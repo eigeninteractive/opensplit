@@ -23,6 +23,11 @@ class GroupDetailScreen extends ConsumerWidget {
     final groupAsync = ref.watch(groupProvider(groupId));
     final ledger = ref.watch(groupLedgerProvider(groupId));
 
+    // Fire-and-forget: the screen is rendered from the local database, so this
+    // only fills in what other devices have added. Its result is deliberately
+    // not awaited or surfaced — there is no spinner to show.
+    ref.watch(groupSyncProvider(groupId));
+
     if (groupAsync.hasValue && groupAsync.value == null) {
       return Scaffold(
         appBar: AppBar(leading: const BackButton()),

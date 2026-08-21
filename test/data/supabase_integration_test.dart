@@ -10,10 +10,12 @@ import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';
 import 'package:opensplit/data/sync/outbox_queue.dart';
+import 'package:opensplit/data/sync/supabase_invite_api.dart';
 import 'package:opensplit/data/sync/supabase_ledger_api.dart';
 import 'package:opensplit/data/sync/sync_engine.dart';
 import 'package:opensplit/domain/balance/balance_fold.dart';
 import 'package:opensplit/domain/entry_draft.dart';
+import 'package:opensplit/domain/repositories/invite_api.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -261,6 +263,85 @@ void main() {
         );
       },
     );
+
+    test('an invite link puts a stranger inside the group', () async {
+      if (!available) return;
+
+      // ---- Ravi's device -------------------------------------------------
+      final ravi = (await client.auth.signInAnonymously()).user!;
+      final created = await groups.createGroup(
+        name: 'Invite ${DateTime.now().microsecondsSinceEpoch}',
+        defaultCurrency: 'INR',
+        ownerDisplayName: 'Ravi',
+        ownerProfileId: ravi.id,
+      );
+      // Priya is added as a placeholder: a full member of the group who has
+      // never heard of the app.
+      final priya = await groups.addMember(
+        created.group.id,
+        displayName: 'Priya',
+      );
+      await entries.create(
+        EntryDraft(
+          groupId: created.group.id,
+          currency: 'INR',
+          amountMinor: 240000,
+          description: 'Dinner at Toit',
+          split: EqualSplit([created.owner.id, priya.id]),
+          payerAmounts: {created.owner.id: 240000},
+        ),
+        createdBy: created.owner.id,
+      );
+      await sync.syncGroup(created.group.id);
+
+      final invite = await SupabaseInviteApi(client).create(priya.id);
+      expect(invite.memberId, priya.id);
+      expect(
+        invite.urlFor('opensplit.alturing.dev'),
+        'https://opensplit.alturing.dev/join/${invite.token}',
+      );
+
+      // ---- Priya's device, which has never seen this group ---------------
+      final hers = SupabaseClient(_apiUrl, _anonKey);
+      addTearDown(hers.dispose);
+      // No signup screen: a session is created silently.
+      await hers.auth.signInAnonymously();
+
+      final claimed = await SupabaseInviteApi(hers).redeem(invite.token);
+      expect(claimed.id, priya.id, reason: 'she claims the existing place');
+      expect(claimed.isPlaceholder, isFalse);
+
+      final herDb = AppDatabase(NativeDatabase.memory());
+      addTearDown(herDb.close);
+      await SyncEngine(
+        db: herDb,
+        api: SupabaseLedgerApi(hers),
+        outbox: OutboxQueue(herDb),
+      ).syncGroup(created.group.id);
+
+      final herEntries = await DriftEntryRepository(
+        herDb,
+      ).getEntries(created.group.id);
+      expect(herEntries, hasLength(1));
+
+      // The debt she inherits is the one that already existed. Claiming set one
+      // column; it did not rewrite a single financial row.
+      final balances = foldBalances(herEntries);
+      expect(
+        balances.firstWhere((b) => b.memberId == priya.id).balanceMinor,
+        -120000,
+      );
+
+      // ---- The token is spent ---------------------------------------------
+      final third = SupabaseClient(_apiUrl, _anonKey);
+      addTearDown(third.dispose);
+      await third.auth.signInAnonymously();
+      await expectLater(
+        SupabaseInviteApi(third).redeem(invite.token),
+        throwsA(isA<InviteRejected>()),
+        reason: 'a single-use link cannot be spent twice',
+      );
+    });
 
     test('a stranger cannot read another group', () async {
       if (!available) return;

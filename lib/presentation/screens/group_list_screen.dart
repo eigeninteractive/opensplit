@@ -8,6 +8,7 @@ import '../../domain/models/group.dart';
 import '../format.dart';
 import '../theme.dart';
 import '../widgets/create_group_sheet.dart';
+import '../widgets/link_account_prompt.dart';
 
 class GroupListScreen extends ConsumerWidget {
   const GroupListScreen({super.key});
@@ -58,9 +59,13 @@ class _GroupList extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-      itemCount: groups.length,
+      // One extra leading slot for the account prompt, which renders as nothing
+      // until there is something worth warning about.
+      itemCount: groups.length + 1,
       separatorBuilder: (_, _) => const SizedBox(height: 8),
-      itemBuilder: (context, index) => _GroupTile(group: groups[index]),
+      itemBuilder: (context, index) => index == 0
+          ? const LinkAccountPrompt()
+          : _GroupTile(group: groups[index - 1]),
     );
   }
 }

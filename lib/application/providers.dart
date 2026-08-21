@@ -1,5 +1,6 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:uuid/uuid.dart';
 
 import '../data/local/database.dart';
@@ -7,7 +8,13 @@ import '../data/repositories/drift_currency_repository.dart';
 import '../data/repositories/drift_entry_repository.dart';
 import '../data/repositories/drift_group_repository.dart';
 import '../data/repositories/drift_profile_repository.dart';
+import '../data/auth/supabase_auth_service.dart';
+import '../data/local/identity_reconciler.dart';
 import '../data/sync/outbox_queue.dart';
+import '../data/sync/remote_ledger_api.dart';
+import '../data/sync/supabase_invite_api.dart';
+import '../data/sync/supabase_ledger_api.dart';
+import '../data/sync/sync_engine.dart';
 import '../domain/balance/balance_fold.dart';
 import '../domain/balance/member_balance.dart';
 import '../domain/balance/simplify.dart';
@@ -19,6 +26,8 @@ import '../domain/models/profile.dart';
 import '../domain/repositories/currency_repository.dart';
 import '../domain/repositories/entry_repository.dart';
 import '../domain/repositories/group_repository.dart';
+import '../domain/repositories/auth_service.dart';
+import '../domain/repositories/invite_api.dart';
 import '../domain/repositories/profile_repository.dart';
 
 part 'providers.g.dart';
@@ -145,6 +154,22 @@ class LocalIdentityController extends _$LocalIdentityController {
       profileId: state.profileId,
       displayName: state.displayName,
       upiVpa: trimmed == null || trimmed.isEmpty ? null : trimmed,
+    );
+    await _mirrorToProfile();
+  }
+
+  /// Replaces the locally generated id with a real account id.
+  ///
+  /// Called once, when a session first appears. Everything that referenced the
+  /// old id has already been repointed by [adoptAuthIdentity].
+  Future<void> adoptProfileId(String authUserId) async {
+    if (state.profileId == authUserId) return;
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setString(_profileIdKey, authUserId);
+    state = LocalIdentity(
+      profileId: authUserId,
+      displayName: state.displayName,
+      upiVpa: state.upiVpa,
     );
     await _mirrorToProfile();
   }
@@ -277,4 +302,154 @@ GroupLedger? groupLedger(Ref ref, String groupId) {
     transfers: group.simplifyDebts ? simplifyDebts(balances) : const [],
     me: memberList.where((m) => m.profileId == identity.profileId).firstOrNull,
   );
+}
+
+/// The backend client, or null when there is none.
+///
+/// Null is a supported state, not a failure: everything the product does is
+/// computed on the device, so the app is fully usable with no server at all.
+/// Only sync and accounts depend on this.
+@Riverpod(keepAlive: true)
+sb.SupabaseClient? supabaseClient(Ref ref) {
+  try {
+    return sb.Supabase.instance.client;
+  } catch (_) {
+    // Not initialised — a local-only build, or a test that never called
+    // Supabase.initialize.
+    return null;
+  }
+}
+
+@Riverpod(keepAlive: true)
+AuthService? authService(Ref ref) {
+  final client = ref.watch(supabaseClientProvider);
+  return client == null ? null : SupabaseAuthService(client);
+}
+
+@Riverpod(keepAlive: true)
+InviteApi? inviteApi(Ref ref) {
+  final client = ref.watch(supabaseClientProvider);
+  return client == null ? null : SupabaseInviteApi(client);
+}
+
+@Riverpod(keepAlive: true)
+RemoteLedgerApi? remoteLedgerApi(Ref ref) {
+  final client = ref.watch(supabaseClientProvider);
+  return client == null ? null : SupabaseLedgerApi(client);
+}
+
+@Riverpod(keepAlive: true)
+SyncEngine? syncEngine(Ref ref) {
+  final api = ref.watch(remoteLedgerApiProvider);
+  if (api == null) return null;
+  return SyncEngine(
+    db: ref.watch(appDatabaseProvider),
+    api: api,
+    outbox: ref.watch(outboxQueueProvider),
+  );
+}
+
+/// The current session, if any.
+@Riverpod(keepAlive: true)
+Stream<Account?> account(Ref ref) {
+  final auth = ref.watch(authServiceProvider);
+  if (auth == null) return Stream.value(null);
+  return auth.authStateChanges();
+}
+
+/// Establishes a session and reconciles this device's local identity with it.
+///
+/// Anonymous sign-in happens silently and is never presented as a step. Someone
+/// arriving from an invite link has to land inside the group; a signup screen at
+/// that moment is where they leave.
+@Riverpod(keepAlive: true)
+class SessionController extends _$SessionController {
+  @override
+  Future<Account?> build() async {
+    final auth = ref.watch(authServiceProvider);
+    if (auth == null) return null;
+
+    final user = auth.currentUser ?? await auth.signInAnonymously();
+
+    // Everything recorded before this session existed was filed under a locally
+    // generated id. Move it across — one column, no financial rows touched.
+    final identity = ref.read(localIdentityControllerProvider);
+    if (identity.profileId != user.id) {
+      await adoptAuthIdentity(
+        ref.read(appDatabaseProvider),
+        localProfileId: identity.profileId,
+        authUserId: user.id,
+        outbox: ref.read(outboxQueueProvider),
+      );
+      await ref
+          .read(localIdentityControllerProvider.notifier)
+          .adoptProfileId(user.id);
+    }
+
+    return user;
+  }
+}
+
+/// Runs sync and reports what happened.
+///
+/// Deliberately manual rather than a persistent realtime subscription: peak
+/// concurrent realtime peers is what a hosted backend bills for, and pushing a
+/// wake-up costs nothing. Live subscriptions are reserved for the rare case of
+/// two people editing the same group at the same moment.
+@riverpod
+class SyncController extends _$SyncController {
+  @override
+  SyncReport? build() => null;
+
+  Future<void> syncGroup(String groupId) async {
+    final engine = ref.read(syncEngineProvider);
+    if (engine == null) return;
+
+    // Make sure a session exists first, or every push is refused by RLS.
+    await ref.read(sessionControllerProvider.future);
+
+    state = await engine.syncGroup(groupId);
+  }
+
+  Future<void> syncAll() async {
+    final engine = ref.read(syncEngineProvider);
+    if (engine == null) return;
+    await ref.read(sessionControllerProvider.future);
+
+    final groups = await ref.read(groupRepositoryProvider).watchGroups().first;
+    for (final group in groups) {
+      state = await engine.syncGroup(group.id);
+    }
+  }
+}
+
+/// Syncs a group when its screen opens.
+///
+/// A provider rather than an initState call so it runs once per mount, is
+/// cancelled with the screen, and is trivially overridable in tests. Failures
+/// are swallowed on purpose: the screen renders entirely from the local
+/// database, so a sync that cannot reach the server changes nothing the user
+/// can see and must not produce an error surface.
+@riverpod
+Future<void> groupSync(Ref ref, String groupId) async {
+  final engine = ref.watch(syncEngineProvider);
+  if (engine == null) return;
+  try {
+    await ref.read(sessionControllerProvider.future);
+    await engine.syncGroup(groupId);
+  } catch (_) {
+    // Offline is the normal case, not an error.
+  }
+}
+
+/// How many entries this device has recorded, across every group.
+///
+/// Drives the prompt to attach an account. Anonymous means one device and no
+/// recovery — on the web, clearing site data destroys it outright — so the ask
+/// has to arrive once there is something worth losing, and never before.
+@riverpod
+Future<int> totalEntryCount(Ref ref) async {
+  final db = ref.watch(appDatabaseProvider);
+  final rows = await db.select(db.entries).get();
+  return rows.where((row) => row.deletedAt == null).length;
 }

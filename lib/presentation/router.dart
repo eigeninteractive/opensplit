@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'screens/entry_editor_screen.dart';
 import 'screens/group_detail_screen.dart';
 import 'screens/group_list_screen.dart';
+import 'screens/join_screen.dart';
 import 'screens/members_screen.dart';
 import 'screens/not_found_screen.dart';
 import 'screens/settings_screen.dart';
@@ -36,6 +37,13 @@ GoRouter buildRouter() => GoRouter(
         GoRoute(
           path: '/settings',
           builder: (context, state) => const SettingsScreen(),
+        ),
+        // The link a friend sends. Deliberately free of any guard: this route
+        // has to work for someone who has never opened the app before.
+        GoRoute(
+          path: '/join/:token',
+          builder: (context, state) =>
+              JoinScreen(token: state.pathParameters['token']!),
         ),
         GoRoute(
           path: '/g/:groupId',

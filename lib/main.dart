@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'application/providers.dart';
+import 'config.dart';
 import 'presentation/app.dart';
 
 Future<void> main() async {
@@ -15,6 +17,20 @@ Future<void> main() async {
   usePathUrlStrategy();
 
   final prefs = await SharedPreferences.getInstance();
+
+  if (hasBackend) {
+    try {
+      await Supabase.initialize(
+        url: supabaseUrl,
+        publishableKey: supabasePublishableKey,
+      );
+    } catch (error) {
+      // Startup must not depend on reaching a server. Every screen is rendered
+      // from the local database, so a build that cannot initialise its backend
+      // is still a working app — it simply will not sync.
+      debugPrint('OpenSplit: continuing without a backend ($error)');
+    }
+  }
 
   runApp(
     ProviderScope(

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/providers.dart';
 import '../../domain/settle/upi.dart';
+import '../widgets/account_section.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -83,6 +84,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           const SizedBox(height: 24),
           FilledButton(onPressed: _save, child: const Text('Save')),
+          const Divider(height: 48),
+          const AccountSection(),
           const Divider(height: 48),
           const ListTile(
             contentPadding: EdgeInsets.zero,

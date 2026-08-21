@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../application/providers.dart';
 import '../../domain/models/member.dart';
+import '../widgets/invite_sheet.dart';
 
 class MembersScreen extends ConsumerWidget {
   const MembersScreen({super.key, required this.groupId});
@@ -65,11 +66,17 @@ class MembersScreen extends ConsumerWidget {
                     ),
                     trailing: PopupMenuButton<String>(
                       onSelected: (action) => switch (action) {
+                        'invite' => showInviteSheet(context, ref, member),
                         'rename' => _rename(context, ref, member),
                         'remove' => _remove(context, ref, member, ledger),
                         _ => null,
                       },
                       itemBuilder: (context) => [
+                        if (member.isPlaceholder)
+                          const PopupMenuItem(
+                            value: 'invite',
+                            child: Text('Send invite link'),
+                          ),
                         const PopupMenuItem(
                           value: 'rename',
                           child: Text('Rename'),
