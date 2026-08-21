@@ -1,0 +1,202 @@
+import 'package:drift/drift.dart';
+
+import '../../domain/models/entry.dart';
+import '../../domain/repositories/analytics_repository.dart';
+import '../local/database.dart';
+import 'drift_entry_repository.dart';
+
+final class DriftAnalyticsRepository implements AnalyticsRepository {
+  DriftAnalyticsRepository(this._db);
+
+  final AppDatabase _db;
+
+  /// Builds the shared WHERE clause and its variables.
+  ///
+  /// `kind = 'expense'` and `deleted_at IS NULL` are not optional: a settlement
+  /// is a transfer, not spending, and counting one would inflate every figure
+  /// on the screen.
+  ({String sql, List<Variable<Object>> vars}) _where(
+    AnalyticsFilter filter, {
+    String alias = 'e',
+  }) {
+    final clauses = <String>[
+      "$alias.group_id = ?",
+      "$alias.kind = 'expense'",
+      '$alias.deleted_at IS NULL',
+    ];
+    final vars = <Variable<Object>>[Variable<String>(filter.groupId)];
+
+    if (filter.currency != null) {
+      clauses.add('$alias.currency = ?');
+      vars.add(Variable<String>(filter.currency!));
+    }
+    if (filter.categoryId != null) {
+      clauses.add('$alias.category_id = ?');
+      vars.add(Variable<String>(filter.categoryId!));
+    }
+    if (filter.from != null) {
+      clauses.add('$alias.entry_date >= ?');
+      vars.add(Variable<String>(_iso(filter.from!)));
+    }
+    if (filter.to != null) {
+      clauses.add('$alias.entry_date <= ?');
+      vars.add(Variable<String>(_iso(filter.to!)));
+    }
+    if (filter.memberId != null) {
+      clauses.add(
+        'EXISTS (SELECT 1 FROM entry_shares s '
+        'WHERE s.entry_id = $alias.id AND s.member_id = ?)',
+      );
+      vars.add(Variable<String>(filter.memberId!));
+    }
+
+    final match = _ftsMatch(filter.query);
+    if (match != null) {
+      clauses.add(
+        '$alias.rowid IN (SELECT rowid FROM entries_fts WHERE entries_fts MATCH ?)',
+      );
+      vars.add(Variable<String>(match));
+    }
+
+    return (sql: clauses.join(' AND '), vars: vars);
+  }
+
+  /// Turns user input into an FTS5 query.
+  ///
+  /// Each term is quoted so that punctuation cannot be read as FTS5 operators —
+  /// an apostrophe or a stray `*` would otherwise be a syntax error thrown at
+  /// someone who was only typing a restaurant name. A trailing `*` makes it
+  /// match as you type.
+  static String? _ftsMatch(String query) {
+    final terms = query
+        .replaceAll('"', ' ')
+        .split(RegExp(r'\s+'))
+        .where((t) => t.isNotEmpty)
+        .toList();
+    if (terms.isEmpty) return null;
+    return terms.map((t) => '"$t"*').join(' ');
+  }
+
+  static String _iso(DateTime date) =>
+      DateTime.utc(date.year, date.month, date.day).toIso8601String();
+
+  @override
+  Future<List<Entry>> search(AnalyticsFilter filter) async {
+    final where = _where(filter);
+    final rows = await _db
+        .customSelect(
+          'SELECT e.id FROM entries e WHERE ${where.sql} '
+          'ORDER BY e.entry_date DESC, e.created_at DESC',
+          variables: where.vars,
+          readsFrom: {_db.entries, _db.entryShares},
+        )
+        .get();
+
+    final ids = [for (final row in rows) row.read<String>('id')];
+    if (ids.isEmpty) return const [];
+
+    // Reuse the repository so entries come back fully hydrated, rather than
+    // maintaining a second way to build one.
+    final repository = DriftEntryRepository(_db);
+    final entries = await repository.getEntries(filter.groupId);
+    final byId = {for (final entry in entries) entry.id: entry};
+    return [
+      for (final id in ids)
+        if (byId[id] != null) byId[id]!,
+    ];
+  }
+
+  Future<List<SpendBucket>> _aggregate({
+    required AnalyticsFilter filter,
+    required String keyExpression,
+    required String labelExpression,
+    required String from,
+    required Set<ResultSetImplementation<Object, Object>> readsFrom,
+    required String amountExpression,
+    String? extraJoin,
+  }) async {
+    final where = _where(filter);
+    final rows = await _db
+        .customSelect(
+          'SELECT $keyExpression AS bucket_key, '
+          '$labelExpression AS bucket_label, '
+          'e.currency AS currency, '
+          'SUM($amountExpression) AS total, '
+          'COUNT(DISTINCT e.id) AS entries '
+          'FROM $from ${extraJoin ?? ''} '
+          'WHERE ${where.sql} '
+          'GROUP BY bucket_key, e.currency '
+          'ORDER BY total DESC',
+          variables: where.vars,
+          readsFrom: readsFrom,
+        )
+        .get();
+
+    return [
+      for (final row in rows)
+        SpendBucket(
+          key: row.read<String?>('bucket_key') ?? '',
+          label: row.read<String?>('bucket_label') ?? 'Uncategorised',
+          currency: row.read<String>('currency'),
+          amountMinor: row.read<int>('total'),
+          entryCount: row.read<int>('entries'),
+        ),
+    ];
+  }
+
+  @override
+  Future<List<SpendBucket>> spendByCategory(AnalyticsFilter filter) =>
+      _aggregate(
+        filter: filter,
+        keyExpression: "COALESCE(e.category_id, '')",
+        labelExpression: "COALESCE(c.name, 'Uncategorised')",
+        from: 'entries e',
+        extraJoin: 'LEFT JOIN categories c ON c.id = e.category_id',
+        amountExpression: 'e.amount_minor',
+        readsFrom: {_db.entries, _db.categories, _db.entryShares},
+      );
+
+  @override
+  Future<List<SpendBucket>> spendByMember(AnalyticsFilter filter) => _aggregate(
+    filter: filter,
+    keyExpression: 's.member_id',
+    labelExpression: "COALESCE(m.display_name, '—')",
+    from: 'entries e',
+    extraJoin:
+        'JOIN entry_shares s ON s.entry_id = e.id '
+        'LEFT JOIN members m ON m.id = s.member_id',
+    // A member's own spend is what they owed, not what they paid: one person
+    // putting the whole bill on their card did not consume all of it.
+    amountExpression: 's.amount_minor',
+    readsFrom: {_db.entries, _db.entryShares, _db.members},
+  );
+
+  @override
+  Future<List<SpendBucket>> spendByMonth(AnalyticsFilter filter) async {
+    final buckets = await _aggregate(
+      filter: filter,
+      keyExpression: 'substr(e.entry_date, 1, 7)',
+      labelExpression: 'substr(e.entry_date, 1, 7)',
+      from: 'entries e',
+      amountExpression: 'e.amount_minor',
+      readsFrom: {_db.entries, _db.entryShares},
+    );
+    // Chronological rather than largest-first: a trend read out of order is
+    // not a trend.
+    return buckets..sort((a, b) => a.key.compareTo(b.key));
+  }
+
+  @override
+  Future<List<String>> currenciesUsed(String groupId) async {
+    final rows = await _db
+        .customSelect(
+          "SELECT currency, COUNT(*) AS n FROM entries "
+          "WHERE group_id = ? AND deleted_at IS NULL "
+          'GROUP BY currency ORDER BY n DESC',
+          variables: [Variable<String>(groupId)],
+          readsFrom: {_db.entries},
+        )
+        .get();
+    return [for (final row in rows) row.read<String>('currency')];
+  }
+}

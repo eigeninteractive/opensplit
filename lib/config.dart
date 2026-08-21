@@ -47,3 +47,24 @@ const String googleServerClientId = String.fromEnvironment(
 );
 
 const String googleWebClientId = String.fromEnvironment('GOOGLE_WEB_CLIENT_ID');
+
+/// Firebase Cloud Messaging, for push.
+///
+/// Empty by default, which disables push entirely rather than crashing at
+/// startup. Supplied at build time so no credentials file has to be committed
+/// and so a fork can point at its own project:
+///
+///   --dart-define=FCM_API_KEY=... --dart-define=FCM_APP_ID=... etc.
+const String fcmApiKey = String.fromEnvironment('FCM_API_KEY');
+const String fcmAppId = String.fromEnvironment('FCM_APP_ID');
+const String fcmSenderId = String.fromEnvironment('FCM_SENDER_ID');
+const String fcmProjectId = String.fromEnvironment('FCM_PROJECT_ID');
+
+/// Web push needs a VAPID key in addition to the above.
+const String fcmVapidKey = String.fromEnvironment('FCM_VAPID_KEY');
+
+bool get hasPush =>
+    fcmApiKey.isNotEmpty &&
+    fcmAppId.isNotEmpty &&
+    fcmSenderId.isNotEmpty &&
+    fcmProjectId.isNotEmpty;

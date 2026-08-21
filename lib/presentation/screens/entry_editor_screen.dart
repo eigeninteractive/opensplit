@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../application/providers.dart';
 import '../../domain/entry_draft.dart';
+import '../../domain/models/category.dart';
 import '../../domain/models/currency.dart';
 import '../../domain/models/entry.dart';
 import '../../domain/split/allocation.dart';
@@ -40,6 +41,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
   final _payerAmounts = <String, TextEditingController>{};
 
   String? _currencyCode;
+  String? _categoryId;
   DateTime _date = DateTime.now();
   SplitKind _splitKind = SplitKind.equal;
   final _participants = <String>{};
@@ -93,6 +95,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
     }
 
     _description.text = existing.description;
+    _categoryId = existing.categoryId;
     _date = existing.entryDate;
     _splitKind = existing.splitKind;
     final currency = cx[existing.currency];
@@ -221,6 +224,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
       currency: currency.code,
       amountMinor: totalMinor,
       description: _description.text.trim(),
+      categoryId: _categoryId,
       split: split,
       payerAmounts: payers,
       entryDate: DateTime.utc(_date.year, _date.month, _date.day),
@@ -362,6 +366,12 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
               style: Theme.of(context).textTheme.bodySmall,
             ),
           const SizedBox(height: 16),
+          _CategoryPicker(
+            groupId: widget.groupId,
+            value: _categoryId,
+            onChanged: (id) => setState(() => _categoryId = id),
+          ),
+          const SizedBox(height: 8),
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.event_outlined),
@@ -704,4 +714,85 @@ class _SplitSection extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Picks a category, with an escape hatch to add one the group needs.
+///
+/// Optional on purpose: forcing a choice before an expense can be saved would
+/// put a decision in front of the one action that has to stay instant.
+class _CategoryPicker extends ConsumerWidget {
+  const _CategoryPicker({
+    required this.groupId,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String groupId;
+  final String? value;
+  final ValueChanged<String?> onChanged;
+
+  static const _addSentinel = '__add__';
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final categories =
+        ref.watch(groupCategoriesProvider(groupId)).value ?? const <Category>[];
+
+    return DropdownButtonFormField<String>(
+      initialValue: categories.any((c) => c.id == value) ? value : null,
+      isExpanded: true,
+      decoration: const InputDecoration(labelText: 'Category (optional)'),
+      items: [
+        const DropdownMenuItem(value: null, child: Text('Uncategorised')),
+        for (final category in categories)
+          DropdownMenuItem(
+            value: category.id,
+            child: Text(category.name, overflow: TextOverflow.ellipsis),
+          ),
+        const DropdownMenuItem(
+          value: _addSentinel,
+          child: Text('Add a category…'),
+        ),
+      ],
+      onChanged: (selected) async {
+        if (selected != _addSentinel) {
+          onChanged(selected);
+          return;
+        }
+        final name = await _promptForCategory(context);
+        if (name == null || name.trim().isEmpty) return;
+        final created = await ref
+            .read(categoryRepositoryProvider)
+            .create(groupId, name: name);
+        onChanged(created.id);
+      },
+    );
+  }
+}
+
+Future<String?> _promptForCategory(BuildContext context) {
+  final controller = TextEditingController();
+  return showDialog<String>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('New category'),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        textCapitalization: TextCapitalization.words,
+        decoration: const InputDecoration(hintText: 'Scuba diving'),
+        onSubmitted: (value) => Navigator.of(context).pop(value),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(controller.text),
+          child: const Text('Add'),
+        ),
+      ],
+    ),
+  );
 }

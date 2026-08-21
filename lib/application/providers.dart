@@ -4,12 +4,15 @@ import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:uuid/uuid.dart';
 
 import '../data/local/database.dart';
+import '../data/repositories/drift_analytics_repository.dart';
+import '../data/repositories/drift_category_repository.dart';
 import '../data/repositories/drift_currency_repository.dart';
 import '../data/repositories/drift_entry_repository.dart';
 import '../data/repositories/drift_group_repository.dart';
 import '../data/repositories/drift_profile_repository.dart';
 import '../data/auth/supabase_auth_service.dart';
 import '../data/local/identity_reconciler.dart';
+import '../data/push/push_service.dart';
 import '../data/sync/outbox_queue.dart';
 import '../data/sync/remote_ledger_api.dart';
 import '../data/sync/supabase_invite_api.dart';
@@ -18,15 +21,20 @@ import '../data/sync/sync_engine.dart';
 import '../domain/balance/balance_fold.dart';
 import '../domain/balance/member_balance.dart';
 import '../domain/balance/simplify.dart';
+import '../domain/models/category.dart';
 import '../domain/models/currency.dart';
 import '../domain/models/entry.dart';
+import '../domain/notification_text.dart';
 import '../domain/models/group.dart';
+import '../domain/money_format.dart';
 import '../domain/models/member.dart';
 import '../domain/models/profile.dart';
 import '../domain/repositories/currency_repository.dart';
 import '../domain/repositories/entry_repository.dart';
 import '../domain/repositories/group_repository.dart';
+import '../domain/repositories/analytics_repository.dart';
 import '../domain/repositories/auth_service.dart';
+import '../domain/repositories/category_repository.dart';
 import '../domain/repositories/invite_api.dart';
 import '../domain/repositories/profile_repository.dart';
 
@@ -452,4 +460,137 @@ Future<int> totalEntryCount(Ref ref) async {
   final db = ref.watch(appDatabaseProvider);
   final rows = await db.select(db.entries).get();
   return rows.where((row) => row.deletedAt == null).length;
+}
+
+@Riverpod(keepAlive: true)
+CategoryRepository categoryRepository(Ref ref) =>
+    DriftCategoryRepository(ref.watch(appDatabaseProvider));
+
+@Riverpod(keepAlive: true)
+AnalyticsRepository analyticsRepository(Ref ref) =>
+    DriftAnalyticsRepository(ref.watch(appDatabaseProvider));
+
+/// Categories a group can use: the global presets plus its own additions.
+@riverpod
+Stream<List<Category>> groupCategories(Ref ref, String groupId) =>
+    ref.watch(categoryRepositoryProvider).watchForGroup(groupId);
+
+/// The current analytics question. Held in a provider so the filter survives
+/// navigating into an entry and back out.
+@riverpod
+class AnalyticsFilterController extends _$AnalyticsFilterController {
+  @override
+  AnalyticsFilter build(String groupId) => AnalyticsFilter(groupId: groupId);
+
+  void update(AnalyticsFilter filter) => state = filter;
+  void reset() => state = AnalyticsFilter(groupId: groupId);
+}
+
+@riverpod
+Future<List<SpendBucket>> spendByCategory(Ref ref, String groupId) => ref
+    .watch(analyticsRepositoryProvider)
+    .spendByCategory(ref.watch(analyticsFilterControllerProvider(groupId)));
+
+@riverpod
+Future<List<SpendBucket>> spendByMember(Ref ref, String groupId) => ref
+    .watch(analyticsRepositoryProvider)
+    .spendByMember(ref.watch(analyticsFilterControllerProvider(groupId)));
+
+@riverpod
+Future<List<SpendBucket>> spendByMonth(Ref ref, String groupId) => ref
+    .watch(analyticsRepositoryProvider)
+    .spendByMonth(ref.watch(analyticsFilterControllerProvider(groupId)));
+
+@riverpod
+Future<List<Entry>> analyticsResults(Ref ref, String groupId) => ref
+    .watch(analyticsRepositoryProvider)
+    .search(ref.watch(analyticsFilterControllerProvider(groupId)));
+
+@riverpod
+Future<List<String>> groupCurrencies(Ref ref, String groupId) =>
+    ref.watch(analyticsRepositoryProvider).currenciesUsed(groupId);
+
+/// Push, wired to sync first and describe second.
+///
+/// The message from the server carries only ids. Everything the notification
+/// says is produced here, from data that has just been pulled onto this device,
+/// using the same formatter the screens use.
+@Riverpod(keepAlive: true)
+PushService pushService(Ref ref) => PushService(
+  onWake: (groupId) async {
+    final engine = ref.read(syncEngineProvider);
+    if (engine == null) return;
+    await engine.syncGroup(groupId);
+  },
+  describe: (groupId, entryId) async {
+    final entry = await ref.read(entryRepositoryProvider).getEntry(entryId);
+    if (entry == null) return null;
+
+    final group = await ref.read(groupRepositoryProvider).getGroup(groupId);
+    final members = await ref.read(groupRepositoryProvider).getMembers(groupId);
+    final currencies = await ref.read(currencyRepositoryProvider).all();
+    final me = ref.read(localIdentityControllerProvider).profileId;
+
+    String nameOf(String memberId) =>
+        members
+            .where((m) => m.id == memberId)
+            .map((m) => m.displayName)
+            .firstOrNull ??
+        'Someone';
+
+    final myMemberId = members
+        .where((m) => m.profileId == me)
+        .map((m) => m.id)
+        .firstOrNull;
+    final myShare =
+        entry.shares
+            .where((s) => s.memberId == myMemberId)
+            .map((s) => s.amountMinor)
+            .firstOrNull ??
+        0;
+
+    final currency = currencies
+        .where((c) => c.code == entry.currency)
+        .firstOrNull;
+
+    return describeEntry(
+      entry: entry,
+      groupName: group?.name ?? 'OpenSplit',
+      authorName: nameOf(entry.createdBy),
+      currency: currency,
+      shareMinor: myShare,
+      // The screens' formatter, so a banner and the app can never quote
+      // different figures.
+      format: (minor) => formatMoney(currency, minor),
+    );
+  },
+);
+
+/// Registers this device for push, once there is a session to attach it to.
+///
+/// Failure is not surfaced: push is a convenience on top of sync, and a device
+/// that cannot register still receives everything the next time a screen opens.
+@Riverpod(keepAlive: true)
+Future<void> pushRegistration(Ref ref) async {
+  final account = await ref.watch(sessionControllerProvider.future);
+  final client = ref.watch(supabaseClientProvider);
+  if (account == null || client == null) return;
+
+  try {
+    final push = ref.read(pushServiceProvider);
+    await push.initialize();
+
+    final token = await push.token();
+    if (token == null) return;
+
+    await client.from('device_tokens').upsert({
+      'token': token,
+      'profile_id': account.id,
+      'platform': push.platform,
+      'last_seen_at': DateTime.now().toUtc().toIso8601String(),
+    });
+  } catch (error) {
+    // Push is not configured, or permission was refused. Neither is a problem
+    // worth interrupting anyone about.
+  }
 }

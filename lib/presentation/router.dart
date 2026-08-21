@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'screens/entry_editor_screen.dart';
 import 'screens/group_detail_screen.dart';
 import 'screens/group_list_screen.dart';
+import 'screens/insights_screen.dart';
 import 'screens/join_screen.dart';
 import 'screens/members_screen.dart';
 import 'screens/not_found_screen.dart';
@@ -54,6 +55,11 @@ GoRouter buildRouter() => GoRouter(
               path: 'add',
               builder: (context, state) =>
                   EntryEditorScreen(groupId: state.pathParameters['groupId']!),
+            ),
+            GoRoute(
+              path: 'insights',
+              builder: (context, state) =>
+                  InsightsScreen(groupId: state.pathParameters['groupId']!),
             ),
             GoRoute(
               path: 'members',

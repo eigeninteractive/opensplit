@@ -42,7 +42,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   /// Timestamps are stored as ISO-8601 text rather than Unix seconds.
   ///
@@ -58,7 +58,21 @@ class AppDatabase extends _$AppDatabase {
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) async {
       await m.createAll();
+      await _createSearchIndex();
       await _seedReferenceData();
+    },
+    onUpgrade: (m, from, to) async {
+      // Version 2 adds full-text search over descriptions and notes.
+      //
+      // Written as a real migration rather than folded into the initial schema
+      // even though nothing has shipped yet, because the upgrade path is the
+      // one thing that cannot be tested after the fact: people's expense
+      // history lives on their device, and a migration that fails there is
+      // unrecoverable.
+      if (from < 2) {
+        await _createSearchIndex();
+        await _backfillSearchIndex();
+      }
     },
     beforeOpen: (details) async {
       // SQLite disables foreign keys per connection by default, so the
@@ -68,6 +82,59 @@ class AppDatabase extends _$AppDatabase {
       await customStatement('PRAGMA foreign_keys = ON');
     },
   );
+
+  /// Creates the FTS5 index and the triggers that keep it in step.
+  ///
+  /// Search is local and instant, over data already on the device — no
+  /// endpoint, no query cost, and it works with no connection. Searching your
+  /// own expense history is not a feature worth charging for.
+  ///
+  /// An external-content table (`content='entries'`) stores only the index, not
+  /// a second copy of the text, so this costs very little space.
+  Future<void> _createSearchIndex() async {
+    await customStatement('''
+      CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts USING fts5(
+        description,
+        notes,
+        content='entries',
+        content_rowid='rowid'
+      )
+    ''');
+
+    // External-content FTS5 tables are not updated automatically; without
+    // these the index silently drifts from the table and search starts
+    // returning stale or missing rows.
+    await customStatement('''
+      CREATE TRIGGER IF NOT EXISTS entries_fts_insert AFTER INSERT ON entries
+      BEGIN
+        INSERT INTO entries_fts(rowid, description, notes)
+        VALUES (new.rowid, new.description, new.notes);
+      END
+    ''');
+    await customStatement('''
+      CREATE TRIGGER IF NOT EXISTS entries_fts_delete AFTER DELETE ON entries
+      BEGIN
+        INSERT INTO entries_fts(entries_fts, rowid, description, notes)
+        VALUES ('delete', old.rowid, old.description, old.notes);
+      END
+    ''');
+    await customStatement('''
+      CREATE TRIGGER IF NOT EXISTS entries_fts_update AFTER UPDATE ON entries
+      BEGIN
+        INSERT INTO entries_fts(entries_fts, rowid, description, notes)
+        VALUES ('delete', old.rowid, old.description, old.notes);
+        INSERT INTO entries_fts(rowid, description, notes)
+        VALUES (new.rowid, new.description, new.notes);
+      END
+    ''');
+  }
+
+  /// Indexes everything already stored, for a device upgrading from v1.
+  Future<void> _backfillSearchIndex() async {
+    await customStatement(
+      "INSERT INTO entries_fts(entries_fts) VALUES ('rebuild')",
+    );
+  }
 
   /// Populates currencies and the global category presets.
   ///
