@@ -6,7 +6,13 @@ import 'split/splitter.dart';
 /// Stamped onto every entry written. An entry is never recomputed under a newer
 /// version — a rounding fix must not retroactively move money that has already
 /// been settled — so this is how a future change stays confined to new rows.
-const int currentAlgoVersion = 1;
+///
+/// Version 2 rotates which party absorbs a rounding leftover, seeded by the
+/// entry id. Version 1 always gave it to the lowest member id, so in a group
+/// that mostly splits evenly one person quietly paid an extra minor unit on
+/// every single expense. Existing entries keep the amounts they were written
+/// with, because those amounts are stored rather than recomputed.
+const int currentAlgoVersion = 2;
 
 /// A user's intent to record an entry, before it has been resolved into
 /// balanced payers and shares.
@@ -99,7 +105,10 @@ Entry composeEntry(
     throw const SplitException('An amount is needed.');
   }
 
-  final shares = draft.split.resolve(draft.amountMinor);
+  // Seeded with the entry id, so the person who absorbs a rounding leftover
+  // varies from expense to expense instead of being the same member every
+  // time — and so re-editing this entry reproduces the identical split.
+  final shares = draft.split.resolve(draft.amountMinor, seed: id);
   final payers = resolvePayers(
     totalMinor: draft.amountMinor,
     amountsByMemberId: draft.payerAmounts,

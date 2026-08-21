@@ -42,7 +42,13 @@ sealed class SplitSpec {
   ///
   /// The result sums to exactly [totalMinor] and is ordered by member id.
   /// Throws [SplitException] if the inputs do not describe a valid split.
-  List<ResolvedShare> resolve(int totalMinor);
+  ///
+  /// [seed] decides which party absorbs a rounding leftover when several have
+  /// an equal claim to it — an equal split gives everyone the same remainder,
+  /// so without it the same person would absorb the extra minor unit on every
+  /// such expense. Callers pass the entry id, which keeps the result a pure
+  /// function of the entry and reproduces it exactly on an edit.
+  List<ResolvedShare> resolve(int totalMinor, {String? seed});
 }
 
 /// Split evenly. The overwhelming majority of real expenses.
@@ -59,7 +65,7 @@ final class EqualSplit extends SplitSpec {
   SplitKind get kind => SplitKind.equal;
 
   @override
-  List<ResolvedShare> resolve(int totalMinor) {
+  List<ResolvedShare> resolve(int totalMinor, {String? seed}) {
     if (memberIds.isEmpty) {
       throw const SplitException('An expense needs at least one participant.');
     }
@@ -69,6 +75,7 @@ final class EqualSplit extends SplitSpec {
 
     final allocation = allocateLargestRemainder(
       totalMinor: totalMinor,
+      seed: seed,
       parties: [
         for (final id in memberIds) (memberId: id, weightMicros: weightScale),
       ],
@@ -94,7 +101,7 @@ final class ExactSplit extends SplitSpec {
   SplitKind get kind => SplitKind.exact;
 
   @override
-  List<ResolvedShare> resolve(int totalMinor) {
+  List<ResolvedShare> resolve(int totalMinor, {String? seed}) {
     if (amountsByMemberId.isEmpty) {
       throw const SplitException('An expense needs at least one participant.');
     }
@@ -130,7 +137,7 @@ final class SharesSplit extends SplitSpec {
   SplitKind get kind => SplitKind.shares;
 
   @override
-  List<ResolvedShare> resolve(int totalMinor) {
+  List<ResolvedShare> resolve(int totalMinor, {String? seed}) {
     if (sharesByMemberId.isEmpty) {
       throw const SplitException('An expense needs at least one participant.');
     }
@@ -149,6 +156,7 @@ final class SharesSplit extends SplitSpec {
     ];
     final allocation = allocateLargestRemainder(
       totalMinor: totalMinor,
+      seed: seed,
       parties: parties,
     );
     return [
@@ -179,7 +187,7 @@ final class PercentSplit extends SplitSpec {
   SplitKind get kind => SplitKind.percent;
 
   @override
-  List<ResolvedShare> resolve(int totalMinor) {
+  List<ResolvedShare> resolve(int totalMinor, {String? seed}) {
     if (percentMicrosByMemberId.isEmpty) {
       throw const SplitException('An expense needs at least one participant.');
     }
@@ -201,6 +209,7 @@ final class PercentSplit extends SplitSpec {
     ];
     final allocation = allocateLargestRemainder(
       totalMinor: totalMinor,
+      seed: seed,
       parties: parties,
     );
     return [

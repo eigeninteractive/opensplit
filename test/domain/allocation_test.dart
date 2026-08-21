@@ -196,4 +196,131 @@ void main() {
       }
     });
   });
+
+  group('rounding leftovers rotate', () {
+    // Three people, ₹100. Someone has to take the extra paisa.
+    List<WeightedParty> trio() => const [
+      (memberId: 'aaa', weightMicros: weightScale),
+      (memberId: 'bbb', weightMicros: weightScale),
+      (memberId: 'ccc', weightMicros: weightScale),
+    ];
+
+    String favoured(String? seed) {
+      final result = allocateLargestRemainder(
+        totalMinor: 10000,
+        parties: trio(),
+        seed: seed,
+      );
+      return result.entries.firstWhere((e) => e.value == 3334).key;
+    }
+
+    test('the same seed always favours the same member', () {
+      expect(favoured('entry-1'), favoured('entry-1'));
+      expect(favoured('entry-1'), favoured('entry-1'));
+    });
+
+    test('an edit to the same entry reproduces the same split', () {
+      // Editing re-runs the allocator with the entry's own id, so the split
+      // must not shuffle underneath a correction to the amount or the notes.
+      final first = allocateLargestRemainder(
+        totalMinor: 10000,
+        parties: trio(),
+        seed: 'entry-42',
+      );
+      final second = allocateLargestRemainder(
+        totalMinor: 10000,
+        parties: trio(),
+        seed: 'entry-42',
+      );
+      expect(first, second);
+    });
+
+    test('different entries do not all favour the same member', () {
+      // The bug this replaces: with a fixed tiebreak, one member absorbed the
+      // extra minor unit on every equal split for the life of the group.
+      final seen = {for (var i = 0; i < 60; i++) favoured('entry-$i')};
+      expect(
+        seen.length,
+        greaterThan(1),
+        reason: 'a fixed tiebreak would put every leftover on one member',
+      );
+    });
+
+    test('no seed keeps the old ascending-id behaviour', () {
+      expect(favoured(null), 'aaa');
+    });
+
+    test('the sum is exact whatever the seed', () {
+      for (var i = 0; i < 200; i++) {
+        final result = allocateLargestRemainder(
+          totalMinor: 10000,
+          parties: trio(),
+          seed: 'seed-$i',
+        );
+        expect(result.values.reduce((a, b) => a + b), 10000);
+      }
+    });
+
+    test('a seed cannot change anyone\'s share by more than one unit', () {
+      // Rotation decides who absorbs a leftover, never how much anyone owes.
+      for (var i = 0; i < 50; i++) {
+        final result = allocateLargestRemainder(
+          totalMinor: 10000,
+          parties: trio(),
+          seed: 'seed-$i',
+        );
+        for (final amount in result.values) {
+          expect(amount, anyOf(3333, 3334));
+        }
+      }
+    });
+
+    test('a seed does not disturb an allocation with no leftover', () {
+      // ₹99 over three is exact, so there is nothing to hand out and every
+      // seed must produce the identical result.
+      for (var i = 0; i < 20; i++) {
+        final result = allocateLargestRemainder(
+          totalMinor: 9900,
+          parties: trio(),
+          seed: 'seed-$i',
+        );
+        expect(result.values, everyElement(3300));
+      }
+    });
+
+    // Pinned values, run on the VM and in Chrome by CI.
+    //
+    // This is the test that matters most in this group. The first version of
+    // the hash used a plain `hash * prime` masked to 32 bits, which is correct
+    // on a 64-bit int and lossy on a JavaScript double — the product reaches
+    // 2^56 and the web is exact only to 2^53. The two platforms then chose
+    // different members for the same entry, meaning a phone and the web app
+    // would split one expense differently and the sync would flip between
+    // them. Nothing but pinned cross-platform values catches that.
+    test('a seed picks the same member on every platform', () {
+      expect(favoured('entry-1'), 'bbb');
+      expect(favoured('entry-2'), 'bbb');
+      expect(favoured('entry-3'), 'aaa');
+      expect(favoured('goa-dinner'), 'ccc');
+      expect(favoured('f47ac10b'), 'aaa');
+    });
+
+    test('unequal weights still win over the rotation', () {
+      // The rotation only breaks ties. A genuinely larger remainder must still
+      // take precedence, or the allocation stops being largest-remainder.
+      for (var i = 0; i < 30; i++) {
+        final result = allocateLargestRemainder(
+          totalMinor: 100,
+          parties: const [
+            (memberId: 'aaa', weightMicros: 1 * weightScale),
+            (memberId: 'bbb', weightMicros: 1 * weightScale),
+            (memberId: 'ccc', weightMicros: 7 * weightScale),
+          ],
+          seed: 'seed-$i',
+        );
+        // 100 * 7/9 = 77.7 -> floor 77, the largest remainder by far.
+        expect(result['ccc'], 78);
+      }
+    });
+  });
 }
