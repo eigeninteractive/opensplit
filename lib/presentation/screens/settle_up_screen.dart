@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../widgets/page_body.dart';
 import '../../application/providers.dart';
 import '../../domain/entry_draft.dart';
 import '../../domain/models/currency.dart';
@@ -115,77 +116,81 @@ class _SettleUpScreenState extends ConsumerState<SettleUpScreen> {
         ),
         title: const Text('Settle up'),
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-        children: [
-          _MemberDropdown(
-            label: 'Who is paying',
-            members: ledger.members,
-            meId: ledger.me?.id,
-            value: _from,
-            onChanged: (id) => setState(() => _from = id),
-          ),
-          const SizedBox(height: 16),
-          _MemberDropdown(
-            label: 'Who is being paid',
-            members: ledger.members,
-            meId: ledger.me?.id,
-            value: _to,
-            excludeId: _from,
-            onChanged: (id) => setState(() => _to = id),
-          ),
-          const SizedBox(height: 16),
-          CurrencyPicker(
-            value: _currencyCode ?? ledger.group.defaultCurrency,
-            onChanged: (code) => setState(() => _currencyCode = code),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _amount,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: InputDecoration(
-              labelText: 'Amount',
-              prefixText: currency?.symbol == null
-                  ? null
-                  : '${currency!.symbol} ',
-              errorText: _amountError,
+      body: PageBody(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+          children: [
+            _MemberDropdown(
+              label: 'Who is paying',
+              members: ledger.members,
+              meId: ledger.me?.id,
+              value: _from,
+              onChanged: (id) => setState(() => _from = id),
             ),
-            onChanged: (_) => setState(() => _amountError = null),
-          ),
-          if (_from != null && _to != null && currency != null) ...[
-            const SizedBox(height: 8),
-            _OutstandingHint(
-              ledger: ledger,
-              from: _from!,
-              to: _to!,
-              currency: currency,
+            const SizedBox(height: 16),
+            _MemberDropdown(
+              label: 'Who is being paid',
+              members: ledger.members,
+              meId: ledger.me?.id,
+              value: _to,
+              excludeId: _from,
+              onChanged: (id) => setState(() => _to = id),
             ),
-          ],
-          const SizedBox(height: 24),
-          if (currency?.code == 'INR') ...[
-            _UpiSection(
-              payeeName: payee?.displayName ?? '',
-              vpaController: _payeeVpa,
-              uri: upiUri,
-              onChanged: () => setState(() {}),
-              onPaid: () => _record(ledger, currency!),
+            const SizedBox(height: 16),
+            CurrencyPicker(
+              value: _currencyCode ?? ledger.group.defaultCurrency,
+              onChanged: (code) => setState(() => _currencyCode = code),
             ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _amount,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: InputDecoration(
+                labelText: 'Amount',
+                prefixText: currency?.symbol == null
+                    ? null
+                    : '${currency!.symbol} ',
+                errorText: _amountError,
+              ),
+              onChanged: (_) => setState(() => _amountError = null),
+            ),
+            if (_from != null && _to != null && currency != null) ...[
+              const SizedBox(height: 8),
+              _OutstandingHint(
+                ledger: ledger,
+                from: _from!,
+                to: _to!,
+                currency: currency,
+              ),
+            ],
             const SizedBox(height: 24),
+            if (currency?.code == 'INR') ...[
+              _UpiSection(
+                payeeName: payee?.displayName ?? '',
+                vpaController: _payeeVpa,
+                uri: upiUri,
+                onChanged: () => setState(() {}),
+                onPaid: () => _record(ledger, currency!),
+              ),
+              const SizedBox(height: 24),
+            ],
+            FilledButton.icon(
+              onPressed: _saving || currency == null
+                  ? null
+                  : () => _record(ledger, currency),
+              icon: const Icon(Icons.check),
+              label: const Text('Record this payment'),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'OpenSplit does not move or check money. Recording a payment here '
+              'only updates the balances in this app.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
           ],
-          FilledButton.icon(
-            onPressed: _saving || currency == null
-                ? null
-                : () => _record(ledger, currency),
-            icon: const Icon(Icons.check),
-            label: const Text('Record this payment'),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'OpenSplit does not move or check money. Recording a payment here '
-            'only updates the balances in this app.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../widgets/page_body.dart';
 import '../../application/providers.dart';
 import '../../domain/entry_draft.dart';
 import '../../domain/models/category.dart';
@@ -340,133 +341,136 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
             ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-        children: [
-          TextField(
-            controller: _description,
-            autofocus: !widget.isEditing,
-            textCapitalization: TextCapitalization.sentences,
-            decoration: const InputDecoration(
-              labelText: 'What was it?',
-              hintText: 'Dinner at Toit',
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                flex: 3,
-                child: TextField(
-                  controller: _amount,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  decoration: InputDecoration(
-                    labelText: 'How much?',
-                    prefixText: currency?.symbol == null
-                        ? null
-                        : '${currency!.symbol} ',
-                  ),
-                  onChanged: (_) => setState(() {}),
-                ),
+      body: PageBody(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+          children: [
+            TextField(
+              controller: _description,
+              autofocus: !widget.isEditing,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                labelText: 'What was it?',
+                hintText: 'Dinner at Toit',
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: CurrencyPicker(
-                  value: _currencyCode ?? ledger.group.defaultCurrency,
-                  label: '',
-                  onChanged: (code) => setState(() => _currencyCode = code),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: TextField(
+                    controller: _amount,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: 'How much?',
+                      prefixText: currency?.symbol == null
+                          ? null
+                          : '${currency!.symbol} ',
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: CurrencyPicker(
+                    value: _currencyCode ?? ledger.group.defaultCurrency,
+                    label: '',
+                    onChanged: (code) => setState(() => _currencyCode = code),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (currency != null &&
+                currency.code != ledger.group.defaultCurrency)
+              Text(
+                'Stored in ${currency.code}. Balances in a group are always kept '
+                'per currency, never converted.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            const SizedBox(height: 16),
+            _CategoryPicker(
+              groupId: widget.groupId,
+              value: _categoryId,
+              onChanged: (id) => setState(() => _categoryId = id),
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.event_outlined),
+              title: Text(DateFormat.yMMMEd().format(_date)),
+              trailing: const Icon(Icons.edit_calendar_outlined),
+              onTap: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: _date,
+                  firstDate: DateTime(2000),
+                  lastDate: DateTime.now().add(const Duration(days: 365)),
+                );
+                if (picked != null) setState(() => _date = picked);
+              },
+            ),
+            const Divider(height: 32),
+            _PayerSection(
+              ledger: ledger,
+              currency: currency,
+              payers: _payers,
+              multiple: _multiplePayers,
+              controllerFor: (id) => _controllerFor(_payerAmounts, id),
+              onToggleMultiple: (value) => setState(() {
+                _multiplePayers = value;
+                if (!value && _payers.length > 1) {
+                  final first = _payers.first;
+                  _payers
+                    ..clear()
+                    ..add(first);
+                }
+              }),
+              onChanged: () => setState(() {}),
+            ),
+            const Divider(height: 32),
+            _SplitSection(
+              ledger: ledger,
+              currency: currency,
+              totalMinor: totalMinor,
+              splitKind: _splitKind,
+              participants: _participants,
+              shares: _shares,
+              exactControllerFor: (id) => _controllerFor(_exact, id),
+              percentControllerFor: (id) => _controllerFor(_percent, id),
+              onKindChanged: (kind) => setState(() => _splitKind = kind),
+              onChanged: () => setState(() {}),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 16),
+              Card(
+                color: Theme.of(context).colorScheme.errorContainer,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                    _error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onErrorContainer,
+                    ),
+                  ),
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 8),
-          if (currency != null && currency.code != ledger.group.defaultCurrency)
-            Text(
-              'Stored in ${currency.code}. Balances in a group are always kept '
-              'per currency, never converted.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          const SizedBox(height: 16),
-          _CategoryPicker(
-            groupId: widget.groupId,
-            value: _categoryId,
-            onChanged: (id) => setState(() => _categoryId = id),
-          ),
-          const SizedBox(height: 8),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.event_outlined),
-            title: Text(DateFormat.yMMMEd().format(_date)),
-            trailing: const Icon(Icons.edit_calendar_outlined),
-            onTap: () async {
-              final picked = await showDatePicker(
-                context: context,
-                initialDate: _date,
-                firstDate: DateTime(2000),
-                lastDate: DateTime.now().add(const Duration(days: 365)),
-              );
-              if (picked != null) setState(() => _date = picked);
-            },
-          ),
-          const Divider(height: 32),
-          _PayerSection(
-            ledger: ledger,
-            currency: currency,
-            payers: _payers,
-            multiple: _multiplePayers,
-            controllerFor: (id) => _controllerFor(_payerAmounts, id),
-            onToggleMultiple: (value) => setState(() {
-              _multiplePayers = value;
-              if (!value && _payers.length > 1) {
-                final first = _payers.first;
-                _payers
-                  ..clear()
-                  ..add(first);
-              }
-            }),
-            onChanged: () => setState(() {}),
-          ),
-          const Divider(height: 32),
-          _SplitSection(
-            ledger: ledger,
-            currency: currency,
-            totalMinor: totalMinor,
-            splitKind: _splitKind,
-            participants: _participants,
-            shares: _shares,
-            exactControllerFor: (id) => _controllerFor(_exact, id),
-            percentControllerFor: (id) => _controllerFor(_percent, id),
-            onKindChanged: (kind) => setState(() => _splitKind = kind),
-            onChanged: () => setState(() {}),
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 16),
-            Card(
-              color: Theme.of(context).colorScheme.errorContainer,
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Text(
-                  _error!,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onErrorContainer,
-                  ),
-                ),
-              ),
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: _saving || currency == null
+                  ? null
+                  : () => _save(ledger, currency, fx),
+              icon: const Icon(Icons.check),
+              label: Text(widget.isEditing ? 'Save changes' : 'Add expense'),
             ),
           ],
-          const SizedBox(height: 24),
-          FilledButton.icon(
-            onPressed: _saving || currency == null
-                ? null
-                : () => _save(ledger, currency, fx),
-            icon: const Icon(Icons.check),
-            label: Text(widget.isEditing ? 'Save changes' : 'Add expense'),
-          ),
-        ],
+        ),
       ),
     );
   }

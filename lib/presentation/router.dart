@@ -29,7 +29,9 @@ GoRouter buildRouter() => GoRouter(
     // SelectableRegion needs an Overlay ancestor, which only exists inside a
     // route.
     ShellRoute(
-      builder: (context, state, child) => SelectionArea(child: child),
+      builder: (context, state, child) => SelectionArea(
+        child: _AdaptiveShell(state: state, child: child),
+      ),
       routes: [
         GoRoute(
           path: '/',
@@ -91,3 +93,55 @@ GoRouter buildRouter() => GoRouter(
     ),
   ],
 );
+
+/// Adds a navigation rail once there is room for one.
+///
+/// On a phone the app bar and the back stack are the navigation, and a rail
+/// would eat a quarter of the width. On a desktop browser there is otherwise no
+/// persistent chrome at all — the only way back to the group list is the app
+/// bar's back arrow, which is a phone affordance shown on a 27-inch monitor.
+class _AdaptiveShell extends StatelessWidget {
+  const _AdaptiveShell({required this.state, required this.child});
+
+  /// Below this the rail is not shown at all. Chosen so that a rail plus a
+  /// readable content measure both fit without squeezing either.
+  static const double _railBreakpoint = 900;
+
+  final GoRouterState state;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (MediaQuery.sizeOf(context).width < _railBreakpoint) return child;
+
+    final path = state.uri.path;
+    final onSettings = path == '/settings';
+
+    return Scaffold(
+      body: Row(
+        children: [
+          NavigationRail(
+            selectedIndex: onSettings ? 1 : 0,
+            labelType: NavigationRailLabelType.all,
+            onDestinationSelected: (index) =>
+                context.go(index == 1 ? '/settings' : '/'),
+            destinations: const [
+              NavigationRailDestination(
+                icon: Icon(Icons.groups_outlined),
+                selectedIcon: Icon(Icons.groups),
+                label: Text('Groups'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.settings_outlined),
+                selectedIcon: Icon(Icons.settings),
+                label: Text('Settings'),
+              ),
+            ],
+          ),
+          const VerticalDivider(width: 1),
+          Expanded(child: child),
+        ],
+      ),
+    );
+  }
+}

@@ -1,3 +1,4 @@
+import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -23,12 +24,16 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
     // local database regardless of how these turn out.
     ref.watch(pushRegistrationProvider);
 
-    return MaterialApp.router(
-      title: 'OpenSplit',
-      debugShowCheckedModeBanner: false,
-      theme: buildTheme(Brightness.light),
-      darkTheme: buildTheme(Brightness.dark),
-      routerConfig: _router,
+    // Material You on Android 12+; everywhere else the builder yields null and
+    // the seeded scheme is used unchanged.
+    return DynamicColorBuilder(
+      builder: (lightDynamic, darkDynamic) => MaterialApp.router(
+        title: 'OpenSplit',
+        debugShowCheckedModeBanner: false,
+        theme: buildTheme(Brightness.light, lightDynamic),
+        darkTheme: buildTheme(Brightness.dark, darkDynamic),
+        routerConfig: _router,
+      ),
     );
   }
 }

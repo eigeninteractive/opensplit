@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../application/providers.dart';
+import '../widgets/page_body.dart';
 import '../../domain/models/currency.dart';
 import '../../domain/models/entry.dart';
 import '../format.dart';
@@ -78,21 +79,27 @@ class GroupDetailScreen extends ConsumerWidget {
         icon: const Icon(Icons.add),
         label: const Text('Add expense'),
       ),
-      body: wide
-          ? Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(flex: 3, child: _EntriesList(ledger: ledger)),
-                const VerticalDivider(width: 1),
-                Expanded(flex: 2, child: BalancesPanel(ledger: ledger)),
-              ],
-            )
-          : TabBarView(
-              children: [
-                _EntriesList(ledger: ledger),
-                BalancesPanel(ledger: ledger),
-              ],
-            ),
+      // Two panes are a master–detail layout and can take more width than a
+      // single column, but not an unbounded amount: on a 27-inch monitor an
+      // uncapped Row puts the expense list and the balances a foot apart.
+      body: PageBody(
+        maxWidth: wide ? 1200 : 760,
+        child: wide
+            ? Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(flex: 3, child: _EntriesList(ledger: ledger)),
+                  const VerticalDivider(width: 1),
+                  Expanded(flex: 2, child: BalancesPanel(ledger: ledger)),
+                ],
+              )
+            : TabBarView(
+                children: [
+                  _EntriesList(ledger: ledger),
+                  BalancesPanel(ledger: ledger),
+                ],
+              ),
+      ),
     );
 
     // A TabBar needs a controller in scope, but only the narrow layout has

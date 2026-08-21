@@ -36,6 +36,11 @@ dependencies:
   firebase_core: ^4.13.0
   firebase_messaging: ^16.5.0
   flutter_local_notifications: ^22.3.0
+  # Pinned to the 1.x line on purpose. dynamic_color 2.x depends on the
+  # decoupled material_ui package, whose ColorScheme is a different type from
+  # the one in package:flutter/material.dart — adopting it would mean migrating
+  # every widget in the app off Flutter's own Material library.
+  dynamic_color: ^1.9.0
 
 dev_dependencies:
   flutter_test:

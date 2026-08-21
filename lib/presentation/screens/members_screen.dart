@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../widgets/page_body.dart';
 import '../../application/providers.dart';
 import '../../domain/models/member.dart';
 import '../../domain/settle/upi.dart';
@@ -30,90 +31,92 @@ class MembersScreen extends ConsumerWidget {
         icon: const Icon(Icons.person_add_outlined),
         label: const Text('Add person'),
       ),
-      body: ledger == null
-          ? const SizedBox.shrink()
-          : ListView(
-              padding: const EdgeInsets.only(bottom: 96),
-              children: [
-                for (final member in ledger.members)
-                  ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: member.isPlaceholder
-                          ? scheme.surfaceContainerHighest
-                          : scheme.primaryContainer,
-                      child: Text(
-                        member.displayName.characters.firstOrNull
-                                ?.toUpperCase() ??
-                            '?',
-                        style: TextStyle(
-                          color: member.isPlaceholder
-                              ? scheme.onSurfaceVariant
-                              : scheme.onPrimaryContainer,
+      body: PageBody(
+        child: ledger == null
+            ? const SizedBox.shrink()
+            : ListView(
+                padding: const EdgeInsets.only(bottom: 96),
+                children: [
+                  for (final member in ledger.members)
+                    ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: member.isPlaceholder
+                            ? scheme.surfaceContainerHighest
+                            : scheme.primaryContainer,
+                        child: Text(
+                          member.displayName.characters.firstOrNull
+                                  ?.toUpperCase() ??
+                              '?',
+                          style: TextStyle(
+                            color: member.isPlaceholder
+                                ? scheme.onSurfaceVariant
+                                : scheme.onPrimaryContainer,
+                          ),
                         ),
                       ),
-                    ),
-                    title: Text(
-                      member.displayName +
-                          (member.id == ledger.me?.id ? ' (you)' : ''),
-                    ),
-                    subtitle: Text(
-                      member.upiVpa != null
-                          // The handle is the useful thing to see at a glance
-                          // here: it is what makes settling with this person
-                          // one tap instead of a chat message asking for it.
-                          ? member.upiVpa!
-                          : member.role == MemberRole.owner
-                          ? 'Owner'
-                          : member.isPlaceholder
-                          // Blunt on purpose: a placeholder is a real member
-                          // with real money attached, not a draft.
-                          ? 'Added by someone here — no account yet'
-                          : 'Member',
-                    ),
-                    trailing: PopupMenuButton<String>(
-                      onSelected: (action) => switch (action) {
-                        'invite' => showInviteSheet(context, ref, member),
-                        'rename' => _rename(context, ref, member),
-                        'upi' => _setUpi(context, ref, member),
-                        'remove' => _remove(context, ref, member, ledger),
-                        _ => null,
-                      },
-                      itemBuilder: (context) => [
-                        if (member.isPlaceholder)
+                      title: Text(
+                        member.displayName +
+                            (member.id == ledger.me?.id ? ' (you)' : ''),
+                      ),
+                      subtitle: Text(
+                        member.upiVpa != null
+                            // The handle is the useful thing to see at a glance
+                            // here: it is what makes settling with this person
+                            // one tap instead of a chat message asking for it.
+                            ? member.upiVpa!
+                            : member.role == MemberRole.owner
+                            ? 'Owner'
+                            : member.isPlaceholder
+                            // Blunt on purpose: a placeholder is a real member
+                            // with real money attached, not a draft.
+                            ? 'Added by someone here — no account yet'
+                            : 'Member',
+                      ),
+                      trailing: PopupMenuButton<String>(
+                        onSelected: (action) => switch (action) {
+                          'invite' => showInviteSheet(context, ref, member),
+                          'rename' => _rename(context, ref, member),
+                          'upi' => _setUpi(context, ref, member),
+                          'remove' => _remove(context, ref, member, ledger),
+                          _ => null,
+                        },
+                        itemBuilder: (context) => [
+                          if (member.isPlaceholder)
+                            const PopupMenuItem(
+                              value: 'invite',
+                              child: Text('Send invite link'),
+                            ),
                           const PopupMenuItem(
-                            value: 'invite',
-                            child: Text('Send invite link'),
+                            value: 'rename',
+                            child: Text('Rename'),
                           ),
-                        const PopupMenuItem(
-                          value: 'rename',
-                          child: Text('Rename'),
-                        ),
-                        PopupMenuItem(
-                          value: 'upi',
-                          child: Text(
-                            member.upiVpa == null
-                                ? 'Add UPI ID'
-                                : 'Change UPI ID',
+                          PopupMenuItem(
+                            value: 'upi',
+                            child: Text(
+                              member.upiVpa == null
+                                  ? 'Add UPI ID'
+                                  : 'Change UPI ID',
+                            ),
                           ),
-                        ),
-                        if (member.role != MemberRole.owner)
-                          const PopupMenuItem(
-                            value: 'remove',
-                            child: Text('Remove from group'),
-                          ),
-                      ],
+                          if (member.role != MemberRole.owner)
+                            const PopupMenuItem(
+                              value: 'remove',
+                              child: Text('Remove from group'),
+                            ),
+                        ],
+                      ),
+                    ),
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 24, 16, 0),
+                    child: Text(
+                      'People without the app are full members: they can pay, '
+                      'owe, and be settled with. When they join, they claim '
+                      'their place and nothing about the history changes.',
                     ),
                   ),
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 24, 16, 0),
-                  child: Text(
-                    'People without the app are full members: they can pay, '
-                    'owe, and be settled with. When they join, they claim '
-                    'their place and nothing about the history changes.',
-                  ),
-                ),
-              ],
-            ),
+                ],
+              ),
+      ),
     );
   }
 

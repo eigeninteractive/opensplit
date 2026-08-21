@@ -341,6 +341,13 @@ class _TransferExplanation extends StatelessWidget {
                 subtitle: Text(DateFormat.yMMMd().format(item.entry.entryDate)),
                 trailing: Text(
                   formatMoney(currency, item.delta, alwaysSigned: true),
+                  // The colour and the leading sign are the only thing saying
+                  // which way this line goes, and a screen reader gets
+                  // neither — "minus five hundred rupees" is not how anyone
+                  // hears a debt.
+                  semanticsLabel: item.delta > 0
+                      ? 'lent ${formatMoneyAbs(currency, item.delta)}'
+                      : 'owed ${formatMoneyAbs(currency, item.delta)}',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: balanceColor(scheme, item.delta),
                   ),
@@ -353,6 +360,9 @@ class _TransferExplanation extends StatelessWidget {
               Text('Net', style: Theme.of(context).textTheme.titleSmall),
               Text(
                 formatMoney(currency, net, alwaysSigned: true),
+                semanticsLabel: net > 0
+                    ? 'net, owed to you ${formatMoneyAbs(currency, net)}'
+                    : 'net, you owe ${formatMoneyAbs(currency, net)}',
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
                   color: balanceColor(scheme, net),
                 ),

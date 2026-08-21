@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../widgets/page_body.dart';
 import '../../application/providers.dart';
 import '../../domain/models/currency.dart';
 import '../../domain/repositories/analytics_repository.dart';
@@ -48,79 +49,81 @@ class InsightsScreen extends ConsumerWidget {
         title: const Text('Insights'),
         actions: [ExportButton(groupId: groupId)],
       ),
-      body: ledger == null
-          ? const SizedBox.shrink()
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-              children: [
-                TextField(
-                  decoration: InputDecoration(
-                    prefixIcon: const Icon(Icons.search),
-                    hintText: 'Search descriptions and notes',
-                    suffixIcon: filter.query.isEmpty
-                        ? null
-                        : IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () =>
-                                controller.update(filter.copyWith(query: '')),
-                          ),
-                  ),
-                  onChanged: (value) =>
-                      controller.update(filter.copyWith(query: value)),
-                ),
-                const SizedBox(height: 12),
-                if (used.length > 1)
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      for (final code in used)
-                        ChoiceChip(
-                          label: Text(code),
-                          selected: active == code,
-                          onSelected: (_) => controller.update(
-                            filter.copyWith(currency: code),
-                          ),
-                        ),
-                    ],
-                  ),
-                const SizedBox(height: 8),
-                _MemberFilter(
-                  groupId: groupId,
-                  filter: filter,
-                  onChanged: controller.update,
-                ),
-                if (filter.isNarrowed)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      onPressed: controller.reset,
-                      icon: const Icon(Icons.filter_alt_off_outlined),
-                      label: const Text('Clear filters'),
+      body: PageBody(
+        child: ledger == null
+            ? const SizedBox.shrink()
+            : ListView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                children: [
+                  TextField(
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.search),
+                      hintText: 'Search descriptions and notes',
+                      suffixIcon: filter.query.isEmpty
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () =>
+                                  controller.update(filter.copyWith(query: '')),
+                            ),
                     ),
+                    onChanged: (value) =>
+                        controller.update(filter.copyWith(query: value)),
                   ),
-                const SizedBox(height: 8),
-                _Section(
-                  title: 'By category',
-                  buckets: ref.watch(spendByCategoryProvider(groupId)),
-                  currencies: currencies,
-                ),
-                _Section(
-                  title: 'By person',
-                  subtitle:
-                      'What each person consumed, not what they happened to pay.',
-                  buckets: ref.watch(spendByMemberProvider(groupId)),
-                  currencies: currencies,
-                ),
-                _Section(
-                  title: 'Over time',
-                  buckets: ref.watch(spendByMonthProvider(groupId)),
-                  currencies: currencies,
-                  sorted: false,
-                ),
-                const SizedBox(height: 8),
-                _Results(groupId: groupId, currencies: currencies),
-              ],
-            ),
+                  const SizedBox(height: 12),
+                  if (used.length > 1)
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        for (final code in used)
+                          ChoiceChip(
+                            label: Text(code),
+                            selected: active == code,
+                            onSelected: (_) => controller.update(
+                              filter.copyWith(currency: code),
+                            ),
+                          ),
+                      ],
+                    ),
+                  const SizedBox(height: 8),
+                  _MemberFilter(
+                    groupId: groupId,
+                    filter: filter,
+                    onChanged: controller.update,
+                  ),
+                  if (filter.isNarrowed)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: controller.reset,
+                        icon: const Icon(Icons.filter_alt_off_outlined),
+                        label: const Text('Clear filters'),
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                  _Section(
+                    title: 'By category',
+                    buckets: ref.watch(spendByCategoryProvider(groupId)),
+                    currencies: currencies,
+                  ),
+                  _Section(
+                    title: 'By person',
+                    subtitle:
+                        'What each person consumed, not what they happened to pay.',
+                    buckets: ref.watch(spendByMemberProvider(groupId)),
+                    currencies: currencies,
+                  ),
+                  _Section(
+                    title: 'Over time',
+                    buckets: ref.watch(spendByMonthProvider(groupId)),
+                    currencies: currencies,
+                    sorted: false,
+                  ),
+                  const SizedBox(height: 8),
+                  _Results(groupId: groupId, currencies: currencies),
+                ],
+              ),
+      ),
     );
   }
 }

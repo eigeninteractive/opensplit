@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../widgets/page_body.dart';
 import '../../application/providers.dart';
 import '../../config.dart';
 import '../../domain/settle/upi.dart';
@@ -55,66 +56,68 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text('You', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _name,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(
-              labelText: 'Your name',
-              helperText: 'How you appear to other people in a group.',
+      body: PageBody(
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Text('You', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _name,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Your name',
+                helperText: 'How you appear to other people in a group.',
+              ),
             ),
-          ),
-          const SizedBox(height: 24),
-          Text('Payments', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _vpa,
-            decoration: InputDecoration(
-              labelText: 'UPI ID (optional)',
-              hintText: 'you@bank',
-              errorText: _vpaError,
-              helperText:
-                  'Lets people in your groups open their UPI app to pay you. '
-                  'OpenSplit never handles the money.',
-              helperMaxLines: 3,
+            const SizedBox(height: 24),
+            Text('Payments', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _vpa,
+              decoration: InputDecoration(
+                labelText: 'UPI ID (optional)',
+                hintText: 'you@bank',
+                errorText: _vpaError,
+                helperText:
+                    'Lets people in your groups open their UPI app to pay you. '
+                    'OpenSplit never handles the money.',
+                helperMaxLines: 3,
+              ),
             ),
-          ),
-          const SizedBox(height: 24),
-          FilledButton(onPressed: _save, child: const Text('Save')),
-          // Hidden entirely rather than shown broken when the build has no FCM
-          // credentials, matching how every other integration behaves here.
-          if (hasPush) ...[
+            const SizedBox(height: 24),
+            FilledButton(onPressed: _save, child: const Text('Save')),
+            // Hidden entirely rather than shown broken when the build has no FCM
+            // credentials, matching how every other integration behaves here.
+            if (hasPush) ...[
+              const Divider(height: 48),
+              const _NotificationSetting(),
+            ],
             const Divider(height: 48),
-            const _NotificationSetting(),
+            const AccountSection(),
+            const Divider(height: 48),
+            const ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.lock_outline),
+              title: Text('Your data is on this device'),
+              subtitle: Text(
+                'Expenses are stored locally in SQLite. The app keeps working '
+                'with what it has even if it can never reach a server again.',
+              ),
+              isThreeLine: true,
+            ),
+            const ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.favorite_outline),
+              title: Text('Free forever'),
+              subtitle: Text(
+                'Logging an expense is never gated, there are no ads, and no '
+                'analytics SDK is present in this app.',
+              ),
+              isThreeLine: true,
+            ),
           ],
-          const Divider(height: 48),
-          const AccountSection(),
-          const Divider(height: 48),
-          const ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.lock_outline),
-            title: Text('Your data is on this device'),
-            subtitle: Text(
-              'Expenses are stored locally in SQLite. The app keeps working '
-              'with what it has even if it can never reach a server again.',
-            ),
-            isThreeLine: true,
-          ),
-          const ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.favorite_outline),
-            title: Text('Free forever'),
-            subtitle: Text(
-              'Logging an expense is never gated, there are no ads, and no '
-              'analytics SDK is present in this app.',
-            ),
-            isThreeLine: true,
-          ),
-        ],
+        ),
       ),
     );
   }

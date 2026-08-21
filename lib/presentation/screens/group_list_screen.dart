@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../widgets/page_body.dart';
 import '../../application/providers.dart';
 import '../../domain/models/currency.dart';
 import '../../domain/models/group.dart';
@@ -33,19 +34,22 @@ class GroupListScreen extends ConsumerWidget {
         icon: const Icon(Icons.group_add_outlined),
         label: const Text('New group'),
       ),
-      body: switch (groupsAsync) {
-        AsyncError(:final error) => _Message(
-          text: 'Could not load groups.\n$error',
-        ),
-        AsyncValue(hasValue: true, value: final groups?) when groups.isEmpty =>
-          const _EmptyState(),
-        AsyncValue(hasValue: true, value: final groups?) => _GroupList(
-          groups: groups,
-        ),
-        // The journal is local, so this window is a single frame rather than
-        // anything the user perceives as loading.
-        _ => const SizedBox.shrink(),
-      },
+      body: PageBody(
+        child: switch (groupsAsync) {
+          AsyncError(:final error) => _Message(
+            text: 'Could not load groups.\n$error',
+          ),
+          AsyncValue(hasValue: true, value: final groups?)
+              when groups.isEmpty =>
+            const _EmptyState(),
+          AsyncValue(hasValue: true, value: final groups?) => _GroupList(
+            groups: groups,
+          ),
+          // The journal is local, so this window is a single frame rather
+          // than anything the user perceives as loading.
+          _ => const SizedBox.shrink(),
+        },
+      ),
     );
   }
 }
