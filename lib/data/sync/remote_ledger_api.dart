@@ -78,6 +78,17 @@ abstract interface class RemoteLedgerApi {
   /// a rate for a past date never changes — so the client keeps a high-water
   /// mark and only ever asks for what came after it.
   Future<List<RemoteFxRate>> pullFxRates({required String since});
+
+  /// Asks the server to fetch rates for a currency on a date it has never
+  /// needed before.
+  ///
+  /// Fire and forget. The daily job keeps recent dates topped up; this covers
+  /// an expense backdated past whatever we hold. The rate arrives on a later
+  /// sync, so callers must not wait on it.
+  Future<void> requestFxBackfill({
+    required DateTime asOf,
+    required String currency,
+  });
 }
 
 /// One published rate, against USD.

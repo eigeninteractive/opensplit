@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -259,6 +261,23 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
     }
   }
 
+  /// Dates already asked for, so a rebuild does not re-ask.
+  ///
+  /// The server deduplicates too, but a widget that fires a request on every
+  /// keystroke is wrong regardless of who absorbs it.
+  final _requestedRates = <String>{};
+
+  void _requestRate(DateTime asOf, String currency) {
+    if (!_requestedRates.add('${_isoDay(asOf)}|$currency')) return;
+
+    final api = ref.read(remoteLedgerApiProvider);
+    if (api == null) return;
+    // Deliberately not awaited: this must not delay a frame or a save. The
+    // implementation swallows its own failures, because a missing rate costs an
+    // estimate and nothing more.
+    unawaited(api.requestFxBackfill(asOf: asOf, currency: currency));
+  }
+
   /// The rate's publication date, kept with the source so a stored snapshot
   /// says both who published it and for which day.
   static String _isoDay(DateTime date) =>
@@ -334,6 +353,18 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
                 ),
               )
               .value;
+
+    // Nothing local can price this date. Ask the server once; the rate lands on
+    // a later sync and the entry saves without a snapshot in the meantime,
+    // which the schema allows.
+    if (fx == null &&
+        currency != null &&
+        currency.code != ledger.group.defaultCurrency) {
+      _requestRate(
+        DateTime.utc(_date.year, _date.month, _date.day),
+        currency.code,
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(

@@ -103,48 +103,57 @@ Every integration is off unless configured, and hidden rather than shown broken:
 
 ### Exchange rates
 
-Rates are fetched by the server, not by devices — so every member of a group
+Rates are fetched by the server, never by devices — so every member of a group
 converts with the same numbers, and a modified client cannot put a rate in
-front of anyone else.
+front of anyone else. Everything is stored against a single base (USD), one row
+per currency per day, so any pair is a division and there is no such thing as a
+supported *pair*.
 
 ```
 supabase functions deploy fetch-fx
-supabase secrets set FX_FETCH_SECRET="$(openssl rand -hex 32)"
+supabase secrets set FX_FETCH_SECRET="$(openssl rand -hex 32)" \
+                     EXCHANGERATE_API_KEY=<your key>
 
-# Wire up the daily cron (16:30 UTC, after ECB publishes):
+# Point the scheduled job at the function:
 insert into app_settings (key, value) values
   ('fx_function_url', 'https://<project>.supabase.co/functions/v1/fetch-fx'),
-  ('fx_fetch_secret', '<the same secret>');
+  ('fx_fetch_secret', '<the same FX_FETCH_SECRET>');
 
-# Seed some history so backdated entries can be converted:
+# Seed history so backdated entries can be converted from day one:
 select trigger_fx_fetch('{"backfill_days": 120}'::jsonb);
 ```
 
-Providers live in the `fx_providers` table and run in `priority` order, each
-filling what the ones before it could not. Two ship enabled: Frankfurter (ECB
-reference rates, ~30 currencies, and the only free source that answers for a
-past date) and ExchangeRate-API's open endpoint (~166 currencies, latest only).
-Reordering, disabling or adding a provider is a row, not a deploy — only a new
-*kind* needs an adapter in `supabase/functions/fetch-fx/providers/`.
+A daily `pg_cron` job (16:30 UTC, after ECB publishes) keeps today topped up.
+Two providers run in `priority` order, the second filling what the first could
+not:
 
-An ExchangeRate-API key is optional and enables the `exchangerate_v6` provider:
+| Provider | Covers | History |
+|---|---|---|
+| Frankfurter (ECB) | ~30 currencies | yes, free |
+| ExchangeRate-API | 166 currencies | no — free plan is latest only |
 
-```
-supabase secrets set EXCHANGERATE_API_KEY=...
-insert into fx_providers (name, kind, priority, supports_history, config)
-values ('ExchangeRate-API (keyed)', 'exchangerate_v6', 15, false,
-        '{"api_key_env": "EXCHANGERATE_API_KEY"}');
-```
+The ExchangeRate-API key is required for full coverage: without it only
+Frankfurter runs, and AED, KWD, BHD, LKR, NPR and VND get no rate at all.
+The free tier is 1,500 requests a month and the cron uses about 30.
 
-The free tier is 1,500 requests a month — a daily cron uses about 30 — and
-covers latest only. Historical is a paid plan; if you buy one, set
-`supports_history = true` on that row and the backfill starts using it. No code
-changes either way.
+**Fetch once, keep forever.** A rate is immutable once published, so every
+fetched row is stored permanently and synced to every device — not scoped to
+whichever group happened to need it. Clients keep a high-water mark and only
+ask for what came after it.
+
+**Backdated entries fetch on demand.** Recording an expense on a date the app
+has never priced calls `request_fx_backfill(date, currency)`, which fetches
+that day and caches it for everyone. The server refuses dates it can already
+answer, repeats within a day, futures, anything over five years old, and more
+than twenty requests an hour.
 
 **Known limitation:** the ~136 currencies ECB does not publish have no free
-historical source, so an entry backdated before the cron started accumulating
-gets no converted estimate. Balances are unaffected — those are per-currency
-and exact.
+historical source, so an entry backdated before the daily job started
+accumulating gets no converted estimate for those. Balances are unaffected —
+they are per-currency and exact.
+
+Adding a provider is one adapter in `supabase/functions/fetch-fx/providers/`
+plus one row in `fx_providers`; reordering or disabling one is just the row.
 
 ### Push notifications
 

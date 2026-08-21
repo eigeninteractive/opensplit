@@ -212,6 +212,30 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
     }
   }
 
+  @override
+  Future<void> requestFxBackfill({
+    required DateTime asOf,
+    required String currency,
+  }) async {
+    try {
+      await _client.rpc(
+        'request_fx_backfill',
+        params: {'p_as_of': _isoDay(asOf), 'p_currency': currency},
+      );
+    } catch (_) {
+      // The server decides whether this is worth doing at all — it refuses
+      // dates it already covers, repeats within the hour, and anything past a
+      // global ceiling. A failure here costs an estimate, never a balance.
+    }
+  }
+
+  static String _isoDay(DateTime date) {
+    final utc = date.toUtc();
+    return '${utc.year.toString().padLeft(4, '0')}-'
+        '${utc.month.toString().padLeft(2, '0')}-'
+        '${utc.day.toString().padLeft(2, '0')}';
+  }
+
   /// Decides whether a failure is worth retrying.
   ///
   /// A violated invariant or a denied permission will be refused identically

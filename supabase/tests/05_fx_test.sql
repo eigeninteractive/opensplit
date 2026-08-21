@@ -1,7 +1,7 @@
 -- Exchange rates: the pivot, the date rule, and who may write them.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(12);
+select plan(17);
 
 insert into auth.users (id, instance_id, aud, role, email, raw_user_meta_data,
                         created_at, updated_at)
@@ -85,6 +85,30 @@ select throws_ok(
   '42501',
   null,
   'provider configuration is invisible to users');
+
+-- ---------------------------------------------------------------------------
+-- On-demand backfill
+--
+-- The daily job covers recent dates. This is for an expense backdated past
+-- anything we hold, which is exactly when the value is least obvious.
+-- ---------------------------------------------------------------------------
+-- INR has a rate from the 14th, so nothing before that date can price it.
+select ok(request_fx_backfill('2026-08-10', 'INR'),
+  'a currency with no rate on or before the date starts a fetch');
+
+select ok(not request_fx_backfill('2026-08-10', 'INR'),
+  'asking again the same day does not queue a second fetch');
+
+-- 2026-08-16 was a Sunday, covered by Friday the 14th under "on or before".
+-- Chasing a rate that will never exist would burn the ceiling on nothing.
+select ok(not request_fx_backfill('2026-08-16', 'INR'),
+  'a currency already answerable for that date is not fetched');
+
+select ok(not request_fx_backfill((current_date + 1)::date, 'INR'),
+  'a future date has no published rate anywhere');
+
+select ok(not request_fx_backfill('2015-01-05', 'INR'),
+  'a date from a decade ago is not an expense anyone is splitting');
 
 select * from finish();
 rollback;

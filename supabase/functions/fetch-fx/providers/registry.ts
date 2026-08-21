@@ -1,4 +1,3 @@
-import { exchangerateOpen } from './exchangerate_open.ts';
 import { exchangerateV6 } from './exchangerate_v6.ts';
 import { frankfurter } from './frankfurter.ts';
 import { FxProvider } from './types.ts';
@@ -11,6 +10,5 @@ import { FxProvider } from './types.ts';
 /// configuration may safely run ahead of the code.
 export const registry: Record<string, FxProvider> = {
   [frankfurter.kind]: frankfurter,
-  [exchangerateOpen.kind]: exchangerateOpen,
   [exchangerateV6.kind]: exchangerateV6,
 };

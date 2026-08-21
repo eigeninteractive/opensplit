@@ -195,5 +195,16 @@ class FakeRemoteLedger implements RemoteLedgerApi {
     ]..sort((a, b) => a.asOf.compareTo(b.asOf));
   }
 
+  /// What a client has asked the server to backfill.
+  final List<({DateTime asOf, String currency})> fxBackfillRequests = [];
+
+  @override
+  Future<void> requestFxBackfill({
+    required DateTime asOf,
+    required String currency,
+  }) async {
+    fxBackfillRequests.add((asOf: asOf, currency: currency));
+  }
+
   int get entryCount => _entries.length;
 }

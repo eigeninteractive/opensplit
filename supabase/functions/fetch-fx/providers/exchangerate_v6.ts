@@ -2,11 +2,14 @@ import { FetchOptions, FxProvider, FxSnapshot, getJson, sanitise } from './types
 
 /// ExchangeRate-API's keyed v6 API.
 ///
-/// The free key covers `latest` at 1,500 requests a month, which against a
-/// daily cron is roughly fifty times more than this needs. Historical is a paid
-/// feature, so whether this provider participates in a backfill is the
-/// `supports_history` flag on its row rather than anything in this file: buying
-/// the plan is then a one-column change, not a deploy.
+/// Carries 166 currencies — every one this app supports, including the AED,
+/// KWD, BHD, LKR, NPR and VND that ECB does not publish. This is what makes
+/// coverage uniform rather than two-tier.
+///
+/// Latest only. The historical endpoint answers `plan-upgrade-required` on the
+/// free plan (verified against the live API, not just the docs), so its row
+/// carries supports_history = false and the waterfall skips it when filling a
+/// past date. Frankfurter covers history, free and without a key.
 ///
 /// The key is read from an environment secret named by the provider config, so
 /// it lives in Supabase secrets rather than in a table anyone with database
@@ -20,10 +23,11 @@ export const exchangerateV6: FxProvider = {
     if (!key) return null;
 
     const baseUrl = (config.base_url as string) ?? 'https://v6.exchangerate-api.com';
+    // Never asked for a past date in practice, because the provider row says it
+    // cannot serve one. Kept correct rather than throwing, so the flag stays
+    // the single place that decides.
     const url = asOf === null
       ? `${baseUrl}/v6/${key}/latest/USD`
-      // history/{base}/{y}/{m}/{d} — 403s on the free plan, which the waterfall
-      // treats as this provider simply having nothing to offer.
       : `${baseUrl}/v6/${key}/history/USD/${asOf.replaceAll('-', '/')}`;
 
     const body = await getJson(url);
