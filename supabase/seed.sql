@@ -1,0 +1,5 @@
+-- Local development seed data.
+--
+-- Intentionally empty: the reference data that the app depends on (currencies,
+-- global category presets) is part of the schema in 0001, not seed data, since
+-- production needs it too. Add throwaway groups/entries here for manual testing.
