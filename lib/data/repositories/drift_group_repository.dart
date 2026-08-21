@@ -5,15 +5,23 @@ import '../../domain/models/group.dart';
 import '../../domain/models/member.dart';
 import '../../domain/repositories/group_repository.dart';
 import '../local/database.dart';
+import '../sync/outbox_queue.dart';
 import 'mappers.dart';
 
 /// Local-first group and membership storage.
 final class DriftGroupRepository implements GroupRepository {
-  DriftGroupRepository(this._db, {Uuid? uuid, DateTime Function()? clock})
-    : _uuid = uuid ?? const Uuid(),
-      _clock = clock ?? DateTime.now;
+  DriftGroupRepository(
+    this._db, {
+    this.outbox,
+    Uuid? uuid,
+    DateTime Function()? clock,
+  }) : _uuid = uuid ?? const Uuid(),
+       _clock = clock ?? DateTime.now;
 
   final AppDatabase _db;
+
+  /// Null in a purely local build, where there is nothing to sync to.
+  final OutboxQueue? outbox;
   final Uuid _uuid;
   final DateTime Function() _clock;
 
@@ -131,6 +139,11 @@ final class DriftGroupRepository implements GroupRepository {
           );
     });
 
+    // Both rows have to reach the server, and the group has to land first:
+    // members and entries reference it by foreign key.
+    await outbox?.enqueue(OutboxTarget.group, group.id);
+    await outbox?.enqueue(OutboxTarget.member, owner.id);
+
     return (
       group: group.copyWith(createdBy: ownerProfileId ?? owner.id),
       owner: owner,
@@ -147,6 +160,7 @@ final class DriftGroupRepository implements GroupRepository {
         archivedAt: Value(group.archivedAt),
       ),
     );
+    await outbox?.enqueue(OutboxTarget.group, group.id);
   }
 
   @override
@@ -187,6 +201,7 @@ final class DriftGroupRepository implements GroupRepository {
             joinedAt: member.joinedAt,
           ),
         );
+    await outbox?.enqueue(OutboxTarget.member, member.id);
     return member;
   }
 
@@ -203,6 +218,7 @@ final class DriftGroupRepository implements GroupRepository {
     await (_db.update(_db.members)..where((t) => t.id.equals(memberId))).write(
       MembersCompanion(displayName: Value(trimmed)),
     );
+    await outbox?.enqueue(OutboxTarget.member, memberId);
   }
 
   @override
@@ -212,6 +228,7 @@ final class DriftGroupRepository implements GroupRepository {
     await (_db.update(_db.members)..where((t) => t.id.equals(memberId))).write(
       MembersCompanion(leftAt: Value(_clock())),
     );
+    await outbox?.enqueue(OutboxTarget.member, memberId);
   }
 
   @override
@@ -219,5 +236,6 @@ final class DriftGroupRepository implements GroupRepository {
     await (_db.update(_db.groups)..where((t) => t.id.equals(groupId))).write(
       GroupsCompanion(archivedAt: Value(archived ? _clock() : null)),
     );
+    await outbox?.enqueue(OutboxTarget.group, groupId);
   }
 }

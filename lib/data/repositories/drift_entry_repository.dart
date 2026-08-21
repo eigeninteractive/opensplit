@@ -5,6 +5,8 @@ import '../../domain/entry_draft.dart';
 import '../../domain/models/entry.dart';
 import '../../domain/repositories/entry_repository.dart';
 import '../local/database.dart';
+import '../local/entry_writer.dart';
+import '../sync/outbox_queue.dart';
 import 'mappers.dart';
 
 /// Local-first entry storage.
@@ -14,13 +16,28 @@ import 'mappers.dart';
 /// story — the app is fully usable on a plane, and "add expense" never shows a
 /// spinner because there is nothing to wait for.
 final class DriftEntryRepository implements EntryRepository {
-  DriftEntryRepository(this._db, {Uuid? uuid, DateTime Function()? clock})
-    : _uuid = uuid ?? const Uuid(),
-      _clock = clock ?? DateTime.now;
+  DriftEntryRepository(
+    this._db, {
+    this.outbox,
+    Uuid? uuid,
+    DateTime Function()? clock,
+  }) : _uuid = uuid ?? const Uuid(),
+       _clock = clock ?? DateTime.now;
 
   final AppDatabase _db;
+
+  /// Null in a purely local build, where there is nothing to sync to.
+  final OutboxQueue? outbox;
   final Uuid _uuid;
   final DateTime Function() _clock;
+
+  /// Queues a row for the server.
+  ///
+  /// Done here rather than left to callers so that no write path can forget:
+  /// an entry that is saved locally but never queued would silently never
+  /// leave the device.
+  Future<void> _enqueue(String entryId) async =>
+      outbox?.enqueue(OutboxTarget.entry, entryId);
 
   @override
   Stream<List<Entry>> watchEntries(
@@ -122,7 +139,8 @@ final class DriftEntryRepository implements EntryRepository {
       now: now ?? _clock(),
     );
 
-    await _writeEntry(entry, isNew: true);
+    await writeEntryLocally(_db, entry);
+    await _enqueue(entry.id);
     return entry;
   }
 
@@ -149,75 +167,9 @@ final class DriftEntryRepository implements EntryRepository {
       clientKey: existing.clientKey,
     ).copyWith(createdAt: existing.createdAt);
 
-    await _writeEntry(recomposed, isNew: false);
+    await writeEntryLocally(_db, recomposed);
+    await _enqueue(recomposed.id);
     return recomposed;
-  }
-
-  /// Writes an entry and its children atomically.
-  ///
-  /// Payers and shares are deleted and reinserted wholesale, which is both
-  /// simpler than diffing and closer to how the server RPC behaves. The
-  /// transaction is what keeps the balance invariant true at every point an
-  /// observer could look.
-  Future<void> _writeEntry(Entry entry, {required bool isNew}) async {
-    assert(entry.isBalanced, 'composeEntry produced an unbalanced entry');
-
-    await _db.transaction(() async {
-      await _db
-          .into(_db.entries)
-          .insertOnConflictUpdate(
-            EntriesCompanion.insert(
-              id: entry.id,
-              groupId: entry.groupId,
-              kind: entry.kind,
-              description: Value(entry.description),
-              categoryId: Value(entry.categoryId),
-              currency: entry.currency,
-              amountMinor: entry.amountMinor,
-              entryDate: entry.entryDate,
-              splitKind: entry.splitKind,
-              fxRate: Value(entry.fxRate),
-              fxSource: Value(entry.fxSource),
-              fxAt: Value(entry.fxAt),
-              notes: Value(entry.notes),
-              createdBy: entry.createdBy,
-              createdAt: entry.createdAt,
-              updatedAt: entry.updatedAt,
-              deletedAt: Value(entry.deletedAt),
-              clientKey: Value(entry.clientKey),
-              algoVersion: Value(entry.algoVersion),
-            ),
-          );
-
-      if (!isNew) {
-        await (_db.delete(
-          _db.entryPayers,
-        )..where((t) => t.entryId.equals(entry.id))).go();
-        await (_db.delete(
-          _db.entryShares,
-        )..where((t) => t.entryId.equals(entry.id))).go();
-      }
-
-      await _db.batch((batch) {
-        batch.insertAll(_db.entryPayers, [
-          for (final payer in entry.payers)
-            EntryPayersCompanion.insert(
-              entryId: entry.id,
-              memberId: payer.memberId,
-              amountMinor: payer.amountMinor,
-            ),
-        ]);
-        batch.insertAll(_db.entryShares, [
-          for (final share in entry.shares)
-            EntrySharesCompanion.insert(
-              entryId: entry.id,
-              memberId: share.memberId,
-              amountMinor: share.amountMinor,
-              weightMicros: Value(share.weightMicros),
-            ),
-        ]);
-      });
-    });
   }
 
   @override
@@ -229,5 +181,6 @@ final class DriftEntryRepository implements EntryRepository {
     await (_db.update(_db.entries)..where((t) => t.id.equals(entryId))).write(
       EntriesCompanion(deletedAt: Value(at), updatedAt: Value(at)),
     );
+    await _enqueue(entryId);
   }
 }

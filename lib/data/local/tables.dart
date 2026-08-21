@@ -189,13 +189,25 @@ class FxRates extends Table {
 /// being killed mid-flight.
 @DataClassName('OutboxRow')
 class Outbox extends Table {
-  /// The client key of the affected row, which is also what makes a retry
-  /// idempotent server-side.
+  /// `<operation>:<targetId>`.
+  ///
+  /// Composite on purpose: re-queuing the same row replaces the pending item
+  /// instead of stacking another one, so editing an expense five times offline
+  /// still results in a single push.
   TextColumn get id => text()();
+
+  /// What kind of row this refers to: `entry`, `group` or `member`.
   TextColumn get operation => text()();
 
-  /// JSON arguments for the RPC.
-  TextColumn get payload => text()();
+  /// The row's id in its own table.
+  TextColumn get targetId => text()();
+
+  /// JSON arguments, for operations that have no local row to read back.
+  ///
+  /// Row-backed operations deliberately store nothing here: the pusher reads
+  /// the current local state at send time, so a queued item can never carry a
+  /// stale copy of something that has been edited since.
+  TextColumn get payload => text().withDefault(const Constant('{}'))();
   DateTimeColumn get createdAt => dateTime()();
   IntColumn get attempts => integer().withDefault(const Constant(0))();
   DateTimeColumn get nextAttemptAt => dateTime().nullable()();
@@ -212,6 +224,16 @@ class SyncCursors extends Table {
 
   /// Highest server `updated_at` already pulled. Null means never synced.
   DateTimeColumn get cursor => dateTime().nullable()();
+
+  /// Id of the last row consumed at exactly [cursor].
+  ///
+  /// The cursor has to be the pair, not the timestamp alone. Postgres `now()`
+  /// is transaction time, so every row written in one transaction shares an
+  /// `updated_at` — a bulk sync can easily produce more rows at one timestamp
+  /// than a page holds. A `> timestamp` cursor would skip the rest of that
+  /// batch forever; a `>= timestamp` cursor would re-read it forever. Ordering
+  /// and comparing on `(updated_at, id)` terminates and loses nothing.
+  TextColumn get cursorId => text().nullable()();
   DateTimeColumn get lastSyncedAt => dateTime().nullable()();
 
   @override

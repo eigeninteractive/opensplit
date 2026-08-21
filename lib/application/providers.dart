@@ -7,6 +7,7 @@ import '../data/repositories/drift_currency_repository.dart';
 import '../data/repositories/drift_entry_repository.dart';
 import '../data/repositories/drift_group_repository.dart';
 import '../data/repositories/drift_profile_repository.dart';
+import '../data/sync/outbox_queue.dart';
 import '../domain/balance/balance_fold.dart';
 import '../domain/balance/member_balance.dart';
 import '../domain/balance/simplify.dart';
@@ -34,13 +35,26 @@ AppDatabase appDatabase(Ref ref) {
   return db;
 }
 
+/// Pending writes waiting for a server.
+///
+/// Wired in from the start even though nothing drains it yet: every mutation is
+/// queued as it happens, so when sync is switched on there is no backfill step
+/// and nothing recorded in the meantime is lost. The queue coalesces per row,
+/// so its size is bounded by how many rows were touched, not how many times.
 @Riverpod(keepAlive: true)
-GroupRepository groupRepository(Ref ref) =>
-    DriftGroupRepository(ref.watch(appDatabaseProvider));
+OutboxQueue outboxQueue(Ref ref) => OutboxQueue(ref.watch(appDatabaseProvider));
 
 @Riverpod(keepAlive: true)
-EntryRepository entryRepository(Ref ref) =>
-    DriftEntryRepository(ref.watch(appDatabaseProvider));
+GroupRepository groupRepository(Ref ref) => DriftGroupRepository(
+  ref.watch(appDatabaseProvider),
+  outbox: ref.watch(outboxQueueProvider),
+);
+
+@Riverpod(keepAlive: true)
+EntryRepository entryRepository(Ref ref) => DriftEntryRepository(
+  ref.watch(appDatabaseProvider),
+  outbox: ref.watch(outboxQueueProvider),
+);
 
 @Riverpod(keepAlive: true)
 CurrencyRepository currencyRepository(Ref ref) =>
