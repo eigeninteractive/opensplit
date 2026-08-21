@@ -38,7 +38,7 @@ Requires the Flutter SDK, Docker, and the Supabase CLI.
 ```bash
 flutter pub get
 dart run build_runner build        # Drift, Freezed and Riverpod codegen
-flutter test                       # domain property tests + storage tests
+flutter test                       # domain, storage, sync and UI flow tests
 flutter run
 ```
 
@@ -56,6 +56,13 @@ not recurse through its own policy (Postgres 42P17, the standard failure for
 this shape of schema), that entries cannot be hard-deleted, that an anonymous
 account cannot destroy a group, and that an invite token can be spent exactly
 once by someone with no other access to the group.
+
+`test/data/supabase_integration_test.dart` runs the real adapter against that
+local instance. It skips itself when nothing is listening, so `flutter test`
+stays green without it — but it is the only thing that catches a wrong RPC
+signature, a PostgREST filter that does not mean what it looks like, or an RLS
+policy that forbids something the app has to do. Every one of those has already
+happened once.
 
 Code generation runs over Drift tables, Freezed models and Riverpod providers.
 After changing any of them, re-run `dart run build_runner build`.

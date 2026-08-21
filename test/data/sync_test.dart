@@ -288,7 +288,7 @@ void main() {
     });
 
     test(
-      'a permanently rejected item is dropped, not retried forever',
+      'a permanently rejected item is set aside, not retried forever',
       () async {
         final g = await seedGroup();
         final entry = await a.entries.create(
@@ -308,8 +308,14 @@ void main() {
 
         await a.sync.syncGroup(g.groupId);
 
-        // Otherwise it would wedge everything queued behind it.
+        // Out of the queue, so it cannot wedge everything behind it...
         expect(await a.outbox.pendingCount(), 0);
+
+        // ...but not silently discarded. A write the user believes they made
+        // must remain accounted for somewhere.
+        final dead = await a.outbox.deadLetters();
+        expect(dead, hasLength(1));
+        expect(dead.single.lastError, contains('does not balance'));
       },
     );
 

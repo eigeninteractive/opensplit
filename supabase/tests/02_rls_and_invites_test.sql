@@ -155,7 +155,12 @@ select is(
   -120000::bigint,
   'and her balance is untouched: she was always a full member');
 
-select is((select count(*)::int from entries), 1,
+-- Scoped to the group: this runs as postgres, which bypasses RLS and would
+-- otherwise count every entry in the database.
+select is(
+  (select count(*)::int from entries
+    where group_id = '33333333-3333-4333-8333-333333333333'),
+  1,
   'no entry was rewritten — this is why members are group-scoped');
 
 select isnt(

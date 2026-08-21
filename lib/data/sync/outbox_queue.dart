@@ -47,6 +47,7 @@ class OutboxQueue {
             attempts: const Value(0),
             nextAttemptAt: const Value(null),
             lastError: const Value(null),
+            deadLetteredAt: const Value(null),
           ),
         );
   }
@@ -63,8 +64,9 @@ class OutboxQueue {
     final rows =
         await (_db.select(_db.outbox)..where(
               (t) =>
-                  t.nextAttemptAt.isNull() |
-                  t.nextAttemptAt.isSmallerOrEqualValue(now),
+                  t.deadLetteredAt.isNull() &
+                  (t.nextAttemptAt.isNull() |
+                      t.nextAttemptAt.isSmallerOrEqualValue(now)),
             ))
             .get();
 
@@ -84,10 +86,18 @@ class OutboxQueue {
     _ => 2,
   };
 
+  /// Items still expected to reach the server. Dead letters are excluded.
   Future<int> pendingCount() async {
-    final rows = await _db.select(_db.outbox).get();
+    final rows = await (_db.select(
+      _db.outbox,
+    )..where((t) => t.deadLetteredAt.isNull())).get();
     return rows.length;
   }
+
+  /// Writes the server refused outright, kept for the debug bundle.
+  Future<List<OutboxRow>> deadLetters() => (_db.select(
+    _db.outbox,
+  )..where((t) => t.deadLetteredAt.isNotNull())).get();
 
   Future<void> complete(String id) async {
     await (_db.delete(_db.outbox)..where((t) => t.id.equals(id))).go();
@@ -96,11 +106,18 @@ class OutboxQueue {
   /// Records a failed attempt and schedules the next one.
   ///
   /// A [permanent] failure — a violated invariant, a permission denial — is
-  /// dropped rather than retried, because retrying cannot change the answer and
-  /// a poisoned item would otherwise block everything queued behind it forever.
+  /// set aside rather than retried: retrying cannot change the answer, and a
+  /// poisoned item left in the queue would block everything behind it forever.
+  /// It is kept, not deleted, so that a write which never reached the server
+  /// can still be accounted for.
   Future<void> fail(String id, String error, {bool permanent = false}) async {
     if (permanent) {
-      await complete(id);
+      await (_db.update(_db.outbox)..where((t) => t.id.equals(id))).write(
+        OutboxCompanion(
+          deadLetteredAt: Value(_clock()),
+          lastError: Value(error),
+        ),
+      );
       return;
     }
 

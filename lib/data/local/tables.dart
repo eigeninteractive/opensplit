@@ -213,6 +213,14 @@ class Outbox extends Table {
   DateTimeColumn get nextAttemptAt => dateTime().nullable()();
   TextColumn get lastError => text().nullable()();
 
+  /// Set when the server refused this in a way retrying cannot fix.
+  ///
+  /// The row is kept rather than deleted. Dropping it silently would lose a
+  /// write the user believes they made, with nothing anywhere to explain the
+  /// discrepancy — and "my balance is wrong" is already the hardest thing to
+  /// support in an app whose state lives on the device.
+  DateTimeColumn get deadLetteredAt => dateTime().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }

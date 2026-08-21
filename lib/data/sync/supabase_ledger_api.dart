@@ -100,15 +100,29 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
       if (cursor != null) {
         // Row-value comparison, spelled out because PostgREST has no syntax for
         // `(updated_at, id) > (?, ?)`. Anything strictly after the pair.
-        final at = cursor.updatedAt.toUtc().toIso8601String();
+        //
+        // Both values are double-quoted. Inside an `or=(...)` group PostgREST
+        // treats `.` `,` `:` `(` `)` as structural, and an ISO-8601 timestamp
+        // is full of them — unquoted, the filter parses into something else
+        // and quietly matches nothing, so paging stops after the first page
+        // and the rest of the group never arrives.
+        final at = '"${cursor.updatedAt.toUtc().toIso8601String()}"';
         query = query.or(
-          'updated_at.gt.$at,and(updated_at.eq.$at,id.gt.${cursor.id})',
+          'updated_at.gt.$at,and(updated_at.eq.$at,id.gt."${cursor.id}")',
         );
       }
 
       // Soft-deleted rows are deliberately included: a deletion is a delta, and
       // filtering it out would strand the row on every device that had it.
-      final rows = await query.order('updated_at').order('id').limit(limit + 1);
+      // `ascending` must be stated: supabase_dart's order() defaults to
+      // DESCENDING, which silently reverses the feed. The cursor then walks
+      // backwards from the newest row, re-reading what it has already applied
+      // and never reaching the oldest — a group would sync its two most recent
+      // expenses and then quietly stop.
+      final rows = await query
+          .order('updated_at', ascending: true)
+          .order('id', ascending: true)
+          .limit(limit + 1);
 
       final parsed = [for (final row in rows.take(limit)) entryFromJson(row)];
 
