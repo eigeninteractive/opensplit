@@ -1,9 +1,24 @@
 import 'package:opensplit/domain/models/currency.dart';
 import 'package:test/test.dart';
 
-const inr = Currency(code: 'INR', exponent: 2, symbol: '₹', name: 'Indian Rupee');
-const jpy = Currency(code: 'JPY', exponent: 0, symbol: '¥', name: 'Japanese Yen');
-const kwd = Currency(code: 'KWD', exponent: 3, symbol: 'د.ك', name: 'Kuwaiti Dinar');
+const inr = Currency(
+  code: 'INR',
+  exponent: 2,
+  symbol: '₹',
+  name: 'Indian Rupee',
+);
+const jpy = Currency(
+  code: 'JPY',
+  exponent: 0,
+  symbol: '¥',
+  name: 'Japanese Yen',
+);
+const kwd = Currency(
+  code: 'KWD',
+  exponent: 3,
+  symbol: 'د.ك',
+  name: 'Kuwaiti Dinar',
+);
 
 void main() {
   group('minorPerMajor', () {

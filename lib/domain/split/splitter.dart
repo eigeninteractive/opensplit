@@ -114,11 +114,7 @@ final class ExactSplit extends SplitSpec {
     final ids = amountsByMemberId.keys.toList()..sort();
     return [
       for (final id in ids)
-        (
-          memberId: id,
-          amountMinor: amountsByMemberId[id]!,
-          weightMicros: null,
-        ),
+        (memberId: id, amountMinor: amountsByMemberId[id]!, weightMicros: null),
     ];
   }
 }

@@ -167,9 +167,7 @@ class EntryGen {
   List<Entry> entries(List<String> members, int count) => [
     for (var i = 0; i < count; i++)
       if (random.nextInt(10) == 0)
-        expense(members, index: i).copyWith(
-          deletedAt: DateTime.utc(2026, 2, 1),
-        )
+        expense(members, index: i).copyWith(deletedAt: DateTime.utc(2026, 2, 1))
       else
         expense(members, index: i),
   ];

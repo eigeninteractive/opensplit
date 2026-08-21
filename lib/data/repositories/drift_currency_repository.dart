@@ -13,9 +13,9 @@ final class DriftCurrencyRepository implements CurrencyRepository {
 
   @override
   Future<List<Currency>> all() async {
-    final rows = await (_db.select(_db.currencies)
-          ..orderBy([(t) => OrderingTerm.asc(t.code)]))
-        .get();
+    final rows = await (_db.select(
+      _db.currencies,
+    )..orderBy([(t) => OrderingTerm.asc(t.code)])).get();
     return [for (final row in rows) row.toDomain()];
   }
 

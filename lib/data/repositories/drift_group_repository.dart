@@ -61,10 +61,11 @@ final class DriftGroupRepository implements GroupRepository {
 
   @override
   Future<List<Member>> getMembers(String groupId) async {
-    final rows = await (_db.select(_db.members)
-          ..where((t) => t.groupId.equals(groupId) & t.leftAt.isNull())
-          ..orderBy([(t) => OrderingTerm.asc(t.joinedAt)]))
-        .get();
+    final rows =
+        await (_db.select(_db.members)
+              ..where((t) => t.groupId.equals(groupId) & t.leftAt.isNull())
+              ..orderBy([(t) => OrderingTerm.asc(t.joinedAt)]))
+            .get();
     return [for (final row in rows) row.toDomain()];
   }
 
@@ -130,7 +131,10 @@ final class DriftGroupRepository implements GroupRepository {
           );
     });
 
-    return (group: group.copyWith(createdBy: ownerProfileId ?? owner.id), owner: owner);
+    return (
+      group: group.copyWith(createdBy: ownerProfileId ?? owner.id),
+      owner: owner,
+    );
   }
 
   @override

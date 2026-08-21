@@ -49,8 +49,7 @@ class Groups extends Table {
 
   /// A 1:1 split is a two-member group with this set, not a separate concept.
   BoolColumn get isDirect => boolean().withDefault(const Constant(false))();
-  BoolColumn get simplifyDebts =>
-      boolean().withDefault(const Constant(true))();
+  BoolColumn get simplifyDebts => boolean().withDefault(const Constant(true))();
 
   /// Profile id of the creator. Deliberately not a foreign key: a group can
   /// arrive by sync before its creator's profile row does, and refusing the
