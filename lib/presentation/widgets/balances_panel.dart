@@ -7,8 +7,8 @@ import '../../application/providers.dart';
 import '../../domain/balance/simplify.dart';
 import '../../domain/models/currency.dart';
 import '../../domain/models/entry.dart';
+import 'balance_arrow.dart';
 import '../format.dart';
-import '../theme.dart';
 
 /// Per-currency balances and, when the group wants them, the payments that
 /// would settle it.
@@ -104,7 +104,6 @@ class _CurrencySection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final balances = [
       for (final b in ledger.balances)
         if (b.currency == code) b,
@@ -143,14 +142,16 @@ class _CurrencySection extends StatelessWidget {
                     ledger.nameOf(balance.memberId) +
                         (balance.memberId == ledger.me?.id ? ' (you)' : ''),
                   ),
-                  trailing: Text(
-                    balance.balanceMinor > 0
+                  trailing: BalanceAmount(
+                    balanceMinor: balance.balanceMinor,
+                    text: balance.balanceMinor > 0
                         ? 'is owed ${formatMoneyAbs(currency, balance.balanceMinor)}'
                         : 'owes ${formatMoneyAbs(currency, balance.balanceMinor)}',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: balanceColor(scheme, balance.balanceMinor),
-                      fontWeight: FontWeight.w600,
-                    ),
+                    semanticsLabel:
+                        '${ledger.nameOf(balance.memberId)} '
+                        '${balance.balanceMinor > 0 ? 'is owed' : 'owes'} '
+                        '${formatMoneyAbs(currency, balance.balanceMinor)}',
+                    style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
             ],
@@ -339,18 +340,13 @@ class _TransferExplanation extends StatelessWidget {
                       : item.entry.description,
                 ),
                 subtitle: Text(DateFormat.yMMMd().format(item.entry.entryDate)),
-                trailing: Text(
-                  formatMoney(currency, item.delta, alwaysSigned: true),
-                  // The colour and the leading sign are the only thing saying
-                  // which way this line goes, and a screen reader gets
-                  // neither — "minus five hundred rupees" is not how anyone
-                  // hears a debt.
+                trailing: BalanceAmount(
+                  balanceMinor: item.delta,
+                  text: formatMoneyAbs(currency, item.delta),
                   semanticsLabel: item.delta > 0
                       ? 'lent ${formatMoneyAbs(currency, item.delta)}'
                       : 'owed ${formatMoneyAbs(currency, item.delta)}',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: balanceColor(scheme, item.delta),
-                  ),
+                  style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ),
           const Divider(height: 32),
@@ -358,14 +354,13 @@ class _TransferExplanation extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('Net', style: Theme.of(context).textTheme.titleSmall),
-              Text(
-                formatMoney(currency, net, alwaysSigned: true),
+              BalanceAmount(
+                balanceMinor: net,
+                text: formatMoneyAbs(currency, net),
                 semanticsLabel: net > 0
                     ? 'net, owed to you ${formatMoneyAbs(currency, net)}'
                     : 'net, you owe ${formatMoneyAbs(currency, net)}',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: balanceColor(scheme, net),
-                ),
+                style: Theme.of(context).textTheme.titleSmall,
               ),
             ],
           ),
@@ -424,19 +419,13 @@ class _EstimateCard extends ConsumerWidget {
               ).textTheme.labelMedium?.copyWith(color: scheme.onSurfaceVariant),
             ),
             const SizedBox(height: 4),
-            Semantics(
-              label:
+            BalanceAmount(
+              balanceMinor: estimate.amountMinor,
+              text: '≈ $text ${owed ? 'owed to you' : 'you owe'}',
+              semanticsLabel:
                   'Estimated total: approximately $text '
                   '${owed ? 'owed to you' : 'that you owe'}',
-              child: ExcludeSemantics(
-                child: Text(
-                  '≈ $text ${owed ? 'owed to you' : 'you owe'}',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: balanceColor(scheme, estimate.amountMinor),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
+              style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 6),
             Text(

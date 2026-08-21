@@ -8,6 +8,7 @@ import '../../domain/models/currency.dart';
 import '../../domain/models/group.dart';
 import '../format.dart';
 import '../theme.dart';
+import '../widgets/balance_arrow.dart';
 import '../widgets/create_group_sheet.dart';
 import '../widgets/link_account_prompt.dart';
 
@@ -177,11 +178,26 @@ class _Summary extends StatelessWidget {
     );
     final net = ledger!.balanceOf(me.id, firstCode);
 
-    return Text(
-      '${net > 0 ? 'You are owed' : 'You owe'} ${owed.join(' + ')}',
-      style: style?.copyWith(
-        color: balanceColor(scheme, net),
-        fontWeight: FontWeight.w600,
+    final words = '${net > 0 ? 'You are owed' : 'You owe'} ${owed.join(' + ')}';
+    return Semantics(
+      label: words,
+      child: ExcludeSemantics(
+        child: Row(
+          children: [
+            BalanceArrow(balanceMinor: net, size: 15),
+            const SizedBox(width: 2),
+            Flexible(
+              child: Text(
+                words,
+                overflow: TextOverflow.ellipsis,
+                style: style?.copyWith(
+                  color: balanceColor(scheme, net),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

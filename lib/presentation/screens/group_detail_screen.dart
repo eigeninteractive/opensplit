@@ -4,11 +4,11 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../application/providers.dart';
+import '../widgets/balance_arrow.dart';
 import '../widgets/page_body.dart';
 import '../../domain/models/currency.dart';
 import '../../domain/models/entry.dart';
 import '../format.dart';
-import '../theme.dart';
 import '../widgets/balances_panel.dart';
 
 /// Width at which the two halves of a group stop competing for the screen.
@@ -215,13 +215,15 @@ class _EntryTile extends StatelessWidget {
             ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
           ),
           if (me != null && myDelta != 0)
-            Text(
-              myDelta > 0
+            BalanceAmount(
+              balanceMinor: myDelta,
+              text: myDelta > 0
                   ? 'you lent ${formatMoneyAbs(currency, myDelta)}'
                   : 'you owe ${formatMoneyAbs(currency, myDelta)}',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: balanceColor(scheme, myDelta),
-              ),
+              semanticsLabel: myDelta > 0
+                  ? 'you lent ${formatMoneyAbs(currency, myDelta)}'
+                  : 'you owe ${formatMoneyAbs(currency, myDelta)}',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
         ],
       ),

@@ -38,7 +38,6 @@ dependencies:
   # the one in package:flutter/material.dart — adopting it would mean migrating
   # every widget in the app off Flutter's own Material library.
   dynamic_color: ^1.9.0
-
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -8,16 +8,36 @@ import 'package:flutter/material.dart';
 /// opened at restaurant tables at night as often as anywhere else.
 const _seed = Color(0xFF00695C);
 
-/// Colours for a balance figure, which the [ColorScheme] has no slot for.
+/// Source colour for "owed to you", before harmonisation.
 ///
-/// "Owed to you" and "you owe" are semantic states, not brand colours, so they
-/// live in a theme extension rather than being written inline. That also makes
-/// them survive a switch to Material You: a wallpaper-derived scheme changes
-/// every other colour on the screen, and credit still has to read as credit.
+/// Never used directly. It is a hue to derive a role from, in the same way
+/// [_seed] is — the colour that actually reaches the screen is a tone from a
+/// palette built out of this and harmonised against the running scheme.
+const _creditSource = Color(0xFF2E7D32);
+
+/// Colours for a balance figure, which [ColorScheme] has no role for.
 ///
-/// Both values are defined per brightness. A single fixed green is the bug this
-/// replaces — a light-mode green on a dark surface lands around 3.4:1, under
-/// the 4.5:1 needed for text, on the one number the whole app exists to show.
+/// "Owed to you" and "you owe" are semantic states rather than brand colours,
+/// so they live in a theme extension instead of being written inline. They are
+/// also derived rather than hardcoded: a fixed hex cannot be right in both
+/// brightnesses, and it would sit unchanged while Material You replaced every
+/// other colour on the screen.
+///
+/// [credit] follows the recipe Material 3 gives for a custom colour role, using
+/// only public API to do it. `harmonizeWith` — dynamic_color's helper — shifts
+/// the source hue toward the running scheme's primary so it belongs to the
+/// palette rather than sitting on top of it. Seeding a scheme from the result
+/// and taking its `primary` then yields the correct tone for the brightness:
+/// that role is tone 40 in light and tone 80 in dark, which is what makes the
+/// contrast against `surface` correct by construction rather than by luck.
+///
+/// Reaching for `Hct` and `TonalPalette` directly would compute the identical
+/// colour while reimplementing what `fromSeed` already guarantees.
+///
+/// [debit] is `ColorScheme.error`. It is a real named role, already
+/// brightness-correct, already harmonised with whatever scheme is running, and
+/// visually the red people expect against money they owe. Deriving a second red
+/// beside it would put two nearly identical reds in one palette for no gain.
 @immutable
 class BalanceColors extends ThemeExtension<BalanceColors> {
   const BalanceColors({required this.credit, required this.debit});
@@ -28,19 +48,14 @@ class BalanceColors extends ThemeExtension<BalanceColors> {
   /// Money you owe.
   final Color debit;
 
-  factory BalanceColors.of(ColorScheme scheme) => switch (scheme.brightness) {
-    // Green 800 on a light surface: ~5.7:1.
-    Brightness.light => BalanceColors(
-      credit: const Color(0xFF2E7D32),
-      debit: scheme.error,
-    ),
-    // Green 300 on a dark surface: ~8:1. The light-mode value here would be
-    // unreadable.
-    Brightness.dark => BalanceColors(
-      credit: const Color(0xFF81C784),
-      debit: scheme.error,
-    ),
-  };
+  factory BalanceColors.of(ColorScheme scheme) {
+    final credit = ColorScheme.fromSeed(
+      seedColor: _creditSource.harmonizeWith(scheme.primary),
+      brightness: scheme.brightness,
+    );
+
+    return BalanceColors(credit: credit.primary, debit: scheme.error);
+  }
 
   @override
   BalanceColors copyWith({Color? credit, Color? debit}) =>
@@ -58,12 +73,13 @@ class BalanceColors extends ThemeExtension<BalanceColors> {
 
 /// Builds the theme, optionally from a wallpaper-derived scheme.
 ///
-/// [dynamic_] is the platform's own palette on Android 12+ and null everywhere
-/// else, including the web. Harmonised against the seed so that a wallpaper
-/// which happens to be red does not leave the app's own accents clashing.
-ThemeData buildTheme(Brightness brightness, [ColorScheme? dynamic_]) {
+/// [dynamicScheme] is the platform's own palette on Android 12+ and null
+/// everywhere else, including the web. Harmonised against the seed so that a
+/// wallpaper which happens to be red does not leave the app's own accents
+/// clashing.
+ThemeData buildTheme(Brightness brightness, [ColorScheme? dynamicScheme]) {
   final scheme =
-      dynamic_?.harmonized() ??
+      dynamicScheme?.harmonized() ??
       ColorScheme.fromSeed(seedColor: _seed, brightness: brightness);
 
   return ThemeData(
@@ -71,11 +87,11 @@ ThemeData buildTheme(Brightness brightness, [ColorScheme? dynamic_]) {
     useMaterial3: true,
     visualDensity: VisualDensity.adaptivePlatformDensity,
     extensions: [BalanceColors.of(scheme)],
-    appBarTheme: AppBarTheme(
-      backgroundColor: scheme.surface,
-      surfaceTintColor: scheme.surfaceTint,
-      centerTitle: false,
-    ),
+    // No surfaceTintColor. Material 3 replaced the opacity-based tint overlay
+    // with the tone-based surface roles, and Flutter's default is now null;
+    // setting it would reinstate the model the spec moved away from. Depth
+    // comes from surfaceContainer* instead.
+    appBarTheme: const AppBarTheme(centerTitle: false),
     cardTheme: CardThemeData(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -94,10 +110,11 @@ ThemeData buildTheme(Brightness brightness, [ColorScheme? dynamic_]) {
   );
 }
 
-/// Colours for a balance figure.
+/// Colour for a balance figure.
 ///
-/// Never the only signal — the wording says which way it goes too, for anyone
-/// who cannot separate the hues.
+/// Never the only signal. The wording says which way it goes, and
+/// `BalanceAmount` puts an arrow beside it, for anyone who cannot separate the
+/// hues — which is roughly one man in twelve.
 Color balanceColor(ColorScheme scheme, int balanceMinor) {
   if (balanceMinor == 0) return scheme.onSurfaceVariant;
   final colors = BalanceColors.of(scheme);
