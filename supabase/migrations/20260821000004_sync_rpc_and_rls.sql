@@ -121,8 +121,13 @@ drop function if exists upsert_entry(
 
 -- ---------------------------------------------------------------------------
 -- delete_entry returns the row, for the same reason upsert_entry does.
+--
+-- Dropped first: 0001 declared it `returns void`, and CREATE OR REPLACE cannot
+-- change a function's return type (SQLSTATE 42P13).
 -- ---------------------------------------------------------------------------
-create or replace function delete_entry(p_entry_id uuid)
+drop function if exists delete_entry(uuid);
+
+create function delete_entry(p_entry_id uuid)
 returns entries
 language plpgsql
 security invoker

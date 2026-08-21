@@ -47,7 +47,15 @@ The local backend:
 ```bash
 supabase start                     # applies supabase/migrations in order
 supabase db reset                  # rebuild from scratch
+supabase test db                   # pgTAP: invariants, RLS, invite claims
 ```
+
+The database tests are not optional decoration. They cover the deferred
+constraint trigger rejecting unbalanced entries, that `is_group_member` does
+not recurse through its own policy (Postgres 42P17, the standard failure for
+this shape of schema), that entries cannot be hard-deleted, that an anonymous
+account cannot destroy a group, and that an invite token can be spent exactly
+once by someone with no other access to the group.
 
 Code generation runs over Drift tables, Freezed models and Riverpod providers.
 After changing any of them, re-run `dart run build_runner build`.
