@@ -101,6 +101,51 @@ Every integration is off unless configured, and hidden rather than shown broken:
 | `FCM_VAPID_KEY` | Web push (in addition to the four above) |
 | `LINK_HOST` | The host used in invite links |
 
+### Exchange rates
+
+Rates are fetched by the server, not by devices — so every member of a group
+converts with the same numbers, and a modified client cannot put a rate in
+front of anyone else.
+
+```
+supabase functions deploy fetch-fx
+supabase secrets set FX_FETCH_SECRET="$(openssl rand -hex 32)"
+
+# Wire up the daily cron (16:30 UTC, after ECB publishes):
+insert into app_settings (key, value) values
+  ('fx_function_url', 'https://<project>.supabase.co/functions/v1/fetch-fx'),
+  ('fx_fetch_secret', '<the same secret>');
+
+# Seed some history so backdated entries can be converted:
+select trigger_fx_fetch('{"backfill_days": 120}'::jsonb);
+```
+
+Providers live in the `fx_providers` table and run in `priority` order, each
+filling what the ones before it could not. Two ship enabled: Frankfurter (ECB
+reference rates, ~30 currencies, and the only free source that answers for a
+past date) and ExchangeRate-API's open endpoint (~166 currencies, latest only).
+Reordering, disabling or adding a provider is a row, not a deploy — only a new
+*kind* needs an adapter in `supabase/functions/fetch-fx/providers/`.
+
+An ExchangeRate-API key is optional and enables the `exchangerate_v6` provider:
+
+```
+supabase secrets set EXCHANGERATE_API_KEY=...
+insert into fx_providers (name, kind, priority, supports_history, config)
+values ('ExchangeRate-API (keyed)', 'exchangerate_v6', 15, false,
+        '{"api_key_env": "EXCHANGERATE_API_KEY"}');
+```
+
+The free tier is 1,500 requests a month — a daily cron uses about 30 — and
+covers latest only. Historical is a paid plan; if you buy one, set
+`supports_history = true` on that row and the backfill starts using it. No code
+changes either way.
+
+**Known limitation:** the ~136 currencies ECB does not publish have no free
+historical source, so an entry backdated before the cron started accumulating
+gets no converted estimate. Balances are unaffected — those are per-currency
+and exact.
+
 ### Push notifications
 
 The client defines above cover the app. The fan-out also needs three function

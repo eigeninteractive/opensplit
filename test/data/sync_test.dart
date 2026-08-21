@@ -544,4 +544,68 @@ void main() {
       );
     });
   });
+
+  group('exchange rates', () {
+    test('arrive with sync and are then left alone', () async {
+      server.publishFxRate(asOf: '2026-08-20', currency: 'USD', rate: 1);
+      server.publishFxRate(asOf: '2026-08-20', currency: 'INR', rate: 95.43);
+
+      final created = await a.groups.createGroup(
+        name: 'Goa Trip',
+        defaultCurrency: 'INR',
+        ownerDisplayName: 'Ravi',
+        ownerProfileId: 'ravi',
+      );
+      await a.sync.syncGroup(created.group.id);
+
+      final stored = await a.db.select(a.db.fxRates).get();
+      expect(stored, hasLength(2));
+
+      // Rates are immutable once published, so a settled device asks for
+      // everything on or after the newest date it holds and gets that one day
+      // back — never the whole history again.
+      final pullsAfterFirst = server.fxPulls;
+      await a.sync.syncGroup(created.group.id);
+      expect(server.fxPulls, pullsAfterFirst + 1);
+      expect(await a.db.select(a.db.fxRates).get(), hasLength(2));
+    });
+
+    test(
+      'a later publication is added without disturbing the earlier one',
+      () async {
+        server.publishFxRate(asOf: '2026-08-20', currency: 'INR', rate: 95.43);
+
+        final created = await a.groups.createGroup(
+          name: 'Goa Trip',
+          defaultCurrency: 'INR',
+          ownerDisplayName: 'Ravi',
+          ownerProfileId: 'ravi',
+        );
+        await a.sync.syncGroup(created.group.id);
+
+        server.publishFxRate(asOf: '2026-08-21', currency: 'INR', rate: 95.70);
+        await a.sync.syncGroup(created.group.id);
+
+        final stored = await a.db.select(a.db.fxRates).get()
+          ..sort((x, y) => x.asOf.compareTo(y.asOf));
+        expect(stored.map((r) => r.asOf), ['2026-08-20', '2026-08-21']);
+        // History must not be rewritten: an entry backdated to the 20th still
+        // has to price at the 20th's rate.
+        expect(stored.first.rate, closeTo(95.43, 1e-9));
+      },
+    );
+
+    test('a rate failure never fails a sync that carries money', () async {
+      server.failFxPulls = true;
+
+      final created = await a.groups.createGroup(
+        name: 'Goa Trip',
+        defaultCurrency: 'INR',
+        ownerDisplayName: 'Ravi',
+        ownerProfileId: 'ravi',
+      );
+      final report = await a.sync.syncGroup(created.group.id);
+      expect(report.isClean, isTrue);
+    });
+  });
 }

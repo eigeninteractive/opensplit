@@ -159,5 +159,41 @@ class FakeRemoteLedger implements RemoteLedgerApi {
     return memberFromJson(json);
   }
 
+  /// Published rates, keyed by "date|currency", exactly as the server holds
+  /// them: against USD, immutable once published.
+  final Map<String, RemoteFxRate> _fxRates = {};
+
+  /// Records rates as the server's fetch-fx function would.
+  void publishFxRate({
+    required String asOf,
+    required String currency,
+    required double rate,
+    String source = 'fake',
+  }) {
+    _fxRates['$asOf|$currency'] = RemoteFxRate(
+      asOf: asOf,
+      currency: currency,
+      rate: rate,
+      source: source,
+    );
+  }
+
+  /// How many times a client has asked for rates. Lets a test prove the
+  /// high-water mark actually stops the traffic.
+  int fxPulls = 0;
+
+  /// Simulates the rate endpoint being unavailable.
+  bool failFxPulls = false;
+
+  @override
+  Future<List<RemoteFxRate>> pullFxRates({required String since}) async {
+    fxPulls++;
+    if (failFxPulls) throw StateError('rates unavailable');
+    return [
+      for (final rate in _fxRates.values)
+        if (rate.asOf.compareTo(since) >= 0) rate,
+    ]..sort((a, b) => a.asOf.compareTo(b.asOf));
+  }
+
   int get entryCount => _entries.length;
 }

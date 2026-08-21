@@ -71,4 +71,29 @@ abstract interface class RemoteLedgerApi {
 
   /// Returns the stored row. See [pushGroup].
   Future<Member> pushMember(Member member);
+
+  /// Exchange rates published on or after [since] (`yyyy-MM-dd`).
+  ///
+  /// Reference data, identical for every user, and immutable once published —
+  /// a rate for a past date never changes — so the client keeps a high-water
+  /// mark and only ever asks for what came after it.
+  Future<List<RemoteFxRate>> pullFxRates({required String since});
+}
+
+/// One published rate, against USD.
+class RemoteFxRate {
+  const RemoteFxRate({
+    required this.asOf,
+    required this.currency,
+    required this.rate,
+    required this.source,
+  });
+
+  /// Publication date, `yyyy-MM-dd`.
+  final String asOf;
+  final String currency;
+
+  /// Units of [currency] per one USD.
+  final double rate;
+  final String source;
 }

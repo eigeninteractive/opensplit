@@ -52,3 +52,4 @@ app.*.map.json
 # Supabase CLI local state
 supabase/.temp/
 supabase/.branches/
+supabase/functions/.env

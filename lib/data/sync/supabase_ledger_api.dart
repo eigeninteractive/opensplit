@@ -187,6 +187,31 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
     }
   }
 
+  @override
+  Future<List<RemoteFxRate>> pullFxRates({required String since}) async {
+    try {
+      final rows = await _client
+          .from('fx_rates')
+          .select('as_of, currency, rate, source')
+          .gte('as_of', since)
+          .order('as_of', ascending: true);
+
+      return [
+        for (final row in rows)
+          RemoteFxRate(
+            asOf: row['as_of'] as String,
+            currency: (row['currency'] as String).trim(),
+            // numeric arrives as a string from PostgREST, since a double
+            // cannot represent every numeric exactly.
+            rate: double.parse('${row['rate']}'),
+            source: row['source'] as String,
+          ),
+      ];
+    } on PostgrestException catch (e) {
+      throw _translate(e);
+    }
+  }
+
   /// Decides whether a failure is worth retrying.
   ///
   /// A violated invariant or a denied permission will be refused identically

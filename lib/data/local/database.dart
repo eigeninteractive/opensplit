@@ -42,7 +42,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   /// Timestamps are stored as ISO-8601 text rather than Unix seconds.
   ///
@@ -83,6 +83,14 @@ class AppDatabase extends _$AppDatabase {
         await m.addColumn(members, members.updatedAt);
         await m.addColumn(members, members.upiVpa);
         await m.addColumn(categories, categories.updatedAt);
+      }
+      // Version 4 reshapes fx_rates from currency pairs to a USD pivot, and
+      // makes it server-supplied rather than fetched on the device. Dropped
+      // rather than migrated: every row is reference data the server will
+      // resend, so converting them would be work in exchange for nothing.
+      if (from < 4) {
+        await m.deleteTable('fx_rates');
+        await m.createTable(fxRates);
       }
     },
     beforeOpen: (details) async {

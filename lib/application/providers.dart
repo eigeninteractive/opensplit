@@ -4,7 +4,6 @@ import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:uuid/uuid.dart';
 
 import '../data/fx/drift_fx_repository.dart';
-import '../data/fx/frankfurter_client.dart';
 import '../data/local/database.dart';
 import '../data/repositories/drift_analytics_repository.dart';
 import '../data/repositories/drift_category_repository.dart';
@@ -82,31 +81,23 @@ EntryRepository entryRepository(Ref ref) => DriftEntryRepository(
 CurrencyRepository currencyRepository(Ref ref) =>
     DriftCurrencyRepository(ref.watch(appDatabaseProvider));
 
-@Riverpod(keepAlive: true)
-FrankfurterClient frankfurterClient(Ref ref) {
-  final client = FrankfurterClient();
-  ref.onDispose(client.close);
-  return client;
-}
-
-/// Display-only exchange rates.
+/// Display-only exchange rates, read from the locally mirrored table.
 ///
-/// Reads the local cache first and treats the network as a refresher, so a
-/// conversion is available offline and entry creation never waits on a rate.
+/// No network: the server fetches rates centrally and they arrive with sync, so
+/// a conversion works offline and every member of a group converts with the
+/// same numbers.
 @Riverpod(keepAlive: true)
-FxRepository fxRepository(Ref ref) => DriftFxRepository(
-  ref.watch(appDatabaseProvider),
-  ref.watch(frankfurterClientProvider),
-);
+FxRepository fxRepository(Ref ref) =>
+    DriftFxRepository(ref.watch(appDatabaseProvider));
 
-/// The rate for one pair.
+/// The rate for one pair, as it stood on a given date.
 ///
-/// Watched by the entry editor so that by the time anyone taps save the rate is
-/// already resolved and the snapshot costs nothing. Null is an ordinary answer:
-/// ECB does not publish every currency the app can record.
+/// Watched by the entry editor so the rate is already resolved by the time
+/// anyone taps save. Null is an ordinary answer: a currency may have no
+/// publication on or before that date, particularly for a backdated entry.
 @riverpod
-Future<FxQuote?> fxQuote(Ref ref, String base, String quote) =>
-    ref.watch(fxRepositoryProvider).quote(base: base, quote: quote);
+Future<FxQuote?> fxQuote(Ref ref, String base, String quote, DateTime asOf) =>
+    ref.watch(fxRepositoryProvider).quote(base: base, quote: quote, asOf: asOf);
 
 @Riverpod(keepAlive: true)
 ProfileRepository profileRepository(Ref ref) =>
@@ -370,14 +361,16 @@ Future<EstimatedTotal?> groupEstimate(Ref ref, String groupId) async {
   if (holding.length < 2) return null;
 
   final fx = ref.watch(fxRepositoryProvider);
-  // One request covers every currency the group holds, because the response is
-  // keyed by the group default.
-  await fx.warm(base: target, quotes: holding);
+
+  // Today's rate, not each entry's. A net balance is money owed now, so what
+  // matters is what it is worth now — whereas an individual expense is shown at
+  // the rate on the day it happened. Two different questions.
+  final today = DateTime.now();
 
   final quotes = <String, FxQuote>{};
   for (final code in holding) {
     if (code == target) continue;
-    final quote = await fx.quote(base: code, quote: target);
+    final quote = await fx.quote(base: code, quote: target, asOf: today);
     if (quote != null) quotes[code] = quote;
   }
 

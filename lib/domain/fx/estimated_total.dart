@@ -28,9 +28,11 @@ class EstimatedTotal {
 
   /// Currencies excluded because no rate was available.
   ///
-  /// Not an error: ECB reference rates do not cover AED, KWD, BHD, LKR, NPR or
-  /// VND, so a group holding those will always have entries here. The figure
-  /// stays honest by naming what it left out instead of quietly under-reporting.
+  /// Not an error, and no longer about which provider covers what: the server's
+  /// waterfall fills gaps across sources, so this now means only that nothing
+  /// had been published for that currency on or before the date in question —
+  /// most often a backdated entry predating the rates we hold. The figure stays
+  /// honest by naming what it left out instead of quietly under-reporting.
   final List<String> unconverted;
 
   bool get isComplete => unconverted.isEmpty;

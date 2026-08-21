@@ -418,3 +418,16 @@ enabled = true
 # declarative_schema_path = "./schemas"
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
+
+# Machine-to-machine endpoints, authenticated by a shared secret rather than a
+# user JWT.
+#
+# Leaving verify_jwt on would mean the caller presents the publishable key,
+# which is public by design — so it would gate nothing while giving a false
+# impression that the endpoint is protected. Each function checks its own
+# secret in constant time and refuses to start without one.
+[functions.fetch-fx]
+verify_jwt = false
+
+[functions.notify-entry]
+verify_jwt = false

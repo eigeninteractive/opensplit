@@ -313,15 +313,25 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
     final currency = currencies[_currencyCode];
     final totalMinor = currency?.parseToMinor(_amount.text);
 
-    // Resolved here rather than in _save so that saving never waits on a rate.
-    // By the time anyone has finished typing an amount this has settled, and if
-    // it has not, the entry is stored without a snapshot — which the schema
-    // allows and which costs nothing but a converted estimate later.
+    // The rate as it stood on the ENTRY's date, not today's.
+    //
+    // A dinner backdated to last Tuesday was worth what it was worth last
+    // Tuesday. Stamping it with today's rate would restate history every time
+    // someone recorded an old expense, and would quietly disagree with the same
+    // expense entered on the day.
+    //
+    // Resolved here rather than in _save so saving never waits on a lookup, and
+    // re-resolved when the date picker changes because the date is part of the
+    // question.
     final fx = currency == null || currency.code == ledger.group.defaultCurrency
         ? null
         : ref
               .watch(
-                fxQuoteProvider(currency.code, ledger.group.defaultCurrency),
+                fxQuoteProvider(
+                  currency.code,
+                  ledger.group.defaultCurrency,
+                  DateTime.utc(_date.year, _date.month, _date.day),
+                ),
               )
               .value;
 

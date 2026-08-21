@@ -185,22 +185,37 @@ class EntryShares extends Table {
   Set<Column> get primaryKey => {entryId, memberId};
 }
 
-/// Cached foreign exchange rates. Client-only — this table has no server
-/// counterpart.
+/// Exchange rates, mirrored from the server.
 ///
-/// Keyed by date so a historical entry can always be shown at the rate that
-/// applied when it was created, and so an offline device can fall back to the
-/// most recent rate it saw and label the figure as approximate.
+/// Reference data like [Currencies], not a client-side cache: the server
+/// fetches rates centrally and every device reads the same rows, so two people
+/// looking at one group cannot see different estimates.
+///
+/// Stored against a single pivot (USD) rather than as currency pairs. A pair
+/// table needs n^2 rows and makes "do we have INR to AED?" a different question
+/// for every combination; against a pivot there is one row per currency per day
+/// and any pair is a division. That is what removes the notion of a supported
+/// pair entirely.
 @DataClassName('FxRateRow')
 class FxRates extends Table {
-  /// ECB publication date as `yyyy-MM-dd`.
-  TextColumn get date => text()();
-  TextColumn get base => text()();
-  TextColumn get quote => text()();
+  /// Publication date as `yyyy-MM-dd`.
+  ///
+  /// Text rather than a DateTime because it is a date, not an instant, and
+  /// because ISO dates sort lexicographically — which is the whole lookup.
+  TextColumn get asOf => text()();
+  TextColumn get currency => text()();
+
+  /// Units of [currency] per one USD. USD itself is stored as exactly 1, so the
+  /// pivot needs no special case.
   RealColumn get rate => real()();
 
+  /// Which provider supplied this row. Rows for one day can come from different
+  /// providers, because the server's waterfall fills gaps rather than stopping
+  /// at the first success.
+  TextColumn get source => text()();
+
   @override
-  Set<Column> get primaryKey => {date, base, quote};
+  Set<Column> get primaryKey => {asOf, currency};
 }
 
 /// Pending writes waiting to reach the server. Client-only.

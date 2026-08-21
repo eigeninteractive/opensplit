@@ -2,22 +2,28 @@ import '../fx/fx_quote.dart';
 
 /// Supplies exchange rates for display-only conversion.
 ///
-/// Every method is total: a rate is a convenience, and no implementation may
-/// throw into a caller or block one on the network. Entry creation in
-/// particular must complete offline, at an airport, with the rate service down
-/// — in which case the entry is simply stored without a snapshot, which the
-/// data model already allows.
+/// Reads only. Rates are fetched centrally by the server and reach the device
+/// through sync, so nothing here touches the network: a conversion is available
+/// offline, and every member of a group converts with the same numbers.
+///
+/// Every method is total. A rate is a convenience, and no implementation may
+/// throw into a caller or block one — entry creation in particular must
+/// complete on a plane, in which case the entry is stored without a snapshot,
+/// which the data model already allows.
 abstract interface class FxRepository {
-  /// The best rate available for [base] → [quote], cache first.
+  /// The rate for converting [base] into [quote] as it stood on [asOf].
   ///
-  /// Null when no rate has ever been cached for the pair and none can be
-  /// fetched — including for currencies the rate source does not publish at
-  /// all, which is a normal outcome rather than an error.
-  Future<FxQuote?> quote({required String base, required String quote});
-
-  /// Warms the cache for a set of pairs, best effort.
+  /// Uses the most recent publication on or before [asOf], never a later one.
+  /// Backdating an expense to last Tuesday must use last Tuesday's rate; using
+  /// today's would silently restate history every time the market moved. It
+  /// also disposes of weekends and holidays without any calendar logic: there
+  /// is no Sunday publication, and Friday's is the correct answer for Sunday.
   ///
-  /// Called when a group is opened, so that the rate is already local by the
-  /// time anyone adds an expense in a second currency.
-  Future<void> warm({required String base, required Iterable<String> quotes});
+  /// Null when either side has no published rate on or before that date, which
+  /// is an ordinary outcome rather than an error.
+  Future<FxQuote?> quote({
+    required String base,
+    required String quote,
+    required DateTime asOf,
+  });
 }

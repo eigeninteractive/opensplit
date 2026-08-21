@@ -152,6 +152,7 @@ class SyncEngine {
 
   /// Applies every change made since the stored cursor.
   Future<int> pull(String groupId) async {
+    await pullFxRates();
     await _pullGroupAndMembers(groupId);
 
     var cursor = await _readCursor(groupId);
@@ -179,6 +180,61 @@ class SyncEngine {
 
     return applied;
   }
+
+  /// Mirrors published exchange rates onto the device.
+  ///
+  /// Rates are immutable once published, so this is a high-water mark rather
+  /// than a cursor: ask for everything on or after the newest date held, and on
+  /// a settled device that returns nothing. A device with no rates at all takes
+  /// a bounded window rather than all history, because a first sync should not
+  /// pull years of reference data to convert a dinner.
+  ///
+  /// Failure is swallowed. A missing rate costs an estimate, never a balance,
+  /// and it must not be able to fail a sync that carries actual money.
+  Future<int> pullFxRates() async {
+    try {
+      final newest = await _newestRateDate();
+      final since = newest ?? _isoDay(_clock().toUtc().subtract(_rateWindow));
+
+      final rates = await api.pullFxRates(since: since);
+      if (rates.isEmpty) return 0;
+
+      await db.batch((batch) {
+        for (final rate in rates) {
+          batch.insert(
+            db.fxRates,
+            FxRatesCompanion.insert(
+              asOf: rate.asOf,
+              currency: rate.currency,
+              rate: rate.rate,
+              source: rate.source,
+            ),
+            mode: InsertMode.insertOrReplace,
+          );
+        }
+      });
+      return rates.length;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  /// How far back a device with no rates at all reaches on its first sync.
+  static const _rateWindow = Duration(days: 400);
+
+  Future<String?> _newestRateDate() async {
+    final row =
+        await (db.select(db.fxRates)
+              ..orderBy([(t) => OrderingTerm.desc(t.asOf)])
+              ..limit(1))
+            .getSingleOrNull();
+    return row?.asOf;
+  }
+
+  static String _isoDay(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-'
+      '${date.month.toString().padLeft(2, '0')}-'
+      '${date.day.toString().padLeft(2, '0')}';
 
   /// Applies the group row and its members, newest write winning.
   ///
