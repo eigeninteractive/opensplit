@@ -1,46 +1,133 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
-  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Split expenses with friends. Free forever, no ads, works offline, open source.">
+  <meta name="theme-color" content="#00695C" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#111413" media="(prefers-color-scheme: dark)">
 
-  <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="opensplit">
+  <meta name="apple-mobile-web-app-title" content="OpenSplit">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
-
-  <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>opensplit</title>
+  <title>OpenSplit — split expenses with friends</title>
   <link rel="manifest" href="manifest.json">
+
+  <style>
+    /* A real skeleton, not a spinner.
+     *
+     * The gap before the first frame is the worst impression the app makes,
+     * and on the web it is unavoidable — the engine has to download. A blank
+     * white page reads as broken; a spinner reads as slow. A layout that
+     * matches what is about to appear reads as loading, and the swap is barely
+     * perceptible because nothing moves.
+     *
+     * Deliberately inline and tiny: this has to paint on the first round trip,
+     * before any stylesheet or script is fetched. */
+    :root {
+      --bg: #fbfdfc;
+      --surface: #ffffff;
+      --line: #dde5e2;
+      --shimmer: #eef3f1;
+      --brand: #00695C;
+      --text: #191c1b;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #111413;
+        --surface: #191d1c;
+        --line: #2b312f;
+        --shimmer: #232827;
+        --brand: #4fd8c4;
+        --text: #e1e3e1;
+      }
+    }
+    html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      color: var(--text);
+    }
+    #skeleton { position: fixed; inset: 0; z-index: 1; }
+    .bar {
+      height: 56px;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+      font-weight: 600;
+      font-size: 20px;
+      letter-spacing: -0.2px;
+    }
+    .bar span { color: var(--brand); }
+    .list { padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .avatar {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: var(--shimmer); flex: none;
+    }
+    .lines { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+    .line { height: 12px; border-radius: 6px; background: var(--shimmer); }
+    .line.short { width: 40%; }
+    .line.medium { width: 62%; }
+
+    /* One slow pulse. Anything faster competes for attention with the content
+     * that is about to replace it. */
+    @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+    #skeleton .card { animation: breathe 1.8s ease-in-out infinite; }
+    #skeleton .card:nth-child(2) { animation-delay: 0.15s; }
+    #skeleton .card:nth-child(3) { animation-delay: 0.3s; }
+
+    #skeleton.done { opacity: 0; transition: opacity 180ms ease-out; pointer-events: none; }
+  </style>
 </head>
 <body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
+  <div id="skeleton" aria-hidden="true">
+    <div class="bar">Open<span>Split</span></div>
+    <div class="list">
+      <div class="card">
+        <div class="avatar"></div>
+        <div class="lines"><div class="line medium"></div><div class="line short"></div></div>
+      </div>
+      <div class="card">
+        <div class="avatar"></div>
+        <div class="lines"><div class="line short"></div><div class="line medium"></div></div>
+      </div>
+      <div class="card">
+        <div class="avatar"></div>
+        <div class="lines"><div class="line medium"></div><div class="line short"></div></div>
+      </div>
+    </div>
+  </div>
 
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
+  <noscript>
+    <p style="padding:24px">OpenSplit needs JavaScript. The Android app does not.</p>
+  </noscript>
+
+  <script>
+    // Flutter fires this once it has actually painted, so the swap happens
+    // when there is something real underneath rather than on a timer that
+    // guesses.
+    window.addEventListener('flutter-first-frame', function () {
+      var skeleton = document.getElementById('skeleton');
+      if (!skeleton) return;
+      skeleton.classList.add('done');
+      setTimeout(function () { skeleton.remove(); }, 200);
+    });
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

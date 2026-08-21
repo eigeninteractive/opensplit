@@ -24,6 +24,24 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+
+            <!-- App Links. The same URL is a web route and a native route, so
+                 an invite link tapped by someone without the app opens the web
+                 build and just works — deferred deep linking for free, which
+                 otherwise needs a paid SDK.
+
+                 autoVerify makes Android fetch
+                 /.well-known/assetlinks.json. If that file does not list the
+                 certificate the installed app was actually signed with, this
+                 fails silently and links open in a browser instead. See
+                 web/.well-known/README.md. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https"
+                      android:host="opensplit.alturing.dev"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

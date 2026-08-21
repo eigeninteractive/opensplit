@@ -64,6 +64,60 @@ signature, a PostgREST filter that does not mean what it looks like, or an RLS
 policy that forbids something the app has to do. Every one of those has already
 happened once.
 
+The domain layer is also run in a real browser:
+
+```bash
+flutter test --platform chrome test/domain
+```
+
+That is not redundant. On the web a Dart `int` is a JavaScript double and is
+exact only to 2^53; a plausible expense multiplied by a 10^6-scaled weight
+already exceeds that. The allocator uses `BigInt` for exactly this reason, and
+this is the only run that proves it.
+
+## Building
+
+```bash
+# Web, WasmGC with an automatic JS fallback for older browsers.
+flutter build web --wasm --release \
+  --dart-define=SUPABASE_URL=https://your-project.supabase.co \
+  --dart-define=SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+
+# Android
+flutter build appbundle --release
+```
+
+`web/sqlite3.wasm` and `web/drift_worker.js` are committed: Drift needs both at
+runtime to use OPFS, and a build without them falls back to a database that does
+not survive a reload.
+
+Every integration is off unless configured, and hidden rather than shown broken:
+
+| `--dart-define` | Enables |
+|---|---|
+| `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` | Sync and accounts |
+| `GOOGLE_SERVER_CLIENT_ID`, `GOOGLE_WEB_CLIENT_ID` | Sign in with Google |
+| `FCM_API_KEY`, `FCM_APP_ID`, `FCM_SENDER_ID`, `FCM_PROJECT_ID` | Push |
+| `LINK_HOST` | The host used in invite links |
+
+## Deploying
+
+The web build is static. Any host works, provided it serves an SPA fallback —
+`/join/<token>` must return the app shell rather than a 404, since that is the
+entire point of an invite link. `web/_redirects` covers Cloudflare Pages and
+Netlify.
+
+**Before the first Play Store release**, read
+[`web/.well-known/README.md`](web/.well-known/README.md). `assetlinks.json`
+currently lists only a local debug key. App Links will verify perfectly on your
+machine and fail for every real user until it also lists the upload key *and*
+the Google Play App Signing key — and the failure is silent: links just open in
+a browser.
+
+Turnstile must be attached to the anonymous sign-in endpoint before the backend
+is public. Anonymous sign-in is unauthenticated row creation; without a CAPTCHA
+in front of it, anyone can mint users and rows indefinitely.
+
 Code generation runs over Drift tables, Freezed models and Riverpod providers.
 After changing any of them, re-run `dart run build_runner build`.
 
