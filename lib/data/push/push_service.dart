@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
@@ -16,8 +18,17 @@ import '../../config.dart';
 ///
 /// This also replaces holding a realtime subscription open. Peak concurrent
 /// realtime peers is what a hosted backend bills for; a push costs nothing.
+///
+/// Nothing here asks for permission. [initialize] wires up messaging and
+/// nothing more; [requestPermission] is separate and is only ever called from
+/// an explicit user action. That split is deliberate — see the note on
+/// [requestPermission].
 class PushService {
-  PushService({required this.onWake, required this.describe});
+  PushService({
+    required this.onWake,
+    required this.describe,
+    required this.onTokenChanged,
+  });
 
   /// Pull the delta for a group. Runs before anything is shown.
   final Future<void> Function(String groupId) onWake;
@@ -29,8 +40,13 @@ class PushService {
   )
   describe;
 
+  /// Register a token with the server. Called on first registration and again
+  /// every time FCM rotates it.
+  final Future<void> Function(String token) onTokenChanged;
+
   final _local = FlutterLocalNotificationsPlugin();
   bool _ready = false;
+  StreamSubscription<String>? _refresh;
 
   static const _channel = AndroidNotificationChannel(
     'opensplit_activity',
@@ -67,11 +83,48 @@ class PushService {
         >()
         ?.createNotificationChannel(_channel);
 
-    await FirebaseMessaging.instance.requestPermission();
     FirebaseMessaging.onMessage.listen(_handle);
     FirebaseMessaging.onBackgroundMessage(_backgroundStub);
 
+    // FCM rotates a registration token on reinstall, on restore to a new
+    // device, and whenever it decides one is stale — after 270 days of
+    // inactivity it garbage-collects them outright. Without this subscription
+    // the server keeps the dead token, and the user simply stops receiving
+    // anything with no error anywhere to explain it.
+    _refresh ??= FirebaseMessaging.instance.onTokenRefresh.listen((
+      token,
+    ) async {
+      try {
+        await onTokenChanged(token);
+      } catch (_) {
+        // Re-registration is retried on next launch. Push is a convenience.
+      }
+    });
+
     _ready = true;
+  }
+
+  /// Whether the OS has already granted permission to post notifications.
+  Future<bool> hasPermission() async {
+    if (!hasPush || !_ready) return false;
+    final settings = await FirebaseMessaging.instance.getNotificationSettings();
+    return settings.authorizationStatus == AuthorizationStatus.authorized ||
+        settings.authorizationStatus == AuthorizationStatus.provisional;
+  }
+
+  /// Asks the OS for permission to post notifications.
+  ///
+  /// Only ever called from a deliberate user action, never on launch. Android
+  /// 13+ shows the system dialog once or twice and then treats further asks as
+  /// permanently denied, with system settings as the only way back. Spending
+  /// that on a first-run user who has not yet created a group is spending it at
+  /// the moment they have the least reason to say yes.
+  Future<bool> requestPermission() async {
+    if (!hasPush) return false;
+    await initialize();
+    final settings = await FirebaseMessaging.instance.requestPermission();
+    return settings.authorizationStatus == AuthorizationStatus.authorized ||
+        settings.authorizationStatus == AuthorizationStatus.provisional;
   }
 
   /// The token to register with the server, or null when push is off.
@@ -83,6 +136,11 @@ class PushService {
   }
 
   String get platform => kIsWeb ? 'web' : 'android';
+
+  Future<void> dispose() async {
+    await _refresh?.cancel();
+    _refresh = null;
+  }
 
   Future<void> _handle(RemoteMessage message) async {
     final groupId = message.data['group_id'];

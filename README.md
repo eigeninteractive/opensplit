@@ -98,7 +98,36 @@ Every integration is off unless configured, and hidden rather than shown broken:
 | `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` | Sync and accounts |
 | `GOOGLE_SERVER_CLIENT_ID`, `GOOGLE_WEB_CLIENT_ID` | Sign in with Google |
 | `FCM_API_KEY`, `FCM_APP_ID`, `FCM_SENDER_ID`, `FCM_PROJECT_ID` | Push |
+| `FCM_VAPID_KEY` | Web push (in addition to the four above) |
 | `LINK_HOST` | The host used in invite links |
+
+### Push notifications
+
+The client defines above cover the app. The fan-out also needs three function
+secrets and a webhook:
+
+```
+supabase functions deploy notify-entry
+supabase secrets set FCM_PROJECT_ID=your-project \
+                     FCM_SERVICE_ACCOUNT="$(cat service-account.json)" \
+                     NOTIFY_WEBHOOK_SECRET="$(openssl rand -hex 32)"
+```
+
+Then add a database webhook on `entries` (INSERT only) pointing at the
+function, with a header `x-webhook-secret` set to the same value.
+
+**The secret is not optional.** The function refuses to run without it, because
+otherwise anyone holding the publishable key — which is public by design —
+could drive the fan-out.
+
+For web push, fill in the same four public values in `web/firebase-messaging-sw.js`.
+
+**Permission is never requested at launch.** Android 13+ shows the system
+dialog once or twice and then treats further asks as permanently denied, with
+system settings as the only way back. The app asks in two places instead: the
+Settings switch, and once after someone shares an invite — the first moment
+being notified about a group means anything. Both show an in-app rationale
+first, so the OS dialog is only ever spent on someone who has already agreed.
 
 ## Deploying
 

@@ -9,9 +9,15 @@
 // exponents, rounding and each recipient's share outside Dart, where it would
 // drift from the app silently. The device already knows how to say it.
 //
-// Deploy: supabase functions deploy notify-entry
-// Then add a database webhook on entries (INSERT) pointing at it.
+// Deploy:
+//   supabase functions deploy notify-entry
+//   supabase secrets set FCM_PROJECT_ID=... \
+//                        FCM_SERVICE_ACCOUNT="$(cat service-account.json)" \
+//                        NOTIFY_WEBHOOK_SECRET="$(openssl rand -hex 32)"
+// Then add a database webhook on entries (INSERT) pointing at this function,
+// with the header `x-webhook-secret` set to the same value.
 
+import { importPKCS8, SignJWT } from 'npm:jose@6';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 interface WebhookPayload {
@@ -22,63 +28,122 @@ interface WebhookPayload {
 
 const projectId = Deno.env.get('FCM_PROJECT_ID') ?? '';
 const serviceAccountJson = Deno.env.get('FCM_SERVICE_ACCOUNT') ?? '';
+const webhookSecret = Deno.env.get('NOTIFY_WEBHOOK_SECRET') ?? '';
 
-/// Mints a short-lived OAuth token for the FCM v1 API from the service account.
+const FCM_SCOPE = 'https://www.googleapis.com/auth/firebase.messaging';
+const TOKEN_URL = 'https://oauth2.googleapis.com/token';
+
+/// Cached across invocations: Edge Function isolates are reused, and the token
+/// is valid for an hour. Minting one per webhook added a round trip to Google
+/// on every expense anyone recorded, for no benefit.
+let cachedToken: { value: string; expiresAt: number } | null = null;
+
+/// Mints an OAuth token for the FCM v1 API from the service account.
+///
+/// jose handles the PKCS#8 parsing and base64url encoding. Doing it by hand
+/// meant stripping PEM armour with regexes and running JSON through btoa, which
+/// throws on any non-ASCII character and produces standard base64 where the JWT
+/// spec requires base64url.
 async function accessToken(): Promise<string> {
-  const account = JSON.parse(serviceAccountJson);
   const now = Math.floor(Date.now() / 1000);
+  // A minute of slack, so a token cannot expire between here and the send.
+  if (cachedToken && cachedToken.expiresAt > now + 60) return cachedToken.value;
 
-  const header = { alg: 'RS256', typ: 'JWT' };
-  const claims = {
-    iss: account.client_email,
-    scope: 'https://www.googleapis.com/auth/firebase.messaging',
-    aud: 'https://oauth2.googleapis.com/token',
-    iat: now,
-    exp: now + 3600,
-  };
+  const account = JSON.parse(serviceAccountJson);
+  const key = await importPKCS8(account.private_key, 'RS256');
 
-  const encode = (value: unknown) =>
-    btoa(JSON.stringify(value)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-  const unsigned = `${encode(header)}.${encode(claims)}`;
+  const assertion = await new SignJWT({ scope: FCM_SCOPE })
+    .setProtectedHeader({ alg: 'RS256', typ: 'JWT' })
+    .setIssuer(account.client_email)
+    .setAudience(TOKEN_URL)
+    .setIssuedAt(now)
+    .setExpirationTime(now + 3600)
+    .sign(key);
 
-  const pem = account.private_key
-    .replace(/-----BEGIN PRIVATE KEY-----/, '')
-    .replace(/-----END PRIVATE KEY-----/, '')
-    .replace(/\s/g, '');
-  const key = await crypto.subtle.importKey(
-    'pkcs8',
-    Uint8Array.from(atob(pem), (c) => c.charCodeAt(0)),
-    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const signature = await crypto.subtle.sign(
-    'RSASSA-PKCS1-v1_5',
-    key,
-    new TextEncoder().encode(unsigned),
-  );
-  const encodedSignature = btoa(String.fromCharCode(...new Uint8Array(signature)))
-    .replace(/=/g, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_');
-
-  const response = await fetch('https://oauth2.googleapis.com/token', {
+  const response = await fetch(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      assertion: `${unsigned}.${encodedSignature}`,
+      assertion,
     }),
   });
+
+  // Without this check a failed mint yields `undefined`, every send goes out as
+  // `Bearer undefined`, and the 401s are invisible because nothing inspects
+  // them. Failing loudly here is the difference between a broken deploy that
+  // reports itself and one that silently stops notifying anybody.
+  if (!response.ok) {
+    throw new Error(
+      `FCM token request failed: ${response.status} ${await response.text()}`,
+    );
+  }
   const body = await response.json();
-  return body.access_token;
+  if (typeof body.access_token !== 'string') {
+    throw new Error('FCM token response carried no access_token');
+  }
+
+  cachedToken = {
+    value: body.access_token,
+    expiresAt: now + (typeof body.expires_in === 'number' ? body.expires_in : 3600),
+  };
+  return cachedToken.value;
+}
+
+/// Whether a send failure means this registration is dead for good.
+///
+/// UNREGISTERED (404) always does. INVALID_ARGUMENT (400) is the trap: FCM
+/// returns it both for a token it cannot parse AND for a malformed message, and
+/// the two are told apart only by the `details` array. Since a fan-out sends an
+/// identical payload to everyone, treating every 400 as a dead token means one
+/// payload bug deletes every device in the group and each of those users has to
+/// reinstall to recover.
+function isDeadToken(status: number, body: unknown): boolean {
+  if (status === 404) return true;
+  if (status !== 400) return false;
+
+  const details = (body as { error?: { details?: unknown[] } })?.error?.details;
+  if (!Array.isArray(details)) return false;
+
+  // A payload problem is reported as google.rpc.BadRequest with fieldViolations.
+  // Only the FcmError detail describes the registration itself.
+  return details.some(
+    (detail) =>
+      (detail as { '@type'?: string })?.['@type'] ===
+        'type.googleapis.com/google.firebase.fcm.v1.FcmError' &&
+      (detail as { errorCode?: string })?.errorCode === 'INVALID_ARGUMENT',
+  );
+}
+
+/// Constant-time comparison, so the shared secret cannot be recovered by
+/// timing repeated requests.
+function secretMatches(provided: string, expected: string): boolean {
+  if (provided.length !== expected.length) return false;
+  let diff = 0;
+  for (let i = 0; i < provided.length; i++) {
+    diff |= provided.charCodeAt(i) ^ expected.charCodeAt(i);
+  }
+  return diff === 0;
 }
 
 Deno.serve(async (request) => {
+  // The webhook is the only legitimate caller. Without this, anyone holding the
+  // publishable key — which is public by design — could drive the fan-out.
+  if (!webhookSecret) {
+    console.error('NOTIFY_WEBHOOK_SECRET is not set; refusing to run');
+    return new Response('misconfigured', { status: 500 });
+  }
+  if (
+    !secretMatches(request.headers.get('x-webhook-secret') ?? '', webhookSecret)
+  ) {
+    return new Response('forbidden', { status: 403 });
+  }
+
   const payload: WebhookPayload = await request.json();
   if (payload.type !== 'INSERT' || payload.table !== 'entries' || !payload.record) {
     return new Response('ignored', { status: 200 });
   }
+  const record = payload.record;
 
   // Service role: tokens_for_entry reads other people's tokens, which no
   // user-facing policy permits.
@@ -88,7 +153,7 @@ Deno.serve(async (request) => {
   );
 
   const { data: targets, error } = await supabase.rpc('tokens_for_entry', {
-    p_entry_id: payload.record.id,
+    p_entry_id: record.id,
   });
   if (error) {
     console.error('tokens_for_entry failed', error);
@@ -101,10 +166,19 @@ Deno.serve(async (request) => {
     return new Response('unconfigured', { status: 200 });
   }
 
-  const token = await accessToken();
+  let token: string;
+  try {
+    token = await accessToken();
+  } catch (cause) {
+    console.error('could not mint an FCM access token', cause);
+    return new Response('error', { status: 500 });
+  }
+
   const stale: string[] = [];
 
-  await Promise.all(
+  // allSettled, not all: one recipient's network failure must not abandon the
+  // rest of the group half-notified.
+  await Promise.allSettled(
     targets.map(async (target: { token: string; platform: string }) => {
       const response = await fetch(
         `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
@@ -122,8 +196,8 @@ Deno.serve(async (request) => {
               // design exists to avoid.
               data: {
                 kind: 'entry',
-                entry_id: payload.record!.id,
-                group_id: payload.record!.group_id,
+                entry_id: record.id,
+                group_id: record.group_id,
               },
               android: { priority: 'high' },
               webpush: { headers: { Urgency: 'high' } },
@@ -132,10 +206,13 @@ Deno.serve(async (request) => {
         },
       );
 
-      // 404 UNREGISTERED / 400 INVALID_ARGUMENT mean the token is dead. Left in
-      // place they accumulate forever and every send retries them.
-      if (response.status === 404 || response.status === 400) {
+      if (response.ok) return;
+
+      const body = await response.json().catch(() => null);
+      if (isDeadToken(response.status, body)) {
         stale.push(target.token);
+      } else {
+        console.error('FCM send failed', response.status, JSON.stringify(body));
       }
     }),
   );

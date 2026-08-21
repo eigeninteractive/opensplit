@@ -593,57 +593,86 @@ Future<List<String>> groupCurrencies(Ref ref, String groupId) =>
 /// says is produced here, from data that has just been pulled onto this device,
 /// using the same formatter the screens use.
 @Riverpod(keepAlive: true)
-PushService pushService(Ref ref) => PushService(
-  onWake: (groupId) async {
-    final engine = ref.read(syncEngineProvider);
-    if (engine == null) return;
-    await engine.syncGroup(groupId);
-  },
-  describe: (groupId, entryId) async {
-    final entry = await ref.read(entryRepositoryProvider).getEntry(entryId);
-    if (entry == null) return null;
+PushService pushService(Ref ref) {
+  final service = PushService(
+    onTokenChanged: (token) => _registerDeviceToken(ref, token),
+    onWake: (groupId) async {
+      final engine = ref.read(syncEngineProvider);
+      if (engine == null) return;
+      await engine.syncGroup(groupId);
+    },
+    describe: (groupId, entryId) async {
+      final entry = await ref.read(entryRepositoryProvider).getEntry(entryId);
+      if (entry == null) return null;
 
-    final group = await ref.read(groupRepositoryProvider).getGroup(groupId);
-    final members = await ref.read(groupRepositoryProvider).getMembers(groupId);
-    final currencies = await ref.read(currencyRepositoryProvider).all();
-    final me = ref.read(localIdentityControllerProvider).profileId;
+      final group = await ref.read(groupRepositoryProvider).getGroup(groupId);
+      final members = await ref
+          .read(groupRepositoryProvider)
+          .getMembers(groupId);
+      final currencies = await ref.read(currencyRepositoryProvider).all();
+      final me = ref.read(localIdentityControllerProvider).profileId;
 
-    String nameOf(String memberId) =>
-        members
-            .where((m) => m.id == memberId)
-            .map((m) => m.displayName)
-            .firstOrNull ??
-        'Someone';
+      String nameOf(String memberId) =>
+          members
+              .where((m) => m.id == memberId)
+              .map((m) => m.displayName)
+              .firstOrNull ??
+          'Someone';
 
-    final myMemberId = members
-        .where((m) => m.profileId == me)
-        .map((m) => m.id)
-        .firstOrNull;
-    final myShare =
-        entry.shares
-            .where((s) => s.memberId == myMemberId)
-            .map((s) => s.amountMinor)
-            .firstOrNull ??
-        0;
+      final myMemberId = members
+          .where((m) => m.profileId == me)
+          .map((m) => m.id)
+          .firstOrNull;
+      final myShare =
+          entry.shares
+              .where((s) => s.memberId == myMemberId)
+              .map((s) => s.amountMinor)
+              .firstOrNull ??
+          0;
 
-    final currency = currencies
-        .where((c) => c.code == entry.currency)
-        .firstOrNull;
+      final currency = currencies
+          .where((c) => c.code == entry.currency)
+          .firstOrNull;
 
-    return describeEntry(
-      entry: entry,
-      groupName: group?.name ?? 'OpenSplit',
-      authorName: nameOf(entry.createdBy),
-      currency: currency,
-      shareMinor: myShare,
-      // The screens' formatter, so a banner and the app can never quote
-      // different figures.
-      format: (minor) => formatMoney(currency, minor),
-    );
-  },
-);
+      return describeEntry(
+        entry: entry,
+        groupName: group?.name ?? 'OpenSplit',
+        authorName: nameOf(entry.createdBy),
+        currency: currency,
+        shareMinor: myShare,
+        // The screens' formatter, so a banner and the app can never quote
+        // different figures.
+        format: (minor) => formatMoney(currency, minor),
+      );
+    },
+  );
+  ref.onDispose(service.dispose);
+  return service;
+}
 
-/// Registers this device for push, once there is a session to attach it to.
+/// Sends this device's token to the server.
+///
+/// Shared by first registration and by the rotation listener, so both write the
+/// same row the same way.
+Future<void> _registerDeviceToken(Ref ref, String token) async {
+  final client = ref.read(supabaseClientProvider);
+  final account = await ref.read(sessionControllerProvider.future);
+  if (client == null || account == null) return;
+
+  await client.from('device_tokens').upsert({
+    'token': token,
+    'profile_id': account.id,
+    'platform': ref.read(pushServiceProvider).platform,
+    'last_seen_at': DateTime.now().toUtc().toIso8601String(),
+  });
+}
+
+/// Registers this device for push, if the user has already agreed to it.
+///
+/// Deliberately does NOT ask for permission. Asking is a separate, explicit
+/// action taken from Settings or from the invite flow — see
+/// [PushService.requestPermission]. This provider only wires up an
+/// already-granted permission, so a launch never produces a system dialog.
 ///
 /// Failure is not surfaced: push is a convenience on top of sync, and a device
 /// that cannot register still receives everything the next time a screen opens.
@@ -655,19 +684,79 @@ Future<void> pushRegistration(Ref ref) async {
 
   try {
     final push = ref.read(pushServiceProvider);
+    // Sets up listeners only. Safe to run before any permission exists, and
+    // necessary so that a permission granted in system settings starts working
+    // on the next launch without another prompt.
     await push.initialize();
+    if (!await push.hasPermission()) return;
 
     final token = await push.token();
     if (token == null) return;
-
-    await client.from('device_tokens').upsert({
-      'token': token,
-      'profile_id': account.id,
-      'platform': push.platform,
-      'last_seen_at': DateTime.now().toUtc().toIso8601String(),
-    });
+    await _registerDeviceToken(ref, token);
   } catch (error) {
     // Push is not configured, or permission was refused. Neither is a problem
     // worth interrupting anyone about.
+  }
+}
+
+/// Whether the user has asked to be told about group activity.
+///
+/// Persisted separately from the OS permission because they answer different
+/// questions: the OS knows whether the app *may* post a notification, this
+/// knows whether the user ever *wanted* one. Keeping both means the Settings
+/// switch can show the real state after someone revokes permission in system
+/// settings, instead of silently claiming notifications are on.
+@Riverpod(keepAlive: true)
+class NotificationPreference extends _$NotificationPreference {
+  static const _key = 'notifications_requested';
+
+  @override
+  bool build() => ref.watch(sharedPreferencesProvider).getBool(_key) ?? false;
+
+  /// Whether the user has ever been shown the prompt.
+  ///
+  /// Distinct from the stored value being false, which means they were asked
+  /// and said no — a state that must not be re-prompted unbidden.
+  bool get hasBeenAsked =>
+      ref.read(sharedPreferencesProvider).containsKey(_key);
+
+  /// Records a refusal made in the app, before the OS is ever involved.
+  Future<void> markDeclined() => _remember(false);
+
+  /// Turns notifications on, prompting the OS if needed.
+  ///
+  /// Returns whether they are actually on afterwards, which is not the same as
+  /// what the user tapped: on Android 13+ a second refusal makes the system
+  /// dialog stop appearing entirely, so this can return false having shown the
+  /// user nothing at all. Callers say so rather than leaving a switch on.
+  Future<bool> enable() async {
+    final push = ref.read(pushServiceProvider);
+    final granted = await push.requestPermission();
+    await _remember(granted);
+    if (!granted) return false;
+
+    final token = await push.token();
+    if (token == null) return false;
+    await _registerDeviceToken(ref, token);
+    return true;
+  }
+
+  /// Stops notifying this device, and removes its token from the server so the
+  /// fan-out does not keep paying to wake a device that will ignore it.
+  Future<void> disable() async {
+    await _remember(false);
+    final client = ref.read(supabaseClientProvider);
+    final token = await ref.read(pushServiceProvider).token();
+    if (client == null || token == null) return;
+    try {
+      await client.from('device_tokens').delete().eq('token', token);
+    } catch (_) {
+      // The preference is what governs this device either way.
+    }
+  }
+
+  Future<void> _remember(bool wanted) async {
+    await ref.read(sharedPreferencesProvider).setBool(_key, wanted);
+    state = wanted;
   }
 }

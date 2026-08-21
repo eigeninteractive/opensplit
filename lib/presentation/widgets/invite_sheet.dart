@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/providers.dart';
+import 'notification_invitation.dart';
 import '../../config.dart';
 import '../../domain/models/member.dart';
 import '../../domain/repositories/invite_api.dart';
@@ -111,11 +112,13 @@ class _InviteSheetState extends ConsumerState<_InviteSheet> {
             FilledButton.icon(
               onPressed: () async {
                 await Clipboard.setData(ClipboardData(text: _url!));
-                if (context.mounted) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(const SnackBar(content: Text('Link copied')));
-                }
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(const SnackBar(content: Text('Link copied')));
+                // The group is about to stop being a solo ledger, which is the
+                // first moment being notified about it means anything.
+                await offerNotifications(context, ref);
               },
               icon: const Icon(Icons.copy),
               label: const Text('Copy link'),
