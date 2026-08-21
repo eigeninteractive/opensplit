@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../domain/models/group.dart';
+import '../../domain/settle/upi.dart';
 import '../../domain/models/member.dart';
 import '../../domain/repositories/group_repository.dart';
 import '../local/database.dart';
@@ -123,6 +124,7 @@ final class DriftGroupRepository implements GroupRepository {
               simplifyDebts: Value(group.simplifyDebts),
               createdBy: ownerProfileId ?? owner.id,
               createdAt: group.createdAt,
+              updatedAt: Value(now),
             ),
           );
       await _db
@@ -135,6 +137,7 @@ final class DriftGroupRepository implements GroupRepository {
               displayName: owner.displayName,
               role: owner.role,
               joinedAt: owner.joinedAt,
+              updatedAt: Value(now),
             ),
           );
     });
@@ -158,6 +161,10 @@ final class DriftGroupRepository implements GroupRepository {
         defaultCurrency: Value(group.defaultCurrency),
         simplifyDebts: Value(group.simplifyDebts),
         archivedAt: Value(group.archivedAt),
+        // Bumped on every local write. Without this a rename made offline
+        // keeps its old version, and the next pull sees the server as newer
+        // and discards the edit before the outbox has had a chance to send it.
+        updatedAt: Value(_clock()),
       ),
     );
     await outbox?.enqueue(OutboxTarget.group, group.id);
@@ -199,6 +206,7 @@ final class DriftGroupRepository implements GroupRepository {
             displayName: member.displayName,
             role: member.role,
             joinedAt: member.joinedAt,
+            updatedAt: Value(member.joinedAt),
           ),
         );
     await outbox?.enqueue(OutboxTarget.member, member.id);
@@ -216,7 +224,7 @@ final class DriftGroupRepository implements GroupRepository {
       );
     }
     await (_db.update(_db.members)..where((t) => t.id.equals(memberId))).write(
-      MembersCompanion(displayName: Value(trimmed)),
+      MembersCompanion(displayName: Value(trimmed), updatedAt: Value(_clock())),
     );
     await outbox?.enqueue(OutboxTarget.member, memberId);
   }
@@ -226,7 +234,22 @@ final class DriftGroupRepository implements GroupRepository {
     // Marked as left, never deleted. Their name still has to render on every
     // expense they were part of, and their balance still has to be settleable.
     await (_db.update(_db.members)..where((t) => t.id.equals(memberId))).write(
-      MembersCompanion(leftAt: Value(_clock())),
+      MembersCompanion(leftAt: Value(_clock()), updatedAt: Value(_clock())),
+    );
+    await outbox?.enqueue(OutboxTarget.member, memberId);
+  }
+
+  @override
+  Future<void> setMemberUpiVpa(String memberId, String? vpa) async {
+    final trimmed = vpa?.trim();
+    if (trimmed != null && trimmed.isNotEmpty && !isValidUpiVpa(trimmed)) {
+      throw ArgumentError.value(vpa, 'vpa', 'Not a UPI ID.');
+    }
+    await (_db.update(_db.members)..where((t) => t.id.equals(memberId))).write(
+      MembersCompanion(
+        upiVpa: Value(trimmed == null || trimmed.isEmpty ? null : trimmed),
+        updatedAt: Value(_clock()),
+      ),
     );
     await outbox?.enqueue(OutboxTarget.member, memberId);
   }
@@ -234,7 +257,10 @@ final class DriftGroupRepository implements GroupRepository {
   @override
   Future<void> setArchived(String groupId, {required bool archived}) async {
     await (_db.update(_db.groups)..where((t) => t.id.equals(groupId))).write(
-      GroupsCompanion(archivedAt: Value(archived ? _clock() : null)),
+      GroupsCompanion(
+        archivedAt: Value(archived ? _clock() : null),
+        updatedAt: Value(_clock()),
+      ),
     );
     await outbox?.enqueue(OutboxTarget.group, groupId);
   }

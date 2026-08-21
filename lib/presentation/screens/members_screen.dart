@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../application/providers.dart';
 import '../../domain/models/member.dart';
+import '../../domain/settle/upi.dart';
 import '../widgets/invite_sheet.dart';
 
 class MembersScreen extends ConsumerWidget {
@@ -56,7 +57,12 @@ class MembersScreen extends ConsumerWidget {
                           (member.id == ledger.me?.id ? ' (you)' : ''),
                     ),
                     subtitle: Text(
-                      member.role == MemberRole.owner
+                      member.upiVpa != null
+                          // The handle is the useful thing to see at a glance
+                          // here: it is what makes settling with this person
+                          // one tap instead of a chat message asking for it.
+                          ? member.upiVpa!
+                          : member.role == MemberRole.owner
                           ? 'Owner'
                           : member.isPlaceholder
                           // Blunt on purpose: a placeholder is a real member
@@ -68,6 +74,7 @@ class MembersScreen extends ConsumerWidget {
                       onSelected: (action) => switch (action) {
                         'invite' => showInviteSheet(context, ref, member),
                         'rename' => _rename(context, ref, member),
+                        'upi' => _setUpi(context, ref, member),
                         'remove' => _remove(context, ref, member, ledger),
                         _ => null,
                       },
@@ -80,6 +87,14 @@ class MembersScreen extends ConsumerWidget {
                         const PopupMenuItem(
                           value: 'rename',
                           child: Text('Rename'),
+                        ),
+                        PopupMenuItem(
+                          value: 'upi',
+                          child: Text(
+                            member.upiVpa == null
+                                ? 'Add UPI ID'
+                                : 'Change UPI ID',
+                          ),
                         ),
                         if (member.role != MemberRole.owner)
                           const PopupMenuItem(
@@ -113,6 +128,30 @@ class MembersScreen extends ConsumerWidget {
     await ref
         .read(groupRepositoryProvider)
         .addMember(groupId, displayName: name);
+  }
+
+  /// Records a UPI handle for a member of this group.
+  ///
+  /// Available for everyone, not just placeholders: the person who set up the
+  /// group often knows a flatmate's UPI ID long before that flatmate gets round
+  /// to filling in their own profile.
+  Future<void> _setUpi(
+    BuildContext context,
+    WidgetRef ref,
+    Member member,
+  ) async {
+    final controller = TextEditingController(text: member.upiVpa ?? '');
+    final saved = await showDialog<String?>(
+      context: context,
+      builder: (context) =>
+          _UpiDialog(controller: controller, displayName: member.displayName),
+    );
+    controller.dispose();
+    if (saved == null) return;
+
+    await ref
+        .read(groupRepositoryProvider)
+        .setMemberUpiVpa(member.id, saved.isEmpty ? null : saved);
   }
 
   Future<void> _rename(
@@ -201,5 +240,68 @@ Future<String?> _promptForName(
         ),
       ],
     ),
+  );
+}
+
+/// Collects a UPI ID, validating it before it is stored.
+///
+/// Validated here as well as in the repository and again by a check constraint
+/// on the server. A handle that is wrong is worse than one that is missing:
+/// the payment app opens, looks entirely normal, and the money goes nowhere or
+/// to a stranger.
+class _UpiDialog extends StatefulWidget {
+  const _UpiDialog({required this.controller, required this.displayName});
+
+  final TextEditingController controller;
+  final String displayName;
+
+  @override
+  State<_UpiDialog> createState() => _UpiDialogState();
+}
+
+class _UpiDialogState extends State<_UpiDialog> {
+  String? _error;
+
+  void _submit() {
+    final value = widget.controller.text.trim();
+    if (value.isNotEmpty && !isValidUpiVpa(value)) {
+      setState(() => _error = 'That does not look like a UPI ID.');
+      return;
+    }
+    Navigator.of(context).pop(value);
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text('UPI ID for ${widget.displayName}'),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: widget.controller,
+          autofocus: true,
+          onSubmitted: (_) => _submit(),
+          decoration: InputDecoration(
+            labelText: 'UPI ID',
+            hintText: 'name@bank',
+            errorText: _error,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Used to open a payment app when settling up. Leave it empty to '
+          'remove it. OpenSplit never handles the money.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.of(context).pop(),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(onPressed: _submit, child: const Text('Save')),
+    ],
   );
 }

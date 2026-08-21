@@ -32,6 +32,16 @@ abstract class Member with _$Member {
     /// financial history has to stay referenceable for their past entries to
     /// make sense.
     DateTime? leftAt,
+
+    /// A UPI handle for this member of this group.
+    ///
+    /// Group-scoped rather than on the profile, because a placeholder has no
+    /// profile and settling with a placeholder is exactly when the handle is
+    /// needed. Falls back to the linked profile's when null.
+    String? upiVpa,
+
+    /// Version for last-write-wins. See [Group.updatedAt].
+    DateTime? updatedAt,
   }) = _Member;
 
   const Member._();

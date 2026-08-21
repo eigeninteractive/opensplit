@@ -91,8 +91,12 @@ class _SettleUpScreenState extends ConsumerState<SettleUpScreen> {
 
     // Fill the payee's handle from their profile the first time we learn it,
     // without stamping over anything the user has typed.
-    if (_payeeVpa.text.isEmpty && payeeProfile?.upiVpa != null) {
-      _payeeVpa.text = payeeProfile!.upiVpa!;
+    // The member's own handle wins over the profile's: it was recorded by
+    // someone in this group about this person, and a placeholder has no
+    // profile at all — which is exactly who most often needs paying.
+    final knownVpa = payee?.upiVpa ?? payeeProfile?.upiVpa;
+    if (_payeeVpa.text.isEmpty && knownVpa != null) {
+      _payeeVpa.text = knownVpa;
     }
 
     final amountMinor = currency?.parseToMinor(_amount.text);

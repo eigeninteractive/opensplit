@@ -21,6 +21,12 @@ abstract class Group with _$Group {
     required String createdBy,
     required DateTime createdAt,
     DateTime? archivedAt,
+
+    /// Version for last-write-wins, from the server once synced.
+    ///
+    /// Null on a row this device created and has not yet pushed, which cannot
+    /// be in conflict with anything — the server has never seen it.
+    DateTime? updatedAt,
   }) = _Group;
 
   const Group._();

@@ -141,13 +141,22 @@ class FakeRemoteLedger implements RemoteLedgerApi {
   ];
 
   @override
-  Future<void> pushGroup(Group group) async {
-    _groups[group.id] = groupToJson(group);
+  Future<Group> pushGroup(Group group) async {
+    // Stamped from the fake's own clock, exactly as Postgres does with now().
+    // Accepting the client's value would let a test pass that a real server
+    // would fail.
+    final json = groupToJson(group)
+      ..['updated_at'] = _stamp().toIso8601String();
+    _groups[group.id] = json;
+    return groupFromJson(json);
   }
 
   @override
-  Future<void> pushMember(Member member) async {
-    _members[member.id] = memberToJson(member);
+  Future<Member> pushMember(Member member) async {
+    final json = memberToJson(member)
+      ..['updated_at'] = _stamp().toIso8601String();
+    _members[member.id] = json;
+    return memberFromJson(json);
   }
 
   int get entryCount => _entries.length;

@@ -58,6 +58,13 @@ class Groups extends Table {
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get archivedAt => dateTime().nullable()();
 
+  /// Version for last-write-wins, from the server once synced.
+  ///
+  /// Locally created rows carry a device clock until their first push, which is
+  /// safe because a row the server has never seen cannot be in conflict with
+  /// anything. From then on both sides of every comparison are server times.
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -79,6 +86,17 @@ class Members extends Table {
   /// referenceable for past entries to make sense.
   DateTimeColumn get leftAt => dateTime().nullable()();
 
+  /// A UPI handle recorded against this member of this group.
+  ///
+  /// Group-scoped on purpose. A placeholder has no profile at all, and settling
+  /// with a placeholder is exactly when their payment handle is needed — so a
+  /// profile-only field is missing for precisely the people who need it most.
+  /// Falls back to the linked profile's when this is null.
+  TextColumn get upiVpa => text().nullable()();
+
+  /// Version for last-write-wins. See [Groups.updatedAt].
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -92,6 +110,9 @@ class Categories extends Table {
       text().nullable().references(Groups, #id, onDelete: KeyAction.cascade)();
   TextColumn get name => text()();
   TextColumn get icon => text().nullable()();
+
+  /// Version for last-write-wins. See [Groups.updatedAt].
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 
   @override
   Set<Column> get primaryKey => {id};

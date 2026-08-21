@@ -42,7 +42,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   /// Timestamps are stored as ISO-8601 text rather than Unix seconds.
   ///
@@ -72,6 +72,17 @@ class AppDatabase extends _$AppDatabase {
       if (from < 2) {
         await _createSearchIndex();
         await _backfillSearchIndex();
+      }
+      // Version 3 gives groups, members and categories their own version
+      // column, so a pull can do a real last-write-wins on them instead of
+      // overwriting whatever the device holds. Existing rows are stamped with
+      // the column default, which is correct: they predate any comparison and
+      // the first push replaces the value with a server timestamp anyway.
+      if (from < 3) {
+        await m.addColumn(groups, groups.updatedAt);
+        await m.addColumn(members, members.updatedAt);
+        await m.addColumn(members, members.upiVpa);
+        await m.addColumn(categories, categories.updatedAt);
       }
     },
     beforeOpen: (details) async {

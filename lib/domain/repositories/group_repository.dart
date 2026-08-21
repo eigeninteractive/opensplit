@@ -52,5 +52,11 @@ abstract interface class GroupRepository {
   /// keep making sense.
   Future<void> removeMember(String memberId);
 
+  /// Records a UPI handle against a member of a group.
+  ///
+  /// Group-scoped rather than on the profile, so a placeholder — someone who
+  /// has never opened the app — can still be paid. Pass null to clear it.
+  Future<void> setMemberUpiVpa(String memberId, String? vpa);
+
   Future<void> setArchived(String groupId, {required bool archived});
 }

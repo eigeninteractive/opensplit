@@ -96,6 +96,9 @@ Map<String, dynamic> groupToJson(Group group) => {
   'created_by': group.createdBy,
   'created_at': group.createdAt.toUtc().toIso8601String(),
   'archived_at': group.archivedAt?.toUtc().toIso8601String(),
+  // updated_at is deliberately absent. The server stamps it with now() on
+  // write, so sending a device clock could only corrupt the comparison it
+  // exists to make.
 };
 
 Group groupFromJson(Map<String, dynamic> json) => Group(
@@ -107,6 +110,7 @@ Group groupFromJson(Map<String, dynamic> json) => Group(
   createdBy: json['created_by'] as String,
   createdAt: DateTime.parse(json['created_at'] as String),
   archivedAt: _parseOrNull(json['archived_at']),
+  updatedAt: _parseOrNull(json['updated_at']),
 );
 
 Map<String, dynamic> memberToJson(Member member) => {
@@ -117,6 +121,7 @@ Map<String, dynamic> memberToJson(Member member) => {
   'role': member.role.name,
   'joined_at': member.joinedAt.toUtc().toIso8601String(),
   'left_at': member.leftAt?.toUtc().toIso8601String(),
+  'upi_vpa': member.upiVpa,
 };
 
 Member memberFromJson(Map<String, dynamic> json) => Member(
@@ -127,6 +132,8 @@ Member memberFromJson(Map<String, dynamic> json) => Member(
   role: MemberRole.values.byName((json['role'] as String?) ?? 'member'),
   joinedAt: DateTime.parse(json['joined_at'] as String),
   leftAt: _parseOrNull(json['left_at']),
+  upiVpa: json['upi_vpa'] as String?,
+  updatedAt: _parseOrNull(json['updated_at']),
 );
 
 DateTime? _parseOrNull(Object? value) =>

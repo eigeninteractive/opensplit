@@ -65,7 +65,10 @@ abstract interface class RemoteLedgerApi {
 
   Future<List<Member>> pullMembers(String groupId);
 
-  Future<void> pushGroup(Group group);
+  /// Returns the stored row, so the caller can adopt the server's
+  /// `updated_at` instead of leaving a device clock in the version column.
+  Future<Group> pushGroup(Group group);
 
-  Future<void> pushMember(Member member);
+  /// Returns the stored row. See [pushGroup].
+  Future<Member> pushMember(Member member);
 }

@@ -156,18 +156,32 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
   }
 
   @override
-  Future<void> pushGroup(Group group) async {
+  Future<Group> pushGroup(Group group) async {
     try {
-      await _client.from('groups').upsert(groupToJson(group));
+      // select().single() so the server's updated_at comes straight back. Note
+      // this needs a SELECT policy as well as an INSERT one: an upsert that
+      // returns rows is refused without it, and the error names the INSERT
+      // policy, which is nothing to do with it.
+      final row = await _client
+          .from('groups')
+          .upsert(groupToJson(group))
+          .select()
+          .single();
+      return groupFromJson(row);
     } on PostgrestException catch (e) {
       throw _translate(e);
     }
   }
 
   @override
-  Future<void> pushMember(Member member) async {
+  Future<Member> pushMember(Member member) async {
     try {
-      await _client.from('members').upsert(memberToJson(member));
+      final row = await _client
+          .from('members')
+          .upsert(memberToJson(member))
+          .select()
+          .single();
+      return memberFromJson(row);
     } on PostgrestException catch (e) {
       throw _translate(e);
     }

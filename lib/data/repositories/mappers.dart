@@ -20,6 +20,7 @@ extension GroupRowMapper on GroupRow {
     createdBy: createdBy,
     createdAt: createdAt,
     archivedAt: archivedAt,
+    updatedAt: updatedAt,
   );
 }
 
@@ -32,6 +33,8 @@ extension MemberRowMapper on MemberRow {
     role: role,
     joinedAt: joinedAt,
     leftAt: leftAt,
+    upiVpa: upiVpa,
+    updatedAt: updatedAt,
   );
 }
 

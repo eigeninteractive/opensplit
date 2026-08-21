@@ -123,14 +123,30 @@ class SyncEngine {
           db.groups,
         )..where((t) => t.id.equals(item.targetId))).getSingleOrNull();
         if (row == null) return;
-        await api.pushGroup(row.toDomain());
+        final storedGroup = await api.pushGroup(row.toDomain());
+        // Adopt the server's version, exactly as the entry path does. Leaving
+        // a device clock here would make the next pull compare a local clock
+        // against a server one, which is the comparison this column exists to
+        // avoid.
+        if (storedGroup.updatedAt != null) {
+          await (db.update(db.groups)..where((t) => t.id.equals(row.id))).write(
+            GroupsCompanion(updatedAt: Value(storedGroup.updatedAt!)),
+          );
+        }
 
       case OutboxTarget.member:
         final row = await (db.select(
           db.members,
         )..where((t) => t.id.equals(item.targetId))).getSingleOrNull();
         if (row == null) return;
-        await api.pushMember(row.toDomain());
+        final storedMember = await api.pushMember(row.toDomain());
+        if (storedMember.updatedAt != null) {
+          await (db.update(
+            db.members,
+          )..where((t) => t.id.equals(row.id))).write(
+            MembersCompanion(updatedAt: Value(storedMember.updatedAt!)),
+          );
+        }
     }
   }
 
@@ -164,9 +180,20 @@ class SyncEngine {
     return applied;
   }
 
+  /// Applies the group row and its members, newest write winning.
+  ///
+  /// These are refetched whole rather than paged by cursor — a group has one
+  /// row and a handful of members, so a delta feed would cost more than it
+  /// saves. What they are NOT is applied unconditionally: before these tables
+  /// had an `updated_at`, this method overwrote whatever the device held on
+  /// every sync, so a rename made offline was silently discarded by the next
+  /// pull that happened to run before the outbox drained.
   Future<void> _pullGroupAndMembers(String groupId) async {
     final group = await api.pullGroup(groupId);
-    if (group != null) {
+    final localGroup = await (db.select(
+      db.groups,
+    )..where((t) => t.id.equals(groupId))).getSingleOrNull();
+    if (group != null && _remoteWins(localGroup?.updatedAt, group.updatedAt)) {
       await db
           .into(db.groups)
           .insertOnConflictUpdate(
@@ -179,6 +206,7 @@ class SyncEngine {
               createdBy: group.createdBy,
               createdAt: group.createdAt,
               archivedAt: Value(group.archivedAt),
+              updatedAt: Value(group.updatedAt ?? _clock()),
             ),
           );
     }
@@ -186,6 +214,10 @@ class SyncEngine {
     // Members must land before entries: an entry's payers and shares reference
     // them, and the foreign keys are real.
     for (final member in await api.pullMembers(groupId)) {
+      final localMember = await (db.select(
+        db.members,
+      )..where((t) => t.id.equals(member.id))).getSingleOrNull();
+      if (!_remoteWins(localMember?.updatedAt, member.updatedAt)) continue;
       await db
           .into(db.members)
           .insertOnConflictUpdate(
@@ -197,9 +229,23 @@ class SyncEngine {
               role: member.role,
               joinedAt: member.joinedAt,
               leftAt: Value(member.leftAt),
+              upiVpa: Value(member.upiVpa),
+              updatedAt: Value(member.updatedAt ?? _clock()),
             ),
           );
     }
+  }
+
+  /// Whether a remote row should replace the local one.
+  ///
+  /// Both sides are server timestamps once a row has been pushed, so this is a
+  /// genuine last-write-wins rather than a race between two devices' clocks.
+  /// A local row with no timestamp has never reached the server and cannot be
+  /// the newer of the two; a remote row with none came from a backend that
+  /// predates versioning, and applying it matches the old behaviour.
+  static bool _remoteWins(DateTime? local, DateTime? remote) {
+    if (local == null || remote == null) return true;
+    return local.isBefore(remote);
   }
 
   /// Writes a remote entry unless the local copy is already at least as new.

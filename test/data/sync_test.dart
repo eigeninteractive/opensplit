@@ -470,4 +470,78 @@ void main() {
       );
     });
   });
+
+  group('group and member rows', () {
+    test(
+      'a local rename survives a pull that runs before it is pushed',
+      () async {
+        final created = await a.groups.createGroup(
+          name: 'Goa Trip',
+          defaultCurrency: 'INR',
+          ownerDisplayName: 'Ravi',
+          ownerProfileId: 'ravi',
+        );
+        await a.sync.syncGroup(created.group.id);
+        await b.sync.syncGroup(created.group.id);
+
+        // Renamed on A while offline: the edit is in the local row and queued,
+        // but has not reached the server.
+        await a.groups.updateGroup(
+          created.group.copyWith(name: 'Goa Trip 2026'),
+        );
+
+        // A pull arrives first — this is the case that used to silently discard
+        // the rename, because the pull applied the server row unconditionally.
+        await a.sync.pull(created.group.id);
+
+        final local = await a.groups.getGroup(created.group.id);
+        expect(local!.name, 'Goa Trip 2026');
+      },
+    );
+
+    test('a remote rename still wins once it is genuinely newer', () async {
+      final created = await a.groups.createGroup(
+        name: 'Goa Trip',
+        defaultCurrency: 'INR',
+        ownerDisplayName: 'Ravi',
+        ownerProfileId: 'ravi',
+      );
+      await a.sync.syncGroup(created.group.id);
+      await b.sync.syncGroup(created.group.id);
+
+      // B renames it and pushes, so the server row carries a later stamp.
+      final onB = await b.groups.getGroup(created.group.id);
+      await b.groups.updateGroup(onB!.copyWith(name: 'Renamed on B'));
+      await b.sync.syncGroup(created.group.id);
+
+      await a.sync.syncGroup(created.group.id);
+      final local = await a.groups.getGroup(created.group.id);
+      expect(local!.name, 'Renamed on B');
+    });
+
+    test('a member rename converges across devices', () async {
+      final created = await a.groups.createGroup(
+        name: 'Flat 4B',
+        defaultCurrency: 'INR',
+        ownerDisplayName: 'Ravi',
+        ownerProfileId: 'ravi',
+      );
+      final priya = await a.groups.addMember(
+        created.group.id,
+        displayName: 'Priya',
+      );
+      await a.sync.syncGroup(created.group.id);
+      await b.sync.syncGroup(created.group.id);
+
+      await b.groups.renameMember(priya.id, 'Priya S');
+      await b.sync.syncGroup(created.group.id);
+      await a.sync.syncGroup(created.group.id);
+
+      final members = await a.groups.getMembers(created.group.id);
+      expect(
+        members.firstWhere((m) => m.id == priya.id).displayName,
+        'Priya S',
+      );
+    });
+  });
 }
