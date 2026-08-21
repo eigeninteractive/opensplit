@@ -51,6 +51,11 @@ class BalancesPanel extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
       children: [
+        // The estimate leads, the exact per-currency figures follow directly
+        // beneath it. That is the "breakdown one tap away" requirement met
+        // without a tap: the authoritative numbers are never hidden behind the
+        // approximate one.
+        _EstimateCard(groupId: ledger.group.id),
         for (final code in ledger.activeCurrencies) ...[
           _CurrencySection(
             ledger: ledger,
@@ -355,6 +360,83 @@ class _TransferExplanation extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// One approximate figure for a group holding several currencies.
+///
+/// Renders nothing unless there is a real estimate to make. Everything about
+/// it is hedged on purpose — the tilde, the word "roughly", the rate date, and
+/// the named currencies it could not convert — because this is the only number
+/// on the screen that is not exact, and it sits directly above ones that are.
+class _EstimateCard extends ConsumerWidget {
+  const _EstimateCard({required this.groupId});
+
+  final String groupId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final estimate = ref.watch(groupEstimateProvider(groupId)).value;
+    final currencies = ref.watch(currenciesProvider).value ?? const {};
+    if (estimate == null) return const SizedBox.shrink();
+
+    final scheme = Theme.of(context).colorScheme;
+    final currency = currencies[estimate.currency];
+    final owed = estimate.amountMinor > 0;
+    final text = formatMoneyAbs(currency, estimate.amountMinor);
+
+    final caveat = StringBuffer('Converted at ECB rates from ')
+      ..write(DateFormat.yMMMd().format(estimate.asOf));
+    if (!estimate.isComplete) {
+      caveat
+        ..write('. ')
+        ..write(estimate.unconverted.join(' and '))
+        ..write(
+          estimate.unconverted.length == 1
+              ? ' is not covered and is left out.'
+              : ' are not covered and are left out.',
+        );
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 24),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Roughly, across everything',
+              style: Theme.of(
+                context,
+              ).textTheme.labelMedium?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 4),
+            Semantics(
+              label:
+                  'Estimated total: approximately $text '
+                  '${owed ? 'owed to you' : 'that you owe'}',
+              child: ExcludeSemantics(
+                child: Text(
+                  '≈ $text ${owed ? 'owed to you' : 'you owe'}',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: balanceColor(scheme, estimate.amountMinor),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              caveat.toString(),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+          ],
+        ),
       ),
     );
   }

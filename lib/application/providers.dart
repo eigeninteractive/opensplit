@@ -3,6 +3,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:uuid/uuid.dart';
 
+import '../data/fx/drift_fx_repository.dart';
+import '../data/fx/frankfurter_client.dart';
 import '../data/local/database.dart';
 import '../data/repositories/drift_analytics_repository.dart';
 import '../data/repositories/drift_category_repository.dart';
@@ -19,6 +21,8 @@ import '../data/sync/supabase_invite_api.dart';
 import '../data/sync/supabase_ledger_api.dart';
 import '../data/sync/sync_engine.dart';
 import '../domain/balance/balance_fold.dart';
+import '../domain/fx/estimated_total.dart';
+import '../domain/fx/fx_quote.dart';
 import '../domain/balance/member_balance.dart';
 import '../domain/balance/simplify.dart';
 import '../domain/models/category.dart';
@@ -30,6 +34,7 @@ import '../domain/money_format.dart';
 import '../domain/models/member.dart';
 import '../domain/models/profile.dart';
 import '../domain/repositories/currency_repository.dart';
+import '../domain/repositories/fx_repository.dart';
 import '../domain/repositories/entry_repository.dart';
 import '../domain/repositories/group_repository.dart';
 import '../domain/repositories/analytics_repository.dart';
@@ -76,6 +81,32 @@ EntryRepository entryRepository(Ref ref) => DriftEntryRepository(
 @Riverpod(keepAlive: true)
 CurrencyRepository currencyRepository(Ref ref) =>
     DriftCurrencyRepository(ref.watch(appDatabaseProvider));
+
+@Riverpod(keepAlive: true)
+FrankfurterClient frankfurterClient(Ref ref) {
+  final client = FrankfurterClient();
+  ref.onDispose(client.close);
+  return client;
+}
+
+/// Display-only exchange rates.
+///
+/// Reads the local cache first and treats the network as a refresher, so a
+/// conversion is available offline and entry creation never waits on a rate.
+@Riverpod(keepAlive: true)
+FxRepository fxRepository(Ref ref) => DriftFxRepository(
+  ref.watch(appDatabaseProvider),
+  ref.watch(frankfurterClientProvider),
+);
+
+/// The rate for one pair.
+///
+/// Watched by the entry editor so that by the time anyone taps save the rate is
+/// already resolved and the snapshot costs nothing. Null is an ordinary answer:
+/// ECB does not publish every currency the app can record.
+@riverpod
+Future<FxQuote?> fxQuote(Ref ref, String base, String quote) =>
+    ref.watch(fxRepositoryProvider).quote(base: base, quote: quote);
 
 @Riverpod(keepAlive: true)
 ProfileRepository profileRepository(Ref ref) =>
@@ -309,6 +340,52 @@ GroupLedger? groupLedger(Ref ref, String groupId) {
     balances: balances,
     transfers: group.simplifyDebts ? simplifyDebts(balances) : const [],
     me: memberList.where((m) => m.profileId == identity.profileId).firstOrNull,
+  );
+}
+
+/// This device's own balance across every currency, as one estimated figure.
+///
+/// Null whenever an estimate would be meaningless or misleading — no member,
+/// only one currency in play (where the exact per-currency figure is already
+/// the whole answer), or no rate for anything. Callers render nothing in that
+/// case rather than a zero, because "we could not convert this" and "you are
+/// settled" are very different statements to make about someone's money.
+@riverpod
+Future<EstimatedTotal?> groupEstimate(Ref ref, String groupId) async {
+  final ledger = ref.watch(groupLedgerProvider(groupId));
+  final currencies = ref.watch(currenciesProvider).value;
+  if (ledger == null || currencies == null) return null;
+
+  final me = ledger.me;
+  if (me == null) return null;
+
+  final target = ledger.group.defaultCurrency;
+  final perCurrency = <String, int>{
+    for (final code in ledger.activeCurrencies)
+      code: ledger.balanceOf(me.id, code),
+  };
+  final holding = perCurrency.keys
+      .where((code) => perCurrency[code] != 0)
+      .toSet();
+  if (holding.length < 2) return null;
+
+  final fx = ref.watch(fxRepositoryProvider);
+  // One request covers every currency the group holds, because the response is
+  // keyed by the group default.
+  await fx.warm(base: target, quotes: holding);
+
+  final quotes = <String, FxQuote>{};
+  for (final code in holding) {
+    if (code == target) continue;
+    final quote = await fx.quote(base: code, quote: target);
+    if (quote != null) quotes[code] = quote;
+  }
+
+  return estimateTotal(
+    perCurrencyMinor: perCurrency,
+    target: target,
+    currencies: currencies,
+    quotes: quotes,
   );
 }
 

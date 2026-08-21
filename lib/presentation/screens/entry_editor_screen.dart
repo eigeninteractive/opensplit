@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../application/providers.dart';
 import '../../domain/entry_draft.dart';
 import '../../domain/models/category.dart';
+import '../../domain/fx/fx_quote.dart';
 import '../../domain/models/currency.dart';
 import '../../domain/models/entry.dart';
 import '../../domain/split/allocation.dart';
@@ -194,7 +195,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
     return amounts.isEmpty ? null : amounts;
   }
 
-  Future<void> _save(GroupLedger ledger, Currency currency) async {
+  Future<void> _save(GroupLedger ledger, Currency currency, FxQuote? fx) async {
     setState(() => _error = null);
 
     final totalMinor = currency.parseToMinor(_amount.text);
@@ -228,6 +229,11 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
       split: split,
       payerAmounts: payers,
       entryDate: DateTime.utc(_date.year, _date.month, _date.day),
+      // A fact about the transaction, captured once. Never re-fetched for a
+      // historical entry: what a rupee was worth on the night of the dinner
+      // does not change because the market moved afterwards.
+      fxRate: fx?.rate,
+      fxSource: fx == null ? null : '${fx.source}@${_isoDay(fx.date)}',
     );
 
     setState(() => _saving = true);
@@ -251,6 +257,13 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
       if (mounted) setState(() => _saving = false);
     }
   }
+
+  /// The rate's publication date, kept with the source so a stored snapshot
+  /// says both who published it and for which day.
+  static String _isoDay(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-'
+      '${date.month.toString().padLeft(2, '0')}-'
+      '${date.day.toString().padLeft(2, '0')}';
 
   Future<void> _delete() async {
     final confirmed = await showDialog<bool>(
@@ -298,6 +311,18 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
 
     final currency = currencies[_currencyCode];
     final totalMinor = currency?.parseToMinor(_amount.text);
+
+    // Resolved here rather than in _save so that saving never waits on a rate.
+    // By the time anyone has finished typing an amount this has settled, and if
+    // it has not, the entry is stored without a snapshot — which the schema
+    // allows and which costs nothing but a converted estimate later.
+    final fx = currency == null || currency.code == ledger.group.defaultCurrency
+        ? null
+        : ref
+              .watch(
+                fxQuoteProvider(currency.code, ledger.group.defaultCurrency),
+              )
+              .value;
 
     return Scaffold(
       appBar: AppBar(
@@ -437,7 +462,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
           FilledButton.icon(
             onPressed: _saving || currency == null
                 ? null
-                : () => _save(ledger, currency),
+                : () => _save(ledger, currency, fx),
             icon: const Icon(Icons.check),
             label: Text(widget.isEditing ? 'Save changes' : 'Add expense'),
           ),
