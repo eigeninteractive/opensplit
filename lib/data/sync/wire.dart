@@ -29,7 +29,6 @@ Map<String, dynamic> entryToJson(Entry entry) => {
   'updated_at': entry.updatedAt.toUtc().toIso8601String(),
   'deleted_at': entry.deletedAt?.toUtc().toIso8601String(),
   'client_key': entry.clientKey,
-  'algo_version': entry.algoVersion,
   'payers': [
     for (final payer in entry.payers)
       {'member_id': payer.memberId, 'amount_minor': payer.amountMinor},
@@ -65,7 +64,6 @@ Entry entryFromJson(Map<String, dynamic> json) => Entry(
   updatedAt: DateTime.parse(json['updated_at'] as String),
   deletedAt: _parseOrNull(json['deleted_at']),
   clientKey: json['client_key'] as String?,
-  algoVersion: (json['algo_version'] as num?)?.toInt() ?? 1,
   payers: [
     for (final payer in (json['payers'] as List? ?? const []))
       EntryPayer(

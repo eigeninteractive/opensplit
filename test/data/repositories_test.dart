@@ -149,7 +149,6 @@ void main() {
 
       expect(entry.isBalanced, isTrue);
       expect(entry.shares.map((s) => s.amountMinor), [80000, 80000, 80000]);
-      expect(entry.algoVersion, currentAlgoVersion);
       expect(entry.clientKey, entry.id, reason: 'retries must be idempotent');
     });
 

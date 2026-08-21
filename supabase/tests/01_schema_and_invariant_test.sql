@@ -3,7 +3,7 @@
 -- Run with: supabase test db
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(28);
+select plan(27);
 
 -- ---------------------------------------------------------------------------
 -- Reference data
@@ -31,8 +31,6 @@ select hasnt_column('public', 'entries', 'receipt_path',
   'receipt_path is gone: storage and egress are what force a paywall');
 select has_column('public', 'profiles', 'upi_vpa',
   'payment identity is personal, so it lives on profiles');
-select has_column('public', 'entries', 'algo_version',
-  'entries record which algorithm produced them');
 
 -- ---------------------------------------------------------------------------
 -- Fixtures

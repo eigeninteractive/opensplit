@@ -42,7 +42,6 @@ Future<void> writeEntryLocally(AppDatabase db, Entry entry) async {
             updatedAt: entry.updatedAt,
             deletedAt: Value(entry.deletedAt),
             clientKey: Value(entry.clientKey),
-            algoVersion: Value(entry.algoVersion),
           ),
         );
 

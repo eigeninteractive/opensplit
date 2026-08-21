@@ -27,15 +27,6 @@ create index idx_device_tokens_profile on device_tokens (profile_id);
 
 alter table device_tokens enable row level security;
 
--- Strictly your own. A token is a capability to interrupt someone's phone; it
--- must never be readable by anyone else, including people in your groups.
-create policy device_tokens_own on device_tokens
-  for all to authenticated
-  using (profile_id = auth.uid())
-  with check (profile_id = auth.uid());
-
-grant select, insert, update, delete on device_tokens to authenticated;
-
 -- ---------------------------------------------------------------------------
 -- Who should be woken for an entry.
 --
@@ -60,6 +51,3 @@ as $$
      and m.profile_id is not null
      and m.id <> e.created_by;
 $$;
-
-revoke execute on function tokens_for_entry(uuid) from public, anon, authenticated;
-grant execute on function tokens_for_entry(uuid) to service_role;

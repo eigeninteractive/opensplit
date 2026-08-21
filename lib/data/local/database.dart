@@ -42,7 +42,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 1;
 
   /// Timestamps are stored as ISO-8601 text rather than Unix seconds.
   ///
@@ -60,38 +60,6 @@ class AppDatabase extends _$AppDatabase {
       await m.createAll();
       await _createSearchIndex();
       await _seedReferenceData();
-    },
-    onUpgrade: (m, from, to) async {
-      // Version 2 adds full-text search over descriptions and notes.
-      //
-      // Written as a real migration rather than folded into the initial schema
-      // even though nothing has shipped yet, because the upgrade path is the
-      // one thing that cannot be tested after the fact: people's expense
-      // history lives on their device, and a migration that fails there is
-      // unrecoverable.
-      if (from < 2) {
-        await _createSearchIndex();
-        await _backfillSearchIndex();
-      }
-      // Version 3 gives groups, members and categories their own version
-      // column, so a pull can do a real last-write-wins on them instead of
-      // overwriting whatever the device holds. Existing rows are stamped with
-      // the column default, which is correct: they predate any comparison and
-      // the first push replaces the value with a server timestamp anyway.
-      if (from < 3) {
-        await m.addColumn(groups, groups.updatedAt);
-        await m.addColumn(members, members.updatedAt);
-        await m.addColumn(members, members.upiVpa);
-        await m.addColumn(categories, categories.updatedAt);
-      }
-      // Version 4 reshapes fx_rates from currency pairs to a USD pivot, and
-      // makes it server-supplied rather than fetched on the device. Dropped
-      // rather than migrated: every row is reference data the server will
-      // resend, so converting them would be work in exchange for nothing.
-      if (from < 4) {
-        await m.deleteTable('fx_rates');
-        await m.createTable(fxRates);
-      }
     },
     beforeOpen: (details) async {
       // SQLite disables foreign keys per connection by default, so the
@@ -146,13 +114,6 @@ class AppDatabase extends _$AppDatabase {
         VALUES (new.rowid, new.description, new.notes);
       END
     ''');
-  }
-
-  /// Indexes everything already stored, for a device upgrading from v1.
-  Future<void> _backfillSearchIndex() async {
-    await customStatement(
-      "INSERT INTO entries_fts(entries_fts) VALUES ('rebuild')",
-    );
   }
 
   /// Populates currencies and the global category presets.

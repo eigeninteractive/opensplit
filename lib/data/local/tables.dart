@@ -153,7 +153,6 @@ class Entries extends Table {
 
   /// Client-generated id making a retried write idempotent.
   TextColumn get clientKey => text().nullable()();
-  IntColumn get algoVersion => integer().withDefault(const Constant(1))();
 
   @override
   Set<Column> get primaryKey => {id};

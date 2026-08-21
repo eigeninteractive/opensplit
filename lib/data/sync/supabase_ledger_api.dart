@@ -58,7 +58,6 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
           'p_fx_rate': entry.fxRate,
           'p_fx_source': entry.fxSource,
           'p_client_key': entry.clientKey,
-          'p_algo_version': entry.algoVersion,
         },
       );
 

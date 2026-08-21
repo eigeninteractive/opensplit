@@ -86,7 +86,6 @@ extension EntryRowMapper on EntryRow {
     updatedAt: updatedAt,
     deletedAt: deletedAt,
     clientKey: clientKey,
-    algoVersion: algoVersion,
   );
 }
 

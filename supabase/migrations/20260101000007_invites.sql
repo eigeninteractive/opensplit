@@ -1,15 +1,16 @@
 -- ============================================================================
--- Invites, claim tokens, and anonymous-account hygiene.
--- ============================================================================
-
--- ---------------------------------------------------------------------------
 -- Invites.
 --
--- The link carries a single-use, expiring token — never a raw member_id.
--- A member id in a URL means anyone who ever sees that URL can seize that
--- person's financial identity in the group, retroactively and permanently.
--- The token is a separate secret that can be spent once and then is worthless.
--- ---------------------------------------------------------------------------
+-- An invite hands over one placeholder slot. Possession of the token is the
+-- only proof required, so redemption goes through a SECURITY DEFINER function
+-- and the table itself stays closed — there is deliberately no policy letting a
+-- stranger read an invite row.
+--
+-- Claiming sets exactly one column, members.profile_id. Nothing about the
+-- group's history changes, which is the entire payoff of members being
+-- group-scoped rather than auth users.
+-- ============================================================================
+
 create table invites (
   token       uuid primary key default gen_random_uuid(),
   group_id    uuid not null references groups(id) on delete cascade,
@@ -29,21 +30,6 @@ create index idx_invites_member on invites (member_id);
 create index idx_invites_group  on invites (group_id);
 
 alter table invites enable row level security;
-
--- Members of a group can see and issue its invites. Note there is no policy
--- allowing a stranger to SELECT an invite: redemption goes through a
--- security-definer function, so possession of the token is the only proof
--- needed and the table itself stays closed.
-create policy invites_read on invites
-  for select to authenticated using (is_group_member(group_id));
-
-create policy invites_insert on invites
-  for insert to authenticated with check (
-    is_group_member(group_id) and created_by = auth.uid()
-  );
-
-create policy invites_delete on invites
-  for delete to authenticated using (is_group_member(group_id));
 
 -- ---------------------------------------------------------------------------
 -- Issuing an invite.
@@ -166,64 +152,5 @@ begin
    where token = p_token;
 
   return v_member;
-end;
-$$;
-
--- Anyone holding a token may attempt redemption; the function does the rest.
-grant execute on function redeem_invite(uuid) to authenticated;
-
--- ---------------------------------------------------------------------------
--- Anonymous-account hygiene.
---
--- Anonymous sign-in is the default entry path, which means it is also
--- unauthenticated row creation. Anonymous users count toward MAU, so abandoned
--- ones have to be reaped or the cost of the free tier drifts upward forever.
---
--- Only accounts that are genuinely empty are removed: no linked identity, no
--- membership anywhere, and untouched for 30 days. Deleting an anonymous user
--- who is in a group would orphan their place in someone else's ledger.
--- ---------------------------------------------------------------------------
-create or replace function cleanup_abandoned_anonymous_users()
-returns integer
-language plpgsql
-security definer
-set search_path = public, auth
-as $$
-declare
-  v_deleted integer;
-begin
-  with doomed as (
-    delete from auth.users u
-     where u.is_anonymous
-       and u.created_at < now() - interval '30 days'
-       and not exists (
-         select 1 from auth.identities i where i.user_id = u.id
-       )
-       and not exists (
-         select 1 from public.members m where m.profile_id = u.id
-       )
-    returning 1
-  )
-  select count(*) into v_deleted from doomed;
-
-  return v_deleted;
-end;
-$$;
-
-comment on function cleanup_abandoned_anonymous_users is
-  'Reaps empty anonymous accounts. Schedule daily via pg_cron. Deliberately '
-  'skips anyone who belongs to a group, however old the account is.';
-
--- Scheduled only where pg_cron exists, so this migration still applies on a
--- plain Postgres used for self-hosting.
-do $$
-begin
-  if exists (select 1 from pg_extension where extname = 'pg_cron') then
-    perform cron.schedule(
-      'opensplit-cleanup-anon',
-      '17 3 * * *',
-      'select public.cleanup_abandoned_anonymous_users()'
-    );
-  end if;
 end;
 $$;

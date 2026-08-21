@@ -1,19 +1,6 @@
 import 'models/entry.dart';
 import 'split/splitter.dart';
 
-/// The version of the split and fold algorithms this build implements.
-///
-/// Stamped onto every entry written. An entry is never recomputed under a newer
-/// version — a rounding fix must not retroactively move money that has already
-/// been settled — so this is how a future change stays confined to new rows.
-///
-/// Version 2 rotates which party absorbs a rounding leftover, seeded by the
-/// entry id. Version 1 always gave it to the lowest member id, so in a group
-/// that mostly splits evenly one person quietly paid an extra minor unit on
-/// every single expense. Existing entries keep the amounts they were written
-/// with, because those amounts are stored rather than recomputed.
-const int currentAlgoVersion = 2;
-
 /// A user's intent to record an entry, before it has been resolved into
 /// balanced payers and shares.
 ///
@@ -144,6 +131,5 @@ Entry composeEntry(
     createdAt: now,
     updatedAt: now,
     clientKey: clientKey ?? id,
-    algoVersion: currentAlgoVersion,
   );
 }

@@ -88,7 +88,6 @@ abstract class Entry with _$Entry {
 
     /// Version of the split algorithm that produced [shares]. Historical
     /// entries are never recomputed under a newer version.
-    @Default(1) int algoVersion,
   }) = _Entry;
 
   const Entry._();
