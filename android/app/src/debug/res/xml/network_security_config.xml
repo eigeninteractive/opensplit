@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug builds only. This file lives in src/debug/ and is never merged into a
+  release build, which keeps HTTPS mandatory for anything a user installs.
+
+  It exists because Android has blocked cleartext HTTP by default since API 28,
+  and a local Supabase stack is plain http on port 54321. Without this, a debug
+  build pointed at http://10.0.2.2:54321 fails every request with
+  "CLEARTEXT communication not permitted" — which surfaces in this app as a
+  sync that silently never completes, because sync failures are swallowed by
+  design.
+
+  Left broad rather than listing hosts: an emulator reaches the host machine at
+  10.0.2.2, but a physical device needs whatever LAN address the machine has
+  today, and a list that has to be edited per developer is a list that gets
+  edited into a release config eventually.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

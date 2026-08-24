@@ -264,6 +264,82 @@ Settings switch, and once after someone shares an invite — the first moment
 being notified about a group means anything. Both show an in-app rationale
 first, so the OS dialog is only ever spent on someone who has already agreed.
 
+## Developing against local Supabase with the real Firebase
+
+The usual working setup: Postgres, edge functions and auth all local, but push
+going through the real FCM project, because there is no local FCM.
+
+Config files are merged in order and **later files win**, so a local override
+goes last:
+
+```bash
+cp env/local.example.json env/local.json
+
+flutter run -d chrome \
+  --dart-define-from-file=env/common.json \
+  --dart-define-from-file=env/web.json \
+  --dart-define-from-file=env/local.json
+```
+
+`env/local.json` only needs to override `SUPABASE_URL` and
+`SUPABASE_PUBLISHABLE_KEY`. The local publishable key is the same for everyone
+and is already the default in `lib/config.dart`, so a bare `flutter run` with no
+defines at all is already a local-Supabase build — just without Firebase.
+
+**The URL depends on where the app runs**, and this is the step that wastes an
+afternoon:
+
+| Running on | `SUPABASE_URL` |
+|---|---|
+| Chrome, on this machine | `http://127.0.0.1:54321` |
+| Android emulator | `http://10.0.2.2:54321` — the emulator's own 127.0.0.1 is the emulator |
+| Physical Android device | `http://<this machine's LAN address>:54321`, same Wi-Fi |
+
+Android has blocked cleartext HTTP since API 28, so a debug build also needs
+`android/app/src/debug/res/xml/network_security_config.xml` — already committed,
+and scoped to the debug source set so release builds keep HTTPS mandatory. Without
+it every request fails with `CLEARTEXT communication not permitted`, which in
+this app looks like a sync that never completes, because sync failures are
+swallowed by design.
+
+### Push, locally
+
+Three terminals:
+
+```bash
+supabase start                                    # database, auth, storage
+supabase functions serve --env-file supabase/functions/.env
+./supabase/dev/local-webhook.sh                   # the entries INSERT trigger
+```
+
+`supabase/functions/.env` needs `NOTIFY_WEBHOOK_SECRET` (any random string
+locally), plus `FCM_PROJECT_ID` and `FCM_SERVICE_ACCOUNT` if you want the send
+to actually reach a device. Without the FCM pair the function still runs and
+answers `unconfigured`, which is enough to prove the wiring.
+
+There is no dashboard locally, so the webhook is a trigger created by that
+script. **`supabase db reset` drops it** — rerun the script afterwards, or push
+stops firing with nothing to say why.
+
+To check the chain without a device:
+
+```bash
+curl -s -X POST http://127.0.0.1:54321/functions/v1/notify-entry \
+  -H 'Content-Type: application/json' \
+  -H "x-webhook-secret: $(grep '^NOTIFY_WEBHOOK_SECRET=' supabase/functions/.env | cut -d= -f2-)" \
+  -d '{"type":"UPDATE","table":"groups","record":null}'
+# -> ignored
+
+# And after adding an expense in the app, what the database got back:
+docker exec supabase_db_opensplit psql -U postgres \
+  -c "select status_code, content from net._http_response order by id desc limit 3;"
+# -> 200 | nobody to wake      (no devices registered yet)
+# -> 200 | ok                  (a device was notified)
+```
+
+A wrong secret returns `403`, which is the function refusing to be driven by
+anyone holding the publishable key.
+
 ## Deploying
 
 The web build is static. Any host works, provided it serves an SPA fallback —
