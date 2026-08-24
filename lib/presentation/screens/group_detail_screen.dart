@@ -10,6 +10,7 @@ import '../../domain/models/currency.dart';
 import '../../domain/models/entry.dart';
 import '../format.dart';
 import '../widgets/balances_panel.dart';
+import '../widgets/unsynced_changes_banner.dart';
 
 /// Width at which the two halves of a group stop competing for the screen.
 const double _wideBreakpoint = 840;
@@ -84,21 +85,33 @@ class GroupDetailScreen extends ConsumerWidget {
       // uncapped Row puts the expense list and the balances a foot apart.
       body: PageBody(
         maxWidth: wide ? 1200 : 760,
-        child: wide
-            ? Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(flex: 3, child: _EntriesList(ledger: ledger)),
-                  const VerticalDivider(width: 1),
-                  Expanded(flex: 2, child: BalancesPanel(ledger: ledger)),
-                ],
-              )
-            : TabBarView(
-                children: [
-                  _EntriesList(ledger: ledger),
-                  BalancesPanel(ledger: ledger),
-                ],
-              ),
+        child: Column(
+          children: [
+            // Above both panes rather than inside either: a write the server
+            // refused makes the entry list and the balances beside it wrong
+            // together, and it must be visible on whichever tab is open.
+            const UnsyncedChangesBanner(
+              padding: EdgeInsets.fromLTRB(8, 8, 8, 0),
+            ),
+            Expanded(
+              child: wide
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(flex: 3, child: _EntriesList(ledger: ledger)),
+                        const VerticalDivider(width: 1),
+                        Expanded(flex: 2, child: BalancesPanel(ledger: ledger)),
+                      ],
+                    )
+                  : TabBarView(
+                      children: [
+                        _EntriesList(ledger: ledger),
+                        BalancesPanel(ledger: ledger),
+                      ],
+                    ),
+            ),
+          ],
+        ),
       ),
     );
 

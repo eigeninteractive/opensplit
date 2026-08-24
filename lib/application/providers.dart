@@ -65,6 +65,16 @@ AppDatabase appDatabase(Ref ref) {
 @Riverpod(keepAlive: true)
 OutboxQueue outboxQueue(Ref ref) => OutboxQueue(ref.watch(appDatabaseProvider));
 
+/// Writes the server refused outright, and will not accept on a retry.
+///
+/// Kept alive and watched app-wide rather than per screen: a refused write is
+/// not a property of whichever group happens to be open, and the one thing that
+/// must not happen is for it to go unmentioned because the user was elsewhere
+/// when it failed.
+@Riverpod(keepAlive: true)
+Stream<List<FailedWrite>> failedWrites(Ref ref) =>
+    ref.watch(outboxQueueProvider).watchDeadLetters();
+
 @Riverpod(keepAlive: true)
 GroupRepository groupRepository(Ref ref) => DriftGroupRepository(
   ref.watch(appDatabaseProvider),
@@ -498,6 +508,17 @@ class SyncController extends _$SyncController {
     for (final group in groups) {
       state = await engine.syncGroup(group.id);
     }
+  }
+
+  /// Requeues everything the server previously refused and pushes again.
+  ///
+  /// Whatever made the server say no may have been fixed since — most often by
+  /// a membership row that had not landed yet. If it has not, the items simply
+  /// fail the same way and are set aside again, which is why this is safe to
+  /// offer as a button.
+  Future<void> retryFailed() async {
+    await ref.read(outboxQueueProvider).retryDeadLetters();
+    await syncAll();
   }
 }
 

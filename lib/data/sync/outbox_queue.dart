@@ -7,6 +7,29 @@ import '../local/database.dart';
 /// The kind of row an outbox item refers to.
 enum OutboxTarget { entry, group, member }
 
+/// A write the server refused outright, named the way its author would name it.
+class FailedWrite {
+  const FailedWrite({
+    required this.id,
+    required this.target,
+    required this.label,
+    required this.reason,
+    required this.failedAt,
+  });
+
+  final String id;
+  final OutboxTarget target;
+
+  /// What the user called it: an expense description, a group or member name.
+  final String label;
+
+  /// What the server said, verbatim. Paraphrasing it would be guessing at a
+  /// cause, and the raw message is the only thing that makes a report useful.
+  final String reason;
+
+  final DateTime failedAt;
+}
+
 /// Pending local writes waiting to reach the server.
 ///
 /// Every mutation is written to the local tables first and queued here second.
@@ -94,10 +117,79 @@ class OutboxQueue {
     return rows.length;
   }
 
-  /// Writes the server refused outright, kept for the debug bundle.
+  /// Writes the server refused outright.
   Future<List<OutboxRow>> deadLetters() => (_db.select(
     _db.outbox,
   )..where((t) => t.deadLetteredAt.isNotNull())).get();
+
+  /// The same, described, and as they happen.
+  ///
+  /// A stream rather than a one-shot read because this is the only path by
+  /// which anyone ever learns that something they recorded is not going to
+  /// reach the rest of the group. Until it reaches a screen, the row sits on
+  /// this device looking exactly like a saved expense, and the first symptom is
+  /// two people reading different balances weeks later.
+  Stream<List<FailedWrite>> watchDeadLetters() {
+    final query = _db.select(_db.outbox)
+      ..where((t) => t.deadLetteredAt.isNotNull())
+      ..orderBy([(t) => OrderingTerm.desc(t.deadLetteredAt)]);
+
+    return query.watch().asyncMap((rows) => Future.wait(rows.map(_describe)));
+  }
+
+  Future<FailedWrite> _describe(OutboxRow row) async {
+    final target = OutboxTarget.values.byName(row.operation);
+    return FailedWrite(
+      id: row.id,
+      target: target,
+      label: await _labelFor(target, row.targetId),
+      reason: row.lastError ?? 'The server refused it without saying why.',
+      failedAt: row.deadLetteredAt!,
+    );
+  }
+
+  /// A name for the refused row, or a generic one if it has since been deleted
+  /// locally — the outbox outlives what it points at.
+  Future<String> _labelFor(OutboxTarget target, String id) async {
+    switch (target) {
+      case OutboxTarget.entry:
+        final row = await (_db.select(
+          _db.entries,
+        )..where((t) => t.id.equals(id))).getSingleOrNull();
+        final description = row?.description.trim() ?? '';
+        return description.isEmpty ? 'An expense' : description;
+      case OutboxTarget.group:
+        final row = await (_db.select(
+          _db.groups,
+        )..where((t) => t.id.equals(id))).getSingleOrNull();
+        return row?.name ?? 'A group';
+      case OutboxTarget.member:
+        final row = await (_db.select(
+          _db.members,
+        )..where((t) => t.id.equals(id))).getSingleOrNull();
+        return row?.displayName ?? 'A member';
+    }
+  }
+
+  /// Puts refused writes back in the queue.
+  ///
+  /// "Permanent" only ever meant permanent against the server as it stood: a
+  /// membership row that had not been pushed yet, a group the user was removed
+  /// from and added back to, an RLS policy since corrected. Those change, and
+  /// when they do this is the only thing standing between the write and the
+  /// server.
+  Future<int> retryDeadLetters() async {
+    return (_db.update(
+      _db.outbox,
+    )..where((t) => t.deadLetteredAt.isNotNull())).write(
+      const OutboxCompanion(
+        deadLetteredAt: Value(null),
+        nextAttemptAt: Value(null),
+        lastError: Value(null),
+        attempts: Value(0),
+      ),
+    );
+  }
 
   Future<void> complete(String id) async {
     await (_db.delete(_db.outbox)..where((t) => t.id.equals(id))).go();

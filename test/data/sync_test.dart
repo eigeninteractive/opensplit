@@ -319,6 +319,75 @@ void main() {
       },
     );
 
+    // Being "accounted for somewhere" is worth nothing if nowhere is a screen.
+    // A refused write leaves an entry that looks saved on this device and does
+    // not exist for anyone else, which surfaces weeks later as two people
+    // reading different balances. These two tests are the difference between
+    // that and a banner.
+    test('a refused write is described, not just recorded', () async {
+      final g = await seedGroup();
+      final entry = await a.entries.create(
+        EntryDraft(
+          groupId: g.groupId,
+          currency: 'INR',
+          amountMinor: 100000,
+          description: "Dinner at Britto's",
+          split: EqualSplit([g.ravi, g.priya]),
+          payerAmounts: {g.ravi: 100000},
+        ),
+        createdBy: g.ravi,
+      );
+      await (a.db.update(a.db.entryShares)
+            ..where((t) => t.entryId.equals(entry.id)))
+          .write(const EntrySharesCompanion(amountMinor: Value(1)));
+      await a.outbox.enqueue(OutboxTarget.entry, entry.id);
+
+      await a.sync.syncGroup(g.groupId);
+
+      final failures = await a.outbox.watchDeadLetters().first;
+      expect(failures, hasLength(1));
+      expect(
+        failures.single.label,
+        "Dinner at Britto's",
+        reason: 'the user has to recognise which expense this is',
+      );
+      expect(failures.single.reason, contains('does not balance'));
+      expect(failures.single.target, OutboxTarget.entry);
+    });
+
+    test('a refused write can be retried once its cause is fixed', () async {
+      final g = await seedGroup();
+      final entry = await a.entries.create(
+        EntryDraft(
+          groupId: g.groupId,
+          currency: 'INR',
+          amountMinor: 100000,
+          split: EqualSplit([g.ravi, g.priya]),
+          payerAmounts: {g.ravi: 100000},
+        ),
+        createdBy: g.ravi,
+      );
+      await (a.db.update(a.db.entryShares)
+            ..where((t) => t.entryId.equals(entry.id)))
+          .write(const EntrySharesCompanion(amountMinor: Value(1)));
+      await a.outbox.enqueue(OutboxTarget.entry, entry.id);
+      await a.sync.syncGroup(g.groupId);
+      expect(await a.outbox.deadLetters(), hasLength(1));
+
+      // Whatever the server objected to, put it right. "Permanent" only ever
+      // meant permanent against the server as it stood.
+      await (a.db.update(a.db.entryShares)
+            ..where((t) => t.entryId.equals(entry.id)))
+          .write(const EntrySharesCompanion(amountMinor: Value(50000)));
+
+      expect(await a.outbox.retryDeadLetters(), 1);
+      await a.sync.syncGroup(g.groupId);
+
+      expect(await a.outbox.deadLetters(), isEmpty);
+      expect(await a.outbox.pendingCount(), 0, reason: 'it landed');
+      expect(await a.outbox.watchDeadLetters().first, isEmpty);
+    });
+
     test('a retried push does not create a second entry', () async {
       final g = await seedGroup();
       await a.entries.create(

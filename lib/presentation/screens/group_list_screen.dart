@@ -11,6 +11,7 @@ import '../theme.dart';
 import '../widgets/balance_arrow.dart';
 import '../widgets/create_group_sheet.dart';
 import '../widgets/link_account_prompt.dart';
+import '../widgets/unsynced_changes_banner.dart';
 
 class GroupListScreen extends ConsumerWidget {
   const GroupListScreen({super.key});
@@ -64,13 +65,16 @@ class _GroupList extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-      // One extra leading slot for the account prompt, which renders as nothing
-      // until there is something worth warning about.
-      itemCount: groups.length + 1,
+      // Two leading slots, each of which renders as nothing until it has
+      // something to say. The refused-write banner comes first: it is the one
+      // that means data is already wrong somewhere.
+      itemCount: groups.length + 2,
       separatorBuilder: (_, _) => const SizedBox(height: 8),
-      itemBuilder: (context, index) => index == 0
-          ? const LinkAccountPrompt()
-          : _GroupTile(group: groups[index - 1]),
+      itemBuilder: (context, index) => switch (index) {
+        0 => const UnsyncedChangesBanner(),
+        1 => const LinkAccountPrompt(),
+        _ => _GroupTile(group: groups[index - 2]),
+      },
     );
   }
 }
