@@ -77,14 +77,18 @@ this is the only run that proves it.
 
 ## Building
 
+Configuration is injected at build time. Copy the template, fill it in, and
+pass the file — a dozen `--dart-define` flags on one command line is how a
+release ends up built against the wrong backend:
+
 ```bash
+cp env/prod.example.json env/prod.json   # gitignored; edit in place
+
 # Web, WasmGC with an automatic JS fallback for older browsers.
-flutter build web --wasm --release \
-  --dart-define=SUPABASE_URL=https://your-project.supabase.co \
-  --dart-define=SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+flutter build web --wasm --release --dart-define-from-file=env/prod.json
 
 # Android
-flutter build appbundle --release
+flutter build appbundle --release --dart-define-from-file=env/prod.json
 ```
 
 `web/sqlite3.wasm` and `web/drift_worker.js` are committed: Drift needs both at
@@ -93,7 +97,7 @@ not survive a reload.
 
 Every integration is off unless configured, and hidden rather than shown broken:
 
-| `--dart-define` | Enables |
+| Key | Enables |
 |---|---|
 | `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` | Sync and accounts |
 | `GOOGLE_SERVER_CLIENT_ID`, `GOOGLE_WEB_CLIENT_ID` | Sign in with Google |
@@ -155,10 +159,47 @@ they are per-currency and exact.
 Adding a provider is one adapter in `supabase/functions/fetch-fx/providers/`
 plus one row in `fx_providers`; reordering or disabling one is just the row.
 
+### Firebase, for push and Google sign-in
+
+One Firebase project supplies both, because creating it also creates the Google
+Cloud project whose OAuth clients Google sign-in needs. **Turn Google Analytics
+off** when creating it — see PRINCIPLES.md.
+
+The app is configured entirely through `env/prod.json`, so **no
+`google-services.json` is needed** and none should be committed. There is no
+`com.google.gms.google-services` Gradle plugin in this project; `FirebaseOptions`
+are passed explicitly in `lib/data/push/push_service.dart`. The console will
+offer you the file anyway — skip it.
+
+| Value | Where it comes from |
+|---|---|
+| `FCM_PROJECT_ID` | Project settings → General → Project ID |
+| `FCM_SENDER_ID` | Project settings → General → Project number (digits only) |
+| `FCM_API_KEY` | Project settings → General → Web API Key |
+| `FCM_APP_ID` | Project settings → Your apps → the App ID of the platform you are building. **Android and web have different App IDs** |
+| `FCM_VAPID_KEY` | Project settings → Cloud Messaging → Web Push certificates → Generate key pair. Web only |
+
+Register the Android app under package name `dev.alturing.opensplit`, and a
+separate web app for the web build.
+
+For Google sign-in, from the Google Cloud console → APIs & Services →
+Credentials on the *same* project:
+
+- The **Web** OAuth client id is both `GOOGLE_WEB_CLIENT_ID` and
+  `GOOGLE_SERVER_CLIENT_ID`. That is not a typo: Supabase verifies the ID token's
+  audience against the web client even when the token was minted on Android.
+- The **Android** OAuth client needs the SHA-1 of the signing key. Add both the
+  upload key and Play App Signing's, the same way `assetlinks.json` needs both.
+- In the Supabase dashboard → Authentication → Providers → Google: enable it,
+  set the client id and secret from the web client, and add the Android client
+  id under Authorized Client IDs.
+
 ### Push notifications
 
-The client defines above cover the app. The fan-out also needs three function
-secrets and a webhook:
+The client values above cover the app. The fan-out also needs a service account,
+three function secrets and a webhook. Project settings → Service accounts →
+Generate new private key gives you the JSON; unlike everything above, **it is a
+real secret**:
 
 ```
 supabase functions deploy notify-entry
@@ -174,7 +215,9 @@ function, with a header `x-webhook-secret` set to the same value.
 otherwise anyone holding the publishable key — which is public by design —
 could drive the fan-out.
 
-For web push, fill in the same four public values in `web/firebase-messaging-sw.js`.
+For web push, fill in the same four public values — using the **web** App ID —
+in `web/firebase-messaging-sw.js`. That file is loaded by the browser before any
+Dart runs, so it cannot read `env/prod.json`; the duplication is unavoidable.
 
 **Permission is never requested at launch.** Android 13+ shows the system
 dialog once or twice and then treats further asks as permanently denied, with
@@ -197,9 +240,11 @@ machine and fail for every real user until it also lists the upload key *and*
 the Google Play App Signing key — and the failure is silent: links just open in
 a browser.
 
-Turnstile must be attached to the anonymous sign-in endpoint before the backend
-is public. Anonymous sign-in is unauthenticated row creation; without a CAPTCHA
-in front of it, anyone can mint users and rows indefinitely.
+Anonymous sign-in is unauthenticated row creation, so it is rate limited rather
+than gated: `anonymous_users = 30` per hour per IP in `supabase/config.toml`,
+plus a nightly job that deletes anonymous accounts which never joined a group.
+No CAPTCHA — it would sit in front of the one flow that has to be invisible,
+and an invite link that opens a puzzle is an invite link nobody follows.
 
 Code generation runs over Drift tables, Freezed models and Riverpod providers.
 After changing any of them, re-run `dart run build_runner build`.
@@ -213,7 +258,9 @@ lib/data/           Drift database, repositories, sync. The only place the
                     backend is referenced.
 lib/application/    Riverpod providers and view models.
 lib/presentation/   screens and widgets.
-supabase/           migrations, in order. 0001 is the locked initial schema.
+supabase/           migrations, organised by subject rather than by date:
+                    foundation, currencies, identity, groups, entries, fx,
+                    invites, push, write path, security, grants, jobs.
 docs/               the product requirements document.
 ```
 

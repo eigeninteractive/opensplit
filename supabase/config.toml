@@ -178,9 +178,10 @@ enable_signup = true
 # Anonymous sign-in is the default entry path: someone arriving from an invite
 # link must land inside the group with no signup screen in the way.
 #
-# It is also unauthenticated row creation. Turnstile under [auth.captcha] is
-# NON-NEGOTIABLE before this is exposed publicly — without it, anyone can mint
-# millions of users and rows. See PRINCIPLES.md and docs/opensplit-prd.md §9.
+# It is also unauthenticated row creation, held in check by two things rather
+# than a CAPTCHA: the anonymous_users rate limit under [auth.rate_limit] (30 an
+# hour per IP), and cleanup_abandoned_anonymous_users(), which deletes anon
+# accounts that never joined a group. See docs/opensplit-prd.md §9.
 enable_anonymous_sign_ins = true
 # Allow/disallow testing manual linking of accounts
 enable_manual_linking = false

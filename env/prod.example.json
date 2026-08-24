@@ -1,0 +1,14 @@
+{
+  "SUPABASE_URL": "https://<project-ref>.supabase.co",
+  "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_...",
+  "LINK_HOST": "opensplit.alturing.dev",
+
+  "GOOGLE_SERVER_CLIENT_ID": "<project-number>-<hash>.apps.googleusercontent.com",
+  "GOOGLE_WEB_CLIENT_ID": "<project-number>-<hash>.apps.googleusercontent.com",
+
+  "FCM_PROJECT_ID": "opensplit",
+  "FCM_SENDER_ID": "<project number, digits only>",
+  "FCM_API_KEY": "AIza...",
+  "FCM_APP_ID": "1:<sender-id>:android:<hash>",
+  "FCM_VAPID_KEY": "B... (web builds only)"
+}

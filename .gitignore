@@ -53,3 +53,10 @@ app.*.map.json
 supabase/.temp/
 supabase/.branches/
 supabase/functions/.env
+
+# Build-time configuration for real projects. Nothing here is a secret — the
+# publishable key and the Firebase ids are public identifiers — but they are
+# per-deployment, and committing one means a fork silently builds against
+# somebody else's backend.
+env/*.json
+!env/*.example.json

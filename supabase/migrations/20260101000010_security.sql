@@ -28,7 +28,7 @@ create policy currencies_read on currencies
 -- only the service role, and therefore only the fetch-fx function, can publish
 -- a rate.
 create policy fx_rates_read on fx_rates
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 
 -- ----------------------------------------------------------------------------
 -- Profiles: yourself, plus anyone you share a group with.

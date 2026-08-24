@@ -132,7 +132,7 @@ This is a cost strategy as much as a UX one: reads outnumber writes roughly 50:1
 
 ## 8. Data model
 
-The schema is `0001_initial_schema.sql`, previously locked. Two amendments follow from the final scope decisions.
+The schema lives in `supabase/migrations/`, twelve files organised by subject rather than by the date each was learned: foundation, currencies, identity, groups, entries, fx, invites, push, write path, security, grants, jobs.
 
 ### Core shape
 
@@ -145,7 +145,15 @@ entry_payers  — a TABLE (multiple payers per bill)
 entry_shares  — resolved amount + original weight
 categories    — global presets + group overrides
 currencies    — ISO 4217 with exponent
+fx_rates      — one row per currency per day, all against a USD pivot
+invites       — single-use claim tokens against a member row
+device_tokens — FCM registrations, for the fan-out
 ```
+
+No receipt photos in v1, so `entries` has no `receipt_path`. UPI payment identity
+lives on `profiles`, not on `members`: a payment handle is personal, not
+group-scoped, and it is visible to group members through the existing profiles
+policy.
 
 ### The three load-bearing decisions
 
@@ -159,30 +167,22 @@ currencies    — ISO 4217 with exponent
 
 A deferred constraint trigger enforces `sum(payers) = sum(shares) = amount_minor` at COMMIT. It catches every rounding bug, every bad largest-remainder implementation, and every torn write — permanently, server-side. Stored data cannot drift even if client logic does.
 
-### Amendments
+### Rates are stored against a pivot, not as pairs
 
-```sql
--- No receipt photos in v1
-alter table entries drop column receipt_path;
-
--- UPI settle-up: payment identity is personal, not group-scoped.
--- Visible only to group members via the existing profiles RLS policy.
-alter table profiles add column upi_vpa text;
-alter table profiles add constraint upi_vpa_format
-  check (upi_vpa is null or upi_vpa ~ '^[a-zA-Z0-9._-]{2,64}@[a-zA-Z]{2,64}$');
-```
-
-Client-side only (Drift, not Postgres):
+Both server-side and in the Drift mirror:
 
 ```sql
 create table fx_rates (
-  date   text not null,
-  base   text not null,
-  quote  text not null,
-  rate   real not null,
-  primary key (date, base, quote)
+  as_of    date    not null,
+  currency char(3) not null,
+  rate     numeric not null,   -- units of `currency` per 1 USD
+  primary key (as_of, currency)
 );
 ```
+
+A pair table is O(n²) rows and makes "is EUR→INR supported?" a real question. A
+pivot makes any pair a division of two lookups, so there is no such thing as a
+supported *pair* — only a currency that has a rate on a date, or does not.
 
 ---
 
@@ -204,7 +204,7 @@ Sign in with Apple is **not** required in v1 — Apple's guideline 4.8 binds onl
 
 | Guard | Why |
 |---|---|
-| Turnstile CAPTCHA on the anonymous endpoint | Anon sign-in is unauthenticated row creation. Without it, someone mints millions of rows. **Non-negotiable.** |
+| Rate limit on the anonymous endpoint | Anon sign-in is unauthenticated row creation. `anonymous_users = 30` per hour per IP. Deliberately not a CAPTCHA: it would sit in front of the one flow that has to be invisible, and an invite link that opens a puzzle is an invite link nobody follows. |
 | Cleanup cron: delete anon users with no linked identity, no membership, > 30 days | Anonymous users count toward MAU |
 | RLS gate on destructive actions | An anon user must not delete groups or remove members |
 | Nag to link identity after the 3rd entry | Anon = one device, no recovery. On web, clearing site data destroys the account permanently. Copy must be blunt about this. |
@@ -476,8 +476,8 @@ M0–M1 are the product. M2 is the part most projects start with and shouldn't �
 
 | Risk | Severity | Mitigation |
 |---|---|---|
-| Anonymous auth abuse | High | Turnstile mandatory before launch; cleanup cron |
-| Client version drift produces divergent balances | High | `algo_version` stamping; minimum-version floor; server retains `v_member_balances` as a fallback path |
+| Anonymous auth abuse | High | Per-IP rate limit on the anon endpoint; cleanup cron deletes accounts that never joined a group |
+| Client version drift produces divergent balances | Low | Shares are stored, not recomputed, so a rounding change can never move a settled entry. The server's deferred trigger rejects any entry that does not balance, whatever wrote it. `v_member_balances` is the independent second implementation that pgTAP checks the Dart fold against. |
 | App Links fail in production only | Medium | Both signing key hashes in `assetlinks.json`; verify with `adb` pre-release |
 | Flutter web perceived quality | Medium | WasmGC, `SelectionArea`, real HTML skeleton, URL-as-state |
 | Users lose anonymous accounts | Medium | Nag to link after 3rd entry; blunt warning copy on web |

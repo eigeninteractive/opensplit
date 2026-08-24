@@ -17,9 +17,13 @@ grant usage on schema public to anon, authenticated, service_role;
 -- ----------------------------------------------------------------------------
 -- Reference data.
 -- ----------------------------------------------------------------------------
-grant select on currencies to anon, authenticated;
-grant select on categories to anon, authenticated;
-grant select on fx_rates   to anon, authenticated;
+-- authenticated only, and that is not an oversight: the app signs in
+-- anonymously before it does anything at all, so every request it makes carries
+-- a session. Nothing is ever read by the `anon` role, and a grant for a caller
+-- that does not exist is API surface to maintain for nobody.
+grant select on currencies to authenticated;
+grant select on categories to authenticated;
+grant select on fx_rates   to authenticated;
 
 -- ----------------------------------------------------------------------------
 -- Group-scoped data.
@@ -57,13 +61,20 @@ grant execute on function create_invite(uuid, interval) to authenticated;
 grant execute on function redeem_invite(uuid) to authenticated;
 
 grant execute on function request_fx_backfill(date, char(3)) to authenticated;
-grant execute on function fx_rate_as_of(char(3), date) to anon, authenticated;
-grant execute on function fx_convert(char(3), char(3), date) to anon, authenticated;
 
 -- Helpers used inside policies.
-grant execute on function is_group_member(uuid)  to anon, authenticated;
-grant execute on function is_group_owner(uuid)   to anon, authenticated;
-grant execute on function is_group_creator(uuid) to anon, authenticated;
+grant execute on function is_group_member(uuid)  to authenticated;
+grant execute on function is_group_owner(uuid)   to authenticated;
+grant execute on function is_group_creator(uuid) to authenticated;
+
+-- fx_rate_as_of() and fx_convert() are deliberately callable by nobody. They
+-- are the server's own statement of what the pivot table means, which pgTAP
+-- checks the Dart conversion against — the same role v_member_balances plays
+-- for the balance fold. Clients convert locally from the mirrored table and
+-- have never called either; exposing them as RPCs promised an API that nothing
+-- asked for.
+revoke execute on function fx_rate_as_of(char(3), date) from public, anon, authenticated;
+revoke execute on function fx_convert(char(3), char(3), date) from public, anon, authenticated;
 
 -- ----------------------------------------------------------------------------
 -- The Edge Functions.
