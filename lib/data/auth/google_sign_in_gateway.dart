@@ -14,9 +14,7 @@ import '../../config.dart';
 /// Cloud project. [isConfigured] gates the button so an unconfigured build
 /// simply does not offer it, rather than offering it and failing.
 class GoogleSignInGateway {
-  static bool get isConfigured =>
-      googleServerClientId.isNotEmpty &&
-      (!kIsWeb || googleWebClientId.isNotEmpty);
+  static bool get isConfigured => googleWebClientId.isNotEmpty;
 
   bool _initialised = false;
 
@@ -24,9 +22,9 @@ class GoogleSignInGateway {
     if (_initialised) return;
     await GoogleSignIn.instance.initialize(
       clientId: kIsWeb ? googleWebClientId : null,
-      // Supabase verifies the ID token against this audience, so it must match
-      // the web client id of the same Google Cloud project even on Android.
-      serverClientId: googleServerClientId,
+      // The same web client id on Android, deliberately: Supabase verifies the
+      // ID token against this audience whichever platform minted it.
+      serverClientId: googleWebClientId,
     );
     _initialised = true;
   }

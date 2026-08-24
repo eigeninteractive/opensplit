@@ -1,0 +1,18 @@
+{
+  "_": "Every build. All public identifiers; nothing here is a secret.",
+  "SUPABASE_URL": "<your supabase_url>",
+  "SUPABASE_PUBLISHABLE_KEY": "<your supabase_publishable_key>",
+  "LINK_HOST": "<your link_host>",
+  "__google": "The WEB OAuth client id, used on both platforms. See README.",
+  "GOOGLE_WEB_CLIENT_ID": "<web client id>.apps.googleusercontent.com",
+  "__fcm": "Shared by both platforms.",
+  "FCM_PROJECT_ID": "<your fcm_project_id>",
+  "FCM_SENDER_ID": "<your fcm_sender_id>",
+  "FCM_VAPID_KEY": "<your fcm_vapid_key>",
+  "__android": "From the Android app's google-services.json.",
+  "ANDROID_FCM_API_KEY": "<your android_fcm_api_key>",
+  "ANDROID_FCM_APP_ID": "<your android_fcm_app_id>",
+  "__web": "From the web app's firebaseConfig snippet.",
+  "WEB_FCM_API_KEY": "<your web_fcm_api_key>",
+  "WEB_FCM_APP_ID": "<your web_fcm_app_id>"
+}

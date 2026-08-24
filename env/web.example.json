@@ -1,6 +1,0 @@
-{
-  "_": "From the web app's firebaseConfig snippet in the Firebase console. See README.",
-  "FCM_API_KEY": "<firebaseConfig.apiKey>",
-  "FCM_APP_ID": "<firebaseConfig.appId>",
-  "FCM_VAPID_KEY": "<your fcm_vapid_key>"
-}

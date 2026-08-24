@@ -77,30 +77,26 @@ this is the only run that proves it.
 
 ## Building
 
-Configuration is injected at build time, from files rather than a dozen
+Configuration is injected at build time, from a file rather than a dozen
 `--dart-define` flags on one command line — which is how a release ends up
 built against the wrong backend.
 
-There are three, because **Firebase issues a different API key and a different
-App ID per platform**. One combined file would have to be edited between an
-Android build and a web build, which is the same footgun in a smaller box.
-
 ```bash
-for f in common android web; do cp env/$f.example.json env/$f.json; done
+cp env/app.example.json env/app.json      # gitignored; fill it in
 
 # Android
-flutter build appbundle --release \
-  --dart-define-from-file=env/common.json \
-  --dart-define-from-file=env/android.json
+flutter build appbundle --release --dart-define-from-file=env/app.json
 
 # Web, WasmGC with an automatic JS fallback for older browsers.
-flutter build web --wasm --release \
-  --dart-define-from-file=env/common.json \
-  --dart-define-from-file=env/web.json
+flutter build web --wasm --release --dart-define-from-file=env/app.json
 ```
 
-The real files are gitignored; the `.example.json` ones are the templates.
-Later files win, so the platform file supplies what `common.json` leaves out.
+Firebase issues a **different API key and a different App ID per platform** — a
+browser key restricted to your domains, an Android key restricted to your
+package name and signing certificate. Both live in `env/app.json` under
+`WEB_`/`ANDROID_` names, and `lib/config.dart` picks the right pair with
+`kIsWeb`, which is a compile-time constant. So there is no build command that
+can be run with the wrong one, and the unused branch never reaches the bundle.
 
 `web/sqlite3.wasm` and `web/drift_worker.js` are committed: Drift needs both at
 runtime to use OPFS, and a build without them falls back to a database that does
@@ -111,9 +107,9 @@ Every integration is off unless configured, and hidden rather than shown broken:
 | Key | Enables |
 |---|---|
 | `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` | Sync and accounts |
-| `GOOGLE_SERVER_CLIENT_ID`, `GOOGLE_WEB_CLIENT_ID` | Sign in with Google |
-| `FCM_API_KEY`, `FCM_APP_ID`, `FCM_SENDER_ID`, `FCM_PROJECT_ID` | Push |
-| `FCM_VAPID_KEY` | Web push (in addition to the four above) |
+| `GOOGLE_WEB_CLIENT_ID` | Sign in with Google |
+| `FCM_PROJECT_ID`, `FCM_SENDER_ID`, and the `ANDROID_`/`WEB_` key and app id | Push |
+| `FCM_VAPID_KEY` | Web push, in addition to the above |
 | `LINK_HOST` | The host used in invite links |
 
 ### Exchange rates
@@ -186,50 +182,57 @@ offer you the file anyway — skip it.
 Register the Android app under package name `com.eigeninteractive.opensplit`,
 and a separate web app for the web build. Then, in Project settings → General:
 
-**`env/common.json`** — the same for both platforms:
-
-| Value | Where it comes from |
+| Key in `env/app.json` | Where it comes from |
 |---|---|
 | `FCM_PROJECT_ID` | Project ID |
 | `FCM_SENDER_ID` | Project number (digits only) |
-
-**`env/web.json`** — Your apps → the **web** app → SDK setup and configuration
-→ Config. That prints a `firebaseConfig` object:
-
-| Value | Field |
-|---|---|
-| `FCM_API_KEY` | `apiKey` |
-| `FCM_APP_ID` | `appId` (contains `:web:`) |
+| `WEB_FCM_API_KEY` | Your apps → the **web** app → SDK setup and configuration → Config → `apiKey` |
+| `WEB_FCM_APP_ID` | the same snippet's `appId` (contains `:web:`) |
 | `FCM_VAPID_KEY` | Cloud Messaging tab → Web Push certificates → Generate key pair |
+| `ANDROID_FCM_API_KEY` | see below |
+| `ANDROID_FCM_APP_ID` | see below |
 
-**`env/android.json`** — Your apps → the **Android** app offers no config
-snippet, only a `google-services.json` download. Download it, read two fields
-out, and delete it — it is not used at build time and must not be committed:
+The Android app offers no config snippet in the console — only a
+`google-services.json` download. Download it, read two fields out, and delete
+it; it is not used at build time and must not be committed:
 
 ```bash
 jq -r '.client[0].api_key[0].current_key,
-       .client[0].client_info.mobilesdk_app_id' google-services.json
+       .client[0].client_info.mobilesdk_app_id' ~/Downloads/google-services.json
 ```
 
-The first line is `FCM_API_KEY`, the second `FCM_APP_ID` (it contains
+First line is `ANDROID_FCM_API_KEY`, second is `ANDROID_FCM_APP_ID` (it contains
 `:android:`).
 
-**Do not reuse one key for both.** Firebase creates a browser key restricted to
-your domains and an Android key restricted to your package name and signing
-certificate. Swapping them often works on the day and breaks the moment either
-restriction is tightened, with no error that says so.
+### Google sign-in
 
-For Google sign-in, from the Google Cloud console → APIs & Services →
-Credentials on the *same* project:
+**Nothing here is created for you.** Firebase auto-creates OAuth clients only
+when *Firebase Auth* is enabled, and this app authenticates through Supabase, so
+Firebase Auth is never switched on and Credentials stays empty. Create both
+clients by hand, in the same Google Cloud project the Firebase project made:
 
-- The **Web** OAuth client id is both `GOOGLE_WEB_CLIENT_ID` and
-  `GOOGLE_SERVER_CLIENT_ID`. That is not a typo: Supabase verifies the ID token's
-  audience against the web client even when the token was minted on Android.
-- The **Android** OAuth client needs the SHA-1 of the signing key. Add both the
-  upload key and Play App Signing's, the same way `assetlinks.json` needs both.
-- In the Supabase dashboard → Authentication → Providers → Google: enable it,
-  set the client id and secret from the web client, and add the Android client
-  id under Authorized Client IDs.
+1. **Google Auth Platform → Branding** (formerly the OAuth consent screen).
+   App name, support email, developer contact. Nothing works until this exists.
+2. **Credentials → Create credentials → OAuth client ID → Web application.**
+   Add `https://<project-ref>.supabase.co/auth/v1/callback` as an authorized
+   redirect URI, and your site origins under authorized JavaScript origins.
+   Its **Client ID** is `GOOGLE_WEB_CLIENT_ID` — one value, used on both
+   platforms, because Supabase verifies the ID token's audience against the web
+   client even when the token was minted on Android.
+3. **Credentials → Create credentials → OAuth client ID → Android.** Package
+   name `com.eigeninteractive.opensplit`, plus the SHA-1 of the signing key.
+   Its id is never needed in the app, but **without this client Android sign-in
+   fails with `ApiException: 10`** — the client is what binds the package name
+   and certificate. Add both the upload key and Play App Signing's SHA-1, the
+   same dual-key problem as `assetlinks.json`.
+4. **Supabase dashboard → Authentication → Providers → Google:** enable it, and
+   paste the *web* client's ID and secret.
+
+```bash
+# The debug SHA-1, for step 3 during development:
+keytool -list -v -keystore ~/.android/debug.keystore \
+  -alias androiddebugkey -storepass android | grep SHA1
+```
 
 ### Push notifications
 
@@ -252,8 +255,8 @@ function, with a header `x-webhook-secret` set to the same value.
 otherwise anyone holding the publishable key — which is public by design —
 could drive the fan-out.
 
-For web push, copy the same four values from `env/web.json` and
-`env/common.json` into `web/firebase-messaging-sw.js`. That file is loaded by
+For web push, copy `WEB_FCM_API_KEY`, `WEB_FCM_APP_ID`, `FCM_SENDER_ID` and
+`FCM_PROJECT_ID` from `env/app.json` into `web/firebase-messaging-sw.js`. That file is loaded by
 the browser before any Dart runs, so it cannot read a define file; the
 duplication is unavoidable.
 
@@ -276,13 +279,12 @@ goes last:
 cp env/local.example.json env/local.json
 
 flutter run -d chrome \
-  --dart-define-from-file=env/common.json \
-  --dart-define-from-file=env/web.json \
+  --dart-define-from-file=env/app.json \
   --dart-define-from-file=env/local.json
 ```
 
 `env/local.json` only needs to override `SUPABASE_URL` and
-`SUPABASE_PUBLISHABLE_KEY`. The local publishable key is the same for everyone
+`SUPABASE_PUBLISHABLE_KEY`. Later files win, so it goes last. The local publishable key is the same for everyone
 and is already the default in `lib/config.dart`, so a bare `flutter run` with no
 defines at all is already a local-Supabase build — just without Firebase.
 
@@ -351,9 +353,7 @@ on Cloudflare Pages and Netlify.
 
 ```bash
 firebase use --add                 # writes .firebaserc, which is gitignored
-flutter build web --wasm --release \
-  --dart-define-from-file=env/common.json \
-  --dart-define-from-file=env/web.json
+flutter build web --wasm --release --dart-define-from-file=env/app.json
 firebase deploy --only hosting
 ```
 

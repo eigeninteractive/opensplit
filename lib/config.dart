@@ -12,6 +12,8 @@
 /// what actually decides who can read what.
 library;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 const String supabaseUrl = String.fromEnvironment(
   'SUPABASE_URL',
   defaultValue: 'http://127.0.0.1:54321',
@@ -40,17 +42,19 @@ const String linkHost = String.fromEnvironment(
 bool get hasBackend =>
     supabaseUrl.isNotEmpty && supabasePublishableKey.isNotEmpty;
 
-/// Google OAuth client ids, from a Google Cloud project.
+/// The **web** OAuth client id, from the Google Cloud project.
+///
+/// One value for both platforms, and that is not a shortcut: Supabase verifies
+/// the ID token's audience against the web client even when the token was
+/// minted on Android, so Android passes this same id as `serverClientId`. The
+/// Android OAuth client still has to exist in Google Cloud — it is what binds
+/// the package name and signing certificate — but its id is never needed here.
+///
+/// iOS, when it arrives, will need its own; that is the point at which this
+/// stops being one constant.
 ///
 /// Empty by default, which hides the Google button entirely rather than
-/// offering a sign-in that cannot work. Supply them at build time:
-///
-///   --dart-define=GOOGLE_SERVER_CLIENT_ID=....apps.googleusercontent.com
-///   --dart-define=GOOGLE_WEB_CLIENT_ID=....apps.googleusercontent.com
-const String googleServerClientId = String.fromEnvironment(
-  'GOOGLE_SERVER_CLIENT_ID',
-);
-
+/// offering a sign-in that cannot work.
 const String googleWebClientId = String.fromEnvironment('GOOGLE_WEB_CLIENT_ID');
 
 /// Firebase Cloud Messaging, for push.
@@ -60,8 +64,22 @@ const String googleWebClientId = String.fromEnvironment('GOOGLE_WEB_CLIENT_ID');
 /// and so a fork can point at its own project:
 ///
 ///   --dart-define=FCM_API_KEY=... --dart-define=FCM_APP_ID=... etc.
-const String fcmApiKey = String.fromEnvironment('FCM_API_KEY');
-const String fcmAppId = String.fromEnvironment('FCM_APP_ID');
+/// Firebase issues a different API key and a different App ID per platform: a
+/// browser key restricted to your domains, an Android key restricted to your
+/// package name and signing certificate. Both live in one config file under
+/// distinct names and the right pair is chosen here, so there is no build
+/// command that can be run with the wrong one.
+///
+/// `kIsWeb` is a compile-time constant, so this is folded away at build time
+/// and the unused branch never reaches the bundle.
+const String fcmApiKey = kIsWeb
+    ? String.fromEnvironment('WEB_FCM_API_KEY')
+    : String.fromEnvironment('ANDROID_FCM_API_KEY');
+
+const String fcmAppId = kIsWeb
+    ? String.fromEnvironment('WEB_FCM_APP_ID')
+    : String.fromEnvironment('ANDROID_FCM_APP_ID');
+
 const String fcmSenderId = String.fromEnvironment('FCM_SENDER_ID');
 const String fcmProjectId = String.fromEnvironment('FCM_PROJECT_ID');
 
