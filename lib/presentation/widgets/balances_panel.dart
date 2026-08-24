@@ -373,9 +373,15 @@ class _TransferExplanation extends StatelessWidget {
 /// One approximate figure for a group holding several currencies.
 ///
 /// Renders nothing unless there is a real estimate to make. Everything about
-/// it is hedged on purpose — the tilde, the word "roughly", the rate date, and
-/// the named currencies it could not convert — because this is the only number
-/// on the screen that is not exact, and it sits directly above ones that are.
+/// it is hedged on purpose — the tilde, the word "roughly", and the named
+/// currencies it could not convert — because this is the only number on the
+/// screen that is not exact, and it sits directly above ones that are.
+///
+/// It is the sum of the per-expense figures, each converted at the rate stamped
+/// on it. It deliberately does not answer "what would settling cost today":
+/// that question is already answered exactly, per currency, by the rows below,
+/// and answering it here too would put two numbers on one screen that cannot be
+/// reconciled.
 class _EstimateCard extends ConsumerWidget {
   const _EstimateCard({required this.groupId});
 
@@ -383,7 +389,7 @@ class _EstimateCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final estimate = ref.watch(groupEstimateProvider(groupId)).value;
+    final estimate = ref.watch(groupEstimateProvider(groupId));
     final currencies = ref.watch(currenciesProvider).value ?? const {};
     if (estimate == null) return const SizedBox.shrink();
 
@@ -392,17 +398,19 @@ class _EstimateCard extends ConsumerWidget {
     final owed = estimate.amountMinor > 0;
     final text = formatMoneyAbs(currency, estimate.amountMinor);
 
-    final caveat = StringBuffer('Converted at ECB rates from ')
-      ..write(DateFormat.yMMMd().format(estimate.asOf));
+    final caveat = StringBuffer(
+      'Each expense converted at its own rate on the day it happened, so this '
+      'adds up to the figures below',
+    );
     if (!estimate.isComplete) {
+      // "except USD" would overstate it: the USD entries that do carry a rate
+      // are still in the figure. Only the ones without are missing.
       caveat
-        ..write('. ')
+        ..write(' — except expenses in ')
         ..write(estimate.unconverted.join(' and '))
-        ..write(
-          estimate.unconverted.length == 1
-              ? ' is not covered and is left out.'
-              : ' are not covered and are left out.',
-        );
+        ..write(' that carry no rate, which are left out.');
+    } else {
+      caveat.write('.');
     }
 
     return Card(

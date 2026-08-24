@@ -1,18 +1,17 @@
+import 'dart:collection';
+
 import '../models/currency.dart';
+import '../models/entry.dart';
 import 'convert.dart';
-import 'fx_quote.dart';
 
 /// A single figure standing in for money held in several currencies.
 ///
-/// Always an estimate, and shaped so a caller cannot forget that: it carries
-/// the date of the oldest rate that went into it, and the currencies it could
-/// not convert at all. A screen that shows [amountMinor] without also showing
-/// [asOf] is misrepresenting it.
+/// Always an estimate, and shaped so a caller cannot forget that: it names the
+/// currencies it could not convert at all rather than quietly under-reporting.
 class EstimatedTotal {
   const EstimatedTotal({
     required this.amountMinor,
     required this.currency,
-    required this.asOf,
     required this.unconverted,
   });
 
@@ -22,73 +21,83 @@ class EstimatedTotal {
   /// The currency everything was converted into — the group's default.
   final String currency;
 
-  /// Publication date of the oldest rate used. The estimate is at best this
-  /// fresh, so this is the date a screen should quote.
-  final DateTime asOf;
-
-  /// Currencies excluded because no rate was available.
+  /// Currencies in which at least one entry carries no rate.
   ///
-  /// Not an error, and no longer about which provider covers what: the server's
-  /// waterfall fills gaps across sources, so this now means only that nothing
-  /// had been published for that currency on or before the date in question —
-  /// most often a backdated entry predating the rates we hold. The figure stays
-  /// honest by naming what it left out instead of quietly under-reporting.
+  /// Not the whole currency: entries in it that do carry a rate are still in
+  /// the figure, and only the ones without are missing. Most often a backdated
+  /// entry predating the rates we hold, or one recorded with no connection.
+  /// The figure stays honest by naming what it left out.
   final List<String> unconverted;
 
   bool get isComplete => unconverted.isEmpty;
 }
 
-/// Folds per-currency amounts into one estimated figure.
+/// Folds one member's position into a single estimated figure, converting each
+/// entry at the rate stored on that entry.
 ///
-/// Pure, so the interesting cases — a missing rate, a rate from last week, a
-/// currency with a different exponent — are testable without a network or a
-/// database.
-EstimatedTotal? estimateTotal({
-  required Map<String, int> perCurrencyMinor,
+/// The rate comes from the entry, not from today, and that is the whole point.
+/// Converting a net balance at today's rate answers a different question —
+/// "what would settling cost right now" — and produces a number that cannot be
+/// reconciled with the per-expense figures printed directly above it. Two
+/// numbers on one screen that do not add up is worse than either question going
+/// unanswered, and the "what do I owe now" question already has an exact answer
+/// that needs no conversion at all: the per-currency balances.
+///
+/// So this one means "what this came to at the time", every part of it traceable
+/// to a rate stamped on a specific expense on a specific day.
+///
+/// Rounding happens per entry rather than once at the end. That costs a minor
+/// unit here and there against a mathematically ideal sum, and buys the thing
+/// the figure exists for: it is the sum of the numbers the user can actually
+/// see.
+EstimatedTotal? estimateBalance({
+  required Iterable<Entry> entries,
+  required String memberId,
   required String target,
   required Map<String, Currency> currencies,
-  required Map<String, FxQuote> quotes,
 }) {
   final targetCurrency = currencies[target];
   if (targetCurrency == null) return null;
 
   var total = 0;
-  DateTime? oldest;
-  final unconverted = <String>[];
   var convertedAny = false;
+  final unconverted = SplayTreeSet<String>();
 
-  final codes = perCurrencyMinor.keys.toList()..sort();
-  for (final code in codes) {
-    final amount = perCurrencyMinor[code]!;
-    if (amount == 0) continue;
+  for (final entry in entries) {
+    if (entry.isDeleted) continue;
 
-    if (code == target) {
-      total += amount;
+    // The same arithmetic the balance fold does, kept per entry so each one can
+    // be converted at its own rate: paying puts you in credit, owing a share
+    // puts you in debit.
+    var delta = 0;
+    for (final payer in entry.payers) {
+      if (payer.memberId == memberId) delta += payer.amountMinor;
+    }
+    for (final share in entry.shares) {
+      if (share.memberId == memberId) delta -= share.amountMinor;
+    }
+    if (delta == 0) continue;
+
+    if (entry.currency == target) {
+      total += delta;
       convertedAny = true;
       continue;
     }
 
-    final from = currencies[code];
-    final quote = quotes[code];
-    if (from == null || quote == null) {
-      unconverted.add(code);
+    final from = currencies[entry.currency];
+    final rate = entry.fxRate;
+    if (from == null || rate == null || rate <= 0) {
+      unconverted.add(entry.currency);
       continue;
     }
 
-    final converted = convertWith(
-      amountMinor: amount,
+    total += convertMinor(
+      amountMinor: delta,
       from: from,
       to: targetCurrency,
-      quote: quote,
+      rate: rate,
     );
-    if (converted == null) {
-      unconverted.add(code);
-      continue;
-    }
-
-    total += converted;
     convertedAny = true;
-    if (oldest == null || quote.date.isBefore(oldest)) oldest = quote.date;
   }
 
   // Nothing was converted, so there is no estimate to make — as distinct from
@@ -98,9 +107,6 @@ EstimatedTotal? estimateTotal({
   return EstimatedTotal(
     amountMinor: total,
     currency: target,
-    // Only same-currency amounts contributed, so the figure is exact and its
-    // freshness is not in question.
-    asOf: oldest ?? DateTime.utc(1970),
-    unconverted: unconverted,
+    unconverted: unconverted.toList(),
   );
 }

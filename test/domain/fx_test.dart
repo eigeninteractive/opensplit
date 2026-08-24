@@ -3,6 +3,8 @@ import 'package:opensplit/domain/fx/convert.dart';
 import 'package:opensplit/domain/fx/estimated_total.dart';
 import 'package:opensplit/domain/fx/fx_quote.dart';
 import 'package:opensplit/domain/models/currency.dart';
+import 'package:opensplit/domain/models/entry.dart';
+import 'package:opensplit/domain/split/splitter.dart';
 
 const inr = Currency(code: 'INR', exponent: 2, symbol: '₹', name: 'Rupee');
 const usd = Currency(code: 'USD', exponent: 2, symbol: r'$', name: 'Dollar');
@@ -16,6 +18,35 @@ FxQuote quote(String base, String to, double rate, {DateTime? date}) => FxQuote(
   date: date ?? DateTime.utc(2026, 8, 20),
   source: 'test',
 );
+
+/// One entry, seen from `me`'s side: what they paid and what they owe.
+Entry entry({
+  required String currency,
+  required int paid,
+  required int share,
+  double? fxRate,
+  bool deleted = false,
+  String member = 'me',
+}) {
+  final date = DateTime.utc(2026, 8, 20);
+  return Entry(
+    id: 'e-$currency-$paid-$share-$member',
+    groupId: 'g',
+    kind: EntryKind.expense,
+    description: 'test',
+    currency: currency,
+    amountMinor: paid,
+    entryDate: date,
+    splitKind: SplitKind.equal,
+    payers: [if (paid != 0) EntryPayer(memberId: member, amountMinor: paid)],
+    shares: [if (share != 0) EntryShare(memberId: member, amountMinor: share)],
+    fxRate: fxRate,
+    createdBy: member,
+    createdAt: date,
+    updatedAt: date,
+    deletedAt: deleted ? date : null,
+  );
+}
 
 void main() {
   group('convertMinor', () {
@@ -75,80 +106,162 @@ void main() {
     });
   });
 
-  group('estimateTotal', () {
+  group('estimateBalance', () {
     const currencies = {'INR': inr, 'USD': usd, 'JPY': jpy};
 
-    test('sums converted balances into the target currency', () {
-      final total = estimateTotal(
-        perCurrencyMinor: {'INR': 100000, 'USD': 1000},
+    test('converts each entry at the rate stamped on that entry', () {
+      // The same currency on two days at two rates. Folding the currency first
+      // and converting once could only ever use one of them.
+      final total = estimateBalance(
+        entries: [
+          entry(currency: 'USD', paid: 1000, share: 0, fxRate: 80),
+          entry(currency: 'USD', paid: 1000, share: 0, fxRate: 90),
+        ],
+        memberId: 'me',
         target: 'INR',
         currencies: currencies,
-        quotes: {'USD': quote('USD', 'INR', 87.5)},
       );
-      expect(total!.amountMinor, 100000 + 87500);
+      expect(total!.amountMinor, 80000 + 90000);
       expect(total.isComplete, isTrue);
     });
 
-    test('names what it could not convert instead of under-reporting', () {
-      final total = estimateTotal(
-        perCurrencyMinor: {'INR': 100000, 'USD': 1000},
+    test('adds up to the per-expense figures shown above it', () {
+      // The property the whole change exists for: the estimate is the sum of
+      // the numbers on screen, not an independently derived one.
+      final entries = [
+        entry(currency: 'USD', paid: 2500, share: 1250, fxRate: 87.5),
+        entry(currency: 'JPY', paid: 5000, share: 2500, fxRate: 0.56),
+        entry(currency: 'INR', paid: 100000, share: 50000),
+      ];
+      final perEntry = [
+        convertMinor(amountMinor: 1250, from: usd, to: inr, rate: 87.5),
+        convertMinor(amountMinor: 2500, from: jpy, to: inr, rate: 0.56),
+        50000,
+      ];
+
+      final total = estimateBalance(
+        entries: entries,
+        memberId: 'me',
         target: 'INR',
         currencies: currencies,
-        quotes: const {},
+      );
+      expect(total!.amountMinor, perEntry.reduce((a, b) => a + b));
+    });
+
+    test('rounds per entry, which is what makes the sum reconcile', () {
+      // 0.01 USD at 87.5 is 0.875 INR, which rounds up to 88 paise. Two of
+      // them shown on screen read 88 + 88 = 176. Converting the 0.02 USD
+      // total instead gives 1.75 INR -> 175. The old behaviour produced 175
+      // and printed 176, and this is the one paisa that told the user the
+      // screen did not add up.
+      final total = estimateBalance(
+        entries: [
+          entry(currency: 'USD', paid: 1, share: 0, fxRate: 87.5),
+          entry(currency: 'USD', paid: 1, share: 0, fxRate: 87.5),
+        ],
+        memberId: 'me',
+        target: 'INR',
+        currencies: currencies,
+      );
+      expect(total!.amountMinor, 176);
+      expect(
+        convertMinor(amountMinor: 2, from: usd, to: inr, rate: 87.5),
+        175,
+        reason: 'converting the currency total is the number we are not using',
+      );
+    });
+
+    test('a settlement folds through the same path as an expense', () {
+      final total = estimateBalance(
+        entries: [
+          entry(currency: 'USD', paid: 1000, share: 0, fxRate: 80),
+          entry(currency: 'USD', paid: 0, share: 1000, fxRate: 80),
+        ],
+        memberId: 'me',
+        target: 'INR',
+        currencies: currencies,
+      );
+      // Paid then repaid: nothing owed, and the estimate says so rather than
+      // returning null.
+      expect(total!.amountMinor, 0);
+    });
+
+    test('names a currency whose entry carries no rate', () {
+      final total = estimateBalance(
+        entries: [
+          entry(currency: 'INR', paid: 100000, share: 0),
+          entry(currency: 'USD', paid: 1000, share: 0),
+        ],
+        memberId: 'me',
+        target: 'INR',
+        currencies: currencies,
       );
       expect(total!.amountMinor, 100000);
       expect(total.isComplete, isFalse);
       expect(total.unconverted, ['USD']);
     });
 
-    test('reports the oldest rate it used, not the newest', () {
-      final total = estimateTotal(
-        perCurrencyMinor: {'USD': 1000, 'JPY': 5000},
+    test('skips soft-deleted entries, as the balance fold does', () {
+      final total = estimateBalance(
+        entries: [
+          entry(currency: 'INR', paid: 100000, share: 0),
+          entry(
+            currency: 'USD',
+            paid: 1000,
+            share: 0,
+            fxRate: 80,
+            deleted: true,
+          ),
+        ],
+        memberId: 'me',
         target: 'INR',
         currencies: currencies,
-        quotes: {
-          'USD': quote('USD', 'INR', 87.5, date: DateTime.utc(2026, 8, 20)),
-          'JPY': quote('JPY', 'INR', 0.56, date: DateTime.utc(2026, 8, 14)),
-        },
       );
-      // Quoting the fresher date would overstate how current the figure is.
-      expect(total!.asOf, DateTime.utc(2026, 8, 14));
+      expect(total!.amountMinor, 100000);
+      expect(total.isComplete, isTrue);
+    });
+
+    test('ignores entries this member had no part in', () {
+      final total = estimateBalance(
+        entries: [
+          entry(currency: 'INR', paid: 100000, share: 0),
+          entry(currency: 'USD', paid: 0, share: 0, member: 'someone-else'),
+        ],
+        memberId: 'me',
+        target: 'INR',
+        currencies: currencies,
+      );
+      expect(total!.amountMinor, 100000);
+      expect(
+        total.isComplete,
+        isTrue,
+        reason: 'an entry that does not touch you cannot be uncovertible',
+      );
     });
 
     test('returns null when nothing could be converted at all', () {
       // Distinct from an estimate of zero: the screen must say nothing rather
       // than claim the user is settled.
-      final total = estimateTotal(
-        perCurrencyMinor: {'USD': 1000},
+      final total = estimateBalance(
+        entries: [entry(currency: 'USD', paid: 1000, share: 0)],
+        memberId: 'me',
         target: 'INR',
         currencies: currencies,
-        quotes: const {},
       );
       expect(total, isNull);
     });
 
-    test('ignores zero balances so a settled currency adds no noise', () {
-      final total = estimateTotal(
-        perCurrencyMinor: {'INR': 5000, 'USD': 0},
+    test('refuses a non-positive stored rate rather than trusting it', () {
+      final total = estimateBalance(
+        entries: [
+          entry(currency: 'INR', paid: 100000, share: 0),
+          entry(currency: 'USD', paid: 1000, share: 0, fxRate: 0),
+        ],
+        memberId: 'me',
         target: 'INR',
         currencies: currencies,
-        quotes: const {},
       );
-      expect(total!.isComplete, isTrue);
-      expect(total.unconverted, isEmpty);
-    });
-  });
-
-  group('FxQuote.isBehind', () {
-    test('a rate published today is current', () {
-      final q = quote('USD', 'INR', 87.5, date: DateTime.utc(2026, 8, 21));
-      expect(q.isBehind(DateTime.utc(2026, 8, 21, 18)), isFalse);
-    });
-
-    test('yesterday'
-        's rate is behind', () {
-      final q = quote('USD', 'INR', 87.5, date: DateTime.utc(2026, 8, 20));
-      expect(q.isBehind(DateTime.utc(2026, 8, 21, 9)), isTrue);
+      expect(total!.unconverted, ['USD']);
     });
   });
 }

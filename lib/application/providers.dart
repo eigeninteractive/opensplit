@@ -345,8 +345,11 @@ GroupLedger? groupLedger(Ref ref, String groupId) {
 /// the whole answer), or no rate for anything. Callers render nothing in that
 /// case rather than a zero, because "we could not convert this" and "you are
 /// settled" are very different statements to make about someone's money.
+///
+/// Synchronous, and no longer touches the rate table: every rate it needs is
+/// already stamped on the entry that used it.
 @riverpod
-Future<EstimatedTotal?> groupEstimate(Ref ref, String groupId) async {
+EstimatedTotal? groupEstimate(Ref ref, String groupId) {
   final ledger = ref.watch(groupLedgerProvider(groupId));
   final currencies = ref.watch(currenciesProvider).value;
   if (ledger == null || currencies == null) return null;
@@ -354,35 +357,18 @@ Future<EstimatedTotal?> groupEstimate(Ref ref, String groupId) async {
   final me = ledger.me;
   if (me == null) return null;
 
-  final target = ledger.group.defaultCurrency;
-  final perCurrency = <String, int>{
-    for (final code in ledger.activeCurrencies)
-      code: ledger.balanceOf(me.id, code),
-  };
-  final holding = perCurrency.keys
-      .where((code) => perCurrency[code] != 0)
+  // One currency means the exact figure beneath this is already the answer, and
+  // repeating it approximately would only invite doubt about which to believe.
+  final holding = ledger.activeCurrencies
+      .where((code) => ledger.balanceOf(me.id, code) != 0)
       .toSet();
   if (holding.length < 2) return null;
 
-  final fx = ref.watch(fxRepositoryProvider);
-
-  // Today's rate, not each entry's. A net balance is money owed now, so what
-  // matters is what it is worth now — whereas an individual expense is shown at
-  // the rate on the day it happened. Two different questions.
-  final today = DateTime.now();
-
-  final quotes = <String, FxQuote>{};
-  for (final code in holding) {
-    if (code == target) continue;
-    final quote = await fx.quote(base: code, quote: target, asOf: today);
-    if (quote != null) quotes[code] = quote;
-  }
-
-  return estimateTotal(
-    perCurrencyMinor: perCurrency,
-    target: target,
+  return estimateBalance(
+    entries: ledger.entries,
+    memberId: me.id,
+    target: ledger.group.defaultCurrency,
     currencies: currencies,
-    quotes: quotes,
   );
 }
 
