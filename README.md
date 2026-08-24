@@ -268,8 +268,36 @@ first, so the OS dialog is only ever spent on someone who has already agreed.
 
 The web build is static. Any host works, provided it serves an SPA fallback —
 `/join/<token>` must return the app shell rather than a 404, since that is the
-entire point of an invite link. `web/_redirects` covers Cloudflare Pages and
-Netlify.
+entire point of an invite link.
+
+`firebase.json` configures Firebase Hosting; `web/_redirects` does the same job
+on Cloudflare Pages and Netlify.
+
+```bash
+firebase use --add                 # writes .firebaserc, which is gitignored
+flutter build web --wasm --release \
+  --dart-define-from-file=env/common.json \
+  --dart-define-from-file=env/web.json
+firebase deploy --only hosting
+```
+
+The app claims two hosts — `opensplit.eigeninteractive.com` and Firebase
+Hosting's own `opensplit.web.app` — so both appear in the App Links intent
+filter and both must serve `/.well-known/assetlinks.json`. Pointing both at one
+Hosting site means one deploy covers both. Invite links are *generated* with
+`LINK_HOST` only, which is why that is a single canonical value: a link pasted
+into a chat outlives whichever domain was current when it was made.
+
+After the first deploy, confirm the file actually shipped, because the failure
+mode is silence:
+
+```bash
+curl -sI https://opensplit.eigeninteractive.com/.well-known/assetlinks.json
+curl -sI https://opensplit.web.app/.well-known/assetlinks.json
+```
+
+Both must return `200` and `content-type: application/json`. HTML means the SPA
+rewrite swallowed it, and App Links will not verify.
 
 **Before the first Play Store release**, read
 [`web/.well-known/README.md`](web/.well-known/README.md). `assetlinks.json`

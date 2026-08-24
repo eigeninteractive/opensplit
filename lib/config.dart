@@ -22,10 +22,15 @@ const String supabasePublishableKey = String.fromEnvironment(
   defaultValue: 'sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH',
 );
 
-/// Host used for invite and group links.
+/// Host used when *generating* an invite link.
+///
+/// One value, deliberately, even though the app opens links from more than one
+/// domain — see the App Links intent filter in AndroidManifest.xml. A link that
+/// has been pasted into a chat outlives whichever host was fashionable when it
+/// was made, so the one written into it should be the canonical one.
 const String linkHost = String.fromEnvironment(
   'LINK_HOST',
-  defaultValue: 'opensplit.alturing.dev',
+  defaultValue: 'opensplit.eigeninteractive.com',
 );
 
 /// Whether a backend is configured at all.

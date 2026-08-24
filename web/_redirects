@@ -1,5 +1,5 @@
 # Every route is client-side, so an unmatched path must return the app shell.
-# Without this, opening https://opensplit.alturing.dev/join/<token> directly —
+# Without this, opening https://opensplit.eigeninteractive.com/join/<token> directly —
 # which is the entire point of an invite link — 404s.
 #
 # .well-known is excluded first: Android fetches assetlinks.json to verify App

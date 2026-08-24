@@ -40,7 +40,13 @@
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="https"
-                      android:host="opensplit.alturing.dev"/>
+                      android:host="opensplit.eigeninteractive.com"/>
+                <!-- Firebase Hosting's own domain, which serves the same
+                     build. A link can arrive from either, and a host missing
+                     here opens in a browser instead — so both are listed, and
+                     both must serve assetlinks.json. -->
+                <data android:scheme="https"
+                      android:host="opensplit.web.app"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

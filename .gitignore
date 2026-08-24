@@ -60,3 +60,9 @@ supabase/functions/.env
 # somebody else's backend.
 env/*.json
 !env/*.example.json
+
+# Firebase Hosting. firebase.json is committed — it is the deploy contract, and
+# it is the same for anyone. .firebaserc just names one person's project, so
+# each deployer runs `firebase use --add` instead of inheriting a fork's.
+.firebaserc
+.firebase/

@@ -1,10 +1,15 @@
 # App Links verification
 
-`assetlinks.json` must be served from
-`https://opensplit.alturing.dev/.well-known/assetlinks.json` as
-`application/json`, over HTTPS, with no redirect. Android fetches it to decide
-whether this app may open `https://opensplit.alturing.dev/...` links itself
-instead of bouncing to a browser.
+`assetlinks.json` must be served as `application/json`, over HTTPS, with no
+redirect, from **every host the app claims** — currently two:
+
+- `https://opensplit.eigeninteractive.com/.well-known/assetlinks.json`
+- `https://opensplit.web.app/.well-known/assetlinks.json`
+
+Android fetches it once per host listed in the App Links intent filter, and
+decides per host. Both point at the same Firebase Hosting site, so one deploy
+serves both; if the custom domain is ever moved elsewhere, it needs its own
+copy or links from that domain silently stop opening natively.
 
 ## The fingerprint list is not optional reading
 
@@ -40,6 +45,17 @@ natively.
 
 The host must also serve an SPA fallback: every unmatched path returns
 `index.html`, so `/g/<id>` and `/join/<token>` work on a cold load rather than
-404ing. `web/_redirects` does this on Cloudflare Pages and Netlify. `.well-known`
-must be excluded from that fallback, or Android fetches the HTML shell instead
-of the JSON and verification fails.
+404ing. `firebase.json` does this on Firebase Hosting; `web/_redirects` does the
+same on Cloudflare Pages and Netlify.
+
+`.well-known` must be excluded from that fallback, or Android fetches the HTML
+shell instead of the JSON and verification fails.
+
+**Firebase Hosting's default `ignore` list is `["firebase.json", "**/.*",
+"**/node_modules/**"]`, and `**/.*` matches `.well-known`.** Accept that default
+and the directory is never uploaded at all: the URL 404s, or worse falls through
+the SPA rewrite and returns HTML, and App Links quietly stop working with
+nothing to explain it. `firebase.json` here deliberately does not use it. On Firebase Hosting a real
+file wins over a rewrite, so the copy in `build/web/.well-known/` is served as
+itself — but only because `flutter build web` copies the directory verbatim.
+Check it is there before believing a deploy.
