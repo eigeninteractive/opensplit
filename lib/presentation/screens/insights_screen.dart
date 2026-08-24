@@ -6,7 +6,7 @@ import 'package:intl/intl.dart';
 import '../widgets/page_body.dart';
 import '../../application/providers.dart';
 import '../../domain/models/currency.dart';
-import '../../domain/repositories/analytics_repository.dart';
+import '../../domain/analytics/analytics_query.dart';
 import '../format.dart';
 import '../widgets/export_button.dart';
 

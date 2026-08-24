@@ -1,11 +1,19 @@
 import 'package:drift/drift.dart';
 
 import '../../domain/models/entry.dart';
-import '../../domain/repositories/analytics_repository.dart';
+import '../../domain/analytics/analytics_query.dart';
 import '../local/database.dart';
 import 'drift_entry_repository.dart';
 
-final class DriftAnalyticsRepository implements AnalyticsRepository {
+/// Local analytics.
+///
+/// Every one of these is SQL over data already on the device: no endpoint, no
+/// per-query cost, no cache to invalidate, and it all works with no connection.
+/// Searching your own expense history is not something worth charging for.
+///
+/// Settlements are excluded throughout. Paying a friend back is not spending,
+/// and counting it would double every settled expense.
+final class DriftAnalyticsRepository {
   DriftAnalyticsRepository(this._db);
 
   final AppDatabase _db;
@@ -80,7 +88,6 @@ final class DriftAnalyticsRepository implements AnalyticsRepository {
   static String _iso(DateTime date) =>
       DateTime.utc(date.year, date.month, date.day).toIso8601String();
 
-  @override
   Future<List<Entry>> search(AnalyticsFilter filter) async {
     final where = _where(filter);
     final rows = await _db
@@ -144,7 +151,6 @@ final class DriftAnalyticsRepository implements AnalyticsRepository {
     ];
   }
 
-  @override
   Future<List<SpendBucket>> spendByCategory(AnalyticsFilter filter) =>
       _aggregate(
         filter: filter,
@@ -156,7 +162,8 @@ final class DriftAnalyticsRepository implements AnalyticsRepository {
         readsFrom: {_db.entries, _db.categories, _db.entryShares},
       );
 
-  @override
+  /// What each member personally consumed — the sum of their shares, not what
+  /// they happened to pay.
   Future<List<SpendBucket>> spendByMember(AnalyticsFilter filter) => _aggregate(
     filter: filter,
     keyExpression: 's.member_id',
@@ -171,7 +178,7 @@ final class DriftAnalyticsRepository implements AnalyticsRepository {
     readsFrom: {_db.entries, _db.entryShares, _db.members},
   );
 
-  @override
+  /// Totals by calendar month.
   Future<List<SpendBucket>> spendByMonth(AnalyticsFilter filter) async {
     final buckets = await _aggregate(
       filter: filter,
@@ -186,7 +193,7 @@ final class DriftAnalyticsRepository implements AnalyticsRepository {
     return buckets..sort((a, b) => a.key.compareTo(b.key));
   }
 
-  @override
+  /// Currencies this group actually holds, most used first.
   Future<List<String>> currenciesUsed(String groupId) async {
     final rows = await _db
         .customSelect(

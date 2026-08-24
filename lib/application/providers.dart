@@ -32,15 +32,9 @@ import '../domain/models/group.dart';
 import '../domain/money_format.dart';
 import '../domain/models/member.dart';
 import '../domain/models/profile.dart';
-import '../domain/repositories/currency_repository.dart';
-import '../domain/repositories/fx_repository.dart';
-import '../domain/repositories/entry_repository.dart';
-import '../domain/repositories/group_repository.dart';
-import '../domain/repositories/analytics_repository.dart';
+import '../domain/analytics/analytics_query.dart';
 import '../domain/repositories/auth_service.dart';
-import '../domain/repositories/category_repository.dart';
 import '../domain/repositories/invite_api.dart';
-import '../domain/repositories/profile_repository.dart';
 
 part 'providers.g.dart';
 
@@ -76,19 +70,19 @@ Stream<List<FailedWrite>> failedWrites(Ref ref) =>
     ref.watch(outboxQueueProvider).watchDeadLetters();
 
 @Riverpod(keepAlive: true)
-GroupRepository groupRepository(Ref ref) => DriftGroupRepository(
+DriftGroupRepository groupRepository(Ref ref) => DriftGroupRepository(
   ref.watch(appDatabaseProvider),
   outbox: ref.watch(outboxQueueProvider),
 );
 
 @Riverpod(keepAlive: true)
-EntryRepository entryRepository(Ref ref) => DriftEntryRepository(
+DriftEntryRepository entryRepository(Ref ref) => DriftEntryRepository(
   ref.watch(appDatabaseProvider),
   outbox: ref.watch(outboxQueueProvider),
 );
 
 @Riverpod(keepAlive: true)
-CurrencyRepository currencyRepository(Ref ref) =>
+DriftCurrencyRepository currencyRepository(Ref ref) =>
     DriftCurrencyRepository(ref.watch(appDatabaseProvider));
 
 /// Display-only exchange rates, read from the locally mirrored table.
@@ -97,7 +91,7 @@ CurrencyRepository currencyRepository(Ref ref) =>
 /// a conversion works offline and every member of a group converts with the
 /// same numbers.
 @Riverpod(keepAlive: true)
-FxRepository fxRepository(Ref ref) =>
+DriftFxRepository fxRepository(Ref ref) =>
     DriftFxRepository(ref.watch(appDatabaseProvider));
 
 /// The rate for one pair, as it stood on a given date.
@@ -110,7 +104,7 @@ Future<FxQuote?> fxQuote(Ref ref, String base, String quote, DateTime asOf) =>
     ref.watch(fxRepositoryProvider).quote(base: base, quote: quote, asOf: asOf);
 
 @Riverpod(keepAlive: true)
-ProfileRepository profileRepository(Ref ref) =>
+DriftProfileRepository profileRepository(Ref ref) =>
     DriftProfileRepository(ref.watch(appDatabaseProvider));
 
 /// The stored profile for a member, when they have an account.
@@ -554,11 +548,11 @@ Future<int> totalEntryCount(Ref ref) async {
 }
 
 @Riverpod(keepAlive: true)
-CategoryRepository categoryRepository(Ref ref) =>
+DriftCategoryRepository categoryRepository(Ref ref) =>
     DriftCategoryRepository(ref.watch(appDatabaseProvider));
 
 @Riverpod(keepAlive: true)
-AnalyticsRepository analyticsRepository(Ref ref) =>
+DriftAnalyticsRepository analyticsRepository(Ref ref) =>
     DriftAnalyticsRepository(ref.watch(appDatabaseProvider));
 
 /// The fixed global category list. Not group-scoped: there are no per-group

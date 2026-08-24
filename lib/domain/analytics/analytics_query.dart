@@ -1,4 +1,8 @@
-import '../models/entry.dart';
+/// The shape of an analytics question, and the shape of an answer.
+///
+/// Value types only. The queries themselves are SQL over data already on the
+/// device — see `DriftAnalyticsRepository`.
+library;
 
 /// Narrows what an analytics question is asked about.
 class AnalyticsFilter {
@@ -72,28 +76,4 @@ class SpendBucket {
   final String currency;
   final int amountMinor;
   final int entryCount;
-}
-
-/// Local analytics.
-///
-/// Every one of these is SQL over data already on the device: no endpoint, no
-/// per-query cost, no cache to invalidate, and it all works with no connection.
-/// Searching your own expense history is not something worth charging for.
-///
-/// Settlements are excluded throughout. Paying a friend back is not spending,
-/// and counting it would double every settled expense.
-abstract interface class AnalyticsRepository {
-  Future<List<Entry>> search(AnalyticsFilter filter);
-
-  Future<List<SpendBucket>> spendByCategory(AnalyticsFilter filter);
-
-  /// What each member personally consumed — the sum of their shares, not what
-  /// they happened to pay.
-  Future<List<SpendBucket>> spendByMember(AnalyticsFilter filter);
-
-  /// Totals by calendar month.
-  Future<List<SpendBucket>> spendByMonth(AnalyticsFilter filter);
-
-  /// Currencies this group actually holds, most used first.
-  Future<List<String>> currenciesUsed(String groupId);
 }

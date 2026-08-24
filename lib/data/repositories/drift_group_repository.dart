@@ -4,13 +4,12 @@ import 'package:uuid/uuid.dart';
 import '../../domain/models/group.dart';
 import '../../domain/settle/upi.dart';
 import '../../domain/models/member.dart';
-import '../../domain/repositories/group_repository.dart';
 import '../local/database.dart';
 import '../sync/outbox_queue.dart';
 import 'mappers.dart';
 
 /// Local-first group and membership storage.
-final class DriftGroupRepository implements GroupRepository {
+final class DriftGroupRepository {
   DriftGroupRepository(
     this._db, {
     this.outbox,
@@ -26,7 +25,11 @@ final class DriftGroupRepository implements GroupRepository {
   final Uuid _uuid;
   final DateTime Function() _clock;
 
-  @override
+  /// Groups this user belongs to, newest activity first.
+  ///
+  /// A stream rather than a future because every screen is driven by the local
+  /// database: a sync that lands in the background updates the UI without any
+  /// screen having to know a sync happened.
   Stream<List<Group>> watchGroups({bool includeArchived = false}) {
     final query = _db.select(_db.groups)
       ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]);
@@ -38,13 +41,12 @@ final class DriftGroupRepository implements GroupRepository {
     );
   }
 
-  @override
   Stream<Group?> watchGroup(String groupId) =>
       (_db.select(_db.groups)..where((t) => t.id.equals(groupId)))
           .watchSingleOrNull()
           .map((row) => row?.toDomain());
 
-  @override
+  /// Members of a group, including placeholders and people who have left.
   Stream<List<Member>> watchMembers(
     String groupId, {
     bool includeLeft = false,
@@ -60,7 +62,6 @@ final class DriftGroupRepository implements GroupRepository {
     );
   }
 
-  @override
   Future<Group?> getGroup(String groupId) async {
     final row = await (_db.select(
       _db.groups,
@@ -68,7 +69,6 @@ final class DriftGroupRepository implements GroupRepository {
     return row?.toDomain();
   }
 
-  @override
   Future<List<Member>> getMembers(String groupId) async {
     final rows =
         await (_db.select(_db.members)
@@ -78,7 +78,10 @@ final class DriftGroupRepository implements GroupRepository {
     return [for (final row in rows) row.toDomain()];
   }
 
-  @override
+  /// Creates a group along with its first member — the creator, as owner.
+  ///
+  /// One operation because a group with no members is not a valid state; it
+  /// would render as an empty screen with no way to add an expense.
   Future<({Group group, Member owner})> createGroup({
     required String name,
     required String defaultCurrency,
@@ -153,7 +156,6 @@ final class DriftGroupRepository implements GroupRepository {
     );
   }
 
-  @override
   Future<void> updateGroup(Group group) async {
     await (_db.update(_db.groups)..where((t) => t.id.equals(group.id))).write(
       GroupsCompanion(
@@ -170,7 +172,8 @@ final class DriftGroupRepository implements GroupRepository {
     await outbox?.enqueue(OutboxTarget.group, group.id);
   }
 
-  @override
+  /// Adds a member. A null [profileId] creates a placeholder — someone who is
+  /// fully participating in the group's finances without having an account.
   Future<Member> addMember(
     String groupId, {
     required String displayName,
@@ -213,7 +216,6 @@ final class DriftGroupRepository implements GroupRepository {
     return member;
   }
 
-  @override
   Future<void> renameMember(String memberId, String displayName) async {
     final trimmed = displayName.trim();
     if (trimmed.isEmpty) {
@@ -229,7 +231,8 @@ final class DriftGroupRepository implements GroupRepository {
     await outbox?.enqueue(OutboxTarget.member, memberId);
   }
 
-  @override
+  /// Marks a member as having left. Never deletes: their past entries have to
+  /// keep making sense.
   Future<void> removeMember(String memberId) async {
     // Marked as left, never deleted. Their name still has to render on every
     // expense they were part of, and their balance still has to be settleable.
@@ -239,7 +242,10 @@ final class DriftGroupRepository implements GroupRepository {
     await outbox?.enqueue(OutboxTarget.member, memberId);
   }
 
-  @override
+  /// Records a UPI handle against a member of a group.
+  ///
+  /// Group-scoped rather than on the profile, so a placeholder — someone who
+  /// has never opened the app — can still be paid. Pass null to clear it.
   Future<void> setMemberUpiVpa(String memberId, String? vpa) async {
     final trimmed = vpa?.trim();
     if (trimmed != null && trimmed.isNotEmpty && !isValidUpiVpa(trimmed)) {
@@ -254,7 +260,6 @@ final class DriftGroupRepository implements GroupRepository {
     await outbox?.enqueue(OutboxTarget.member, memberId);
   }
 
-  @override
   Future<void> setArchived(String groupId, {required bool archived}) async {
     await (_db.update(_db.groups)..where((t) => t.id.equals(groupId))).write(
       GroupsCompanion(

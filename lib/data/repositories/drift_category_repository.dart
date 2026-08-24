@@ -1,7 +1,6 @@
 import 'package:drift/drift.dart';
 
 import '../../domain/models/category.dart';
-import '../../domain/repositories/category_repository.dart';
 import '../local/database.dart';
 import 'mappers.dart';
 
@@ -11,7 +10,7 @@ import 'mappers.dart';
 /// every device and on the server, which is the only way an entry's category
 /// can mean the same thing to the person who recorded it and the person
 /// reading the group's spending a month later.
-final class DriftCategoryRepository implements CategoryRepository {
+final class DriftCategoryRepository {
   DriftCategoryRepository(this._db);
 
   final AppDatabase _db;
@@ -22,11 +21,10 @@ final class DriftCategoryRepository implements CategoryRepository {
   SimpleSelectStatement<$CategoriesTable, CategoryRow> get _query =>
       _db.select(_db.categories);
 
-  @override
+  /// Every category, in the order they are offered.
   Stream<List<Category>> watchAll() =>
       _query.watch().map((rows) => [for (final row in rows) row.toDomain()]);
 
-  @override
   Future<List<Category>> all() async {
     final rows = await _query.get();
     return [for (final row in rows) row.toDomain()];

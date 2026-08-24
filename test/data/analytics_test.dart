@@ -5,7 +5,7 @@ import 'package:opensplit/data/repositories/drift_category_repository.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';
 import 'package:opensplit/domain/entry_draft.dart';
-import 'package:opensplit/domain/repositories/analytics_repository.dart';
+import 'package:opensplit/domain/analytics/analytics_query.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:test/test.dart';
 

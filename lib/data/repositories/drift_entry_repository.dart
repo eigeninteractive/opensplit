@@ -3,7 +3,6 @@ import 'package:uuid/uuid.dart';
 
 import '../../domain/entry_draft.dart';
 import '../../domain/models/entry.dart';
-import '../../domain/repositories/entry_repository.dart';
 import '../local/database.dart';
 import '../local/entry_writer.dart';
 import '../sync/outbox_queue.dart';
@@ -15,7 +14,12 @@ import 'mappers.dart';
 /// server is a separate, later concern. That ordering is the whole offline
 /// story — the app is fully usable on a plane, and "add expense" never shows a
 /// spinner because there is nothing to wait for.
-final class DriftEntryRepository implements EntryRepository {
+///
+/// An entry, its payers and its shares are one atomic fact. They are never
+/// written separately — a torn write would leave a row that violates the
+/// balance invariant, which is exactly what the server's deferred trigger
+/// exists to make impossible.
+final class DriftEntryRepository {
   DriftEntryRepository(
     this._db, {
     this.outbox,
@@ -39,7 +43,15 @@ final class DriftEntryRepository implements EntryRepository {
   Future<void> _enqueue(String entryId) async =>
       outbox?.enqueue(OutboxTarget.entry, entryId);
 
-  @override
+  /// Every entry in a group, most recent first.
+  ///
+  /// Returns the whole journal rather than a page: balances are a fold over all
+  /// of it, and the fold runs locally on every read. For the group sizes this
+  /// app targets that is microseconds, and it is what removes the spinner from
+  /// every screen.
+  ///
+  /// Soft-deleted entries are excluded unless [includeDeleted] is set. The
+  /// balance fold ignores them either way; history screens want them.
   Stream<List<Entry>> watchEntries(
     String groupId, {
     bool includeDeleted = false,
@@ -57,7 +69,6 @@ final class DriftEntryRepository implements EntryRepository {
         .asyncMap((_) => getEntries(groupId, includeDeleted: includeDeleted));
   }
 
-  @override
   Stream<Entry?> watchEntry(String entryId) => _db
       .customSelect(
         'select 1',
@@ -66,7 +77,6 @@ final class DriftEntryRepository implements EntryRepository {
       .watch()
       .asyncMap((_) => getEntry(entryId));
 
-  @override
   Future<List<Entry>> getEntries(
     String groupId, {
     bool includeDeleted = false,
@@ -85,7 +95,6 @@ final class DriftEntryRepository implements EntryRepository {
     return _hydrate(rows);
   }
 
-  @override
   Future<Entry?> getEntry(String entryId) async {
     final row = await (_db.select(
       _db.entries,
@@ -124,7 +133,10 @@ final class DriftEntryRepository implements EntryRepository {
     ];
   }
 
-  @override
+  /// Resolves [draft] into a balanced entry and stores it.
+  ///
+  /// Throws [SplitException] if the draft does not describe a valid entry, in
+  /// which case nothing is written.
   Future<Entry> create(
     EntryDraft draft, {
     required String createdBy,
@@ -144,7 +156,8 @@ final class DriftEntryRepository implements EntryRepository {
     return entry;
   }
 
-  @override
+  /// Replaces an existing entry's contents, keeping its id and creation
+  /// metadata.
   Future<Entry> update(
     String entryId,
     EntryDraft draft, {
@@ -172,7 +185,8 @@ final class DriftEntryRepository implements EntryRepository {
     return recomposed;
   }
 
-  @override
+  /// Soft delete. The row stays so that a balance which changed can always be
+  /// explained, and so the deletion itself can be synced to other devices.
   Future<void> delete(String entryId, {DateTime? now}) async {
     final at = now ?? _clock();
     // Soft delete, and `updatedAt` moves so the deletion is itself a delta that

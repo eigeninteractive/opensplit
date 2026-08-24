@@ -1,17 +1,20 @@
 import 'package:drift/drift.dart';
 
 import '../../domain/models/currency.dart';
-import '../../domain/repositories/currency_repository.dart';
 import '../local/database.dart';
 import 'mappers.dart';
 
 /// Currency reference data, read from the local table seeded at first run.
-final class DriftCurrencyRepository implements CurrencyRepository {
+///
+/// Exists so that no caller is ever tempted to hardcode an exponent. Every
+/// conversion between a typed amount and stored minor units goes through a
+/// [Currency] fetched here — JPY has no minor unit and KWD has three, so an
+/// assumed 2 is a shipped bug in two directions.
+final class DriftCurrencyRepository {
   DriftCurrencyRepository(this._db);
 
   final AppDatabase _db;
 
-  @override
   Future<List<Currency>> all() async {
     final rows = await (_db.select(
       _db.currencies,
@@ -19,7 +22,7 @@ final class DriftCurrencyRepository implements CurrencyRepository {
     return [for (final row in rows) row.toDomain()];
   }
 
-  @override
+  /// The currency for [code], or null if it is not one this build knows.
   Future<Currency?> byCode(String code) async {
     final row = await (_db.select(
       _db.currencies,
@@ -27,7 +30,6 @@ final class DriftCurrencyRepository implements CurrencyRepository {
     return row?.toDomain();
   }
 
-  @override
   Stream<List<Currency>> watchAll() =>
       (_db.select(_db.currencies)..orderBy([(t) => OrderingTerm.asc(t.code)]))
           .watch()
