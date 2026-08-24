@@ -91,6 +91,17 @@ flutter build appbundle --release --dart-define-from-file=env/app.json
 flutter build web --wasm --release --dart-define-from-file=env/app.json
 ```
 
+Check it before you build, because a wrong value here fails at runtime and
+often silently:
+
+```bash
+dart run tool/verify_config.dart
+
+# Or let google-services.json fill in the four values it is authoritative for
+# — project id, project number, Android App ID and Android API key:
+dart run tool/verify_config.dart ~/Downloads/google-services.json
+```
+
 Firebase issues a **different API key and a different App ID per platform** — a
 browser key restricted to your domains, an Android key restricted to your
 package name and signing certificate. Both live in `env/app.json` under
@@ -193,16 +204,22 @@ and a separate web app for the web build. Then, in Project settings → General:
 | `ANDROID_FCM_APP_ID` | see below |
 
 The Android app offers no config snippet in the console — only a
-`google-services.json` download. Download it, read two fields out, and delete
-it; it is not used at build time and must not be committed:
+`google-services.json` download. Download it and let the tool read it, rather
+than copying four values by hand:
 
 ```bash
-jq -r '.client[0].api_key[0].current_key,
-       .client[0].client_info.mobilesdk_app_id' ~/Downloads/google-services.json
+dart run tool/verify_config.dart ~/Downloads/google-services.json
 ```
 
-First line is `ANDROID_FCM_API_KEY`, second is `ANDROID_FCM_APP_ID` (it contains
-`:android:`).
+That fills `FCM_PROJECT_ID`, `FCM_SENDER_ID`, `ANDROID_FCM_APP_ID` and
+`ANDROID_FCM_API_KEY` from the one file that carries all four consistently, and
+then checks the rest. The download is not needed at build time and must not be
+committed — delete it afterwards.
+
+**`FCM_PROJECT_ID` is the project *id*, not the display name.** The console
+shows "OpenSplit" in large type and `opensplit-4a2b1` in small type; every API
+wants the second. It is also the path segment in the console's own URL:
+`console.firebase.google.com/project/<this>/overview`.
 
 ### Google sign-in
 
