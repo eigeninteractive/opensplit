@@ -77,19 +77,30 @@ this is the only run that proves it.
 
 ## Building
 
-Configuration is injected at build time. Copy the template, fill it in, and
-pass the file — a dozen `--dart-define` flags on one command line is how a
-release ends up built against the wrong backend:
+Configuration is injected at build time, from files rather than a dozen
+`--dart-define` flags on one command line — which is how a release ends up
+built against the wrong backend.
+
+There are three, because **Firebase issues a different API key and a different
+App ID per platform**. One combined file would have to be edited between an
+Android build and a web build, which is the same footgun in a smaller box.
 
 ```bash
-cp env/prod.example.json env/prod.json   # gitignored; edit in place
-
-# Web, WasmGC with an automatic JS fallback for older browsers.
-flutter build web --wasm --release --dart-define-from-file=env/prod.json
+for f in common android web; do cp env/$f.example.json env/$f.json; done
 
 # Android
-flutter build appbundle --release --dart-define-from-file=env/prod.json
+flutter build appbundle --release \
+  --dart-define-from-file=env/common.json \
+  --dart-define-from-file=env/android.json
+
+# Web, WasmGC with an automatic JS fallback for older browsers.
+flutter build web --wasm --release \
+  --dart-define-from-file=env/common.json \
+  --dart-define-from-file=env/web.json
 ```
+
+The real files are gitignored; the `.example.json` ones are the templates.
+Later files win, so the platform file supplies what `common.json` leaves out.
 
 `web/sqlite3.wasm` and `web/drift_worker.js` are committed: Drift needs both at
 runtime to use OPFS, and a build without them falls back to a database that does
@@ -165,22 +176,48 @@ One Firebase project supplies both, because creating it also creates the Google
 Cloud project whose OAuth clients Google sign-in needs. **Turn Google Analytics
 off** when creating it — see PRINCIPLES.md.
 
-The app is configured entirely through `env/prod.json`, so **no
-`google-services.json` is needed** and none should be committed. There is no
+The app is configured entirely through the `env/*.json` files, so **no
+`google-services.json` is needed at build time** and none should be committed —
+you download it once, read two values out of it, and delete it. There is no
 `com.google.gms.google-services` Gradle plugin in this project; `FirebaseOptions`
 are passed explicitly in `lib/data/push/push_service.dart`. The console will
 offer you the file anyway — skip it.
 
+Register the Android app under package name `com.eigeninteractive.opensplit`,
+and a separate web app for the web build. Then, in Project settings → General:
+
+**`env/common.json`** — the same for both platforms:
+
 | Value | Where it comes from |
 |---|---|
-| `FCM_PROJECT_ID` | Project settings → General → Project ID |
-| `FCM_SENDER_ID` | Project settings → General → Project number (digits only) |
-| `FCM_API_KEY` | Project settings → General → Web API Key |
-| `FCM_APP_ID` | Project settings → Your apps → the App ID of the platform you are building. **Android and web have different App IDs** |
-| `FCM_VAPID_KEY` | Project settings → Cloud Messaging → Web Push certificates → Generate key pair. Web only |
+| `FCM_PROJECT_ID` | Project ID |
+| `FCM_SENDER_ID` | Project number (digits only) |
 
-Register the Android app under package name `com.eigeninteractive.opensplit`,
-and a separate web app for the web build.
+**`env/web.json`** — Your apps → the **web** app → SDK setup and configuration
+→ Config. That prints a `firebaseConfig` object:
+
+| Value | Field |
+|---|---|
+| `FCM_API_KEY` | `apiKey` |
+| `FCM_APP_ID` | `appId` (contains `:web:`) |
+| `FCM_VAPID_KEY` | Cloud Messaging tab → Web Push certificates → Generate key pair |
+
+**`env/android.json`** — Your apps → the **Android** app offers no config
+snippet, only a `google-services.json` download. Download it, read two fields
+out, and delete it — it is not used at build time and must not be committed:
+
+```bash
+jq -r '.client[0].api_key[0].current_key,
+       .client[0].client_info.mobilesdk_app_id' google-services.json
+```
+
+The first line is `FCM_API_KEY`, the second `FCM_APP_ID` (it contains
+`:android:`).
+
+**Do not reuse one key for both.** Firebase creates a browser key restricted to
+your domains and an Android key restricted to your package name and signing
+certificate. Swapping them often works on the day and breaks the moment either
+restriction is tightened, with no error that says so.
 
 For Google sign-in, from the Google Cloud console → APIs & Services →
 Credentials on the *same* project:
@@ -215,9 +252,10 @@ function, with a header `x-webhook-secret` set to the same value.
 otherwise anyone holding the publishable key — which is public by design —
 could drive the fan-out.
 
-For web push, fill in the same four public values — using the **web** App ID —
-in `web/firebase-messaging-sw.js`. That file is loaded by the browser before any
-Dart runs, so it cannot read `env/prod.json`; the duplication is unavoidable.
+For web push, copy the same four values from `env/web.json` and
+`env/common.json` into `web/firebase-messaging-sw.js`. That file is loaded by
+the browser before any Dart runs, so it cannot read a define file; the
+duplication is unavoidable.
 
 **Permission is never requested at launch.** Android 13+ shows the system
 dialog once or twice and then treats further asks as permanently denied, with

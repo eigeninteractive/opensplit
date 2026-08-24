@@ -1,0 +1,5 @@
+{
+  "_": "From the Android app's google-services.json. See README.",
+  "FCM_API_KEY": "<client[0].api_key[0].current_key>",
+  "FCM_APP_ID": "<your fcm_app_id>"
+}
