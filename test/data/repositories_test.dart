@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:opensplit/data/local/database.dart';
+import 'package:opensplit/data/local/reference_data.dart';
 import 'package:opensplit/data/repositories/drift_currency_repository.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';
@@ -37,14 +38,28 @@ void main() {
       expect((await currencies.byCode('KWD'))!.exponent, 3);
     });
 
-    test('ships category presets with ids fixed to match the server', () async {
+    test('ships the category list with ids fixed to match the server', () async {
       final rows = await db.select(db.categories).get();
-      expect(rows, hasLength(10));
-      expect(
-        rows.map((r) => r.id),
-        contains('00000000-0000-4000-8000-000000000001'),
+      expect(rows, hasLength(presetCategories.length));
+
+      // Real v4 uuids. The ids are written onto entries and have to be the
+      // same on the server, so they are generated once and pinned here — a
+      // sequential placeholder is easy to retype wrongly and impossible to
+      // tell apart from a legitimate id at a glance.
+      final uuid = RegExp(
+        r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
       );
-      expect(rows.every((r) => r.groupId == null), isTrue);
+      expect(rows.every((r) => uuid.hasMatch(r.id)), isTrue);
+      expect(rows.map((r) => r.id).toSet(), hasLength(rows.length));
+
+      // Every category has an icon, and the picker can resolve all of them.
+      expect(rows.every((r) => r.icon.isNotEmpty), isTrue);
+
+      // The backstop. Without one, anything the list does not name has to go
+      // in as uncategorised, which is indistinguishable from not having
+      // bothered — and makes "by category" analytics quietly lossy.
+      expect(rows.map((r) => r.name), contains('Other'));
+      expect(rows.last.name, 'Other', reason: 'it reads last in the picker');
     });
   });
 

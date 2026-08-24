@@ -104,16 +104,14 @@ create policy members_update on members
   with check (is_group_member(group_id) or is_group_creator(group_id));
 
 -- ----------------------------------------------------------------------------
--- Categories: global presets plus your own groups'.
+-- Categories: a fixed global list, readable by anyone signed in.
+--
+-- No write policy, deliberately. The list is seeded by migration and is the
+-- same everywhere; a category only one device knows about would tag entries
+-- that read as uncategorised for everybody else.
 -- ----------------------------------------------------------------------------
 create policy categories_read on categories
-  for select to authenticated
-  using (group_id is null or is_group_member(group_id));
-
-create policy categories_write on categories
-  for all to authenticated
-  using (group_id is not null and is_group_member(group_id))
-  with check (group_id is not null and is_group_member(group_id));
+  for select to authenticated using (true);
 
 -- ----------------------------------------------------------------------------
 -- Entries, payers and shares.

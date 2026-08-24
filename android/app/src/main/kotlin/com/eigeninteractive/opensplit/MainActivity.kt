@@ -1,4 +1,4 @@
-package dev.alturing.opensplit
+package com.eigeninteractive.opensplit
 
 import io.flutter.embedding.android.FlutterActivity
 

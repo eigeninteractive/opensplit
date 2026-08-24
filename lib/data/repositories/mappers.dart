@@ -44,8 +44,7 @@ extension CurrencyRowMapper on CurrencyRow {
 }
 
 extension CategoryRowMapper on CategoryRow {
-  Category toDomain() =>
-      Category(id: id, groupId: groupId, name: name, icon: icon);
+  Category toDomain() => Category(id: id, name: name, icon: icon);
 }
 
 extension EntryRowMapper on EntryRow {

@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "dev.alturing.opensplit"
+    namespace = "com.eigeninteractive.opensplit"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -19,7 +19,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "dev.alturing.opensplit"
+        applicationId = "com.eigeninteractive.opensplit"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

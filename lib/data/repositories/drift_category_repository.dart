@@ -1,73 +1,34 @@
 import 'package:drift/drift.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../domain/models/category.dart';
 import '../../domain/repositories/category_repository.dart';
 import '../local/database.dart';
 import 'mappers.dart';
 
+/// Reads the fixed category list seeded into the local database.
+///
+/// There is no create and no delete. The list is reference data, the same on
+/// every device and on the server, which is the only way an entry's category
+/// can mean the same thing to the person who recorded it and the person
+/// reading the group's spending a month later.
 final class DriftCategoryRepository implements CategoryRepository {
-  DriftCategoryRepository(this._db, {Uuid? uuid})
-    : _uuid = uuid ?? const Uuid();
+  DriftCategoryRepository(this._db);
 
   final AppDatabase _db;
-  final Uuid _uuid;
 
-  SimpleSelectStatement<$CategoriesTable, CategoryRow> _query(String groupId) =>
-      _db.select(_db.categories)
-        ..where((t) => t.groupId.isNull() | t.groupId.equals(groupId))
-        ..orderBy([
-          // Presets first, then the group's own additions, each alphabetical.
-          (t) => OrderingTerm.asc(t.groupId),
-          (t) => OrderingTerm.asc(t.name),
-        ]);
+  /// Rowid order, which is insertion order, which is the order in
+  /// [presetCategories] — sorted by how often a thing is actually shared
+  /// rather than alphabetically. Sorting by name here would undo that.
+  SimpleSelectStatement<$CategoriesTable, CategoryRow> get _query =>
+      _db.select(_db.categories);
 
   @override
-  Stream<List<Category>> watchForGroup(String groupId) => _query(
-    groupId,
-  ).watch().map((rows) => [for (final row in rows) row.toDomain()]);
+  Stream<List<Category>> watchAll() =>
+      _query.watch().map((rows) => [for (final row in rows) row.toDomain()]);
 
   @override
-  Future<List<Category>> forGroup(String groupId) async {
-    final rows = await _query(groupId).get();
+  Future<List<Category>> all() async {
+    final rows = await _query.get();
     return [for (final row in rows) row.toDomain()];
-  }
-
-  @override
-  Future<Category> create(
-    String groupId, {
-    required String name,
-    String? icon,
-  }) async {
-    final trimmed = name.trim();
-    if (trimmed.isEmpty) {
-      throw ArgumentError.value(name, 'name', 'A category needs a name.');
-    }
-
-    final category = Category(
-      id: _uuid.v4(),
-      groupId: groupId,
-      name: trimmed,
-      icon: icon,
-    );
-    await _db
-        .into(_db.categories)
-        .insert(
-          CategoriesCompanion.insert(
-            id: category.id,
-            groupId: Value(groupId),
-            name: category.name,
-            icon: Value(icon),
-          ),
-        );
-    return category;
-  }
-
-  @override
-  Future<void> remove(String categoryId) async {
-    await (_db.delete(_db.categories)
-          // Presets are shared by every group and are not a group's to delete.
-          ..where((t) => t.id.equals(categoryId) & t.groupId.isNotNull()))
-        .go();
   }
 }

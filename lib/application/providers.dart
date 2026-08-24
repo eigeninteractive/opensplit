@@ -561,10 +561,11 @@ CategoryRepository categoryRepository(Ref ref) =>
 AnalyticsRepository analyticsRepository(Ref ref) =>
     DriftAnalyticsRepository(ref.watch(appDatabaseProvider));
 
-/// Categories a group can use: the global presets plus its own additions.
+/// The fixed global category list. Not group-scoped: there are no per-group
+/// categories, so this is one query for the whole app.
 @riverpod
-Stream<List<Category>> groupCategories(Ref ref, String groupId) =>
-    ref.watch(categoryRepositoryProvider).watchForGroup(groupId);
+Stream<List<Category>> categories(Ref ref) =>
+    ref.watch(categoryRepositoryProvider).watchAll();
 
 /// The current analytics question. Held in a provider so the filter survives
 /// navigating into an entry and back out.

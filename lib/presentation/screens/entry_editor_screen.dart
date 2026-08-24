@@ -9,6 +9,7 @@ import '../widgets/page_body.dart';
 import '../../application/providers.dart';
 import '../../domain/entry_draft.dart';
 import '../../domain/models/category.dart';
+import '../widgets/category_icon.dart';
 import '../../domain/fx/fx_quote.dart';
 import '../../domain/models/currency.dart';
 import '../../domain/models/entry.dart';
@@ -436,7 +437,6 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
               ),
             const SizedBox(height: 16),
             _CategoryPicker(
-              groupId: widget.groupId,
               value: _categoryId,
               onChanged: (id) => setState(() => _categoryId = id),
             ),
@@ -786,83 +786,71 @@ class _SplitSection extends StatelessWidget {
   }
 }
 
-/// Picks a category, with an escape hatch to add one the group needs.
+/// Picks a category from the fixed global list.
 ///
 /// Optional on purpose: forcing a choice before an expense can be saved would
-/// put a decision in front of the one action that has to stay instant.
+/// put a decision in front of the one action that has to stay instant. There is
+/// no "add your own" — see [Category].
 class _CategoryPicker extends ConsumerWidget {
-  const _CategoryPicker({
-    required this.groupId,
-    required this.value,
-    required this.onChanged,
-  });
+  const _CategoryPicker({required this.value, required this.onChanged});
 
-  final String groupId;
   final String? value;
   final ValueChanged<String?> onChanged;
-
-  static const _addSentinel = '__add__';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final categories =
-        ref.watch(groupCategoriesProvider(groupId)).value ?? const <Category>[];
+        ref.watch(categoriesProvider).value ?? const <Category>[];
+    final scheme = Theme.of(context).colorScheme;
 
     return DropdownButtonFormField<String>(
       initialValue: categories.any((c) => c.id == value) ? value : null,
       isExpanded: true,
       decoration: const InputDecoration(labelText: 'Category (optional)'),
       items: [
-        const DropdownMenuItem(value: null, child: Text('Uncategorised')),
+        DropdownMenuItem(
+          value: null,
+          child: _CategoryLabel(
+            icon: Icons.remove_rounded,
+            name: 'Uncategorised',
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
         for (final category in categories)
           DropdownMenuItem(
             value: category.id,
-            child: Text(category.name, overflow: TextOverflow.ellipsis),
+            child: _CategoryLabel(
+              icon: categoryIcon(category.icon),
+              name: category.name,
+              color: scheme.onSurfaceVariant,
+            ),
           ),
-        const DropdownMenuItem(
-          value: _addSentinel,
-          child: Text('Add a category…'),
-        ),
       ],
-      onChanged: (selected) async {
-        if (selected != _addSentinel) {
-          onChanged(selected);
-          return;
-        }
-        final name = await _promptForCategory(context);
-        if (name == null || name.trim().isEmpty) return;
-        final created = await ref
-            .read(categoryRepositoryProvider)
-            .create(groupId, name: name);
-        onChanged(created.id);
-      },
+      onChanged: onChanged,
     );
   }
 }
 
-Future<String?> _promptForCategory(BuildContext context) {
-  final controller = TextEditingController();
-  return showDialog<String>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('New category'),
-      content: TextField(
-        controller: controller,
-        autofocus: true,
-        textCapitalization: TextCapitalization.words,
-        decoration: const InputDecoration(hintText: 'Scuba diving'),
-        onSubmitted: (value) => Navigator.of(context).pop(value),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(controller.text),
-          child: const Text('Add'),
-        ),
-      ],
-    ),
+/// An icon beside the name, so a twenty-item list can be scanned rather than
+/// read. The icon is decoration — the name is already the label — so it is
+/// hidden from assistive tech instead of being announced twice.
+class _CategoryLabel extends StatelessWidget {
+  const _CategoryLabel({
+    required this.icon,
+    required this.name,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String name;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      ExcludeSemantics(child: Icon(icon, size: 20, color: color)),
+      const SizedBox(width: 12),
+      Flexible(child: Text(name, overflow: TextOverflow.ellipsis)),
+    ],
   );
 }

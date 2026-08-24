@@ -3,7 +3,7 @@
     "relation": ["delegate_permission/common.handle_all_urls"],
     "target": {
       "namespace": "android_app",
-      "package_name": "dev.alturing.opensplit",
+      "package_name": "com.eigeninteractive.opensplit",
       "sha256_cert_fingerprints": [
         "2A:6C:A4:7A:B3:B1:0F:6C:BE:46:1F:11:A0:A9:E2:10:51:55:EF:49:D6:4A:47:57:F9:50:84:0C:05:91:8D:0E"
       ]

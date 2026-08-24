@@ -102,17 +102,14 @@ class Members extends Table {
 }
 
 @DataClassName('CategoryRow')
+/// The fixed, global category list. Mirrors the server's, seeded from
+/// [presetCategories] and never written to at runtime.
 class Categories extends Table {
   TextColumn get id => text()();
-
-  /// Null marks a global preset; otherwise a group's own addition.
-  TextColumn get groupId =>
-      text().nullable().references(Groups, #id, onDelete: KeyAction.cascade)();
   TextColumn get name => text()();
-  TextColumn get icon => text().nullable()();
 
-  /// Version for last-write-wins. See [Groups.updatedAt].
-  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+  /// Material icon name, resolved through a static map. See `category_icon.dart`.
+  TextColumn get icon => text()();
 
   @override
   Set<Column> get primaryKey => {id};

@@ -35,9 +35,7 @@ class _ExportButtonState extends ConsumerState<ExportButton> {
       final entries = await ref
           .read(analyticsRepositoryProvider)
           .search(filter);
-      final categories = await ref
-          .read(categoryRepositoryProvider)
-          .forGroup(widget.groupId);
+      final categories = await ref.read(categoryRepositoryProvider).all();
       final currencies = ref.read(currenciesProvider).value ?? const {};
 
       final csv = entriesToCsv(

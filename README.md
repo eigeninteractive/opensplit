@@ -179,8 +179,8 @@ offer you the file anyway — skip it.
 | `FCM_APP_ID` | Project settings → Your apps → the App ID of the platform you are building. **Android and web have different App IDs** |
 | `FCM_VAPID_KEY` | Project settings → Cloud Messaging → Web Push certificates → Generate key pair. Web only |
 
-Register the Android app under package name `dev.alturing.opensplit`, and a
-separate web app for the web build.
+Register the Android app under package name `com.eigeninteractive.opensplit`,
+and a separate web app for the web build.
 
 For Google sign-in, from the Google Cloud console → APIs & Services →
 Credentials on the *same* project:

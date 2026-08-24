@@ -28,8 +28,8 @@ Links break, and the failure is silent: links simply open in the browser.
 keytool -list -v -keystore upload-keystore.jks -alias upload | grep SHA256
 
 # Then verify on a device against the real, deployed file:
-adb shell pm verify-app-links --re-verify dev.alturing.opensplit
-adb shell pm get-app-links dev.alturing.opensplit
+adb shell pm verify-app-links --re-verify com.eigeninteractive.opensplit
+adb shell pm get-app-links com.eigeninteractive.opensplit
 ```
 
 The second command must report `verified` for the domain. Anything else — and

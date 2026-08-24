@@ -38,9 +38,9 @@ void main() {
     ravi = created.owner.id;
     priya = (await groups.addMember(groupId, displayName: 'Priya')).id;
 
-    final all = await categories.forGroup(groupId);
-    food = all.firstWhere((c) => c.name == 'Food & Drink').id;
-    transport = all.firstWhere((c) => c.name == 'Transport').id;
+    final all = await categories.all();
+    food = all.firstWhere((c) => c.name == 'Restaurants').id;
+    transport = all.firstWhere((c) => c.name == 'Taxi & rideshare').id;
 
     Future<void> add({
       required String description,
@@ -111,7 +111,7 @@ void main() {
     test('groups and totals, excluding settlements', () async {
       final buckets = await analytics.spendByCategory(inr());
 
-      expect(buckets.map((b) => b.label), ['Food & Drink', 'Transport']);
+      expect(buckets.map((b) => b.label), ['Restaurants', 'Taxi & rideshare']);
       expect(buckets.first.amountMinor, 270000);
       expect(buckets.first.entryCount, 2);
       expect(
@@ -222,7 +222,7 @@ void main() {
           from: DateTime.utc(2026, 9),
         ),
       );
-      expect(buckets.map((b) => b.label), ['Transport']);
+      expect(buckets.map((b) => b.label), ['Taxi & rideshare']);
     });
 
     test('narrow by member', () async {

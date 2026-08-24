@@ -143,7 +143,7 @@ members       — group-scoped identity; profile_id NULL = placeholder
 entries       — expense | settlement; amount in integer minor units
 entry_payers  — a TABLE (multiple payers per bill)
 entry_shares  — resolved amount + original weight
-categories    — global presets + group overrides
+categories    — one fixed global list, seeded by migration; no per-group ones
 currencies    — ISO 4217 with exponent
 fx_rates      — one row per currency per day, all against a USD pivot
 invites       — single-use claim tokens against a member row

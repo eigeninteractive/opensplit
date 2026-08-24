@@ -3,7 +3,7 @@
 -- Run with: supabase test db
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(27);
+select plan(30);
 
 -- ---------------------------------------------------------------------------
 -- Reference data
@@ -16,13 +16,21 @@ select is((select exponent from currencies where code = 'JPY'), 0::smallint,
 select is((select exponent from currencies where code = 'KWD'), 3::smallint,
   'KWD has three');
 
-select is((select count(*)::int from categories where group_id is null), 10,
-  'ships 10 global category presets');
+select is((select count(*)::int from categories), 20,
+  'ships 20 categories, matching lib/data/local/reference_data.dart');
 select ok(
   exists(select 1 from categories
-          where id = '00000000-0000-4000-8000-000000000001'
-            and name = 'Food & Drink'),
-  'preset ids are fixed, so a client can categorise before its first sync');
+          where id = 'e7b1844c-76a3-4d2b-bd81-56a74e11f943'
+            and name = 'Restaurants'),
+  'ids are fixed, so a client can categorise before its first sync');
+select ok(exists(select 1 from categories where name = 'Other'),
+  'there is a backstop, so nothing has to go in as uncategorised');
+select hasnt_column('public', 'categories', 'group_id',
+  'categories are global: a per-group one would tag entries with an id no '
+  'other device recognises');
+select is((select count(*)::int from pg_policies
+            where tablename = 'categories' and cmd <> 'SELECT'), 0,
+  'and there is no way for a client to write one');
 
 -- ---------------------------------------------------------------------------
 -- Amendments

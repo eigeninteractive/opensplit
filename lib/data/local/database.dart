@@ -134,11 +134,7 @@ class AppDatabase extends _$AppDatabase {
       ]);
       batch.insertAll(categories, [
         for (final c in presetCategories)
-          CategoriesCompanion.insert(
-            id: c.id,
-            name: c.name,
-            icon: Value(c.icon),
-          ),
+          CategoriesCompanion.insert(id: c.id, name: c.name, icon: c.icon),
       ]);
     });
   }

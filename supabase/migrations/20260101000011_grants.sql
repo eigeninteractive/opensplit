@@ -32,7 +32,6 @@ grant select, insert, update         on profiles to authenticated;
 grant select, insert, update, delete on groups   to authenticated;
 grant select, insert, update         on members  to authenticated;
 grant select, insert, update         on entries  to authenticated;
-grant select, insert, update, delete on categories to authenticated;
 grant select, insert, update, delete on invites    to authenticated;
 
 -- upsert_entry replaces children wholesale, so the caller genuinely needs

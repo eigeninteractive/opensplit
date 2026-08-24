@@ -57,29 +57,43 @@ create table members (
 
 -- Categories: global presets (group_id null) plus a group's own additions.
 --
--- The preset ids are fixed rather than generated. A client has to be able to
--- categorise an expense before it has ever synced, and the category_id it
--- writes must be one the server recognises when the entry finally arrives.
--- Kept in step with lib/data/local/reference_data.dart.
+-- Categories are global reference data. There are no per-group ones, and no
+-- way for a client to add one: a category invented on a phone would be an id
+-- the server has never heard of, written onto an entry that then reads as
+-- uncategorised on every other device. A fixed list that is identical
+-- everywhere is what makes "by category" mean the same thing to everyone.
+--
+-- The ids are fixed rather than generated, because a client has to be able to
+-- categorise an expense before it has ever synced. Kept in step with
+-- lib/data/local/reference_data.dart.
 create table categories (
-  id         uuid primary key default gen_random_uuid(),
-  group_id   uuid references groups(id) on delete cascade,
+  id         uuid primary key,
   name       text not null,
-  icon       text,
+  icon       text not null,
   updated_at timestamptz not null default now()
 );
 
-insert into categories (id, group_id, name, icon) values
-  ('00000000-0000-4000-8000-000000000001', null, 'Food & Drink',  'utensils'),
-  ('00000000-0000-4000-8000-000000000002', null, 'Groceries',     'shopping-cart'),
-  ('00000000-0000-4000-8000-000000000003', null, 'Transport',     'car'),
-  ('00000000-0000-4000-8000-000000000004', null, 'Accommodation', 'bed'),
-  ('00000000-0000-4000-8000-000000000005', null, 'Rent',          'home'),
-  ('00000000-0000-4000-8000-000000000006', null, 'Utilities',     'zap'),
-  ('00000000-0000-4000-8000-000000000007', null, 'Entertainment', 'film'),
-  ('00000000-0000-4000-8000-000000000008', null, 'Shopping',      'shopping-bag'),
-  ('00000000-0000-4000-8000-000000000009', null, 'Health',        'heart-pulse'),
-  ('00000000-0000-4000-8000-00000000000a', null, 'Other',         'circle-dot');
+insert into categories (id, name, icon) values
+  ('e7b1844c-76a3-4d2b-bd81-56a74e11f943', 'Restaurants',            'restaurant'),
+  ('afe84b91-6ac5-4ec2-9290-bd18cb8a7605', 'Groceries',              'local_grocery_store'),
+  ('ea5dacd7-da9f-49e3-9e99-90a0343be536', 'Drinks & nightlife',     'local_bar'),
+  ('1f289d21-ff2f-4382-a4f8-31d6366583fa', 'Accommodation',          'hotel'),
+  ('8a682d2e-53f2-4d7f-9217-16e360c3eaa5', 'Flights',                'flight'),
+  ('36df7514-5f84-433f-bcce-67a891f61a93', 'Taxi & rideshare',       'local_taxi'),
+  ('dff02d03-31fa-476d-b6d4-67c9322c3b50', 'Public transport',       'directions_transit'),
+  ('02fa4141-452c-4142-b51b-9374b8a78186', 'Fuel & parking',         'local_gas_station'),
+  ('f5676a7a-6c8b-4ac9-bf09-ccc982885153', 'Activities & outings',   'local_activity'),
+  ('421962f1-795c-414a-816b-215cb8a942c2', 'Shopping',               'shopping_bag'),
+  ('8c66bd37-e243-480d-8277-135105642331', 'Rent',                   'cottage'),
+  ('cfb5c503-c424-41d4-a285-a51ab44f0a28', 'Utilities',              'bolt'),
+  ('669596e4-88f5-4a66-97d0-a6f5857cc6b0', 'Internet & phone',       'wifi'),
+  ('4ea8849c-d298-4a23-91ec-84332bac0a81', 'Household supplies',     'cleaning_services'),
+  ('bca2463d-8dc4-45b5-8b86-ef59559e7820', 'Furniture & appliances', 'chair'),
+  ('54dd3641-140a-4931-8235-0600d6f34f34', 'Repairs & maintenance',  'handyman'),
+  ('1e7958bd-100e-4bc4-8e16-23a5a12f01cd', 'Health & medical',       'medical_services'),
+  ('fca7633f-06b4-4492-bbdc-2ef1e850dc1b', 'Gifts & celebrations',   'celebration'),
+  ('580f8062-6c94-4997-b9e4-b13d3140a738', 'Subscriptions',          'subscriptions'),
+  ('4d6e0094-04e8-4aae-9d93-9aeb7c3fff4e', 'Other',                  'category');
 
 -- ----------------------------------------------------------------------------
 -- Row versioning
@@ -112,13 +126,9 @@ create trigger trg_members_touch
   before update on members
   for each row execute function touch_updated_at();
 
-create trigger trg_categories_touch
-  before update on categories
-  for each row execute function touch_updated_at();
 
 create index idx_groups_updated on groups (updated_at, id);
 create index idx_members_group_updated on members (group_id, updated_at, id);
-create index idx_categories_group_updated on categories (group_id, updated_at, id);
 
 -- Members are read in full on every pull, so this stays cheap as groups grow.
 create index idx_members_group_active on members (group_id) where left_at is null;
