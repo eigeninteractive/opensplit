@@ -165,9 +165,16 @@ class SyncEngine {
         limit: pageSize,
       );
 
-      for (final entry in page.entries) {
-        if (await _applyRemote(entry)) applied++;
-      }
+      // One transaction for the page, not one per row. Each _applyRemote
+      // writes an entry and replaces its payers and shares, so a 200-row page
+      // was 200 separate commits — and SQLite's cost here is dominated by the
+      // commit, not the statements. Drift nests the inner transactions as
+      // savepoints, so this changes the number of fsyncs, not the semantics.
+      await db.transaction(() async {
+        for (final entry in page.entries) {
+          if (await _applyRemote(entry)) applied++;
+        }
+      });
 
       if (page.nextCursor != null) {
         cursor = page.nextCursor;
