@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../application/providers.dart';
 import 'router.dart';
 import 'theme.dart';
+import 'theme_mode.dart';
 
 class OpenSplitApp extends ConsumerStatefulWidget {
   const OpenSplitApp({super.key});
@@ -32,6 +33,9 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
         debugShowCheckedModeBanner: false,
         theme: buildTheme(Brightness.light, lightDynamic),
         darkTheme: buildTheme(Brightness.dark, darkDynamic),
+        // Both themes are always supplied, and this decides between them.
+        // Defaults to following the platform — see [ThemeModeController].
+        themeMode: ref.watch(themeModeProvider),
         routerConfig: _router,
       ),
     );

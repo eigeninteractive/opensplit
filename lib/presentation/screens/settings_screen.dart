@@ -5,6 +5,7 @@ import '../widgets/page_body.dart';
 import '../../application/providers.dart';
 import '../../config.dart';
 import '../../domain/settle/upi.dart';
+import '../theme_mode.dart';
 import '../widgets/account_section.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -87,6 +88,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             const SizedBox(height: 24),
             FilledButton(onPressed: _save, child: const Text('Save')),
+            const Divider(height: 48),
+            const _AppearanceSetting(),
             // Hidden entirely rather than shown broken when the build has
             // no FCM credentials, matching how every other integration behaves
             // here.
@@ -120,6 +123,63 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Light, dark, or whatever the platform is doing.
+///
+/// A SegmentedButton rather than three radio tiles or a dropdown: Material 3
+/// defines it for exactly this shape of choice — a small set of mutually
+/// exclusive options, all worth showing at once, where the selected one should
+/// be readable without opening anything.
+class _AppearanceSetting extends ConsumerWidget {
+  const _AppearanceSetting();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mode = ref.watch(themeModeProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Appearance', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: SegmentedButton<ThemeMode>(
+            segments: const [
+              ButtonSegment(
+                value: ThemeMode.system,
+                icon: Icon(Icons.brightness_auto_outlined),
+                label: Text('System'),
+              ),
+              ButtonSegment(
+                value: ThemeMode.light,
+                icon: Icon(Icons.light_mode_outlined),
+                label: Text('Light'),
+              ),
+              ButtonSegment(
+                value: ThemeMode.dark,
+                icon: Icon(Icons.dark_mode_outlined),
+                label: Text('Dark'),
+              ),
+            ],
+            selected: {mode},
+            // Single selection, so the set always holds exactly one.
+            onSelectionChanged: (selection) =>
+                ref.read(themeModeProvider.notifier).set(selection.first),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'System follows your device, including its automatic night '
+          'schedule.',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
     );
   }
 }
