@@ -23,7 +23,16 @@
         ]
       },
       {
-        "source": "/flutter_service_worker.js",
+        "source": "/flutter_bootstrap.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, max-age=0"
+          }
+        ]
+      },
+      {
+        "source": "/sw.js",
         "headers": [
           {
             "key": "Cache-Control",
