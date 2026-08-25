@@ -338,6 +338,7 @@ void _skeletonMatchesTheme() {
       'secondary-container': scheme.secondaryContainer,
       'primary-container': scheme.primaryContainer,
       'on-primary-container': scheme.onPrimaryContainer,
+      'primary': scheme.primary,
     };
 
     expect(

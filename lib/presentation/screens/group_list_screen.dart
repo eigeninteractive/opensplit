@@ -10,6 +10,7 @@ import '../../domain/models/group.dart';
 import '../format.dart';
 import '../theme.dart';
 import '../widgets/balance_arrow.dart';
+import '../widgets/brand_mark.dart';
 import '../widgets/create_group_sheet.dart';
 import '../widgets/link_account_prompt.dart';
 import '../widgets/unsynced_changes_banner.dart';
@@ -30,7 +31,7 @@ class GroupListScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('OpenSplit'),
+        title: const BrandLockup(),
         actions: [
           IconButton(
             onPressed: () => context.push('/settings'),
@@ -227,7 +228,7 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.receipt_long_outlined, size: 56, color: scheme.primary),
+            const BrandMark(size: 56),
             const SizedBox(height: 20),
             Text(
               'No groups yet',

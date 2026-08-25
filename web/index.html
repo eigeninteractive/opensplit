@@ -55,6 +55,7 @@
       --secondary-container: #e3e0f9;  /* the group avatar */
       --primary-container: #e3dfff;    /* the extended FAB */
       --on-primary-container: #434078;
+      --primary: #5b5891;             /* the brand mark */
     }
     @media (prefers-color-scheme: dark) {
       :root {
@@ -65,6 +66,7 @@
         --secondary-container: #464559;
         --primary-container: #434078;
         --on-primary-container: #e3dfff;
+        --primary: #c4c0ff;
       }
     }
 
@@ -99,6 +101,14 @@
       font-weight: 400;
       letter-spacing: 0;
     }
+    /* The mark, at the size BrandLockup works out: titleLarge is 22px, the
+     * mark's box is a little over 1.5x that, and the clear space beside it is
+     * the ratio measured off the designer's horizontal lockup. Inlined rather
+     * than linked so it paints on the first round trip, like everything else
+     * here — an <img> would also be a second request, and could not be tinted.
+     * See lib/presentation/widgets/brand_mark.dart. */
+    .bar .mark { width: 35px; height: 35px; flex: none; margin-right: 7.5px; color: var(--primary); }
+
     /* Where the settings IconButton lands: a 24dp icon centred in a 48dp
      * target, so the title beside it keeps its true measure. */
     .bar .action { width: 24px; height: 24px; margin: 0 12px; border-radius: 4px; background: var(--placeholder); }
@@ -216,6 +226,13 @@
 <body>
   <div id="skeleton" aria-hidden="true">
     <div class="bar">
+      <svg class="mark" viewBox="0 0 48 48" aria-hidden="true">
+        <mask id="slash">
+          <rect width="48" height="48" fill="#fff"></rect>
+          <rect x="20.75" y="-4" width="6.5" height="56" fill="#000" transform="rotate(24 24 24)"></rect>
+        </mask>
+        <circle cx="24" cy="24" r="17" fill="none" stroke="currentColor" stroke-width="6.5" mask="url(#slash)"></circle>
+      </svg>
       <h1>OpenSplit</h1>
       <div class="action"></div>
     </div>

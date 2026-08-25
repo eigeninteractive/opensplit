@@ -38,6 +38,7 @@ dependencies:
   dynamic_color: ^1.9.0
   google_fonts: ^8.2.1
   web: ^1.1.1
+  flutter_svg: ^2.3.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -92,6 +93,12 @@ flutter:
   # assets/google_fonts/LICENSE for provenance.
   assets:
     - assets/google_fonts/
+    # Only the mark, not the folder. The rest of assets/brand/ — the lockups,
+    # the pre-stroked variants, the 1024px PNGs — are sources for generators and
+    # for anything outside the app, and bundling them would ship a few hundred
+    # kilobytes nothing reads. This one is tinted at runtime, so it is the only
+    # variant the app needs. See BrandMark.
+    - assets/brand/mark-mono.svg
 
   fonts:
     - family: Roboto
