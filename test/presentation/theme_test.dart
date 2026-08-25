@@ -134,6 +134,34 @@ void main() {
       );
     });
 
+    test('puts its navigation rail where the app puts one', () {
+      // Two numbers in two languages describing the same edge. If the CSS
+      // shows a rail at a width where Flutter does not, or the other way
+      // round, the layout jumps sideways at the swap — which is the one thing
+      // this skeleton exists to prevent, and nothing else would catch it.
+      final dart = RegExp(
+        r'_railBreakpoint\s*=\s*(\d+)',
+      ).firstMatch(File('lib/presentation/router.dart').readAsStringSync());
+      final width = RegExp(
+        r'_railWidth\s*=\s*(\d+)',
+      ).firstMatch(File('lib/presentation/router.dart').readAsStringSync());
+
+      expect(dart, isNotNull, reason: 'no _railBreakpoint in router.dart');
+      expect(width, isNotNull, reason: 'no _railWidth in router.dart');
+
+      final css = File('web/index.html').readAsStringSync();
+      expect(
+        css,
+        contains('@media (min-width: ${dart!.group(1)}px)'),
+        reason: 'web/index.html must show its rail at _railBreakpoint',
+      );
+      expect(
+        css,
+        contains('width: ${width!.group(1)}px'),
+        reason: 'the skeleton rail must be _railWidth wide',
+      );
+    });
+
     test('paints its launch background in the theme\'s surface', () {
       final surface = buildTheme(Brightness.light).colorScheme.surface;
       final manifest =
@@ -341,6 +369,7 @@ void _skeletonMatchesTheme() {
       'primary-container': scheme.primaryContainer,
       'on-primary-container': scheme.onPrimaryContainer,
       'primary': scheme.primary,
+      'on-surface-variant': scheme.onSurfaceVariant,
     };
 
     expect(

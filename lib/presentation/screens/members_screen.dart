@@ -225,7 +225,15 @@ Future<String?> _promptForName(
         controller: controller,
         autofocus: true,
         textCapitalization: TextCapitalization.words,
-        decoration: InputDecoration(hintText: hint, helperText: helper),
+        decoration: InputDecoration(
+          hintText: hint,
+          helperText: helper,
+          // Helper text is one line by default and ellipsises silently, which
+          // truncated the only sentence explaining that the person being added
+          // does not need the app. The same cap is already set on the long
+          // helper in settings_screen.dart.
+          helperMaxLines: 3,
+        ),
         onSubmitted: (value) => Navigator.of(context).pop(value),
       ),
       actions: [

@@ -56,6 +56,7 @@
       --primary-container: #e3dfff;    /* the extended FAB */
       --on-primary-container: #434078;
       --primary: #5b5891;             /* the brand mark */
+      --on-surface-variant: #47464f; /* the unselected rail label */
     }
     @media (prefers-color-scheme: dark) {
       :root {
@@ -67,6 +68,7 @@
         --primary-container: #434078;
         --on-primary-container: #e3dfff;
         --primary: #c4c0ff;
+        --on-surface-variant: #c8c5d0;
       }
     }
 
@@ -191,12 +193,22 @@
     /* textTheme.labelLarge. */
     .fab .label { font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; }
 
-    /* At 900px the app puts a NavigationRail on the left: 80dp of rail (its
-     * minWidth, set in router.dart) and then a 1dp divider. The rail sits on
-     * `surface` like everything else, so all that actually shows is that
-     * divider — but the content is measured from it, and without this the
-     * cards jump sideways at the swap. */
-    @media (min-width: 900px) {
+    /* At 840px — Material's medium-to-expanded boundary, and _railBreakpoint
+     * in router.dart — the app puts a NavigationRail on the left: 80dp of rail
+     * and then a 1dp divider.
+     *
+     * The rail is drawn here too, not just left as a gap. It used to be an
+     * empty 80dp column that filled with two destinations the moment Flutter
+     * painted, which is the one part of this screen that visibly appeared out
+     * of nothing.
+     *
+     * Every offset below is measured off the running app rather than derived:
+     * the selected indicator occupies y 8-40, its label's cap height sits at
+     * 48-57, the second destination's icon at 76-100 and its label at 111-121.
+     */
+    .rail { display: none; }
+
+    @media (min-width: 840px) {
       #skeleton { padding-left: 81px; }
       #skeleton::before {
         content: '';
@@ -205,6 +217,30 @@
         width: 1px;
         background: var(--outline-variant);
       }
+
+      .rail { display: block; position: fixed; left: 0; top: 0; bottom: 0; width: 80px; }
+      .rail > * { position: absolute; left: 0; width: 80px; text-align: center; }
+
+      /* The selected destination's indicator: 56x32 on secondaryContainer,
+       * which is exactly what the app draws and needs no placeholder. */
+      .rail .pill {
+        top: 8px; height: 32px; width: 56px; left: 12px;
+        border-radius: 16px; background: var(--secondary-container);
+      }
+      /* textTheme.labelMedium, the rail's label style. The words are real. */
+      .rail .label {
+        font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px;
+      }
+      .rail .selected { top: 44px; color: var(--on-surface); }
+      .rail .unselected { top: 108px; color: var(--on-surface-variant); }
+
+      /* Only the glyphs stand in, the same way the app bar's action does. */
+      .rail .glyph {
+        width: 24px; height: 24px; left: 28px; border-radius: 4px;
+        background: var(--placeholder);
+      }
+      .rail .g1 { top: 12px; }
+      .rail .g2 { top: 76px; }
     }
 
     /* One slow pulse, on the placeholders only. Pulsing the card would fade
@@ -225,6 +261,13 @@
 </head>
 <body>
   <div id="skeleton" aria-hidden="true">
+    <div class="rail">
+      <div class="pill"></div>
+      <div class="glyph g1"></div>
+      <div class="label selected">Groups</div>
+      <div class="glyph g2"></div>
+      <div class="label unselected">Settings</div>
+    </div>
     <div class="bar">
       <svg class="mark" viewBox="0 0 48 48" aria-hidden="true">
         <mask id="slash">

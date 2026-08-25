@@ -35,11 +35,13 @@ GoRouter buildRouter() => GoRouter(
       routes: [
         GoRoute(
           path: '/',
-          builder: (context, state) => const GroupListScreen(),
+          pageBuilder: (context, state) =>
+              const NoTransitionPage(child: GroupListScreen()),
         ),
         GoRoute(
           path: '/settings',
-          builder: (context, state) => const SettingsScreen(),
+          pageBuilder: (context, state) =>
+              const NoTransitionPage(child: SettingsScreen()),
         ),
         // The link a friend sends. Deliberately free of any guard: this route
         // has to work for someone who has never opened the app before.
@@ -94,6 +96,23 @@ GoRouter buildRouter() => GoRouter(
   ],
 );
 
+/// A top-level destination, which is not a page pushed on top of anything.
+///
+/// Material's page transitions describe a hierarchy: a screen slides in from
+/// the edge because it sits on top of the one before it, and the direction is
+/// what tells you a level was entered and can be left again. Moving between
+/// destinations in the navigation rail is not that. There is no deeper or
+/// shallower, so a slide claims a spatial relationship that does not exist —
+/// which is what made switching from Groups to Settings look like a drill-down
+/// in the wrong direction.
+///
+/// [NoTransitionPage] is go_router's own answer for this, and no transition is
+/// the honest one. It is also what Flutter's own NavigationRail and
+/// NavigationBar samples do: the destination's body is swapped, not routed to.
+///
+/// Everything pushed on top of these keeps the platform's page transition,
+/// which on Android is the predictive-back one and is exactly right for a
+/// drill-down.
 /// Adds a navigation rail once there is room for one.
 ///
 /// On a phone the app bar and the back stack are the navigation, and a rail
@@ -103,9 +122,15 @@ GoRouter buildRouter() => GoRouter(
 class _AdaptiveShell extends StatelessWidget {
   const _AdaptiveShell({required this.state, required this.child});
 
-  /// Below this the rail is not shown at all. Chosen so that a rail plus a
-  /// readable content measure both fit without squeezing either.
-  static const double _railBreakpoint = 900;
+  /// Below this the rail is not shown at all.
+  ///
+  /// 840 is Material 3's own boundary between the medium and expanded window
+  /// classes, rather than a number picked because it looked right. The spec
+  /// puts a rail at medium too, from 600 up; this app stops short of that
+  /// because it has two destinations and one of them is Settings, and 80dp of
+  /// permanent chrome to reach a screen with an app bar button already on it is
+  /// a poor trade on a tablet held in portrait.
+  static const double _railBreakpoint = 840;
 
   /// Material 3's own default destination width, and the rail's width outright:
   /// a destination is padded 8dp either side *within* this, and only pushes
@@ -130,8 +155,9 @@ class _AdaptiveShell extends StatelessWidget {
             selectedIndex: onSettings ? 1 : 0,
             labelType: NavigationRailLabelType.all,
             // Material's own default, stated rather than inherited because
-            // the web loading skeleton has to leave exactly this much room on
-            // the left — see the 900px block in web/index.html.
+            // the web loading skeleton draws a rail of exactly this width
+            // before Flutter starts — see the 840px block in web/index.html,
+            // and the test that holds the two numbers together.
             minWidth: _railWidth,
             onDestinationSelected: (index) =>
                 context.go(index == 1 ? '/settings' : '/'),
