@@ -374,22 +374,31 @@ flutter build web --wasm --release --dart-define-from-file=env/app.json
 firebase deploy --only hosting
 ```
 
-The app claims two hosts — `opensplit.eigeninteractive.com` and Firebase
-Hosting's own `opensplit.web.app` — so both appear in the App Links intent
-filter and both must serve `/.well-known/assetlinks.json`. Pointing both at one
-Hosting site means one deploy covers both. Invite links are *generated* with
-`LINK_HOST` only, which is why that is a single canonical value: a link pasted
-into a chat outlives whichever domain was current when it was made.
+`opensplit.web.app` is the official domain, and the only one. It hosts the web
+app, it is the host written into every invite link (`LINK_HOST` in
+`lib/config.dart`), and it is the single entry in the App Links intent filter.
+
+That is a deliberate commitment rather than a default. Every host the app has
+ever claimed has to keep serving, keep resolving, and keep an
+`assetlinks.json` matching the app's signing key — for as long as any link
+naming it exists, which for a link pasted into a chat is indefinitely. A second
+host doubles that obligation and buys nothing, since both would serve the same
+build.
+
+A vanity domain may point here later. If one does it should **redirect** to
+`opensplit.web.app` rather than serve alongside it. A redirect leaves one URL
+that links are minted with and one origin that owns the stored data — which
+matters here, because this is a local-first app whose database is keyed to its
+origin, so a second origin is a second, empty copy of the app.
 
 After the first deploy, confirm the file actually shipped, because the failure
 mode is silence:
 
 ```bash
-curl -sI https://opensplit.eigeninteractive.com/.well-known/assetlinks.json
 curl -sI https://opensplit.web.app/.well-known/assetlinks.json
 ```
 
-Both must return `200` and `content-type: application/json`. HTML means the SPA
+It must return `200` and `content-type: application/json`. HTML means the SPA
 rewrite swallowed it, and App Links will not verify.
 
 **Before the first Play Store release**, read

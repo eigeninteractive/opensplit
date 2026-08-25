@@ -24,15 +24,26 @@ const String supabasePublishableKey = String.fromEnvironment(
   defaultValue: 'sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH',
 );
 
-/// Host used when *generating* an invite link.
+/// The one host this app is served from and generates links for.
 ///
-/// One value, deliberately, even though the app opens links from more than one
-/// domain — see the App Links intent filter in AndroidManifest.xml. A link that
-/// has been pasted into a chat outlives whichever host was fashionable when it
-/// was made, so the one written into it should be the canonical one.
+/// `opensplit.web.app` is the official domain, and the only one. It is where
+/// the web app is hosted, the host written into every invite link, and the sole
+/// host in the App Links intent filter in AndroidManifest.xml.
+///
+/// Committing to one is not tidiness. An invite link pasted into a chat outlives
+/// the app that made it — someone opens it a year later — so every host the app
+/// has ever generated has to keep serving, keep resolving, and keep an
+/// assetlinks.json that matches the signing key, forever. A second domain
+/// doubles that obligation and buys nothing, because both serve the same build.
+///
+/// A vanity domain may point here later. If one does, it redirects to this host
+/// rather than serving alongside it: a redirect leaves exactly one URL that
+/// links are minted with and one origin that owns the stored data, which is what
+/// matters when the site is a local-first app whose database is keyed to its
+/// origin.
 const String linkHost = String.fromEnvironment(
   'LINK_HOST',
-  defaultValue: 'opensplit.eigeninteractive.com',
+  defaultValue: 'opensplit.web.app',
 );
 
 /// Whether a backend is configured at all.

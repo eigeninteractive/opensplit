@@ -1,15 +1,18 @@
 # App Links verification
 
 `assetlinks.json` must be served as `application/json`, over HTTPS, with no
-redirect, from **every host the app claims** — currently two:
+redirect, from every host the app claims. There is exactly one:
 
-- `https://opensplit.eigeninteractive.com/.well-known/assetlinks.json`
 - `https://opensplit.web.app/.well-known/assetlinks.json`
 
-Android fetches it once per host listed in the App Links intent filter, and
-decides per host. Both point at the same Firebase Hosting site, so one deploy
-serves both; if the custom domain is ever moved elsewhere, it needs its own
-copy or links from that domain silently stop opening natively.
+Android fetches it once per host in the App Links intent filter and decides per
+host, which is the reason to claim as few as possible: a host listed there is a
+promise to serve this file, from that host, matching the signing key, for as
+long as any link naming it is still in someone's chat history.
+
+A vanity domain pointed here later should redirect to `opensplit.web.app`
+rather than be added as a second host. A redirect needs no `assetlinks.json` of
+its own and cannot drift out of step with this one.
 
 ## The fingerprint list is not optional reading
 

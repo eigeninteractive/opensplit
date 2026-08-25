@@ -41,17 +41,18 @@
                  /.well-known/assetlinks.json. If that file does not list the
                  certificate the installed app was actually signed with, this
                  fails silently and links open in a browser instead. See
-                 web/.well-known/README.md. -->
+                 web/.well-known/README.md.
+
+                 One host, matching linkHost in lib/config.dart. Every host
+                 listed here is a permanent commitment — it has to keep serving
+                 assetlinks.json for as long as any link naming it exists, which
+                 for a link pasted into a chat is indefinitely. A vanity domain
+                 added later should redirect here rather than be claimed as a
+                 second host. -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
-                <data android:scheme="https"
-                      android:host="opensplit.eigeninteractive.com"/>
-                <!-- Firebase Hosting's own domain, which serves the same
-                     build. A link can arrive from either, and a host missing
-                     here opens in a browser instead — so both are listed, and
-                     both must serve assetlinks.json. -->
                 <data android:scheme="https"
                       android:host="opensplit.web.app"/>
             </intent-filter>
