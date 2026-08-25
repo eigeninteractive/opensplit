@@ -60,26 +60,32 @@ flutter:
 
   # Fonts, bundled rather than fetched.
   #
-  # Flutter's web engine does not ship a font. It registers a family named
-  # "Roboto" as its own fallback and downloads it from https://fonts.gstatic.com
-  # at startup — a request to Google on every cold load of an app whose whole
-  # promise is that it works offline and reports nothing, and a reflow besides,
-  # since until it lands every string is laid out in a substitute face.
+  # Flutter's web engine hardcodes a fallback font family, and it is not
+  # optional. Both renderers do the same thing: if the font manifest contains no
+  # family named "Roboto", they append one pointing at
+  # fonts.gstatic.com/s/roboto/... and download it — see loadAssetFonts in
+  # web_ui/.../skwasm_impl/font_collection.dart and canvaskit/fonts.dart. The
+  # comment there gives the reason, and it is a good one: text laid out in an
+  # unregistered family would otherwise crash, so there has to be something to
+  # fall back to.
   #
-  # Two mechanisms are in play here, reading different keys against one folder
-  # on disk:
+  # It cares about the name and nothing else. So the name is declared, and it
+  # points at the face this app actually uses. That is not a trick played on the
+  # engine: the entry means "the family to fall back to", the engine spells that
+  # "Roboto", and answering with Instrument Sans is more nearly correct than
+  # shipping a second unrelated typeface would be — anything that falls through
+  # lands on the app's own face instead of a stray Roboto. Nothing in this app
+  # asks for "Roboto" by name.
   #
-  #  - `fonts:` is what the engine reads. Declaring the family it is looking for
-  #    is the only thing that stops it fetching its own copy. Roboto is not this
-  #    app's typeface any more and only one weight is bundled; it is a fallback
-  #    face, and the engine synthesises the rest.
-  #  - `assets:` is what package:google_fonts scans, and it is how the brand
-  #    faces below are found. With the files present it resolves from the
-  #    bundle, and allowRuntimeFetching is off in main.dart so a packaging miss
-  #    throws instead of quietly reaching for the network.
+  # `assets:` is the separate mechanism package:google_fonts scans, and it is
+  # how the brand faces are found. google_fonts registers them under its own
+  # family names (InstrumentSans_regular and so on), so the declaration below
+  # cannot collide with them even though it names the same file. With the files
+  # present it resolves from the bundle, and allowRuntimeFetching is off in
+  # main.dart so a packaging miss throws instead of reaching for the network.
   #
-  # The brand faces need no `fonts:` entry: google_fonts matches them by
-  # filename, and the names here are the ones it builds from its own font
+  # The brand faces need no `fonts:` entry of their own: google_fonts matches
+  # them by filename, and these names are the ones it builds out of its own font
   # descriptors. Instrument Sans carries 400 and 500 for Material 3's type scale
   # plus 600, the one weight this app asks for by hand; JetBrains Mono carries
   # only the 500 that money amounts are set in. See docs/BRAND.md, and
@@ -90,5 +96,5 @@ flutter:
   fonts:
     - family: Roboto
       fonts:
-        - asset: assets/google_fonts/Roboto-Regular.ttf
+        - asset: assets/google_fonts/InstrumentSans-Regular.ttf
           weight: 400

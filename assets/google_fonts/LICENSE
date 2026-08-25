@@ -12,11 +12,6 @@ Instrument Sans and JetBrains Mono
     recorded in its own font descriptors.
 
 Roboto
-    Apache License, Version 2.0
-    https://www.apache.org/licenses/LICENSE-2.0
-
-    Roboto-Regular.ttf is copied verbatim from the Flutter SDK's material_fonts
-    artifacts. It is not the app's typeface. It is here because Flutter's web
-    engine registers a font family named "Roboto" as its own fallback and
-    downloads it from fonts.gstatic.com unless the app declares one — see the
-    `fonts:` block in pubspec.yaml.
+    Not bundled. Flutter's web engine needs a font family named "Roboto" to
+    exist or it downloads one from fonts.gstatic.com; pubspec.yaml satisfies
+    that name with Instrument Sans, so no Roboto file ships with this app.
