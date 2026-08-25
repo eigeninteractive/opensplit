@@ -187,7 +187,12 @@ class _AccountSectionState extends ConsumerState<AccountSection> {
         ],
         if (_error != null) ...[
           const SizedBox(height: 8),
-          Text(_error!, style: TextStyle(color: scheme.error)),
+          Text(
+            _error!,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: scheme.error),
+          ),
         ],
         const SizedBox(height: 12),
         FilledButton(

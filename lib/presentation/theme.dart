@@ -1,5 +1,6 @@
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 /// The app's visual identity.
 ///
@@ -82,32 +83,57 @@ ThemeData buildTheme(Brightness brightness, [ColorScheme? dynamicScheme]) {
       dynamicScheme?.harmonized() ??
       ColorScheme.fromSeed(seedColor: _seed, brightness: brightness);
 
-  return ThemeData(
+  final base = ThemeData(
     colorScheme: scheme,
-    useMaterial3: true,
     visualDensity: VisualDensity.adaptivePlatformDensity,
     extensions: [BalanceColors.of(scheme)],
     // No surfaceTintColor. Material 3 replaced the opacity-based tint overlay
     // with the tone-based surface roles, and Flutter's default is now null;
     // setting it would reinstate the model the spec moved away from. Depth
     // comes from surfaceContainer* instead.
-    appBarTheme: const AppBarTheme(centerTitle: false),
-    cardTheme: CardThemeData(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: scheme.outlineVariant),
-      ),
+    // Left-aligned everywhere, which is not the no-op it looks like: on iOS and
+    // macOS an AppBar centres its title, and Flutter reports macOS as the
+    // platform for any browser running on a Mac. Without this the same build
+    // centres its title on a Mac and left-aligns it on Windows.
+    appBarTheme: const AppBarThemeData(centerTitle: false),
+    // Deliberately says nothing about elevation, colour or shape. Those are
+    // what distinguishes Card, Card.filled and Card.outlined from each other,
+    // and anything set here overrides all three at once — which is how this app
+    // ended up hand-rolling an outlined card badly. Call sites pick the variant.
+    cardTheme: const CardThemeData(
       clipBehavior: Clip.antiAlias,
+      // Not a Material value. `margin: EdgeInsets.all(4)` is a literal in
+      // Flutter's own gen_defaults card template — the elevation, colour and
+      // shape beside it are interpolated from the Material token database, and
+      // that database has no card margin at all. So this declines a Flutter
+      // default rather than contradicting the spec, and it means the gap a list
+      // writes between two cards is the gap on screen.
+      margin: EdgeInsets.zero,
     ),
-    inputDecorationTheme: const InputDecorationTheme(
+    // Outlined, not filled. Material 3 has exactly two text field variants: a
+    // filled one whose container is tinted and whose only line is the underline
+    // beneath it, and an outlined one with a transparent container inside a
+    // full border. `filled: true` together with an OutlineInputBorder is
+    // neither — a tinted box wearing the outlined variant's border. Outlined is
+    // the one that belongs beside the outlined cards above.
+    inputDecorationTheme: const InputDecorationThemeData(
       border: OutlineInputBorder(),
-      filled: true,
-    ),
-    listTileTheme: const ListTileThemeData(
-      contentPadding: EdgeInsets.symmetric(horizontal: 16),
     ),
   );
+
+  // Roboto, resolved from the bundle rather than the network — see the
+  // `fonts:`/`assets:` pair in pubspec.yaml and allowRuntimeFetching in
+  // main.dart.
+  //
+  // Applied to `base.textTheme` rather than called bare. GoogleFonts's
+  // no-argument form falls back to `ThemeData.light().textTheme`, which carries
+  // light-mode ink — near-black — and that survives into the dark theme, where
+  // it is very nearly the surface colour. Passing the base the scheme just
+  // produced keeps each brightness its own.
+  //
+  // This is Material's own default face, so nothing here changes what is on
+  // screen; it is the seam for swapping the whole app to another family later.
+  return base.copyWith(textTheme: GoogleFonts.robotoTextTheme(base.textTheme));
 }
 
 /// Colour for a balance figure.

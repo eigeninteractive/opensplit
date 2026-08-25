@@ -43,15 +43,13 @@ class MembersScreen extends ConsumerWidget {
                         backgroundColor: member.isPlaceholder
                             ? scheme.surfaceContainerHighest
                             : scheme.primaryContainer,
+                        foregroundColor: member.isPlaceholder
+                            ? scheme.onSurfaceVariant
+                            : scheme.onPrimaryContainer,
                         child: Text(
                           member.displayName.characters.firstOrNull
                                   ?.toUpperCase() ??
                               '?',
-                          style: TextStyle(
-                            color: member.isPlaceholder
-                                ? scheme.onSurfaceVariant
-                                : scheme.onPrimaryContainer,
-                          ),
                         ),
                       ),
                       title: Text(

@@ -91,7 +91,7 @@ class GroupDetailScreen extends ConsumerWidget {
             // refused makes the entry list and the balances beside it wrong
             // together, and it must be visible on whichever tab is open.
             const UnsyncedChangesBanner(
-              padding: EdgeInsets.fromLTRB(8, 8, 8, 0),
+              padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
             ),
             Expanded(
               child: wide
@@ -218,6 +218,7 @@ class _EntryTile extends StatelessWidget {
       ),
       subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
       trailing: Column(
+        mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [

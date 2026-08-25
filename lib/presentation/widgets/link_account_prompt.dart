@@ -31,60 +31,34 @@ class LinkAccountPrompt extends ConsumerWidget {
 
     final scheme = Theme.of(context).colorScheme;
 
-    return Card(
-      color: scheme.secondaryContainer,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.warning_amber_rounded,
-                  color: scheme.onSecondaryContainer,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Your expenses only exist on this device',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: scheme.onSecondaryContainer,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              kIsWeb
-                  ? 'There is no account attached, so nothing can be recovered. '
-                        'Clearing your browser data will delete all of it, '
-                        'permanently.'
-                  : 'There is no account attached, so nothing can be recovered '
-                        'if you lose this phone or reinstall the app.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: scheme.onSecondaryContainer,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () =>
-                      ref.read(promptDismissedProvider.notifier).dismiss(),
-                  child: const Text('Not now'),
-                ),
-                FilledButton(
-                  onPressed: () => context.go('/settings'),
-                  child: const Text('Save my account'),
-                ),
-              ],
-            ),
-          ],
-        ),
+    return MaterialBanner(
+      backgroundColor: scheme.secondaryContainer,
+      contentTextStyle: Theme.of(
+        context,
+      ).textTheme.bodyMedium?.copyWith(color: scheme.onSecondaryContainer),
+      leading: Icon(
+        Icons.warning_amber_rounded,
+        color: scheme.onSecondaryContainer,
       ),
+      content: Text(
+        kIsWeb
+            ? 'Your expenses only exist on this device. There is no account '
+                  'attached, so nothing can be recovered — clearing your '
+                  'browser data will delete all of it, permanently.'
+            : 'Your expenses only exist on this device. There is no account '
+                  'attached, so nothing can be recovered if you lose this '
+                  'phone or reinstall the app.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => ref.read(promptDismissedProvider.notifier).dismiss(),
+          child: const Text('Not now'),
+        ),
+        FilledButton(
+          onPressed: () => context.push('/settings'),
+          child: const Text('Save my account'),
+        ),
+      ],
     );
   }
 }

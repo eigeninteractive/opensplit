@@ -88,7 +88,12 @@ class _InviteSheetState extends ConsumerState<_InviteSheet> {
           ),
           const SizedBox(height: 16),
           if (_error != null)
-            Text(_error!, style: TextStyle(color: scheme.error))
+            Text(
+              _error!,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: scheme.error),
+            )
           else if (_url == null)
             const Center(
               child: Padding(

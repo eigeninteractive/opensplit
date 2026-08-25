@@ -489,13 +489,13 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
             ),
             if (_error != null) ...[
               const SizedBox(height: 16),
-              Card(
+              Card.filled(
                 color: Theme.of(context).colorScheme.errorContainer,
                 child: Padding(
                   padding: const EdgeInsets.all(12),
                   child: Text(
                     _error!,
-                    style: TextStyle(
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Theme.of(context).colorScheme.onErrorContainer,
                     ),
                   ),
@@ -582,7 +582,6 @@ class _PayerSection extends StatelessWidget {
                     Expanded(
                       child: CheckboxListTile(
                         contentPadding: EdgeInsets.zero,
-                        dense: true,
                         controlAffinity: ListTileControlAffinity.leading,
                         value: payers.contains(member.id),
                         title: Text(member.displayName),
@@ -706,7 +705,6 @@ class _SplitSection extends StatelessWidget {
               Expanded(
                 child: CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
-                  dense: true,
                   controlAffinity: ListTileControlAffinity.leading,
                   value: participants.contains(member.id),
                   title: Text(
@@ -803,54 +801,35 @@ class _CategoryPicker extends ConsumerWidget {
         ref.watch(categoriesProvider).value ?? const <Category>[];
     final scheme = Theme.of(context).colorScheme;
 
-    return DropdownButtonFormField<String>(
-      initialValue: categories.any((c) => c.id == value) ? value : null,
-      isExpanded: true,
-      decoration: const InputDecoration(labelText: 'Category (optional)'),
-      items: [
-        DropdownMenuItem(
+    // DropdownMenuEntry carries a leadingIcon of its own, so the icon and the
+    // name no longer need a hand-built Row to sit side by side.
+    return DropdownMenu<String?>(
+      initialSelection: categories.any((c) => c.id == value) ? value : null,
+      label: const Text('Category (optional)'),
+      enableFilter: true,
+      requestFocusOnTap: true,
+      menuHeight: 320,
+      expandedInsets: EdgeInsets.zero,
+      dropdownMenuEntries: [
+        DropdownMenuEntry(
           value: null,
-          child: _CategoryLabel(
-            icon: Icons.remove_rounded,
-            name: 'Uncategorised',
+          label: 'Uncategorised',
+          leadingIcon: Icon(
+            Icons.remove_rounded,
             color: scheme.onSurfaceVariant,
           ),
         ),
         for (final category in categories)
-          DropdownMenuItem(
+          DropdownMenuEntry(
             value: category.id,
-            child: _CategoryLabel(
-              icon: categoryIcon(category.icon),
-              name: category.name,
+            label: category.name,
+            leadingIcon: Icon(
+              categoryIcon(category.icon),
               color: scheme.onSurfaceVariant,
             ),
           ),
       ],
-      onChanged: onChanged,
+      onSelected: onChanged,
     );
   }
-}
-
-/// An icon beside the name, so a twenty-item list can be scanned rather than
-/// read. The icon is decoration — the name is already the label — so it is
-/// hidden from assistive tech instead of being announced twice.
-class _CategoryLabel extends StatelessWidget {
-  const _CategoryLabel({
-    required this.icon,
-    required this.name,
-    required this.color,
-  });
-
-  final IconData icon;
-  final String name;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      ExcludeSemantics(child: Icon(icon, size: 20, color: color)),
-      const SizedBox(width: 12),
-      Flexible(child: Text(name, overflow: TextOverflow.ellipsis)),
-    ],
-  );
 }

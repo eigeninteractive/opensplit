@@ -293,7 +293,7 @@ class _UpiSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return Card.outlined(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -438,21 +438,21 @@ class _MemberDropdown extends StatelessWidget {
         if (member.id != excludeId) member,
     ];
 
-    return DropdownButtonFormField<String>(
-      initialValue: options.any((m) => m.id == value) ? value : null,
-      decoration: InputDecoration(labelText: label),
-      isExpanded: true,
-      items: [
+    return DropdownMenu<String>(
+      initialSelection: options.any((m) => m.id == value) ? value : null,
+      label: Text(label),
+      // A group's member list is short and every name is already visible, so
+      // filtering would be a text field in front of six people.
+      requestFocusOnTap: false,
+      expandedInsets: EdgeInsets.zero,
+      dropdownMenuEntries: [
         for (final member in options)
-          DropdownMenuItem(
+          DropdownMenuEntry(
             value: member.id,
-            child: Text(
-              member.displayName + (member.id == meId ? ' (you)' : ''),
-              overflow: TextOverflow.ellipsis,
-            ),
+            label: member.displayName + (member.id == meId ? ' (you)' : ''),
           ),
       ],
-      onChanged: onChanged,
+      onSelected: onChanged,
     );
   }
 }

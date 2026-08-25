@@ -55,18 +55,22 @@ class InsightsScreen extends ConsumerWidget {
             : ListView(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
                 children: [
-                  TextField(
-                    decoration: InputDecoration(
-                      prefixIcon: const Icon(Icons.search),
-                      hintText: 'Search descriptions and notes',
-                      suffixIcon: filter.query.isEmpty
-                          ? null
-                          : IconButton(
-                              icon: const Icon(Icons.clear),
-                              onPressed: () =>
-                                  controller.update(filter.copyWith(query: '')),
-                            ),
-                    ),
+                  // SearchBar is Material 3's search field: a pill-shaped bar
+                  // on surfaceContainerHigh with its own elevation and
+                  // leading/trailing slots. A TextField dressed up with a
+                  // prefixIcon is the Material 2 way of drawing one.
+                  SearchBar(
+                    hintText: 'Search descriptions and notes',
+                    leading: const Icon(Icons.search),
+                    trailing: [
+                      if (filter.query.isNotEmpty)
+                        IconButton(
+                          icon: const Icon(Icons.clear),
+                          tooltip: 'Clear search',
+                          onPressed: () =>
+                              controller.update(filter.copyWith(query: '')),
+                        ),
+                    ],
                     onChanged: (value) =>
                         controller.update(filter.copyWith(query: value)),
                   ),
@@ -183,7 +187,6 @@ class _Section extends StatelessWidget {
     if (rows.isEmpty) return const SizedBox.shrink();
 
     final max = rows.map((b) => b.amountMinor).reduce((a, b) => a > b ? a : b);
-    final scheme = Theme.of(context).colorScheme;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -195,7 +198,7 @@ class _Section extends StatelessWidget {
           Text(subtitle!, style: Theme.of(context).textTheme.bodySmall),
         ],
         const SizedBox(height: 8),
-        Card(
+        Card.outlined(
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Column(
@@ -225,16 +228,8 @@ class _Section extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 4),
-                        // A bar rather than a pie: comparing lengths is far
-                        // easier than comparing angles, and it degrades
-                        // gracefully to a screen reader.
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: LinearProgressIndicator(
-                            value: max == 0 ? 0 : bucket.amountMinor / max,
-                            minHeight: 6,
-                            backgroundColor: scheme.surfaceContainerHighest,
-                          ),
+                        _ShareBar(
+                          fraction: max == 0 ? 0 : bucket.amountMinor / max,
                         ),
                       ],
                     ),
@@ -244,6 +239,50 @@ class _Section extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// How big one row is against the biggest row in its section.
+///
+/// A bar rather than a pie: comparing lengths is far easier than comparing
+/// angles.
+///
+/// Not a [LinearProgressIndicator], which is what this used to be. That widget
+/// means "this task is 40% finished" — it announces itself to assistive tech as
+/// a progress bar, and Material's own styling for it is now a moving thing with
+/// a gap and a stop indicator at the end of the track. None of that is true of
+/// a spend figure, which is finished, static, and already stated in full as
+/// text on the line above.
+///
+/// So this is drawn plainly, from the same scheme roles, and hidden from
+/// assistive tech entirely: the label and the amount beside it already say
+/// everything the bar is a picture of.
+class _ShareBar extends StatelessWidget {
+  const _ShareBar({required this.fraction});
+
+  /// 0…1 of the widest bar in this section.
+  final double fraction;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return ExcludeSemantics(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(3),
+        child: SizedBox(
+          height: 6,
+          child: ColoredBox(
+            color: scheme.surfaceContainerHighest,
+            child: FractionallySizedBox(
+              alignment: AlignmentDirectional.centerStart,
+              widthFactor: fraction.clamp(0.0, 1.0),
+              child: ColoredBox(color: scheme.primary),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -271,13 +310,12 @@ class _Results extends ConsumerWidget {
           style: Theme.of(context).textTheme.titleMedium,
         ),
         const SizedBox(height: 8),
-        Card(
+        Card.outlined(
           child: Column(
             children: [
               for (final entry in results)
                 ListTile(
-                  dense: true,
-                  onTap: () => context.go('/g/$groupId/e/${entry.id}'),
+                  onTap: () => context.push('/g/$groupId/e/${entry.id}'),
                   title: Text(
                     entry.description.isEmpty ? 'Expense' : entry.description,
                   ),

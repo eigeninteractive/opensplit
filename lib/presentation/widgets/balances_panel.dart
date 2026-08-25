@@ -65,7 +65,7 @@ class BalancesPanel extends ConsumerWidget {
           const SizedBox(height: 24),
         ],
         if (ledger.activeCurrencies.length > 1)
-          Card(
+          Card.outlined(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
@@ -104,6 +104,7 @@ class _CurrencySection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final balances = [
       for (final b in ledger.balances)
         if (b.currency == code) b,
@@ -117,27 +118,32 @@ class _CurrencySection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Text(
-              currency?.name ?? code,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(width: 8),
-            Chip(
-              label: Text(code),
-              visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-            ),
-          ],
+        // "Indian Rupee · INR", not a Chip.
+        //
+        // This was a Chip with its padding zeroed and its density compacted,
+        // which is two overrides to make a component stop looking like itself.
+        // Chips are controls — they carry tap targets, selection and hover —
+        // and this one was never tappable. A section heading that reads as a
+        // button is a small lie; the code is just part of the name.
+        Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(text: currency?.name ?? code),
+              if (currency?.name != null)
+                TextSpan(
+                  text: '  ·  $code',
+                  style: TextStyle(color: scheme.onSurfaceVariant),
+                ),
+            ],
+          ),
+          style: Theme.of(context).textTheme.titleMedium,
         ),
         const SizedBox(height: 8),
-        Card(
+        Card.outlined(
           child: Column(
             children: [
               for (final balance in balances)
                 ListTile(
-                  dense: true,
                   title: Text(
                     ledger.nameOf(balance.memberId) +
                         (balance.memberId == ledger.me?.id ? ' (you)' : ''),
@@ -169,7 +175,7 @@ class _CurrencySection extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          Card(
+          Card.outlined(
             child: Column(
               children: [
                 for (final transfer in transfers)
@@ -204,32 +210,51 @@ class _TransferTile extends StatelessWidget {
     final from = ledger.nameOf(transfer.fromMemberId);
     final to = ledger.nameOf(transfer.toMemberId);
 
-    return ListTile(
-      title: Text(
-        isMine
-            ? 'You pay $to'
-            : '$from pays ${transfer.toMemberId == ledger.me?.id ? 'you' : to}',
-      ),
-      subtitle: Text(formatMoney(currency, transfer.amountMinor)),
-      trailing: Wrap(
-        spacing: 4,
-        children: [
-          IconButton(
-            tooltip: 'Why this payment?',
-            icon: const Icon(Icons.help_outline),
-            onPressed: () => _explain(context),
-          ),
-          FilledButton.tonal(
-            onPressed: () => context.go(
-              '/g/${ledger.group.id}/settle'
-              '?from=${transfer.fromMemberId}'
-              '&to=${transfer.toMemberId}'
-              '&amount=${transfer.amountMinor}'
-              '&currency=${transfer.currency}',
+    final scheme = Theme.of(context).colorScheme;
+    final words = isMine
+        ? 'You pay $to'
+        : '$from pays ${transfer.toMemberId == ledger.me?.id ? 'you' : to}';
+
+    // One control in `trailing`, which is all a Material list item has room
+    // for. This used to hold a help IconButton and the Settle button side by
+    // side in a Wrap: two targets competing for a slot sized for one, which on
+    // a narrow phone wrapped to a second line and dragged the row out of
+    // alignment with every other row in the card.
+    //
+    // The explanation moves onto the row itself — tapping a list item to see
+    // more about it is the ordinary gesture, and it gives the reasoning a far
+    // bigger target than a 24dp icon. The icon stays as a hint that there is
+    // something to tap, but it is no longer a separate button.
+    return Semantics(
+      // The tooltip that used to say this belonged to the help button, which
+      // is gone; the row carries the affordance now, so it carries the words.
+      hint: 'Shows how this payment was worked out',
+      child: ListTile(
+        onTap: () => _explain(context),
+        title: Row(
+          children: [
+            Flexible(child: Text(words, overflow: TextOverflow.ellipsis)),
+            const SizedBox(width: 6),
+            ExcludeSemantics(
+              child: Icon(
+                Icons.help_outline,
+                size: 16,
+                color: scheme.onSurfaceVariant,
+              ),
             ),
-            child: const Text('Settle'),
+          ],
+        ),
+        subtitle: Text(formatMoney(currency, transfer.amountMinor)),
+        trailing: FilledButton.tonal(
+          onPressed: () => context.push(
+            '/g/${ledger.group.id}/settle'
+            '?from=${transfer.fromMemberId}'
+            '&to=${transfer.toMemberId}'
+            '&amount=${transfer.amountMinor}'
+            '&currency=${transfer.currency}',
           ),
-        ],
+          child: const Text('Settle'),
+        ),
       ),
     );
   }
@@ -331,7 +356,6 @@ class _TransferExplanation extends StatelessWidget {
             for (final item in contributions)
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                dense: true,
                 title: Text(
                   item.entry.description.isEmpty
                       ? (item.entry.kind == EntryKind.settlement
@@ -413,7 +437,7 @@ class _EstimateCard extends ConsumerWidget {
       caveat.write('.');
     }
 
-    return Card(
+    return Card.outlined(
       margin: const EdgeInsets.only(bottom: 24),
       child: Padding(
         padding: const EdgeInsets.all(16),

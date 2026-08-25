@@ -90,7 +90,7 @@ class _GroupTile extends ConsumerWidget {
     final currencies = ref.watch(currenciesProvider).value ?? const {};
     final scheme = Theme.of(context).colorScheme;
 
-    return Card(
+    return Card.outlined(
       child: InkWell(
         onTap: () => context.go('/g/${group.id}'),
         child: Padding(
