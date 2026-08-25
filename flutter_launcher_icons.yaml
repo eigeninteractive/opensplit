@@ -24,6 +24,12 @@ flutter_launcher_icons:
   # spans 59% of the canvas, so it clears that mask with room to spare and the
   # copy is fine.
   #
+  # One thing it cannot do: the favicon. Its favicon step is a plain resize of
+  # image_path, and that file is opaque, so the tab icon comes out as a pale
+  # tile rather than the mark on the browser's own colour. `dart run
+  # tool/brand_icons.dart` rewrites it from the transparent artwork — run it
+  # after this — and a test fails if it has not been.
+  #
   # This also rewrites web/manifest.json in place, keeping the fields it does not
   # own. background_color and theme_color are both ColorScheme.surface: the
   # browser paints theme_color immediately above the app bar, which sits on the

@@ -73,8 +73,17 @@ class PushService {
     );
 
     await _local.initialize(
+      // A dedicated status bar icon, not the launcher icon. Android draws
+      // these as a silhouette — it reads the alpha channel and paints its own
+      // colour through it — so a full-colour launcher icon arrives as a white
+      // blob. This one is generated from the brand mark's monochrome layer by
+      // tool/brand_icons.dart.
+      //
+      // Named rather than referenced, which means resource shrinking cannot
+      // see it: android/app/src/main/res/raw/keep.xml is what stops the
+      // release build dropping it and failing to post silently.
       settings: const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        android: AndroidInitializationSettings('@drawable/ic_stat_opensplit'),
       ),
     );
     await _local

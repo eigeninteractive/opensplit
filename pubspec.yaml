@@ -55,6 +55,7 @@ dev_dependencies:
   # deliberately not bundled — nothing reads them at runtime.
   flutter_launcher_icons: ^0.14.4
   flutter_native_splash: ^2.4.7
+  image: ^4.9.2
 
 flutter:
   uses-material-design: true

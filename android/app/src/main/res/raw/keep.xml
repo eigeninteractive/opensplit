@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Resources referenced only by name at runtime, which the shrinker cannot see.
+
+     Release builds run R8 with resource shrinking — the Flutter Gradle plugin
+     turns both on by default — and anything it cannot trace a reference to is
+     removed. `ic_stat_opensplit` is passed to the notifications plugin as the
+     string "@drawable/ic_stat_opensplit" and resolved by name, so nothing in
+     the compiled code points at it.
+
+     Without this rule the icon is dropped from the release build and Android
+     silently fails to post the notification when it looks the resource up.
+     That failure exists only in release, only on a real device, and produces no
+     error — see lib/data/push/push_service.dart, and the test that ties this
+     file to the name that file asks for. -->
+<resources
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_stat_opensplit" />
