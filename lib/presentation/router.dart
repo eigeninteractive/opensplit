@@ -107,6 +107,12 @@ class _AdaptiveShell extends StatelessWidget {
   /// readable content measure both fit without squeezing either.
   static const double _railBreakpoint = 900;
 
+  /// Material 3's own default destination width, and the rail's width outright:
+  /// a destination is padded 8dp either side *within* this, and only pushes
+  /// past it if a label needs more. "Groups" and "Settings" are nowhere near,
+  /// so the rail is a fixed 80dp and the skeleton can count on it.
+  static const double _railWidth = 80;
+
   final GoRouterState state;
   final Widget child;
 
@@ -123,6 +129,10 @@ class _AdaptiveShell extends StatelessWidget {
           NavigationRail(
             selectedIndex: onSettings ? 1 : 0,
             labelType: NavigationRailLabelType.all,
+            // Material's own default, stated rather than inherited because
+            // the web loading skeleton has to leave exactly this much room on
+            // the left — see the 900px block in web/index.html.
+            minWidth: _railWidth,
             onDestinationSelected: (index) =>
                 context.go(index == 1 ? '/settings' : '/'),
             destinations: const [

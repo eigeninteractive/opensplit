@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../widgets/page_body.dart';
 import '../../application/providers.dart';
+import '../../data/web/boot_hint.dart';
 import '../../domain/models/currency.dart';
 import '../../domain/models/group.dart';
 import '../format.dart';
@@ -19,6 +20,13 @@ class GroupListScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final groupsAsync = ref.watch(groupsProvider());
+
+    // Leaves a note for the next cold start, so the web loader knows whether
+    // to draw group cards or just the chrome. See [recordHasGroups] — it does
+    // nothing on Android.
+    if (groupsAsync.hasValue) {
+      recordHasGroups(groupsAsync.value!.isNotEmpty);
+    }
 
     return Scaffold(
       appBar: AppBar(

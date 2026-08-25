@@ -6,14 +6,24 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="Split expenses with friends. Free forever, no ads, works offline, open source.">
-  <meta name="theme-color" content="#00695C" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#111413" media="(prefers-color-scheme: dark)">
+
+  <!-- ColorScheme.surface, the colour the app bar and the page both sit on.
+       Anything else here shows as a seam between the browser chrome and the
+       first pixel of the app. -->
+  <meta name="theme-color" content="#f4fbf8" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0e1513" media="(prefers-color-scheme: dark)">
 
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="OpenSplit">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
   <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <!-- Flutter's Material typography is Roboto, which the web engine fetches
+       from here at startup rather than bundling. Opening the connection now
+       means the skeleton and the app are far more likely to agree on the font,
+       instead of the whole page reflowing when Roboto finally lands. -->
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
   <title>OpenSplit — split expenses with friends</title>
   <link rel="manifest" href="manifest.json">
@@ -27,89 +37,206 @@
      * matches what is about to appear reads as loading, and the swap is barely
      * perceptible because nothing moves.
      *
-     * Deliberately inline and tiny: this has to paint on the first round trip,
-     * before any stylesheet or script is fetched. */
+     * Every value below is a Material 3 one, taken from the same place the app
+     * takes it: the tones of ColorScheme.fromSeed(#00695C), the sizes of the
+     * M3 components, the metrics of the Roboto text styles. They are written
+     * out as literals because this has to paint on the first round trip,
+     * before any stylesheet or script is fetched — and they are pinned by a
+     * test (test/presentation/theme_test.dart) that reads this file and
+     * compares it against the running theme, so the two cannot drift.
+     *
+     * Anything the app shows that is genuinely constant — the title, the
+     * button's label, the shape and colour of every container — is drawn
+     * exactly. Only the parts that are still unknown are drawn as placeholders.
+     */
     :root {
-      --bg: #fbfdfc;
-      --surface: #ffffff;
-      --line: #dde5e2;
-      --shimmer: #eef3f1;
-      --brand: #00695C;
-      --text: #191c1b;
+      --surface: #f4fbf8;              /* ColorScheme.surface */
+      --placeholder: #dee4e1;          /* ColorScheme.surfaceContainerHighest */
+      --outline-variant: #bec9c5;      /* the Card border, and dividers */
+      --on-surface: #171d1b;           /* the app bar title */
+      --secondary-container: #cde8e1;  /* the group avatar */
+      --primary-container: #9ff2e1;    /* the extended FAB */
+      --on-primary-container: #005046;
     }
     @media (prefers-color-scheme: dark) {
       :root {
-        --bg: #111413;
-        --surface: #191d1c;
-        --line: #2b312f;
-        --shimmer: #232827;
-        --brand: #4fd8c4;
-        --text: #e1e3e1;
+        --surface: #0e1513;
+        --placeholder: #303634;
+        --outline-variant: #3f4946;
+        --on-surface: #dee4e1;
+        --secondary-container: #334b46;
+        --primary-container: #005046;
+        --on-primary-container: #9ff2e1;
       }
     }
-    html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); }
+
+    html, body { margin: 0; padding: 0; height: 100%; background: var(--surface); }
     body {
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-      color: var(--text);
+      /* Roboto first, so that a warm cache matches the app exactly; the system
+       * face only stands in for the first paint of a first visit. */
+      font-family: Roboto, system-ui, -apple-system, "Segoe UI", sans-serif;
+      color: var(--on-surface);
     }
+
     #skeleton { position: fixed; inset: 0; z-index: 1; }
+
+    /* The small top app bar: 56dp, on `surface`, and flat. M3 gave up the
+     * bottom rule and the drop shadow — an app bar only separates itself from
+     * the content when something scrolls under it, and then by changing tone,
+     * not by drawing a line. */
     .bar {
       height: 56px;
       display: flex;
       align-items: center;
-      padding: 0 16px;
-      border-bottom: 1px solid var(--line);
+      padding: 0 12px 0 16px;
       background: var(--surface);
-      font-weight: 600;
-      font-size: 20px;
-      letter-spacing: -0.2px;
     }
-    .bar span { color: var(--brand); }
-    .list { padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+    /* textTheme.titleLarge: Roboto 22/28, regular, no tracking. */
+    .bar h1 {
+      margin: 0;
+      flex: 1;
+      font-size: 22px;
+      line-height: 28px;
+      font-weight: 400;
+      letter-spacing: 0;
+    }
+    /* Where the settings IconButton lands: a 24dp icon centred in a 48dp
+     * target, so the title beside it keeps its true measure. */
+    .bar .action { width: 24px; height: 24px; margin: 0 12px; border-radius: 4px; background: var(--placeholder); }
+
+    /* ListView(padding: fromLTRB(16, 8, 16, 96)) inside PageBody(maxWidth: 760).
+     *
+     * border-box because PageBody caps the whole scroll view at 760, padding
+     * included — the default content-box would cap the cards at 760 and hand
+     * them 32 more, which is only visible once the screen is wide enough for
+     * the cap to bind at all. */
+    .list {
+      box-sizing: border-box;
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 8px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    /* `display: flex` above outranks the user-agent rule for [hidden], so the
+     * attribute needs saying again here to actually hide anything. */
+    .list[hidden] { display: none; }
+
+    /* Card.outlined: elevation 0, 12dp radius, a hairline in outlineVariant,
+     * and a container the same colour as the page — the outline is the whole
+     * boundary. Contents are Padding(all: 16) around a Row with a 16dp gap.
+     *
+     * The padding is 15 rather than 16 because Flutter strokes a shape's
+     * border on the inside — an 80dp card stays 80dp — whereas CSS lays the
+     * border outside the padding box. 1 + 15 puts the contents at the same
+     * 16dp inset and keeps the card the same height, which matters by the
+     * third row, where two pixels a card have become six. */
     .card {
       background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: 16px;
-      padding: 16px;
+      border: 1px solid var(--outline-variant);
+      border-radius: 12px;
+      padding: 15px;
       display: flex;
       align-items: center;
       gap: 16px;
     }
+    /* CircleAvatar's default 40dp, already the right colour — there is no
+     * version of this row without one, so it is not a placeholder. */
     .avatar {
       width: 40px; height: 40px; border-radius: 50%;
-      background: var(--shimmer); flex: none;
+      background: var(--secondary-container); flex: none;
     }
-    .lines { flex: 1; display: flex; flex-direction: column; gap: 8px; }
-    .line { height: 12px; border-radius: 6px; background: var(--shimmer); }
-    .line.short { width: 40%; }
-    .line.medium { width: 62%; }
+    /* 48dp: a titleMedium line box (24) + 4 + a bodyMedium one (20). The bars
+     * sit where the text will, so the card does not resize under the swap. */
+    .lines { flex: 1; height: 48px; }
+    .line { border-radius: 4px; background: var(--placeholder); }
+    .line.title { height: 16px; margin-top: 4px; width: 62%; }
+    .line.detail { height: 12px; margin-top: 11px; width: 40%; }
+    .card:nth-child(2) .line.title { width: 44%; }
+    .card:nth-child(2) .line.detail { width: 56%; }
+    .card:nth-child(3) .line.title { width: 55%; }
 
-    /* One slow pulse. Anything faster competes for attention with the content
-     * that is about to replace it. */
-    @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
-    #skeleton .card { animation: breathe 1.8s ease-in-out infinite; }
-    #skeleton .card:nth-child(2) { animation-delay: 0.15s; }
-    #skeleton .card:nth-child(3) { animation-delay: 0.3s; }
+    /* FloatingActionButton.extended, 16dp clear of both edges: 56dp tall,
+     * 16dp radius, on primaryContainer, padded 16 before the icon and 20 after
+     * the label, with 8 between them. The label is real; only the icon is
+     * standing in, so the button is already its final width. */
+    .fab {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 20px 0 16px;
+      border-radius: 16px;
+      background: var(--primary-container);
+      color: var(--on-primary-container);
+      /* Material's elevation 6, the extended FAB's resting shadow. */
+      box-shadow: 0 3px 5px -1px rgba(0,0,0,.20),
+                  0 6px 10px 0 rgba(0,0,0,.14),
+                  0 1px 18px 0 rgba(0,0,0,.12);
+    }
+    .fab .icon { width: 24px; height: 24px; border-radius: 4px; background: currentColor; opacity: .35; }
+    /* textTheme.labelLarge. */
+    .fab .label { font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; }
+
+    /* At 900px the app puts a NavigationRail on the left: 80dp of rail (its
+     * minWidth, set in router.dart) and then a 1dp divider. The rail sits on
+     * `surface` like everything else, so all that actually shows is that
+     * divider — but the content is measured from it, and without this the
+     * cards jump sideways at the swap. */
+    @media (min-width: 900px) {
+      #skeleton { padding-left: 81px; }
+      #skeleton::before {
+        content: '';
+        position: fixed;
+        left: 80px; top: 0; bottom: 0;
+        width: 1px;
+        background: var(--outline-variant);
+      }
+    }
+
+    /* One slow pulse, on the placeholders only. Pulsing the card would fade
+     * its border and its avatar, which are not placeholders at all — they are
+     * already exactly what the app is about to draw. */
+    @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+    .line, .bar .action { animation: breathe 1.8s ease-in-out infinite; }
+    .card:nth-child(2) .line { animation-delay: 0.15s; }
+    .card:nth-child(3) .line { animation-delay: 0.3s; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .line, .bar .action { animation: none; }
+      #skeleton.done { transition: none; }
+    }
 
     #skeleton.done { opacity: 0; transition: opacity 180ms ease-out; pointer-events: none; }
   </style>
 </head>
 <body>
   <div id="skeleton" aria-hidden="true">
-    <div class="bar">Open<span>Split</span></div>
-    <div class="list">
+    <div class="bar">
+      <h1>OpenSplit</h1>
+      <div class="action"></div>
+    </div>
+    <div class="list" id="cards" hidden>
       <div class="card">
         <div class="avatar"></div>
-        <div class="lines"><div class="line medium"></div><div class="line short"></div></div>
+        <div class="lines"><div class="line title"></div><div class="line detail"></div></div>
       </div>
       <div class="card">
         <div class="avatar"></div>
-        <div class="lines"><div class="line short"></div><div class="line medium"></div></div>
+        <div class="lines"><div class="line title"></div><div class="line detail"></div></div>
       </div>
       <div class="card">
         <div class="avatar"></div>
-        <div class="lines"><div class="line medium"></div><div class="line short"></div></div>
+        <div class="lines"><div class="line title"></div><div class="line detail"></div></div>
       </div>
+    </div>
+    <div class="fab">
+      <div class="icon"></div>
+      <div class="label">New group</div>
     </div>
   </div>
 
@@ -118,6 +245,25 @@
   </noscript>
 
   <script>
+    // Placeholder cards are a promise that content is coming, and for a
+    // first-time visitor that promise is false: they have no groups, so the app
+    // opens on "No groups yet". They are also the ones who wait longest, with
+    // nothing cached — so the cards were least truthful exactly when they were
+    // most visible.
+    //
+    // The app leaves a note in localStorage (see lib/data/web/boot_hint.dart)
+    // once it knows. Only a browser that has seen groups here gets cards; every
+    // other case falls back to the app bar and the button, which are on this
+    // screen for everybody in every state.
+    //
+    // Read synchronously, before first paint, so nothing moves afterwards.
+    // Wrapped because reading storage throws outright in some privacy modes.
+    try {
+      if (localStorage.getItem('opensplit.hasGroups') === '1') {
+        document.getElementById('cards').hidden = false;
+      }
+    } catch (e) { /* chrome only, which is the safe default */ }
+
     // Flutter fires this once it has actually painted, so the swap happens
     // when there is something real underneath rather than on a timer that
     // guesses.
