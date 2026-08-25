@@ -50,9 +50,11 @@ class _ExportButtonState extends ConsumerState<ExportButton> {
         categoryNames: {for (final c in categories) c.id: c.name},
       );
 
-      final name =
-          '${(ledger?.group.name ?? 'opensplit').replaceAll(RegExp(r'[^\w]+'), '-').toLowerCase()}'
-          '-${DateTime.now().toIso8601String().split('T').first}.csv';
+      final slug = (ledger?.group.name ?? 'opensplit')
+          .replaceAll(RegExp(r'[^\w]+'), '-')
+          .toLowerCase();
+      final day = DateTime.now().toIso8601String().split('T').first;
+      final name = '$slug-$day.csv';
 
       await SharePlus.instance.share(
         ShareParams(

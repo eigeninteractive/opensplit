@@ -196,7 +196,11 @@ void main() {
           r'<color name="surface">(#[0-9a-fA-F]{6})</color>',
         ).firstMatch(res('$variant/colors.xml'));
 
-        expect(declared, isNotNull, reason: 'no surface in $variant/colors.xml');
+        expect(
+          declared,
+          isNotNull,
+          reason: 'no surface in $variant/colors.xml',
+        );
         expect(
           declared!.group(1)!.toLowerCase(),
           surface,
@@ -252,9 +256,7 @@ void main() {
         ('color', Brightness.light),
         ('color_dark', Brightness.dark),
       ]) {
-        final declared = RegExp(
-          '$key: "(#[0-9a-fA-F]{6})"',
-        ).firstMatch(config);
+        final declared = RegExp('$key: "(#[0-9a-fA-F]{6})"').firstMatch(config);
 
         expect(declared, isNotNull, reason: 'no $key in the splash config');
         expect(

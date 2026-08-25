@@ -7,8 +7,8 @@ import 'fx_quote.dart';
 /// amount of money, and it is deliberately confined here. A converted figure is
 /// never stored as a balance, never summed into one, and never written back as
 /// an entry amount — it exists to answer "roughly how much is that in rupees?"
-/// on a summary line and nowhere else. Balances stay authoritative per currency,
-/// because an exchange rate is an opinion and a debt is not.
+/// on a summary line and nowhere else. Balances stay authoritative per
+/// currency, because an exchange rate is an opinion and a debt is not.
 ///
 /// The exponents on both sides are read from the [Currency] rows rather than
 /// assumed, so converting ¥5,000 (exponent 0) into ₹ (exponent 2) produces the

@@ -61,7 +61,8 @@ final class DriftAnalyticsRepository {
     final match = _ftsMatch(filter.query);
     if (match != null) {
       clauses.add(
-        '$alias.rowid IN (SELECT rowid FROM entries_fts WHERE entries_fts MATCH ?)',
+        '$alias.rowid IN '
+        '(SELECT rowid FROM entries_fts WHERE entries_fts MATCH ?)',
       );
       vars.add(Variable<String>(match));
     }

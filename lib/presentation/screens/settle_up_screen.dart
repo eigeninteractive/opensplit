@@ -185,8 +185,8 @@ class _SettleUpScreenState extends ConsumerState<SettleUpScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              'OpenSplit does not move or check money. Recording a payment here '
-              'only updates the balances in this app.',
+              'OpenSplit does not move or check money. Recording a payment '
+              'here only updates the balances in this app.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../application/providers.dart';
+import '../../domain/balance/member_balance.dart';
 import '../../domain/balance/simplify.dart';
 import '../../domain/models/currency.dart';
 import '../../domain/models/entry.dart';
@@ -144,26 +145,10 @@ class _CurrencySection extends StatelessWidget {
           child: Column(
             children: [
               for (final balance in balances)
-                ListTile(
-                  title: Text(
-                    ledger.nameOf(balance.memberId) +
-                        (balance.memberId == ledger.me?.id ? ' (you)' : ''),
-                  ),
-                  trailing: BalanceAmount(
-                    balanceMinor: balance.balanceMinor,
-                    text: balance.balanceMinor > 0
-                        ? 'is owed ${formatMoneyAbs(currency, balance.balanceMinor)}'
-                        : 'owes ${formatMoneyAbs(currency, balance.balanceMinor)}',
-                    semanticsLabel:
-                        '${ledger.nameOf(balance.memberId)} '
-                        '${balance.balanceMinor > 0 ? 'is owed' : 'owes'} '
-                        '${formatMoneyAbs(currency, balance.balanceMinor)}',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                _MemberBalanceRow(
+                  ledger: ledger,
+                  balance: balance,
+                  currency: currency,
                 ),
             ],
           ),
@@ -322,83 +307,156 @@ class _TransferExplanation extends StatelessWidget {
     final name = ledger.nameOf(debtor);
     final isMe = debtor == ledger.me?.id;
 
+    // Lifted out of the widget tree rather than written inline. Down inside the
+    // slivers there are twenty columns of indent before the quote even opens,
+    // which leaves no room to say anything.
+    final rest = transfer.amountMinor == net.abs()
+        ? ''
+        : ', plus the other suggested payments';
+    final why =
+        '${isMe ? 'You owe' : '$name owes'} '
+        '${formatMoneyAbs(currency, net)} in total across this group. '
+        'Rather than paying several people separately, that whole amount is '
+        'cleared by paying ${ledger.nameOf(transfer.toMemberId)} '
+        '${formatMoney(currency, transfer.amountMinor)}$rest.';
+    const caveat =
+        'This can name someone you never directly owed. It is the shortest '
+        'set of payments that leaves everybody square.';
+
     return DraggableScrollableSheet(
       expand: false,
       initialChildSize: 0.7,
       maxChildSize: 0.95,
-      builder: (context, controller) => ListView(
+      // Slivers, because the contributing entries below are unbounded: every
+      // expense the two of them share lands in that list, and a ListView would
+      // build all of them before the sheet drew its first frame.
+      builder: (context, controller) => CustomScrollView(
         controller: controller,
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-        children: [
-          Text(
-            'Why this payment?',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            '${isMe ? 'You owe' : '$name owes'} '
-            '${formatMoneyAbs(currency, net)} in total across this group. '
-            'Rather than paying several people separately, that whole amount '
-            'is cleared by paying ${ledger.nameOf(transfer.toMemberId)} '
-            '${formatMoney(currency, transfer.amountMinor)}'
-            '${transfer.amountMinor == net.abs() ? '' : ', plus the other suggested payments'}.',
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'This can name someone you never directly owed. It is the shortest '
-            'set of payments that leaves everybody square.',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-          ),
-          const Divider(height: 32),
-          Text(
-            'Built from these entries',
-            style: Theme.of(context).textTheme.titleSmall,
-          ),
-          const SizedBox(height: 8),
-          if (contributions.isEmpty)
-            const Text('No entries in this currency.')
-          else
-            for (final item in contributions)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text(
-                  item.entry.description.isEmpty
-                      ? (item.entry.kind == EntryKind.settlement
-                            ? 'Settlement'
-                            : 'Expense')
-                      : item.entry.description,
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+            sliver: SliverMainAxisGroup(
+              slivers: [
+                SliverList.list(
+                  children: [
+                    Text(
+                      'Why this payment?',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(why, style: Theme.of(context).textTheme.bodyMedium),
+                    const SizedBox(height: 8),
+                    Text(
+                      caveat,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const Divider(height: 32),
+                    Text(
+                      'Built from these entries',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    if (contributions.isEmpty)
+                      const Text('No entries in this currency.'),
+                  ],
                 ),
-                subtitle: Text(DateFormat.yMMMd().format(item.entry.entryDate)),
-                trailing: BalanceAmount(
-                  balanceMinor: item.delta,
-                  text: formatMoneyAbs(currency, item.delta),
-                  semanticsLabel: item.delta > 0
-                      ? 'lent ${formatMoneyAbs(currency, item.delta)}'
-                      : 'owed ${formatMoneyAbs(currency, item.delta)}',
-                  style: moneyStyle(
-                    Theme.of(context).textTheme.bodyMedium!,
-                  ),
+                SliverList.builder(
+                  itemCount: contributions.length,
+                  itemBuilder: (context, index) {
+                    final item = contributions[index];
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        item.entry.description.isEmpty
+                            ? (item.entry.kind == EntryKind.settlement
+                                  ? 'Settlement'
+                                  : 'Expense')
+                            : item.entry.description,
+                      ),
+                      subtitle: Text(
+                        DateFormat.yMMMd().format(item.entry.entryDate),
+                      ),
+                      trailing: BalanceAmount(
+                        balanceMinor: item.delta,
+                        text: formatMoneyAbs(currency, item.delta),
+                        semanticsLabel: item.delta > 0
+                            ? 'lent ${formatMoneyAbs(currency, item.delta)}'
+                            : 'owed ${formatMoneyAbs(currency, item.delta)}',
+                        style: moneyStyle(
+                          Theme.of(context).textTheme.bodyMedium!,
+                        ),
+                      ),
+                    );
+                  },
                 ),
-              ),
-          const Divider(height: 32),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Net', style: Theme.of(context).textTheme.titleSmall),
-              BalanceAmount(
-                balanceMinor: net,
-                text: formatMoneyAbs(currency, net),
-                semanticsLabel: net > 0
-                    ? 'net, owed to you ${formatMoneyAbs(currency, net)}'
-                    : 'net, you owe ${formatMoneyAbs(currency, net)}',
-                style: moneyStyle(Theme.of(context).textTheme.titleSmall!),
-              ),
-            ],
+                SliverList.list(
+                  children: [
+                    const Divider(height: 32),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Net',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        BalanceAmount(
+                          balanceMinor: net,
+                          text: formatMoneyAbs(currency, net),
+                          semanticsLabel: net > 0
+                              ? 'net, owed to you '
+                                    '${formatMoneyAbs(currency, net)}'
+                              : 'net, you owe ${formatMoneyAbs(currency, net)}',
+                          style: moneyStyle(
+                            Theme.of(context).textTheme.titleSmall!,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// One member's standing in one currency.
+///
+/// Its own widget so that the wording, which needs three pieces of the same
+/// balance, is assembled where there is room to read it rather than inside a
+/// list comprehension nested four containers deep.
+class _MemberBalanceRow extends StatelessWidget {
+  const _MemberBalanceRow({
+    required this.ledger,
+    required this.balance,
+    required this.currency,
+  });
+
+  final GroupLedger ledger;
+  final MemberBalance balance;
+  final Currency? currency;
+
+  @override
+  Widget build(BuildContext context) {
+    final amount = formatMoneyAbs(currency, balance.balanceMinor);
+    final who = ledger.nameOf(balance.memberId);
+    final verb = balance.balanceMinor > 0 ? 'is owed' : 'owes';
+    final isMe = balance.memberId == ledger.me?.id;
+
+    return ListTile(
+      title: Text(isMe ? '$who (you)' : who),
+      trailing: BalanceAmount(
+        balanceMinor: balance.balanceMinor,
+        text: '$verb $amount',
+        semanticsLabel: '$who $verb $amount',
+        style: Theme.of(
+          context,
+        ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
       ),
     );
   }

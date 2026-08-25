@@ -427,9 +427,9 @@ Stream<Account?> account(Ref ref) {
 
 /// Establishes a session and reconciles this device's local identity with it.
 ///
-/// Anonymous sign-in happens silently and is never presented as a step. Someone
-/// arriving from an invite link has to land inside the group; a signup screen at
-/// that moment is where they leave.
+/// Anonymous sign-in happens silently and is never presented as a step.
+/// Someone arriving from an invite link has to land inside the group; a signup
+/// screen at that moment is where they leave.
 @Riverpod(keepAlive: true)
 class SessionController extends _$SessionController {
   @override

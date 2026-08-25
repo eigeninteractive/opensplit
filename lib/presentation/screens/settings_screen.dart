@@ -87,8 +87,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             const SizedBox(height: 24),
             FilledButton(onPressed: _save, child: const Text('Save')),
-            // Hidden entirely rather than shown broken when the build has no FCM
-            // credentials, matching how every other integration behaves here.
+            // Hidden entirely rather than shown broken when the build has
+            // no FCM credentials, matching how every other integration behaves
+            // here.
             if (hasPush) ...[
               const Divider(height: 48),
               const _NotificationSetting(),

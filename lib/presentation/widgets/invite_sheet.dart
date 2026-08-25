@@ -72,6 +72,15 @@ class _InviteSheetState extends ConsumerState<_InviteSheet> {
     }
   }
 
+  /// When the link stops working, in words.
+  ///
+  /// A date only once one is known: until the server has answered there is no
+  /// expiry to quote, and inventing one would be a promise the link cannot
+  /// keep.
+  String get _expiry => _expires == null
+      ? 'shortly'
+      : 'on ${_expires!.toLocal().toString().split(' ').first}';
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -132,8 +141,7 @@ class _InviteSheetState extends ConsumerState<_InviteSheet> {
             Text(
               'Send this to ${widget.member.displayName}. Opening it puts them '
               'straight into the group — no signup, nothing to install first. '
-              'It works once and expires '
-              '${_expires == null ? 'shortly' : 'on ${_expires!.toLocal().toString().split(' ').first}'}.',
+              'It works once and expires $_expiry.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 8),

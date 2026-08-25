@@ -100,9 +100,9 @@ final class DriftGroupRepository {
       name: trimmed,
       defaultCurrency: defaultCurrency,
       isDirect: isDirect,
-      // `createdBy` is a profile id, which an anonymous local-only user does not
-      // have yet. Falling back to the owner member id keeps the column
-      // populated and is corrected when the account is linked.
+      // `createdBy` is a profile id, which an anonymous local-only user
+      // does not have yet. Falling back to the owner member id keeps the
+      // column populated and is corrected when the account is linked.
       createdBy: ownerProfileId ?? '',
       createdAt: now,
     );

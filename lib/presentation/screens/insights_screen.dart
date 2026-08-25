@@ -51,79 +51,106 @@ class InsightsScreen extends ConsumerWidget {
       body: PageBody(
         child: ledger == null
             ? const SizedBox.shrink()
-            : ListView(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-                children: [
-                  // SearchBar is Material 3's search field: a pill-shaped bar
-                  // on surfaceContainerHigh with its own elevation and
-                  // leading/trailing slots. A TextField dressed up with a
-                  // prefixIcon is the Material 2 way of drawing one.
-                  SearchBar(
-                    hintText: 'Search descriptions and notes',
-                    leading: const Icon(Icons.search),
-                    trailing: [
-                      if (filter.query.isNotEmpty)
-                        IconButton(
-                          icon: const Icon(Icons.clear),
-                          tooltip: 'Clear search',
-                          onPressed: () =>
-                              controller.update(filter.copyWith(query: '')),
-                        ),
-                    ],
-                    onChanged: (value) =>
-                        controller.update(filter.copyWith(query: value)),
-                  ),
-                  const SizedBox(height: 12),
-                  if (used.length > 1)
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        for (final code in used)
-                          ChoiceChip(
-                            label: Text(code),
-                            selected: active == code,
-                            onSelected: (_) => controller.update(
-                              filter.copyWith(currency: code),
+            // A CustomScrollView rather than a ListView because the search
+            // results underneath are unbounded — every entry in the group can
+            // match — and a ListView's children are all built at once. The
+            // fixed part of the page is a handful of widgets, so it stays a
+            // plain list; only the results need to be lazy. Nesting a second
+            // scrollable would have been the other way to get there, and it is
+            // the wrong one: two scroll positions in one gesture.
+            : CustomScrollView(
+                slivers: [
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                    sliver: SliverMainAxisGroup(
+                      slivers: [
+                        SliverList.list(
+                          children: [
+                            // SearchBar is Material 3's search field: a
+                            // pill-shaped bar on surfaceContainerHigh with its
+                            // own elevation and leading/trailing slots. A
+                            // TextField dressed up with a prefixIcon is the
+                            // Material 2 way of drawing one.
+                            SearchBar(
+                              hintText: 'Search descriptions and notes',
+                              leading: const Icon(Icons.search),
+                              trailing: [
+                                if (filter.query.isNotEmpty)
+                                  IconButton(
+                                    icon: const Icon(Icons.clear),
+                                    tooltip: 'Clear search',
+                                    onPressed: () => controller.update(
+                                      filter.copyWith(query: ''),
+                                    ),
+                                  ),
+                              ],
+                              onChanged: (value) => controller.update(
+                                filter.copyWith(query: value),
+                              ),
                             ),
-                          ),
+                            const SizedBox(height: 12),
+                            if (used.length > 1)
+                              Wrap(
+                                spacing: 8,
+                                children: [
+                                  for (final code in used)
+                                    ChoiceChip(
+                                      label: Text(code),
+                                      selected: active == code,
+                                      onSelected: (_) => controller.update(
+                                        filter.copyWith(currency: code),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            const SizedBox(height: 8),
+                            _MemberFilter(
+                              groupId: groupId,
+                              filter: filter,
+                              onChanged: controller.update,
+                            ),
+                            if (filter.isNarrowed)
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: TextButton.icon(
+                                  onPressed: controller.reset,
+                                  icon: const Icon(
+                                    Icons.filter_alt_off_outlined,
+                                  ),
+                                  label: const Text('Clear filters'),
+                                ),
+                              ),
+                            const SizedBox(height: 8),
+                            _Section(
+                              title: 'By category',
+                              buckets: ref.watch(
+                                spendByCategoryProvider(groupId),
+                              ),
+                              currencies: currencies,
+                            ),
+                            _Section(
+                              title: 'By person',
+                              subtitle:
+                                  'What each person consumed, not what they '
+                                  'happened to pay.',
+                              buckets: ref.watch(
+                                spendByMemberProvider(groupId),
+                              ),
+                              currencies: currencies,
+                            ),
+                            _Section(
+                              title: 'Over time',
+                              buckets: ref.watch(spendByMonthProvider(groupId)),
+                              currencies: currencies,
+                              sorted: false,
+                            ),
+                            const SizedBox(height: 8),
+                          ],
+                        ),
+                        _Results(groupId: groupId, currencies: currencies),
                       ],
                     ),
-                  const SizedBox(height: 8),
-                  _MemberFilter(
-                    groupId: groupId,
-                    filter: filter,
-                    onChanged: controller.update,
                   ),
-                  if (filter.isNarrowed)
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        onPressed: controller.reset,
-                        icon: const Icon(Icons.filter_alt_off_outlined),
-                        label: const Text('Clear filters'),
-                      ),
-                    ),
-                  const SizedBox(height: 8),
-                  _Section(
-                    title: 'By category',
-                    buckets: ref.watch(spendByCategoryProvider(groupId)),
-                    currencies: currencies,
-                  ),
-                  _Section(
-                    title: 'By person',
-                    subtitle:
-                        'What each person consumed, not what they happened to pay.',
-                    buckets: ref.watch(spendByMemberProvider(groupId)),
-                    currencies: currencies,
-                  ),
-                  _Section(
-                    title: 'Over time',
-                    buckets: ref.watch(spendByMonthProvider(groupId)),
-                    currencies: currencies,
-                    sorted: false,
-                  ),
-                  const SizedBox(height: 8),
-                  _Results(groupId: groupId, currencies: currencies),
                 ],
               ),
       ),
@@ -296,39 +323,49 @@ class _Results extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final filter = ref.watch(analyticsFilterControllerProvider(groupId));
-    if (!filter.isNarrowed) return const SizedBox.shrink();
+    if (!filter.isNarrowed) return const SliverToBoxAdapter();
 
     final results = ref.watch(analyticsResultsProvider(groupId)).value;
-    if (results == null) return const SizedBox.shrink();
+    if (results == null) return const SliverToBoxAdapter();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 16),
-        Text(
-          '${results.length} matching ${results.length == 1 ? 'entry' : 'entries'}',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-        const SizedBox(height: 8),
-        Card.outlined(
-          child: Column(
-            children: [
-              for (final entry in results)
-                ListTile(
-                  onTap: () => context.push('/g/$groupId/e/${entry.id}'),
-                  title: Text(
-                    entry.description.isEmpty ? 'Expense' : entry.description,
-                  ),
-                  subtitle: Text(DateFormat.yMMMd().format(entry.entryDate)),
-                  trailing: Text(
-                    formatMoney(currencies[entry.currency], entry.amountMinor),
-                    style: moneyStyle(
-                      Theme.of(context).textTheme.bodyMedium!,
-                    ),
-                  ),
-                ),
-            ],
+    // Slivers rather than widgets, so the rows are built as they are scrolled
+    // to. There is no upper bound on how many entries a search matches.
+    //
+    // The rows are a plain divided list rather than the card the summary
+    // sections above use. A card is a container for a bounded, glanceable
+    // group, and it also cannot wrap a lazy list without hand-drawing its own
+    // border — which is the thing this app just stopped doing. Material's own
+    // pattern for a result set of unknown length is a list on the surface.
+    return SliverMainAxisGroup(
+      slivers: [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 16, bottom: 8),
+            child: Text(
+              '${results.length} matching '
+              '${results.length == 1 ? 'entry' : 'entries'}',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
           ),
+        ),
+        SliverList.separated(
+          itemCount: results.length,
+          separatorBuilder: (_, _) => const Divider(height: 1),
+          itemBuilder: (context, index) {
+            final entry = results[index];
+            return ListTile(
+              contentPadding: EdgeInsets.zero,
+              onTap: () => context.push('/g/$groupId/e/${entry.id}'),
+              title: Text(
+                entry.description.isEmpty ? 'Expense' : entry.description,
+              ),
+              subtitle: Text(DateFormat.yMMMd().format(entry.entryDate)),
+              trailing: Text(
+                formatMoney(currencies[entry.currency], entry.amountMinor),
+                style: moneyStyle(Theme.of(context).textTheme.bodyMedium!),
+              ),
+            );
+          },
         ),
       ],
     );

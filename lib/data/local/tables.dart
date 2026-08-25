@@ -108,7 +108,8 @@ class Categories extends Table {
   TextColumn get id => text()();
   TextColumn get name => text()();
 
-  /// Material icon name, resolved through a static map. See `category_icon.dart`.
+  /// Material icon name, resolved through a static map. See
+  /// `category_icon.dart`.
   TextColumn get icon => text()();
 
   @override

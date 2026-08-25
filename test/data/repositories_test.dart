@@ -38,7 +38,7 @@ void main() {
       expect((await currencies.byCode('KWD'))!.exponent, 3);
     });
 
-    test('ships the category list with ids fixed to match the server', () async {
+    test('ships the category list with ids fixed to the server', () async {
       final rows = await db.select(db.categories).get();
       expect(rows, hasLength(presetCategories.length));
 
@@ -47,7 +47,8 @@ void main() {
       // sequential placeholder is easy to retype wrongly and impossible to
       // tell apart from a legitimate id at a glance.
       final uuid = RegExp(
-        r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+        r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}'
+        r'-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
       );
       expect(rows.every((r) => uuid.hasMatch(r.id)), isTrue);
       expect(rows.map((r) => r.id).toSet(), hasLength(rows.length));

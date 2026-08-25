@@ -137,7 +137,11 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
     final whole = micros ~/ weightScale;
     final frac = micros % weightScale;
     if (frac == 0) return '$whole';
-    return '$whole.${frac.toString().padLeft(6, '0').replaceAll(RegExp(r'0+$'), '')}';
+    final decimals = frac
+        .toString()
+        .padLeft(6, '0')
+        .replaceAll(RegExp(r'0+$'), '');
+    return '$whole.$decimals';
   }
 
   /// Parses a decimal string into units of 10^-6, the precision the weight
@@ -431,8 +435,8 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
             if (currency != null &&
                 currency.code != ledger.group.defaultCurrency)
               Text(
-                'Stored in ${currency.code}. Balances in a group are always kept '
-                'per currency, never converted.',
+                'Stored in ${currency.code}. Balances in a group are '
+                'always kept per currency, never converted.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             const SizedBox(height: 16),

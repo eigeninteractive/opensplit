@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -32,11 +34,23 @@ Future<void> main() async {
         url: supabaseUrl,
         publishableKey: supabasePublishableKey,
       );
-    } catch (error) {
+    } catch (error, stackTrace) {
       // Startup must not depend on reaching a server. Every screen is rendered
       // from the local database, so a build that cannot initialise its backend
       // is still a working app — it simply will not sync.
-      debugPrint('OpenSplit: continuing without a backend ($error)');
+      //
+      // developer.log rather than a print: this carries the error and the trace
+      // as structured fields, so DevTools shows it as one collapsible entry
+      // with a real stack instead of a line of text, and level 900 (WARNING)
+      // says what it is. A print would also have gone to release console output
+      // on the web, where anyone can read it.
+      developer.log(
+        'Continuing without a backend',
+        name: 'opensplit.startup',
+        level: 900,
+        error: error,
+        stackTrace: stackTrace,
+      );
     }
   }
 

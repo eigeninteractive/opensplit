@@ -102,8 +102,9 @@ ThemeData buildTheme(Brightness brightness, [ColorScheme? dynamicScheme]) {
     appBarTheme: const AppBarThemeData(centerTitle: false),
     // Deliberately says nothing about elevation, colour or shape. Those are
     // what distinguishes Card, Card.filled and Card.outlined from each other,
-    // and anything set here overrides all three at once — which is how this app
-    // ended up hand-rolling an outlined card badly. Call sites pick the variant.
+    // and anything set here overrides all three at once — which is how this
+    // app ended up hand-rolling an outlined card badly. Call sites pick the
+    // variant.
     cardTheme: const CardThemeData(
       clipBehavior: Clip.antiAlias,
       // Not a Material value. `margin: EdgeInsets.all(4)` is a literal in

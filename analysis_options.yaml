@@ -11,4 +11,13 @@ analyzer:
     # reference implementations, not app code — what this project uses from
     # them now lives in lib/presentation/theme.dart. See docs/BRAND.md.
     - brand/**
+
+  # riverpod_lint ships as a custom_lint plugin rather than as analyzer rules,
+  # and custom_lint only runs when it is named here. Both have been dev
+  # dependencies for a while without this line, which meant every riverpod rule
+  # was installed and silent. Run on its own with `dart run custom_lint`; the
+  # IDE picks it up from this entry.
+  plugins:
+    - custom_lint
+
 include: package:flutter_lints/flutter.yaml

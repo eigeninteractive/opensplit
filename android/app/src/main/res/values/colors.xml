@@ -15,5 +15,5 @@
      test/presentation/theme_test.dart. -->
 <resources>
     <color name="surface">#fcf8ff</color>
-    <color name="ic_launcher_background">#e3dfff</color>
+    <color name="ic_launcher_background">#E3DFFF</color>
 </resources>

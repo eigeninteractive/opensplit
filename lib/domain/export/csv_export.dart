@@ -53,11 +53,13 @@ String entriesToCsv(
         money(entry.currency, entry.amountMinor),
         [
           for (final payer in entry.payers)
-            '${name(payer.memberId)}: ${money(entry.currency, payer.amountMinor)}',
+            '${name(payer.memberId)}: '
+                '${money(entry.currency, payer.amountMinor)}',
         ].join('; '),
         [
           for (final share in entry.shares)
-            '${name(share.memberId)}: ${money(entry.currency, share.amountMinor)}',
+            '${name(share.memberId)}: '
+                '${money(entry.currency, share.amountMinor)}',
         ].join('; '),
         entry.notes ?? '',
       ]),

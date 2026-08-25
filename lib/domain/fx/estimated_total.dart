@@ -43,8 +43,8 @@ class EstimatedTotal {
 /// unanswered, and the "what do I owe now" question already has an exact answer
 /// that needs no conversion at all: the per-currency balances.
 ///
-/// So this one means "what this came to at the time", every part of it traceable
-/// to a rate stamped on a specific expense on a specific day.
+/// So this one means "what this came to at the time", every part of it
+/// traceable to a rate stamped on a specific expense on a specific day.
 ///
 /// Rounding happens per entry rather than once at the end. That costs a minor
 /// unit here and there against a mathematically ideal sum, and buys the thing
