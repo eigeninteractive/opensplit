@@ -3,12 +3,15 @@
     "short_name": "OpenSplit",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#fcf8ff",
-    "theme_color": "#fcf8ff",
+    "background_color": "#FCF8FF",
+    "theme_color": "#FCF8FF",
     "description": "Split expenses with friends. Free forever, no ads, works offline, open source.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
-    "categories": ["finance", "productivity"],
+    "categories": [
+        "finance",
+        "productivity"
+    ],
     "icons": [
         {
             "src": "icons/Icon-192.png",

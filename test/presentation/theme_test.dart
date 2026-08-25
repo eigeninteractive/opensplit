@@ -141,8 +141,27 @@ void main() {
               as Map<String, dynamic>;
 
       // What the browser paints before a single byte of the app has parsed.
-      expect(manifest['background_color'], _hex(surface));
-      expect(manifest['theme_color'], _hex(surface));
+      //
+      // Lower-cased before comparing because this file is rewritten in place by
+      // `dart run flutter_launcher_icons`, which copies the colours out of
+      // flutter_launcher_icons.yaml verbatim — and hex is written upper case
+      // there, as every other generator config in this repo writes it.
+      for (final key in ['background_color', 'theme_color']) {
+        expect(
+          (manifest[key] as String).toLowerCase(),
+          _hex(surface),
+          reason: 'web/manifest.json $key must be ColorScheme.surface',
+        );
+      }
+
+      // The generator's own copy of the same two values, so that regenerating
+      // cannot quietly put the brand's primary back into the browser chrome.
+      final config = File('flutter_launcher_icons.yaml').readAsStringSync();
+      for (final key in ['background_color', 'theme_color']) {
+        final declared = RegExp('$key: "(#[0-9a-fA-F]{6})"').firstMatch(config);
+        expect(declared, isNotNull, reason: 'no web $key in the icon config');
+        expect(declared!.group(1)!.toLowerCase(), _hex(surface));
+      }
     });
   });
 

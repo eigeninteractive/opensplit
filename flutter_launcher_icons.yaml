@@ -17,9 +17,20 @@ flutter_launcher_icons:
   # the user's wallpaper palette.
   adaptive_icon_monochrome: "assets/icon/icon-monochrome.png"
 
-  # The kit ships hand-built web icons whose maskable variants already carry the
-  # safe-area padding, and this generator would overwrite them with naive scales
-  # of icon.png. It also rewrites web/manifest.json, which is maintained by hand
-  # here so that its colours stay in step with the theme.
+  # Web icons come from here too, rather than being kept by hand. The concern
+  # was the maskable variants — a launcher crops those to a circle 80% of the
+  # icon's width, and this generator writes the maskable file as a byte-identical
+  # copy of the plain one rather than padding it. Measured, though, the mark
+  # spans 59% of the canvas, so it clears that mask with room to spare and the
+  # copy is fine.
+  #
+  # This also rewrites web/manifest.json in place, keeping the fields it does not
+  # own. background_color and theme_color are both ColorScheme.surface: the
+  # browser paints theme_color immediately above the app bar, which sits on the
+  # surface, so the primary that docs/BRAND.md suggests would draw a violet band
+  # against a near-white bar. A test holds both against the running theme.
   web:
-    generate: false
+    generate: true
+    image_path: "assets/icon/icon.png"
+    background_color: "#FCF8FF"
+    theme_color: "#FCF8FF"
