@@ -55,7 +55,7 @@ class LinkAccountPrompt extends ConsumerWidget {
           child: const Text('Not now'),
         ),
         FilledButton(
-          onPressed: () => context.push('/settings'),
+          onPressed: () => context.push('/account'),
           child: const Text('Save my account'),
         ),
       ],

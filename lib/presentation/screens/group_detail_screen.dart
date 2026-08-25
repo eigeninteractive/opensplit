@@ -11,6 +11,7 @@ import '../navigation.dart';
 import '../theme.dart';
 import '../widgets/balance_arrow.dart';
 import '../widgets/balances_panel.dart';
+import '../widgets/link_account_prompt.dart';
 import '../widgets/page_body.dart';
 import '../widgets/unsynced_changes_banner.dart';
 
@@ -91,6 +92,15 @@ class GroupDetailScreen extends ConsumerWidget {
             // together, and it must be visible on whichever tab is open.
             const UnsyncedChangesBanner(
               padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+            ),
+            // Also here, not only on the group list. Someone who arrived on an
+            // invite link lands inside a group and stays there — they have the
+            // most to lose, since the group is shared and their share of it is
+            // real, and they are the least likely ever to see the list screen
+            // the other copy of this sits on.
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: LinkAccountPrompt(),
             ),
             Expanded(
               child: wide

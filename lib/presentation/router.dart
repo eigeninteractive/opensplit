@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import 'screens/account_screen.dart';
 import 'screens/entry_editor_screen.dart';
 import 'screens/group_detail_screen.dart';
 import 'screens/group_list_screen.dart';
@@ -42,6 +43,13 @@ GoRouter buildRouter() => GoRouter(
           path: '/settings',
           pageBuilder: (context, state) =>
               const NoTransitionPage(child: SettingsScreen()),
+        ),
+        // Pushed rather than lateral: it is reached from Settings and from the
+        // prompt on the group list, and both want a back arrow that returns
+        // where it came from.
+        GoRoute(
+          path: '/account',
+          builder: (context, state) => const AccountScreen(),
         ),
         // The link a friend sends. Deliberately free of any guard: this route
         // has to work for someone who has never opened the app before.

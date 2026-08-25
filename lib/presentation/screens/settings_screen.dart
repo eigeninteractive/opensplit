@@ -5,8 +5,9 @@ import '../widgets/page_body.dart';
 import '../../application/providers.dart';
 import '../../config.dart';
 import '../../domain/settle/upi.dart';
+import 'package:go_router/go_router.dart';
+
 import '../theme_mode.dart';
-import '../widgets/account_section.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -61,6 +62,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            const _AccountRow(),
             Text('You', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
             TextField(
@@ -98,8 +100,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const _NotificationSetting(),
             ],
             const Divider(height: 48),
-            const AccountSection(),
-            const Divider(height: 48),
             const ListTile(
               contentPadding: EdgeInsets.zero,
               leading: Icon(Icons.lock_outline),
@@ -121,6 +121,63 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               isThreeLine: true,
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// What the account is, at the top of the screen where it is read first.
+///
+/// Settings pages put the account first because it is the thing a user checks
+/// rather than changes, and because "am I actually signed in?" is the question
+/// this screen most often gets opened to answer. It used to be answerable only
+/// by scrolling past three other sections to a form.
+///
+/// Leads to a screen rather than expanding in place. The linking flow has its
+/// own state — an email field, a sent code, an error — and a settings list is
+/// the wrong container for something with steps.
+class _AccountRow extends ConsumerWidget {
+  const _AccountRow();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final account = ref.watch(accountProvider).value;
+
+    // No backend configured, so there is no account to have.
+    if (account == null) return const SizedBox.shrink();
+
+    final scheme = Theme.of(context).colorScheme;
+    final anonymous = account.isAnonymous;
+
+    return Card.filled(
+      // Coloured only while something needs doing. A permanent warning tint on
+      // a settled account would be crying wolf on every visit.
+      color: anonymous ? scheme.secondaryContainer : null,
+      child: ListTile(
+        onTap: () => context.push('/account'),
+        leading: Icon(
+          anonymous ? Icons.person_outline : Icons.verified_user_outlined,
+          color: anonymous ? scheme.onSecondaryContainer : null,
+        ),
+        title: Text(
+          anonymous ? 'Guest — nothing is backed up' : 'Account saved',
+          style: TextStyle(
+            color: anonymous ? scheme.onSecondaryContainer : null,
+          ),
+        ),
+        subtitle: Text(
+          anonymous
+              ? 'Add an email or use Google, so this survives losing the '
+                    'device.'
+              : account.email ?? 'You can sign in on another device.',
+          style: TextStyle(
+            color: anonymous ? scheme.onSecondaryContainer : null,
+          ),
+        ),
+        trailing: Icon(
+          Icons.chevron_right,
+          color: anonymous ? scheme.onSecondaryContainer : null,
         ),
       ),
     );
