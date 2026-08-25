@@ -1,0 +1,7 @@
+Roboto is licensed under the Apache License, Version 2.0.
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
+Roboto-Regular.ttf and Roboto-Medium.ttf are copied verbatim from the Flutter
+SDK's material_fonts artifacts. They are bundled so that the app never fetches
+a font from a third-party host at runtime.

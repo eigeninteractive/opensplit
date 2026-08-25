@@ -36,6 +36,8 @@ dependencies:
   # the one in package:flutter/material.dart — adopting it would mean migrating
   # every widget in the app off Flutter's own Material library.
   dynamic_color: ^1.9.0
+  google_fonts: ^8.2.1
+  web: ^1.1.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -50,3 +52,37 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  # Roboto, bundled rather than fetched.
+  #
+  # Flutter's web engine does not ship a font: it registers Roboto from
+  # https://fonts.gstatic.com and downloads it at startup. That is a request to
+  # Google on every cold load of an app whose whole promise is that it works
+  # offline and reports nothing, and until it lands every string on the page is
+  # laid out in a substitute face and then reflowed.
+  #
+  # Declaring the family here takes precedence, so the engine uses these and
+  # asks for nothing. 400 and 500 are the only weights Material 3's text theme
+  # uses; there is no italic anywhere in this app.
+  #
+  # Copied from the Flutter SDK's own material_fonts artifacts. Roboto is
+  # Apache 2.0 — see assets/google_fonts/LICENSE.
+  #
+  # The files live under assets/google_fonts/ and are declared twice, against
+  # one copy on disk, because two different things have to be satisfied:
+  #
+  #  - `fonts:` is what the web engine reads. It is the only thing that stops
+  #    it registering its own Roboto from fonts.gstatic.com.
+  #  - `assets:` is what package:google_fonts scans. With the files present it
+  #    resolves from the bundle, and allowRuntimeFetching is off in main.dart
+  #    so a miss throws rather than quietly reaching for the network.
+  assets:
+    - assets/google_fonts/
+
+  fonts:
+    - family: Roboto
+      fonts:
+        - asset: assets/google_fonts/Roboto-Regular.ttf
+          weight: 400
+        - asset: assets/google_fonts/Roboto-Medium.ttf
+          weight: 500

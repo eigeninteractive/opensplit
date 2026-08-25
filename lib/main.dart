@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -10,6 +11,13 @@ import 'presentation/app.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // google_fonts falls back to downloading a face it cannot find in the
+  // bundle. Everything this app uses is bundled, so a miss is a packaging
+  // mistake, and it should surface as one rather than as a silent request to
+  // Google on a user's first launch — which is exactly what an app promising
+  // to work offline and report nothing must not do.
+  GoogleFonts.config.allowRuntimeFetching = false;
 
   // Real paths, not hash fragments. A fragment is never sent to the server, so
   // a `#/g/123` URL cannot be an Android App Link — the whole "tap a shared
