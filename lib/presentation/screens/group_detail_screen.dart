@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-
-import '../navigation.dart';
 import 'package:intl/intl.dart';
 
 import '../../application/providers.dart';
-import '../widgets/balance_arrow.dart';
-import '../widgets/page_body.dart';
 import '../../domain/models/currency.dart';
 import '../../domain/models/entry.dart';
 import '../format.dart';
+import '../navigation.dart';
+import '../theme.dart';
+import '../widgets/balance_arrow.dart';
 import '../widgets/balances_panel.dart';
+import '../widgets/page_body.dart';
 import '../widgets/unsynced_changes_banner.dart';
 
 /// Width at which the two halves of a group stop competing for the screen.
@@ -223,9 +223,7 @@ class _EntryTile extends StatelessWidget {
         children: [
           Text(
             formatMoney(currency, entry.amountMinor),
-            style: Theme.of(
-              context,
-            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+            style: moneyStyle(Theme.of(context).textTheme.titleSmall!),
           ),
           if (me != null && myDelta != 0)
             BalanceAmount(
@@ -236,7 +234,9 @@ class _EntryTile extends StatelessWidget {
               semanticsLabel: myDelta > 0
                   ? 'you lent ${formatMoneyAbs(currency, myDelta)}'
                   : 'you owe ${formatMoneyAbs(currency, myDelta)}',
-              style: Theme.of(context).textTheme.bodySmall,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
             ),
         ],
       ),

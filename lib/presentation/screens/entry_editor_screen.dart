@@ -2,22 +2,22 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-import '../navigation.dart';
 import 'package:intl/intl.dart';
 
-import '../widgets/page_body.dart';
 import '../../application/providers.dart';
 import '../../domain/entry_draft.dart';
-import '../../domain/models/category.dart';
-import '../widgets/category_icon.dart';
 import '../../domain/fx/fx_quote.dart';
+import '../../domain/models/category.dart';
 import '../../domain/models/currency.dart';
 import '../../domain/models/entry.dart';
 import '../../domain/split/allocation.dart';
 import '../../domain/split/splitter.dart';
 import '../format.dart';
+import '../navigation.dart';
+import '../theme.dart';
+import '../widgets/category_icon.dart';
 import '../widgets/currency_picker.dart';
+import '../widgets/page_body.dart';
 
 /// Creates or edits an expense.
 ///
@@ -712,7 +712,12 @@ class _SplitSection extends StatelessWidget {
                         (member.id == ledger.me?.id ? ' (you)' : ''),
                   ),
                   subtitle: preview != null && participants.contains(member.id)
-                      ? Text(formatMoney(currency, preview[member.id] ?? 0))
+                      ? Text(
+                          formatMoney(currency, preview[member.id] ?? 0),
+                          style: moneyStyle(
+                            Theme.of(context).textTheme.bodySmall!,
+                          ),
+                        )
                       : null,
                   onChanged: (checked) {
                     if (checked ?? false) {

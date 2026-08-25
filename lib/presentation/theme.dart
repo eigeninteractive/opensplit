@@ -142,6 +142,29 @@ ThemeData buildTheme(Brightness brightness, [ColorScheme? dynamicScheme]) {
   );
 }
 
+/// [style], with money set in the app's tabular face.
+///
+/// Amounts are the one thing in this app that get a face of their own, and the
+/// reason is alignment rather than decoration. A proportional font gives "1" a
+/// narrower advance than "8", so a column of figures in the balances panel does
+/// not line up at the decimal point and the eye cannot compare two rows without
+/// reading both. JetBrains Mono is monospaced, so every digit occupies the same
+/// width; [FontFeature.tabularFigures] states the requirement outright rather
+/// than relying on that being true of whichever face is passed.
+///
+/// Takes and returns a [TextStyle] rather than a size, so an amount keeps the
+/// size, height and colour of the type-scale style it sits in. Call it with the
+/// style the surrounding text already uses.
+///
+/// Prose is deliberately left alone. "You are owed ₹1,240" is a sentence, and
+/// setting one word of it in a monospaced face breaks the line for no gain —
+/// there is nothing to align a single inline figure against.
+TextStyle moneyStyle(TextStyle style) => GoogleFonts.jetBrainsMono(
+  textStyle: style,
+  fontWeight: FontWeight.w500,
+  fontFeatures: const [FontFeature.tabularFigures()],
+);
+
 /// Colour for a balance figure.
 ///
 /// Never the only signal. The wording says which way it goes, and

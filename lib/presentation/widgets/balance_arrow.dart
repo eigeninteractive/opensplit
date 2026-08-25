@@ -61,11 +61,21 @@ class BalanceAmount extends StatelessWidget {
   final int balanceMinor;
 
   /// The already-formatted, unsigned amount.
+  ///
+  /// Sometimes a bare figure and sometimes a short phrase around one — "₹500"
+  /// in a column of contributions, "is owed ₹500" beside a name.
   final String text;
 
   /// What a screen reader should say instead — in words, with the direction.
   final String semanticsLabel;
 
+  /// Carries the weight and the face, and only the colour is applied over it.
+  ///
+  /// Which one is right depends on what [text] is, so the caller chooses. A
+  /// bare figure wants `moneyStyle(...)`, the tabular face that lets a column
+  /// of amounts line up. A phrase wants the ordinary text face at a heavier
+  /// weight, because setting whole words in a monospace breaks the line for
+  /// nothing — there is no column to align a sentence against.
   final TextStyle? style;
 
   @override
@@ -73,7 +83,6 @@ class BalanceAmount extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final resolved = (style ?? DefaultTextStyle.of(context).style).copyWith(
       color: balanceColor(scheme, balanceMinor),
-      fontWeight: FontWeight.w600,
     );
 
     return Semantics(

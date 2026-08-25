@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-
-import '../navigation.dart';
 import 'package:intl/intl.dart';
 
-import '../widgets/page_body.dart';
 import '../../application/providers.dart';
-import '../../domain/models/currency.dart';
 import '../../domain/analytics/analytics_query.dart';
+import '../../domain/models/currency.dart';
 import '../format.dart';
+import '../navigation.dart';
+import '../theme.dart';
 import '../widgets/export_button.dart';
+import '../widgets/page_body.dart';
 
 /// Spend analytics and search.
 ///
@@ -221,8 +221,9 @@ class _Section extends StatelessWidget {
                                 currencies[bucket.currency],
                                 bucket.amountMinor,
                               ),
-                              style: Theme.of(context).textTheme.bodyMedium
-                                  ?.copyWith(fontWeight: FontWeight.w600),
+                              style: moneyStyle(
+                                Theme.of(context).textTheme.bodyMedium!,
+                              ),
                             ),
                           ],
                         ),
@@ -321,6 +322,9 @@ class _Results extends ConsumerWidget {
                   subtitle: Text(DateFormat.yMMMd().format(entry.entryDate)),
                   trailing: Text(
                     formatMoney(currencies[entry.currency], entry.amountMinor),
+                    style: moneyStyle(
+                      Theme.of(context).textTheme.bodyMedium!,
+                    ),
                   ),
                 ),
             ],
