@@ -25,7 +25,7 @@ class GroupListScreen extends ConsumerWidget {
         title: const Text('OpenSplit'),
         actions: [
           IconButton(
-            onPressed: () => context.go('/settings'),
+            onPressed: () => context.push('/settings'),
             icon: const Icon(Icons.settings_outlined),
             tooltip: 'Settings',
           ),
@@ -92,7 +92,7 @@ class _GroupTile extends ConsumerWidget {
 
     return Card.outlined(
       child: InkWell(
-        onTap: () => context.go('/g/${group.id}'),
+        onTap: () => context.push('/g/${group.id}'),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(

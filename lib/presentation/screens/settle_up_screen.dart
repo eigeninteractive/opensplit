@@ -1,7 +1,8 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+
+import '../navigation.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -110,9 +111,8 @@ class _SettleUpScreenState extends ConsumerState<SettleUpScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/g/${widget.groupId}'),
+        leading: BackButton(
+          onPressed: () => goBack(context, '/g/${widget.groupId}'),
         ),
         title: const Text('Settle up'),
       ),
@@ -234,7 +234,7 @@ class _SettleUpScreenState extends ConsumerState<SettleUpScreen> {
           );
 
       if (!mounted) return;
-      context.go('/g/${widget.groupId}');
+      goBack(context, '/g/${widget.groupId}');
     } catch (error) {
       if (!mounted) return;
       setState(() => _amountError = '$error');

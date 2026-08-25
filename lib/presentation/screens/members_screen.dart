@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+
+import '../navigation.dart';
 
 import '../widgets/page_body.dart';
 import '../../application/providers.dart';
@@ -20,10 +21,7 @@ class MembersScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/g/$groupId'),
-        ),
+        leading: BackButton(onPressed: () => goBack(context, '/g/$groupId')),
         title: const Text('People'),
       ),
       floatingActionButton: FloatingActionButton.extended(

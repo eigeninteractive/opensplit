@@ -2,7 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+
+import '../navigation.dart';
 import 'package:intl/intl.dart';
 
 import '../widgets/page_body.dart';
@@ -252,7 +253,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
         );
       }
       if (!mounted) return;
-      context.go('/g/${widget.groupId}');
+      goBack(context, '/g/${widget.groupId}');
     } on SplitException catch (e) {
       // The domain refused it, so nothing was written. Its messages are written
       // for people, so they are shown as-is.
@@ -310,7 +311,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
     if (!(confirmed ?? false)) return;
 
     await ref.read(entryRepositoryProvider).delete(widget.entryId!);
-    if (mounted) context.go('/g/${widget.groupId}');
+    if (mounted) goBack(context, '/g/${widget.groupId}');
   }
 
   @override
@@ -369,9 +370,8 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => context.go('/g/${widget.groupId}'),
+        leading: CloseButton(
+          onPressed: () => goBack(context, '/g/${widget.groupId}'),
         ),
         title: Text(widget.isEditing ? 'Edit expense' : 'Add expense'),
         actions: [

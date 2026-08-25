@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
+import '../navigation.dart';
 import 'package:intl/intl.dart';
 
 import '../../application/providers.dart';
@@ -44,25 +46,22 @@ class GroupDetailScreen extends ConsumerWidget {
 
     final scaffold = Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/'),
-        ),
+        leading: BackButton(onPressed: () => goBack(context, '/')),
         title: Text(ledger.group.name),
         actions: [
           IconButton(
             tooltip: 'People',
-            onPressed: () => context.go('/g/$groupId/members'),
+            onPressed: () => context.push('/g/$groupId/members'),
             icon: const Icon(Icons.people_outline),
           ),
           IconButton(
             tooltip: 'Insights',
-            onPressed: () => context.go('/g/$groupId/insights'),
+            onPressed: () => context.push('/g/$groupId/insights'),
             icon: const Icon(Icons.insights_outlined),
           ),
           IconButton(
             tooltip: 'Settle up',
-            onPressed: () => context.go('/g/$groupId/settle'),
+            onPressed: () => context.push('/g/$groupId/settle'),
             icon: const Icon(Icons.handshake_outlined),
           ),
         ],
@@ -76,7 +75,7 @@ class GroupDetailScreen extends ConsumerWidget {
               ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.go('/g/$groupId/add'),
+        onPressed: () => context.push('/g/$groupId/add'),
         icon: const Icon(Icons.add),
         label: const Text('Add expense'),
       ),
@@ -194,7 +193,7 @@ class _EntryTile extends StatelessWidget {
     }
 
     return ListTile(
-      onTap: () => context.go('/g/${ledger.group.id}/e/${entry.id}'),
+      onTap: () => context.push('/g/${ledger.group.id}/e/${entry.id}'),
       leading: CircleAvatar(
         backgroundColor: isSettlement
             ? scheme.tertiaryContainer

@@ -64,8 +64,9 @@ class _CreateGroupSheetState extends ConsumerState<_CreateGroupSheet> {
           );
 
       if (!mounted) return;
+      final router = GoRouter.of(context);
       Navigator.of(context).pop();
-      context.go('/g/${created.group.id}');
+      router.push('/g/${created.group.id}');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
