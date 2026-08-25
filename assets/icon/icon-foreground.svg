@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <mask id="slash">
+      <rect width="1024" height="1024" fill="#fff"></rect>
+      <rect x="443.4" y="170" width="137.2" height="684" fill="#000" transform="rotate(24 512 512)"></rect>
+    </mask>
+  </defs>
+  <circle cx="512" cy="512" r="190.9" fill="none" stroke="#5B5891" stroke-width="88.1" mask="url(#slash)"></circle>
+</svg>

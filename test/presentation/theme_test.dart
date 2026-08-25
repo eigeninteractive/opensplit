@@ -148,48 +148,121 @@ void main() {
 
   // The same problem the web skeleton has, on the other platform: Android
   // paints the window before a line of Dart runs — and on 12 and up paints a
-  // system splash screen over it — from a colour it can only read out of
-  // resources. The template shipped pure white and pure black there.
+  // system splash screen over it — from colours it can only read out of
+  // resources and generator configs.
+  //
+  // Most of these files are written by `dart run flutter_native_splash:create`
+  // and `dart run flutter_launcher_icons`, which is exactly why they are worth
+  // testing: regenerating them silently reverts anything corrected by hand, and
+  // the result is a flash on a cold start that no test would otherwise catch.
   group('the Android launch window', () {
+    String res(String path) =>
+        File('android/app/src/main/res/$path').readAsStringSync();
+
+    /// The body of one `<style name="...">` block.
+    String styleBlock(String variant, String theme) {
+      final styles = res('$variant/styles.xml');
+      final at = styles.indexOf('name="$theme"');
+      expect(at, isNot(-1), reason: 'no $theme in $variant/styles.xml');
+      return styles.substring(at, styles.indexOf('</style>', at));
+    }
+
     for (final brightness in Brightness.values) {
       final night = brightness == Brightness.dark;
-      final path =
-          'android/app/src/main/res/values${night ? '-night' : ''}/colors.xml';
+      final variant = night ? 'values-night' : 'values';
+      final surface = _hex(buildTheme(brightness).colorScheme.surface);
 
-      test('is the theme\'s surface in $brightness', () {
+      test('declares the theme\'s surface in $brightness', () {
         final declared = RegExp(
           r'<color name="surface">(#[0-9a-fA-F]{6})</color>',
-        ).firstMatch(File(path).readAsStringSync());
+        ).firstMatch(res('$variant/colors.xml'));
 
-        expect(declared, isNotNull, reason: 'no surface colour in $path');
+        expect(declared, isNotNull, reason: 'no surface in $variant/colors.xml');
         expect(
           declared!.group(1)!.toLowerCase(),
-          _hex(buildTheme(brightness).colorScheme.surface),
-          reason: '$path must hold ColorScheme.surface for $brightness',
+          surface,
+          reason: '$variant/colors.xml must hold ColorScheme.surface',
+        );
+      });
+
+      // NormalTheme is the window behind the running Flutter UI, visible during
+      // a rotation or a resize. flutter_native_splash writes v31 copies of both
+      // themes and leaves ?android:colorBackground — the platform's white — in
+      // this one, which shadows the corrected value on Android 12 and up. That
+      // is the whole reason this loop covers the v31 variants too.
+      for (final suffix in ['', '-v31']) {
+        test('paints NormalTheme in the surface ($variant$suffix)', () {
+          expect(
+            styleBlock('$variant$suffix', 'NormalTheme'),
+            contains('android:windowBackground">@color/surface'),
+            reason:
+                '$variant$suffix/NormalTheme must use @color/surface, not the '
+                "platform's own window background",
+          );
+        });
+      }
+
+      test('splashes on the surface in $brightness', () {
+        // Android 12+ draws the system splash from this attribute rather than
+        // from windowBackground, and it cannot be opted out of.
+        final declared = RegExp(
+          r'windowSplashScreenBackground">(#[0-9a-fA-F]{6})<',
+        ).firstMatch(res('$variant-v31/styles.xml'));
+
+        expect(declared, isNotNull, reason: 'no splash colour for $brightness');
+        expect(declared!.group(1)!.toLowerCase(), surface);
+      });
+
+      test('launches on the generated splash below Android 12', () {
+        expect(
+          styleBlock(variant, 'LaunchTheme'),
+          contains('android:windowBackground">@drawable/launch_background'),
+          reason:
+              '$variant/LaunchTheme must use the drawable '
+              'flutter_native_splash generates',
         );
       });
     }
 
-    test('is what both window themes actually use', () {
-      // A colour nothing points at would pass the check above and still leave
-      // the flash on screen.
-      for (final variant in ['values', 'values-night']) {
-        final styles = File(
-          'android/app/src/main/res/$variant/styles.xml',
-        ).readAsStringSync();
+    test('is what flutter_native_splash would regenerate', () {
+      // The resources above are outputs. This is the input they come from, so
+      // pinning only the outputs would let the next regeneration undo them.
+      final config = File('flutter_native_splash.yaml').readAsStringSync();
 
-        for (final theme in ['LaunchTheme', 'NormalTheme']) {
-          final block = styles.substring(
-            styles.indexOf('name="$theme"'),
-            styles.indexOf('</style>', styles.indexOf('name="$theme"')),
-          );
-          expect(
-            block,
-            contains('android:windowBackground">@color/surface'),
-            reason: '$variant/$theme must paint the window in the surface',
-          );
-        }
+      for (final (key, brightness) in [
+        ('color', Brightness.light),
+        ('color_dark', Brightness.dark),
+      ]) {
+        final declared = RegExp(
+          '$key: "(#[0-9a-fA-F]{6})"',
+        ).firstMatch(config);
+
+        expect(declared, isNotNull, reason: 'no $key in the splash config');
+        expect(
+          declared!.group(1)!.toLowerCase(),
+          _hex(buildTheme(brightness).colorScheme.surface),
+          reason: 'flutter_native_splash $key must be the theme\'s surface',
+        );
       }
+    });
+
+    test('gives the launcher icon the theme\'s container colour', () {
+      // The adaptive icon's background layer, which flutter_launcher_icons
+      // copies from its own config into colors.xml. Both are checked, because
+      // they are two files that have to agree and neither reads the other.
+      final light = buildTheme(Brightness.light).colorScheme;
+
+      final declared = RegExp(
+        r'<color name="ic_launcher_background">(#[0-9a-fA-F]{6})</color>',
+      ).firstMatch(res('values/colors.xml'));
+      expect(declared, isNotNull, reason: 'no ic_launcher_background declared');
+      expect(declared!.group(1)!.toLowerCase(), _hex(light.primaryContainer));
+
+      final configured = RegExp(
+        r'adaptive_icon_background: "(#[0-9a-fA-F]{6})"',
+      ).firstMatch(File('flutter_launcher_icons.yaml').readAsStringSync());
+      expect(configured, isNotNull, reason: 'no adaptive_icon_background set');
+      expect(configured!.group(1)!.toLowerCase(), _hex(light.primaryContainer));
     });
   });
 }

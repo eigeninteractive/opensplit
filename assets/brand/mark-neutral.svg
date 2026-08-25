@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" role="img" aria-label="OpenSplit">
+  <defs>
+    <mask id="slash">
+      <rect width="48" height="48" fill="#fff"></rect>
+      <rect x="20.75" y="-4" width="6.5" height="56" fill="#000" transform="rotate(24 24 24)"></rect>
+    </mask>
+  </defs>
+  <circle cx="24" cy="24" r="17" fill="none" stroke="#E4E1E9" stroke-width="6.5" mask="url(#slash)"></circle>
+</svg>

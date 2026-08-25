@@ -49,33 +49,41 @@ dev_dependencies:
   custom_lint: ^0.8.1
   riverpod_lint: ^3.1.0
   test: ^1.31.1
+  # Both are build-time generators, run by hand from the configs at the repo
+  # root. Their inputs live in assets/icon/ and assets/splash/, which are
+  # deliberately not bundled — nothing reads them at runtime.
+  flutter_launcher_icons: ^0.14.4
+  flutter_native_splash: ^2.4.7
 
 flutter:
   uses-material-design: true
 
-  # Roboto, bundled rather than fetched.
+  # Fonts, bundled rather than fetched.
   #
-  # Flutter's web engine does not ship a font: it registers Roboto from
-  # https://fonts.gstatic.com and downloads it at startup. That is a request to
-  # Google on every cold load of an app whose whole promise is that it works
-  # offline and reports nothing, and until it lands every string on the page is
-  # laid out in a substitute face and then reflowed.
+  # Flutter's web engine does not ship a font. It registers a family named
+  # "Roboto" as its own fallback and downloads it from https://fonts.gstatic.com
+  # at startup — a request to Google on every cold load of an app whose whole
+  # promise is that it works offline and reports nothing, and a reflow besides,
+  # since until it lands every string is laid out in a substitute face.
   #
-  # Declaring the family here takes precedence, so the engine uses these and
-  # asks for nothing. 400 and 500 are the only weights Material 3's text theme
-  # uses; there is no italic anywhere in this app.
+  # Two mechanisms are in play here, reading different keys against one folder
+  # on disk:
   #
-  # Copied from the Flutter SDK's own material_fonts artifacts. Roboto is
-  # Apache 2.0 — see assets/google_fonts/LICENSE.
+  #  - `fonts:` is what the engine reads. Declaring the family it is looking for
+  #    is the only thing that stops it fetching its own copy. Roboto is not this
+  #    app's typeface any more and only one weight is bundled; it is a fallback
+  #    face, and the engine synthesises the rest.
+  #  - `assets:` is what package:google_fonts scans, and it is how the brand
+  #    faces below are found. With the files present it resolves from the
+  #    bundle, and allowRuntimeFetching is off in main.dart so a packaging miss
+  #    throws instead of quietly reaching for the network.
   #
-  # The files live under assets/google_fonts/ and are declared twice, against
-  # one copy on disk, because two different things have to be satisfied:
-  #
-  #  - `fonts:` is what the web engine reads. It is the only thing that stops
-  #    it registering its own Roboto from fonts.gstatic.com.
-  #  - `assets:` is what package:google_fonts scans. With the files present it
-  #    resolves from the bundle, and allowRuntimeFetching is off in main.dart
-  #    so a miss throws rather than quietly reaching for the network.
+  # The brand faces need no `fonts:` entry: google_fonts matches them by
+  # filename, and the names here are the ones it builds from its own font
+  # descriptors. Instrument Sans carries 400 and 500 for Material 3's type scale
+  # plus 600, the one weight this app asks for by hand; JetBrains Mono carries
+  # only the 500 that money amounts are set in. See docs/BRAND.md, and
+  # assets/google_fonts/LICENSE for provenance.
   assets:
     - assets/google_fonts/
 
@@ -84,5 +92,3 @@ flutter:
       fonts:
         - asset: assets/google_fonts/Roboto-Regular.ttf
           weight: 400
-        - asset: assets/google_fonts/Roboto-Medium.ttf
-          weight: 500

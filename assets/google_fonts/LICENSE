@@ -1,7 +1,22 @@
-Roboto is licensed under the Apache License, Version 2.0.
+Fonts bundled with OpenSplit, so that the app never fetches one from a
+third-party host at runtime.
 
+Instrument Sans and JetBrains Mono
+    SIL Open Font License 1.1
+    https://openfontlicense.org
+
+    InstrumentSans-Regular.ttf, InstrumentSans-Medium.ttf,
+    InstrumentSans-SemiBold.ttf and JetBrainsMono-Medium.ttf are the exact
+    files package:google_fonts would otherwise download: each was fetched from
+    the URL that package builds and checked against the SHA-256 and byte length
+    recorded in its own font descriptors.
+
+Roboto
+    Apache License, Version 2.0
     https://www.apache.org/licenses/LICENSE-2.0
 
-Roboto-Regular.ttf and Roboto-Medium.ttf are copied verbatim from the Flutter
-SDK's material_fonts artifacts. They are bundled so that the app never fetches
-a font from a third-party host at runtime.
+    Roboto-Regular.ttf is copied verbatim from the Flutter SDK's material_fonts
+    artifacts. It is not the app's typeface. It is here because Flutter's web
+    engine registers a font family named "Roboto" as its own fallback and
+    downloads it from fonts.gstatic.com unless the app declares one — see the
+    `fonts:` block in pubspec.yaml.

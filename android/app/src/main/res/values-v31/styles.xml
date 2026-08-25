@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12 replaced the launch window with the SplashScreen API, which
+         draws the icon below in a masked circle over windowSplashScreenBackground
+         and cannot be opted out of. Written by
+         `dart run flutter_native_splash:create` from flutter_native_splash.yaml.
+
+         windowBackground is set as well, which the generator does not do. The
+         splash covers it, but it is what remains on screen in the moment
+         between the splash dismissing and Flutter's first frame. -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">@color/surface</item>
+        <item name="android:forceDarkAllowed">false</item>
+        <item name="android:windowFullscreen">false</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">false</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <item name="android:windowSplashScreenBackground">#FCF8FF</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/android12splash</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">#E3DFFF</item>
+    </style>
+
+    <!-- Same as the pre-31 NormalTheme, and stated again because this file
+         shadows it on Android 12 and up. The generator leaves
+         ?android:colorBackground here, which is the platform's white and is
+         exactly the flash the surface colour exists to prevent. -->
+    <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">@color/surface</item>
+    </style>
+</resources>

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="112" viewBox="0 0 180 112" role="img" aria-label="OpenSplit">
+  <defs>
+    <mask id="slash">
+      <rect width="180" height="112" fill="#fff"></rect>
+      <rect x="86.6" y="-4" width="6.8" height="76" fill="#000" transform="rotate(24 90 34)"></rect>
+    </mask>
+  </defs>
+  <circle cx="90" cy="34" r="18" fill="none" stroke="#5B5891" stroke-width="6.8" mask="url(#slash)"></circle>
+  <text x="90" y="98" text-anchor="middle" font-family="Instrument Sans, Helvetica, Arial, sans-serif" font-size="26" letter-spacing="-0.8" fill="#1B1B21"><tspan font-weight="400">Open</tspan><tspan font-weight="600">Split</tspan></text>
+</svg>

@@ -1,0 +1,25 @@
+# Regenerate with: dart run flutter_launcher_icons
+#
+# Inputs live in assets/icon/ and are not bundled with the app — nothing reads
+# them at runtime. See docs/BRAND.md for what each layer is and why the mark is
+# sized the way it is.
+flutter_launcher_icons:
+  image_path: "assets/icon/icon.png"
+
+  android: "launcher_icon"
+  min_sdk_android: 21
+  # primaryContainer in the light scheme. A flat colour rather than an image
+  # layer: the background of an adaptive icon is parallaxed and cropped by the
+  # launcher, and there is nothing in this one that needs to survive that.
+  adaptive_icon_background: "#E3DFFF"
+  adaptive_icon_foreground: "assets/icon/icon-foreground.png"
+  # Android 13+ themed icons, where the launcher recolours a monochrome layer to
+  # the user's wallpaper palette.
+  adaptive_icon_monochrome: "assets/icon/icon-monochrome.png"
+
+  # The kit ships hand-built web icons whose maskable variants already carry the
+  # safe-area padding, and this generator would overwrite them with naive scales
+  # of icon.png. It also rewrites web/manifest.json, which is maintained by hand
+  # here so that its colours stay in step with the theme.
+  web:
+    generate: false

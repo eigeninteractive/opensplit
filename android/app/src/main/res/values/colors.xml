@@ -1,13 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- ColorScheme.surface, in the one place Android can read before Dart runs.
+<!-- The two colours Android needs before a line of Dart has run.
 
-     This is the colour of the window from the moment the launcher animation
-     ends until Flutter draws its first frame, and on Android 12 and up it is
-     also the background of the system splash screen. Anything other than the
-     app's own surface shows as a flash on every cold start.
+     `surface` is ColorScheme.surface. It is the window behind the Flutter UI,
+     which shows during a rotation or a resize, and the window while the process
+     starts on releases older than Android 12. Anything other than the app's own
+     surface shows as a flash.
 
-     Kept in step with lib/presentation/theme.dart by a test — see
+     `ic_launcher_background` is ColorScheme.primaryContainer, and is the flat
+     background layer of the adaptive launcher icon. It is written here by
+     `dart run flutter_launcher_icons` from the value in
+     flutter_launcher_icons.yaml.
+
+     Both are kept in step with lib/presentation/theme.dart by a test — see
      test/presentation/theme_test.dart. -->
 <resources>
-    <color name="surface">#f4fbf8</color>
+    <color name="surface">#fcf8ff</color>
+    <color name="ic_launcher_background">#e3dfff</color>
 </resources>

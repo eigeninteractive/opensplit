@@ -7,7 +7,11 @@ import 'package:google_fonts/google_fonts.dart';
 /// Material 3 with a single seed colour, and no custom component themes beyond
 /// what earns its place. Light and dark are both first-class: an expense app is
 /// opened at restaurant tables at night as often as anywhere else.
-const _seed = Color(0xFF00695C);
+///
+/// The seed is the brand, and it is the only colour anyone should ever type.
+/// Everything else in the app is a role read off the [ColorScheme] this
+/// generates — see docs/BRAND.md, which is the source this value comes from.
+const _seed = Color(0xFF5B5891);
 
 /// Source colour for "owed to you", before harmonisation.
 ///
@@ -121,19 +125,21 @@ ThemeData buildTheme(Brightness brightness, [ColorScheme? dynamicScheme]) {
     ),
   );
 
-  // Roboto, resolved from the bundle rather than the network — see the
+  // Instrument Sans, resolved from the bundle rather than the network — see the
   // `fonts:`/`assets:` pair in pubspec.yaml and allowRuntimeFetching in
   // main.dart.
   //
-  // Applied to `base.textTheme` rather than called bare. GoogleFonts's
+  // Applied to Material 3's own type scale rather than replacing it: the sizes,
+  // weights and tracking are the ones the spec sets, and only the face changes.
+  //
+  // Applied to `base.textTheme` rather than called bare, too. GoogleFonts's
   // no-argument form falls back to `ThemeData.light().textTheme`, which carries
   // light-mode ink — near-black — and that survives into the dark theme, where
   // it is very nearly the surface colour. Passing the base the scheme just
   // produced keeps each brightness its own.
-  //
-  // This is Material's own default face, so nothing here changes what is on
-  // screen; it is the seam for swapping the whole app to another family later.
-  return base.copyWith(textTheme: GoogleFonts.robotoTextTheme(base.textTheme));
+  return base.copyWith(
+    textTheme: GoogleFonts.instrumentSansTextTheme(base.textTheme),
+  );
 }
 
 /// Colour for a balance figure.
