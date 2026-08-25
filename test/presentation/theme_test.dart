@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -80,4 +81,57 @@ void main() {
       );
     });
   });
+
+  // The same problem the web skeleton has, on the other platform: Android
+  // paints the window before a line of Dart runs — and on 12 and up paints a
+  // system splash screen over it — from a colour it can only read out of
+  // resources. The template shipped pure white and pure black there.
+  group('the Android launch window', () {
+    for (final brightness in Brightness.values) {
+      final night = brightness == Brightness.dark;
+      final path =
+          'android/app/src/main/res/values${night ? '-night' : ''}/colors.xml';
+
+      test('is the theme\'s surface in $brightness', () {
+        final declared = RegExp(
+          r'<color name="surface">(#[0-9a-fA-F]{6})</color>',
+        ).firstMatch(File(path).readAsStringSync());
+
+        expect(declared, isNotNull, reason: 'no surface colour in $path');
+        expect(
+          declared!.group(1)!.toLowerCase(),
+          _hex(buildTheme(brightness).colorScheme.surface),
+          reason: '$path must hold ColorScheme.surface for $brightness',
+        );
+      });
+    }
+
+    test('is what both window themes actually use', () {
+      // A colour nothing points at would pass the check above and still leave
+      // the flash on screen.
+      for (final variant in ['values', 'values-night']) {
+        final styles = File(
+          'android/app/src/main/res/$variant/styles.xml',
+        ).readAsStringSync();
+
+        for (final theme in ['LaunchTheme', 'NormalTheme']) {
+          final block = styles.substring(
+            styles.indexOf('name="$theme"'),
+            styles.indexOf('</style>', styles.indexOf('name="$theme"')),
+          );
+          expect(
+            block,
+            contains('android:windowBackground">@color/surface'),
+            reason: '$variant/$theme must paint the window in the surface',
+          );
+        }
+      }
+    });
+  });
+}
+
+String _hex(Color c) {
+  String channel(double v) =>
+      (v * 255).round().toRadixString(16).padLeft(2, '0');
+  return '#${channel(c.r)}${channel(c.g)}${channel(c.b)}';
 }

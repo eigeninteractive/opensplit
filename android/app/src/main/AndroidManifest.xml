@@ -1,6 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- enableOnBackInvokedCallback opts into Android 13+ predictive back, so
+         dragging the back gesture shows a live preview of where it will land
+         rather than a blank guess. Flutter's own
+         PredictiveBackPageTransitionsBuilder is already the default Android
+         page transition; without this manifest flag the framework never
+         receives the gesture progress, so that animation never runs. -->
     <application
-        android:label="opensplit"
+        android:enableOnBackInvokedCallback="true"
+        android:label="OpenSplit"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
