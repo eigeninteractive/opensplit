@@ -69,20 +69,22 @@ void main() {
     });
   });
 
-  group('navigation rail', () {
-    testWidgets('is absent on a phone, where the app bar is the navigation', (
-      tester,
-    ) async {
+  // One set of destinations, two presentations of it. Which one is on screen
+  // is the only thing the width decides — there is never both, and never
+  // neither.
+  group('the navigation surface', () {
+    testWidgets('is a bar along the bottom on a phone', (tester) async {
       tester.view.physicalSize = const Size(600, 1800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
       await _pumpApp(tester, db);
+      expect(find.byType(NavigationBar), findsOneWidget);
       expect(find.byType(NavigationRail), findsNothing);
       await _unmount(tester);
     });
 
-    testWidgets('appears on a desktop browser, which has no other chrome', (
+    testWidgets('is a rail on a desktop browser, which has no other chrome', (
       tester,
     ) async {
       tester.view.physicalSize = const Size(1400, 900);
@@ -91,8 +93,10 @@ void main() {
 
       await _pumpApp(tester, db);
       expect(find.byType(NavigationRail), findsOneWidget);
+      expect(find.byType(NavigationBar), findsNothing);
       expect(find.text('Groups'), findsOneWidget);
-      expect(find.text('Settings'), findsWidgets);
+      expect(find.text('Account'), findsOneWidget);
+      expect(find.text('Settings'), findsOneWidget);
       await _unmount(tester);
     });
 

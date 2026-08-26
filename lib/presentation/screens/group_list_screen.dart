@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../widgets/page_body.dart';
+import '../widgets/pull_to_sync.dart';
 import '../../application/providers.dart';
 import '../../data/web/boot_hint.dart';
 import '../../domain/models/currency.dart';
@@ -20,26 +21,26 @@ class GroupListScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final groupsAsync = ref.watch(groupsProvider());
+    // Archived groups are pulled in here rather than queried separately, so
+    // the list and the "archived" row at the bottom of it are two readings of
+    // one stream and cannot disagree about which group is where.
+    final groupsAsync = ref.watch(groupsProvider(includeArchived: true));
+    final all = groupsAsync.value ?? const <Group>[];
+    final groups = [
+      for (final group in all)
+        if (!group.isArchived) group,
+    ];
+    final archived = all.length - groups.length;
 
     // Leaves a note for the next cold start, so the web loader knows whether
     // to draw group cards or just the chrome. See [recordHasGroups] — it does
     // nothing on Android.
     if (groupsAsync.hasValue) {
-      recordHasGroups(groupsAsync.value!.isNotEmpty);
+      recordHasGroups(groups.isNotEmpty);
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const BrandLockup(),
-        actions: [
-          IconButton(
-            onPressed: () => context.push('/settings'),
-            icon: const Icon(Icons.settings_outlined),
-            tooltip: 'Settings',
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const BrandLockup()),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => showCreateGroupSheet(context),
         icon: const Icon(Icons.group_add_outlined),
@@ -50,11 +51,9 @@ class GroupListScreen extends ConsumerWidget {
           AsyncError(:final error) => _Message(
             text: 'Could not load groups.\n$error',
           ),
-          AsyncValue(hasValue: true, value: final groups?)
-              when groups.isEmpty =>
-            const _EmptyState(),
-          AsyncValue(hasValue: true, value: final groups?) => _GroupList(
+          AsyncValue(hasValue: true) => _GroupList(
             groups: groups,
+            archivedCount: archived,
           ),
           // The journal is local, so this window is a single frame rather
           // than anything the user perceives as loading.
@@ -66,26 +65,72 @@ class GroupListScreen extends ConsumerWidget {
 }
 
 class _GroupList extends StatelessWidget {
-  const _GroupList({required this.groups});
+  const _GroupList({required this.groups, required this.archivedCount});
 
   final List<Group> groups;
+  final int archivedCount;
 
   @override
   Widget build(BuildContext context) {
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-      // Two leading slots, each of which renders as nothing until it has
-      // something to say. The refused-write banner comes first: it is the one
-      // that means data is already wrong somewhere.
-      itemCount: groups.length + 2,
-      separatorBuilder: (_, _) => const SizedBox(height: 8),
-      itemBuilder: (context, index) => switch (index) {
-        0 => const UnsyncedChangesBanner(),
-        1 => const LinkAccountPrompt(),
-        _ => _GroupTile(group: groups[index - 2]),
-      },
+    // Two leading slots, each of which renders as nothing until it has
+    // something to say. The refused-write banner comes first: it is the one
+    // that means data is already wrong somewhere.
+    const leading = 2;
+    final empty = groups.isEmpty;
+    final rows = empty ? 1 : groups.length;
+    final trailing = archivedCount > 0 ? 1 : 0;
+
+    return PullToSync.everything(
+      child: ListView.separated(
+        // Always scrollable, so the gesture exists on a list too short to
+        // scroll — which is exactly the list a new device shows.
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+        itemCount: leading + rows + trailing,
+        separatorBuilder: (_, _) => const SizedBox(height: 8),
+        // Built lazily rather than assembled into a list, because every tile
+        // subscribes to its own group's ledger: off-screen groups should not
+        // be folding balances.
+        itemBuilder: (context, index) {
+          if (index == 0) return const UnsyncedChangesBanner();
+          if (index == 1) return const LinkAccountPrompt();
+
+          final row = index - leading;
+          if (empty) {
+            return row == 0
+                ? const _EmptyState()
+                : _ArchivedRow(count: archivedCount);
+          }
+          return row < groups.length
+              ? _GroupTile(group: groups[row])
+              : _ArchivedRow(count: archivedCount);
+        },
+      ),
     );
   }
+}
+
+/// The way to the groups that are no longer in this list.
+///
+/// At the bottom, and only when there is something behind it. An archived
+/// group is by definition one nobody is thinking about, so it earns a row
+/// rather than a permanent control in the app bar.
+class _ArchivedRow extends StatelessWidget {
+  const _ArchivedRow({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 8),
+    child: ListTile(
+      onTap: () => context.push('/archived'),
+      leading: const Icon(Icons.inventory_2_outlined),
+      title: Text('Archived groups ($count)'),
+      trailing: const Icon(Icons.chevron_right),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    ),
+  );
 }
 
 class _GroupTile extends ConsumerWidget {

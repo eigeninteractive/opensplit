@@ -11,6 +11,13 @@ import 'drift_entry_repository.dart';
 /// per-query cost, no cache to invalidate, and it all works with no connection.
 /// Searching your own expense history is not something worth charging for.
 ///
+/// All of it is watched rather than fetched. Every query here already declares
+/// what it reads from, which is the expensive half of making it live, and the
+/// alternative is a screen that answers as of the moment it was opened: a sync
+/// landing behind an open Insights tab, or an expense added in the pane beside
+/// it, would leave totals that disagree with the list they were computed from
+/// and nothing on screen to say so.
+///
 /// Settlements are excluded throughout. Paying a friend back is not spending,
 /// and counting it would double every settled expense.
 final class DriftAnalyticsRepository {
@@ -89,32 +96,33 @@ final class DriftAnalyticsRepository {
   static String _iso(DateTime date) =>
       DateTime.utc(date.year, date.month, date.day).toIso8601String();
 
-  Future<List<Entry>> search(AnalyticsFilter filter) async {
+  Stream<List<Entry>> search(AnalyticsFilter filter) {
     final where = _where(filter);
-    final rows = await _db
+    return _db
         .customSelect(
           'SELECT e.id FROM entries e WHERE ${where.sql} '
           'ORDER BY e.entry_date DESC, e.created_at DESC',
           variables: where.vars,
           readsFrom: {_db.entries, _db.entryShares},
         )
-        .get();
+        .watch()
+        .asyncMap((rows) async {
+          final ids = [for (final row in rows) row.read<String>('id')];
+          if (ids.isEmpty) return const <Entry>[];
 
-    final ids = [for (final row in rows) row.read<String>('id')];
-    if (ids.isEmpty) return const [];
-
-    // Reuse the repository so entries come back fully hydrated, rather than
-    // maintaining a second way to build one.
-    final repository = DriftEntryRepository(_db);
-    final entries = await repository.getEntries(filter.groupId);
-    final byId = {for (final entry in entries) entry.id: entry};
-    return [
-      for (final id in ids)
-        if (byId[id] != null) byId[id]!,
-    ];
+          // Reuse the repository so entries come back fully hydrated, rather
+          // than maintaining a second way to build one.
+          final repository = DriftEntryRepository(_db);
+          final entries = await repository.getEntries(filter.groupId);
+          final byId = {for (final entry in entries) entry.id: entry};
+          return [
+            for (final id in ids)
+              if (byId[id] != null) byId[id]!,
+          ];
+        });
   }
 
-  Future<List<SpendBucket>> _aggregate({
+  Stream<List<SpendBucket>> _aggregate({
     required AnalyticsFilter filter,
     required String keyExpression,
     required String labelExpression,
@@ -122,9 +130,9 @@ final class DriftAnalyticsRepository {
     required Set<ResultSetImplementation<Object, Object>> readsFrom,
     required String amountExpression,
     String? extraJoin,
-  }) async {
+  }) {
     final where = _where(filter);
-    final rows = await _db
+    return _db
         .customSelect(
           'SELECT $keyExpression AS bucket_key, '
           '$labelExpression AS bucket_label, '
@@ -138,21 +146,22 @@ final class DriftAnalyticsRepository {
           variables: where.vars,
           readsFrom: readsFrom,
         )
-        .get();
-
-    return [
-      for (final row in rows)
-        SpendBucket(
-          key: row.read<String?>('bucket_key') ?? '',
-          label: row.read<String?>('bucket_label') ?? 'Uncategorised',
-          currency: row.read<String>('currency'),
-          amountMinor: row.read<int>('total'),
-          entryCount: row.read<int>('entries'),
-        ),
-    ];
+        .watch()
+        .map(
+          (rows) => [
+            for (final row in rows)
+              SpendBucket(
+                key: row.read<String?>('bucket_key') ?? '',
+                label: row.read<String?>('bucket_label') ?? 'Uncategorised',
+                currency: row.read<String>('currency'),
+                amountMinor: row.read<int>('total'),
+                entryCount: row.read<int>('entries'),
+              ),
+          ],
+        );
   }
 
-  Future<List<SpendBucket>> spendByCategory(AnalyticsFilter filter) =>
+  Stream<List<SpendBucket>> spendByCategory(AnalyticsFilter filter) =>
       _aggregate(
         filter: filter,
         keyExpression: "COALESCE(e.category_id, '')",
@@ -165,7 +174,7 @@ final class DriftAnalyticsRepository {
 
   /// What each member personally consumed — the sum of their shares, not what
   /// they happened to pay.
-  Future<List<SpendBucket>> spendByMember(AnalyticsFilter filter) => _aggregate(
+  Stream<List<SpendBucket>> spendByMember(AnalyticsFilter filter) => _aggregate(
     filter: filter,
     keyExpression: 's.member_id',
     labelExpression: "COALESCE(m.display_name, '—')",
@@ -180,23 +189,22 @@ final class DriftAnalyticsRepository {
   );
 
   /// Totals by calendar month.
-  Future<List<SpendBucket>> spendByMonth(AnalyticsFilter filter) async {
-    final buckets = await _aggregate(
+  Stream<List<SpendBucket>> spendByMonth(AnalyticsFilter filter) {
+    return _aggregate(
       filter: filter,
       keyExpression: 'substr(e.entry_date, 1, 7)',
       labelExpression: 'substr(e.entry_date, 1, 7)',
       from: 'entries e',
       amountExpression: 'e.amount_minor',
       readsFrom: {_db.entries, _db.entryShares},
-    );
-    // Chronological rather than largest-first: a trend read out of order is
-    // not a trend.
-    return buckets..sort((a, b) => a.key.compareTo(b.key));
+      // Chronological rather than largest-first: a trend read out of order is
+      // not a trend.
+    ).map((buckets) => buckets..sort((a, b) => a.key.compareTo(b.key)));
   }
 
   /// Currencies this group actually holds, most used first.
-  Future<List<String>> currenciesUsed(String groupId) async {
-    final rows = await _db
+  Stream<List<String>> currenciesUsed(String groupId) {
+    return _db
         .customSelect(
           "SELECT currency, COUNT(*) AS n FROM entries "
           "WHERE group_id = ? AND deleted_at IS NULL "
@@ -204,7 +212,7 @@ final class DriftAnalyticsRepository {
           variables: [Variable<String>(groupId)],
           readsFrom: {_db.entries},
         )
-        .get();
-    return [for (final row in rows) row.read<String>('currency')];
+        .watch()
+        .map((rows) => [for (final row in rows) row.read<String>('currency')]);
   }
 }

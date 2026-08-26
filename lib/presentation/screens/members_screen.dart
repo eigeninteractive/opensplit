@@ -75,7 +75,7 @@ class MembersScreen extends ConsumerWidget {
                       trailing: PopupMenuButton<String>(
                         onSelected: (action) => switch (action) {
                           'invite' => showInviteSheet(context, ref, member),
-                          'me' => context.push('/account'),
+                          'me' => context.go('/account'),
                           'rename' => _rename(context, ref, member),
                           'upi' => _setUpi(context, ref, member),
                           'owner' => _makeOwner(context, ref, member),

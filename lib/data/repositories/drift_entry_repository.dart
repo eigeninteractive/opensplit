@@ -50,6 +50,19 @@ final class DriftEntryRepository {
   /// app targets that is microseconds, and it is what removes the spinner from
   /// every screen.
   ///
+  /// How many live entries this device holds, across every group.
+  ///
+  /// Counted in SQL rather than by reading every row and taking the length of
+  /// the result — this is watched for as long as the app is open, and the
+  /// caller only ever compares it against a small number.
+  Stream<int> watchTotalCount() {
+    final total = _db.entries.id.count();
+    final query = _db.selectOnly(_db.entries)
+      ..addColumns([total])
+      ..where(_db.entries.deletedAt.isNull());
+    return query.map((row) => row.read(total) ?? 0).watchSingle();
+  }
+
   /// Soft-deleted entries are excluded unless [includeDeleted] is set. The
   /// balance fold ignores them either way; history screens want them.
   Stream<List<Entry>> watchEntries(

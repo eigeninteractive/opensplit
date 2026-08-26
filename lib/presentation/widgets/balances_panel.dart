@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../application/providers.dart';
+import 'pull_to_sync.dart';
 import '../../domain/balance/member_balance.dart';
 import '../../domain/balance/simplify.dart';
 import '../../domain/models/currency.dart';
@@ -25,70 +26,83 @@ class BalancesPanel extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
 
     if (ledger.isSettled) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.check_circle_outline, size: 48, color: scheme.primary),
-              const SizedBox(height: 16),
-              Text(
-                'All settled up',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Nobody owes anybody anything.',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-      children: [
-        // The estimate leads, the exact per-currency figures follow directly
-        // beneath it. That is the "breakdown one tap away" requirement met
-        // without a tap: the authoritative numbers are never hidden behind the
-        // approximate one.
-        _EstimateCard(groupId: ledger.group.id),
-        for (final code in ledger.activeCurrencies) ...[
-          _CurrencySection(
-            ledger: ledger,
-            code: code,
-            currency: currencies[code],
-          ),
-          const SizedBox(height: 24),
-        ],
-        if (ledger.activeCurrencies.length > 1)
-          Card.outlined(
+      return PullToSync.group(
+        ledger.group.id,
+        child: FillsViewport(
+          child: Center(
             child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.info_outline, size: 20, color: scheme.primary),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'This group holds more than one currency. Each is '
-                      'settled on its own — cancelling one against another '
-                      'would quietly hand the exchange-rate risk to whoever '
-                      'the rounding favoured.',
-                      style: Theme.of(context).textTheme.bodySmall,
+                  Icon(
+                    Icons.check_circle_outline,
+                    size: 48,
+                    color: scheme.primary,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'All settled up',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Nobody owes anybody anything.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
                     ),
                   ),
                 ],
               ),
             ),
           ),
-      ],
+        ),
+      );
+    }
+
+    return PullToSync.group(
+      ledger.group.id,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+        children: [
+          // The estimate leads, the exact per-currency figures follow directly
+          // beneath it. That is the "breakdown one tap away" requirement met
+          // without a tap: the authoritative numbers are never hidden behind the
+          // approximate one.
+          _EstimateCard(groupId: ledger.group.id),
+          for (final code in ledger.activeCurrencies) ...[
+            _CurrencySection(
+              ledger: ledger,
+              code: code,
+              currency: currencies[code],
+            ),
+            const SizedBox(height: 24),
+          ],
+          if (ledger.activeCurrencies.length > 1)
+            Card.outlined(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.info_outline, size: 20, color: scheme.primary),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'This group holds more than one currency. Each is '
+                        'settled on its own — cancelling one against another '
+                        'would quietly hand the exchange-rate risk to whoever '
+                        'the rounding favoured.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

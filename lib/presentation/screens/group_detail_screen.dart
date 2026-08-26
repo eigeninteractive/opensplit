@@ -13,6 +13,7 @@ import '../widgets/balance_arrow.dart';
 import '../widgets/balances_panel.dart';
 import '../widgets/link_account_prompt.dart';
 import '../widgets/page_body.dart';
+import '../widgets/pull_to_sync.dart';
 import '../widgets/unsynced_changes_banner.dart';
 
 /// Width at which the two halves of a group stop competing for the screen.
@@ -108,10 +109,7 @@ class GroupDetailScreen extends ConsumerWidget {
             // most to lose, since the group is shared and their share of it is
             // real, and they are the least likely ever to see the list screen
             // the other copy of this sits on.
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: LinkAccountPrompt(),
-            ),
+            const LinkAccountPrompt(padding: EdgeInsets.fromLTRB(16, 8, 16, 0)),
             Expanded(
               child: wide
                   ? Row(
@@ -150,21 +148,28 @@ class _EntriesList extends ConsumerWidget {
     final currencies = ref.watch(currenciesProvider).value ?? const {};
 
     if (ledger.entries.isEmpty) {
-      return _EmptyEntries(groupId: ledger.group.id);
+      return PullToSync.group(
+        ledger.group.id,
+        child: FillsViewport(child: _EmptyEntries(groupId: ledger.group.id)),
+      );
     }
 
-    return ListView.separated(
-      padding: const EdgeInsets.only(bottom: 96),
-      itemCount: ledger.entries.length,
-      separatorBuilder: (_, _) => const Divider(height: 1),
-      itemBuilder: (context, index) {
-        final entry = ledger.entries[index];
-        return _EntryTile(
-          entry: entry,
-          ledger: ledger,
-          currency: currencies[entry.currency],
-        );
-      },
+    return PullToSync.group(
+      ledger.group.id,
+      child: ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.only(bottom: 96),
+        itemCount: ledger.entries.length,
+        separatorBuilder: (_, _) => const Divider(height: 1),
+        itemBuilder: (context, index) {
+          final entry = ledger.entries[index];
+          return _EntryTile(
+            entry: entry,
+            ledger: ledger,
+            currency: currencies[entry.currency],
+          );
+        },
+      ),
     );
   }
 }

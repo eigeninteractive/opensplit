@@ -6,6 +6,7 @@ import '../../application/providers.dart';
 import '../../config.dart';
 import 'package:go_router/go_router.dart';
 
+import '../dynamic_colors.dart';
 import '../theme_mode.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -27,6 +28,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const _AccountRow(),
             const SizedBox(height: 24),
             const _AppearanceSetting(),
+            const SizedBox(height: 24),
+            const _WallpaperSetting(),
             // Hidden entirely rather than shown broken when the build has
             // no FCM credentials, matching how every other integration behaves
             // here.
@@ -90,7 +93,7 @@ class _AccountRow extends ConsumerWidget {
       // a settled account would be crying wolf on every visit.
       color: anonymous ? scheme.secondaryContainer : null,
       child: ListTile(
-        onTap: () => context.push('/account'),
+        onTap: () => context.go('/account'),
         leading: Icon(
           anonymous ? Icons.person_outline : Icons.verified_user_outlined,
           color: anonymous ? scheme.onSecondaryContainer : null,
@@ -170,6 +173,95 @@ class _AppearanceSetting extends ConsumerWidget {
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
             color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Whether the app takes its colours from the wallpaper, and whether it can.
+///
+/// Both halves matter, and the second is why this row exists at all. Material
+/// You is invisible when it is working — the app simply looks like the rest of
+/// the phone — and identical to a bug when it is not. Saying which is happening
+/// turns "the colours never change" from something to investigate into
+/// something to read.
+class _WallpaperSetting extends ConsumerWidget {
+  const _WallpaperSetting();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final schemes = ref.watch(wallpaperSchemesProvider);
+    final enabled = ref.watch(wallpaperColorsProvider);
+    final text = Theme.of(context).textTheme;
+
+    // Still asking the platform. A single frame in practice, and showing
+    // "not available" during it would be a lie that then corrects itself.
+    if (schemes.isLoading) return const SizedBox.shrink();
+
+    final available = schemes.value;
+    if (available == null) {
+      return ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: const Icon(Icons.palette_outlined),
+        title: const Text('Wallpaper colours are not available here'),
+        subtitle: const Text(
+          'Android 12 and later hand apps a palette taken from your '
+          'wallpaper. This device does not offer one, so OpenSplit uses its '
+          'own — which is also what every browser gets.',
+        ),
+        isThreeLine: true,
+        enabled: false,
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          value: enabled,
+          onChanged: (wanted) =>
+              ref.read(wallpaperColorsProvider.notifier).set(enabled: wanted),
+          secondary: const Icon(Icons.palette_outlined),
+          title: const Text('Match my wallpaper'),
+          subtitle: const Text(
+            'Use the colours Android takes from your wallpaper, instead of '
+            "OpenSplit's own.",
+          ),
+        ),
+        const SizedBox(height: 8),
+        // The palette itself, so that "it is on and nothing changed" is
+        // answerable by looking rather than by guessing. A wallpaper can be
+        // very nearly grey, and that is what this shows when it is.
+        Row(
+          children: [
+            for (final swatch in [
+              available.light.primary,
+              available.light.primaryContainer,
+              available.light.secondary,
+              available.light.tertiary,
+            ])
+              Container(
+                width: 28,
+                height: 28,
+                margin: const EdgeInsets.only(right: 8),
+                decoration: BoxDecoration(
+                  color: swatch,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            Expanded(
+              child: Text(
+                enabled
+                    ? "What your wallpaper offers, and what you are seeing."
+                    : 'What your wallpaper offers. Not in use.',
+                style: text.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );

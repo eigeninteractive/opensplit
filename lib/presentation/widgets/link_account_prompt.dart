@@ -13,9 +13,20 @@ import '../../application/providers.dart';
 /// lose anything. Softening that wording would make the eventual loss our
 /// fault.
 ///
+/// Built like [UnsyncedChangesBanner] and coloured differently on purpose. The
+/// two are the only banners in the app and they say different kinds of thing:
+/// the error-coloured one means something is already wrong, this one means
+/// something is about to be. Both now lead with a heading, because the version
+/// of this that did not was three lines of body text in a pastel box and read
+/// as decoration.
+///
 /// Shown after the third entry, never as a wall, and dismissible.
 class LinkAccountPrompt extends ConsumerWidget {
-  const LinkAccountPrompt({super.key});
+  const LinkAccountPrompt({super.key, this.padding = EdgeInsets.zero});
+
+  /// Applied only when there is something to show, so that a prompt nobody
+  /// needs does not leave a gap where a caller placed it in a column.
+  final EdgeInsets padding;
 
   /// Entries recorded before it is worth interrupting anyone.
   static const int threshold = 3;
@@ -30,35 +41,62 @@ class LinkAccountPrompt extends ConsumerWidget {
     if (count < threshold || dismissed) return const SizedBox.shrink();
 
     final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
 
-    return MaterialBanner(
-      backgroundColor: scheme.secondaryContainer,
-      contentTextStyle: Theme.of(
-        context,
-      ).textTheme.bodyMedium?.copyWith(color: scheme.onSecondaryContainer),
-      leading: Icon(
-        Icons.warning_amber_rounded,
-        color: scheme.onSecondaryContainer,
-      ),
-      content: Text(
-        kIsWeb
-            ? 'Your expenses only exist on this device. There is no account '
-                  'attached, so nothing can be recovered — clearing your '
-                  'browser data will delete all of it, permanently.'
-            : 'Your expenses only exist on this device. There is no account '
-                  'attached, so nothing can be recovered if you lose this '
-                  'phone or reinstall the app.',
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => ref.read(promptDismissedProvider.notifier).dismiss(),
-          child: const Text('Not now'),
+    return Padding(
+      padding: padding,
+      child: MaterialBanner(
+        backgroundColor: scheme.tertiaryContainer,
+        // Material's own banner padding assumes a single line of content
+        // beside the icon. This has a heading and a paragraph, and the default
+        // leaves the text crowding the top edge and the actions crowding the
+        // bottom one.
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+        dividerColor: Colors.transparent,
+        contentTextStyle: text.bodyMedium?.copyWith(
+          color: scheme.onTertiaryContainer,
         ),
-        FilledButton(
-          onPressed: () => context.push('/account'),
-          child: const Text('Save my account'),
+        leading: Icon(
+          Icons.warning_amber_rounded,
+          color: scheme.onTertiaryContainer,
         ),
-      ],
+        content: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Nothing here is backed up',
+              style: text.titleSmall?.copyWith(
+                color: scheme.onTertiaryContainer,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              kIsWeb
+                  ? 'Your expenses exist only in this browser. There is no '
+                        'account attached, so clearing your browsing data '
+                        'deletes all of it, permanently.'
+                  : 'Your expenses exist only on this phone. There is no '
+                        'account attached, so nothing can be recovered if you '
+                        'lose it or reinstall the app.',
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () =>
+                ref.read(promptDismissedProvider.notifier).dismiss(),
+            style: TextButton.styleFrom(
+              foregroundColor: scheme.onTertiaryContainer,
+            ),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => context.go('/account'),
+            child: const Text('Save my account'),
+          ),
+        ],
+      ),
     );
   }
 }

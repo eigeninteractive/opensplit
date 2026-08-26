@@ -694,12 +694,14 @@ Future<void> groupSync(Ref ref, String groupId) async {
 /// Drives the prompt to attach an account. Anonymous means one device and no
 /// recovery — on the web, clearing site data destroys it outright — so the ask
 /// has to arrive once there is something worth losing, and never before.
+///
+/// Watched, not counted once. The prompt sits on the group list, which is
+/// mounted for as long as the app is open, so a one-shot count was taken on
+/// the first frame and never taken again: the third expense of a session
+/// arrived and nothing said anything until the next cold start.
 @riverpod
-Future<int> totalEntryCount(Ref ref) async {
-  final db = ref.watch(appDatabaseProvider);
-  final rows = await db.select(db.entries).get();
-  return rows.where((row) => row.deletedAt == null).length;
-}
+Stream<int> totalEntryCount(Ref ref) =>
+    ref.watch(entryRepositoryProvider).watchTotalCount();
 
 @Riverpod(keepAlive: true)
 DriftCategoryRepository categoryRepository(Ref ref) =>
@@ -727,27 +729,27 @@ class AnalyticsFilterController extends _$AnalyticsFilterController {
 }
 
 @riverpod
-Future<List<SpendBucket>> spendByCategory(Ref ref, String groupId) => ref
+Stream<List<SpendBucket>> spendByCategory(Ref ref, String groupId) => ref
     .watch(analyticsRepositoryProvider)
     .spendByCategory(ref.watch(analyticsFilterControllerProvider(groupId)));
 
 @riverpod
-Future<List<SpendBucket>> spendByMember(Ref ref, String groupId) => ref
+Stream<List<SpendBucket>> spendByMember(Ref ref, String groupId) => ref
     .watch(analyticsRepositoryProvider)
     .spendByMember(ref.watch(analyticsFilterControllerProvider(groupId)));
 
 @riverpod
-Future<List<SpendBucket>> spendByMonth(Ref ref, String groupId) => ref
+Stream<List<SpendBucket>> spendByMonth(Ref ref, String groupId) => ref
     .watch(analyticsRepositoryProvider)
     .spendByMonth(ref.watch(analyticsFilterControllerProvider(groupId)));
 
 @riverpod
-Future<List<Entry>> analyticsResults(Ref ref, String groupId) => ref
+Stream<List<Entry>> analyticsResults(Ref ref, String groupId) => ref
     .watch(analyticsRepositoryProvider)
     .search(ref.watch(analyticsFilterControllerProvider(groupId)));
 
 @riverpod
-Future<List<String>> groupCurrencies(Ref ref, String groupId) =>
+Stream<List<String>> groupCurrencies(Ref ref, String groupId) =>
     ref.watch(analyticsRepositoryProvider).currenciesUsed(groupId);
 
 /// Push, wired to sync first and describe second.

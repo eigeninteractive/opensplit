@@ -79,9 +79,14 @@ class BalanceColors extends ThemeExtension<BalanceColors> {
 /// Builds the theme, optionally from a wallpaper-derived scheme.
 ///
 /// [dynamicScheme] is the platform's own palette on Android 12+ and null
-/// everywhere else, including the web. Harmonised against the seed so that a
-/// wallpaper which happens to be red does not leave the app's own accents
-/// clashing.
+/// everywhere else, including the web — see [wallpaperSchemesProvider], which
+/// is also what a user can switch off.
+///
+/// `harmonized()` shifts that scheme's *error* roles toward its own primary,
+/// so the red on "you owe" belongs to the wallpaper's palette rather than
+/// sitting on top of it. It does not touch the brand seed and has nothing to
+/// say about it: once a wallpaper palette exists it replaces the seed outright,
+/// which is the point of Material You.
 ThemeData buildTheme(Brightness brightness, [ColorScheme? dynamicScheme]) {
   final scheme =
       dynamicScheme?.harmonized() ??

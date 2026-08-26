@@ -109,7 +109,7 @@ void main() {
 
   group('spend by category', () {
     test('groups and totals, excluding settlements', () async {
-      final buckets = await analytics.spendByCategory(inr());
+      final buckets = await analytics.spendByCategory(inr()).first;
 
       expect(buckets.map((b) => b.label), ['Restaurants', 'Taxi & rideshare']);
       expect(buckets.first.amountMinor, 270000);
@@ -122,9 +122,9 @@ void main() {
     });
 
     test('keeps currencies apart', () async {
-      final all = await analytics.spendByCategory(
-        AnalyticsFilter(groupId: groupId),
-      );
+      final all = await analytics
+          .spendByCategory(AnalyticsFilter(groupId: groupId))
+          .first;
       final currencies = all.map((b) => b.currency).toSet();
       expect(currencies, {'INR', 'JPY'});
     });
@@ -132,7 +132,7 @@ void main() {
 
   group('spend by member', () {
     test('counts what each person consumed, not what they paid', () async {
-      final buckets = await analytics.spendByMember(inr());
+      final buckets = await analytics.spendByMember(inr()).first;
       final byName = {for (final b in buckets) b.label: b.amountMinor};
 
       // Ravi paid every bill, but only owed his own shares.
@@ -143,7 +143,7 @@ void main() {
 
   group('spend by month', () {
     test('is chronological, not largest-first', () async {
-      final buckets = await analytics.spendByMonth(inr());
+      final buckets = await analytics.spendByMonth(inr()).first;
 
       expect(buckets.map((b) => b.key), ['2026-08', '2026-09']);
       expect(buckets.first.amountMinor, 270000);
@@ -153,16 +153,16 @@ void main() {
 
   group('search', () {
     test('finds entries by word, offline and instantly', () async {
-      final found = await analytics.search(
-        AnalyticsFilter(groupId: groupId, query: 'toit'),
-      );
+      final found = await analytics
+          .search(AnalyticsFilter(groupId: groupId, query: 'toit'))
+          .first;
       expect(found.map((e) => e.description), ['Dinner at Toit']);
     });
 
     test('matches on a prefix, so it works as you type', () async {
-      final found = await analytics.search(
-        AnalyticsFilter(groupId: groupId, query: 'brea'),
-      );
+      final found = await analytics
+          .search(AnalyticsFilter(groupId: groupId, query: 'brea'))
+          .first;
       expect(found.single.description, 'Breakfast dosa');
     });
 
@@ -173,7 +173,9 @@ void main() {
         // error at someone who was only typing a restaurant name.
         for (final query in ['"', '*', 'toit*', 'a AND', 'NEAR(']) {
           await expectLater(
-            analytics.search(AnalyticsFilter(groupId: groupId, query: query)),
+            analytics
+                .search(AnalyticsFilter(groupId: groupId, query: query))
+                .first,
             completes,
             reason: 'query: $query',
           );
@@ -182,9 +184,11 @@ void main() {
     );
 
     test('tracks edits, so the index cannot drift from the table', () async {
-      final target = (await analytics.search(
-        AnalyticsFilter(groupId: groupId, query: 'toit'),
-      )).single;
+      final target =
+          (await analytics
+                  .search(AnalyticsFilter(groupId: groupId, query: 'toit'))
+                  .first)
+              .single;
 
       await entries.update(
         target.id,
@@ -199,15 +203,17 @@ void main() {
       );
 
       expect(
-        await analytics.search(
-          AnalyticsFilter(groupId: groupId, query: 'toit'),
-        ),
+        await analytics
+            .search(AnalyticsFilter(groupId: groupId, query: 'toit'))
+            .first,
         isEmpty,
       );
       expect(
-        (await analytics.search(
-          AnalyticsFilter(groupId: groupId, query: 'koshys'),
-        )).single.id,
+        (await analytics
+                .search(AnalyticsFilter(groupId: groupId, query: 'koshys'))
+                .first)
+            .single
+            .id,
         target.id,
       );
     });
@@ -215,32 +221,95 @@ void main() {
 
   group('filters', () {
     test('narrow by date range', () async {
-      final buckets = await analytics.spendByCategory(
-        AnalyticsFilter(
-          groupId: groupId,
-          currency: 'INR',
-          from: DateTime.utc(2026, 9),
-        ),
-      );
+      final buckets = await analytics
+          .spendByCategory(
+            AnalyticsFilter(
+              groupId: groupId,
+              currency: 'INR',
+              from: DateTime.utc(2026, 9),
+            ),
+          )
+          .first;
       expect(buckets.map((b) => b.label), ['Taxi & rideshare']);
     });
 
     test('narrow by member', () async {
-      final found = await analytics.search(
-        AnalyticsFilter(groupId: groupId, memberId: priya),
-      );
+      final found = await analytics
+          .search(AnalyticsFilter(groupId: groupId, memberId: priya))
+          .first;
       expect(found, hasLength(4), reason: 'Priya has a share in every expense');
     });
 
     test('narrow by category', () async {
-      final found = await analytics.search(
-        AnalyticsFilter(groupId: groupId, categoryId: transport),
-      );
+      final found = await analytics
+          .search(AnalyticsFilter(groupId: groupId, categoryId: transport))
+          .first;
       expect(found.single.description, 'Auto to the beach');
     });
   });
 
+  // What this guards: every one of these used to be a one-shot query, so the
+  // Insights screen answered as of the moment it was opened. An expense added
+  // in the pane beside it — or arriving on a sync while it sat open — left
+  // totals that quietly disagreed with the ledger they came from.
+  group('is live, not a snapshot', () {
+    test('a new expense reaches an open query', () async {
+      final totals = analytics
+          .spendByCategory(inr())
+          .map((buckets) => buckets.fold(0, (sum, b) => sum + b.amountMinor));
+
+      expect(
+        totals,
+        emitsInOrder([330000, 340000]),
+        reason: 'the second emission is the one the old code never made',
+      );
+
+      // Give the first emission time to land before changing anything.
+      await pumpEventQueue();
+      await entries.create(
+        EntryDraft(
+          groupId: groupId,
+          currency: 'INR',
+          amountMinor: 10000,
+          description: 'Chai',
+          categoryId: food,
+          split: EqualSplit([ravi, priya]),
+          payerAmounts: {ravi: 10000},
+        ),
+        createdBy: ravi,
+      );
+    });
+
+    test('so does a search', () async {
+      final descriptions = analytics
+          .search(AnalyticsFilter(groupId: groupId, query: 'chai'))
+          .map((found) => found.map((e) => e.description).toList());
+
+      expect(
+        descriptions,
+        emitsInOrder([
+          <String>[],
+          ['Chai'],
+        ]),
+      );
+
+      await pumpEventQueue();
+      await entries.create(
+        EntryDraft(
+          groupId: groupId,
+          currency: 'INR',
+          amountMinor: 10000,
+          description: 'Chai',
+          categoryId: food,
+          split: EqualSplit([ravi, priya]),
+          payerAmounts: {ravi: 10000},
+        ),
+        createdBy: ravi,
+      );
+    });
+  });
+
   test('currenciesUsed lists what the group actually holds', () async {
-    expect(await analytics.currenciesUsed(groupId), ['INR', 'JPY']);
+    expect(await analytics.currenciesUsed(groupId).first, ['INR', 'JPY']);
   });
 }

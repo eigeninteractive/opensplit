@@ -370,6 +370,7 @@ void _skeletonMatchesTheme() {
       'on-primary-container': scheme.onPrimaryContainer,
       'primary': scheme.primary,
       'on-surface-variant': scheme.onSurfaceVariant,
+      'surface-container': scheme.surfaceContainer,
     };
 
     expect(

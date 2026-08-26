@@ -104,7 +104,8 @@ class _ExportButtonState extends ConsumerState<ExportButton> {
       );
       final entries = await ref
           .read(analyticsRepositoryProvider)
-          .search(filter);
+          .search(filter)
+          .first;
       final categories = await ref.read(categoryRepositoryProvider).all();
       final currencies = ref.read(currenciesProvider).value ?? const {};
 

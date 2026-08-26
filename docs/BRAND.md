@@ -10,7 +10,7 @@ colour, read it off `ColorScheme`; if you need the logo, use the SVG. Nothing el
 | Seed | `0xFF5B5891` (muted violet) |
 | Light primary | `#5B5891` · container `#E3DFFF` · surface `#FBF8FF` |
 | Dark primary | `#C4C0FF` · container `#434078` · surface `#131318` |
-| Dynamic colour | **on** for Android; `harmonized()` so error/tertiary shift toward the wallpaper |
+| Dynamic colour | **on** for Android 12+, and switchable off in Settings; `harmonized()` shifts the *error* roles toward the wallpaper's primary. Nothing else — once a wallpaper palette exists it replaces the seed outright. |
 | Contrast | pass the platform setting into `contrastLevel` — standard/medium/high come free |
 
 Hex values are only hardcoded where a build config can't call Dart: launcher background,

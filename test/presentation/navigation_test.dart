@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -30,18 +31,60 @@ Future<void> _unmount(WidgetTester tester) async {
 GoRouter _router(WidgetTester tester) =>
     GoRouter.of(tester.element(find.byType(Scaffold).first));
 
+/// A group with nothing in it, so there is something to drill into.
+Future<void> _seedGroup(AppDatabase db, {DateTime? archivedAt}) async {
+  // Currencies are reference data the database ships with, so there is
+  // nothing to seed there — only the group.
+  await db
+      .into(db.groups)
+      .insert(
+        GroupsCompanion.insert(
+          id: 'g1',
+          name: 'Flat 4B',
+          defaultCurrency: 'INR',
+          createdBy: testAccountId,
+          createdAt: DateTime.utc(2026),
+          archivedAt: Value(archivedAt),
+        ),
+      );
+}
+
 void main() {
   late AppDatabase db;
 
   setUp(() => db = AppDatabase(NativeDatabase.memory()));
   tearDown(() => db.close());
 
-  // What this guards: every one of these used to be `context.go`, which
-  // discards the stack and reports a *forward* navigation. Nothing could be
-  // popped, so the browser's history grew on the way back as well as the way
-  // out, and Android's system back had nothing to return to and closed the app.
-  group('drilling down leaves something to come back to', () {
-    testWidgets('settings is pushed, not replaced', (tester) async {
+  // The rule the whole route table is built around: a screen either shows the
+  // navigation bar, in which case it is a destination and there is nothing to
+  // go back to, or it does not, in which case it was pushed and pops.
+  //
+  // What this replaces: Settings used to be an icon in the app bar that pushed
+  // a route which then had to suppress its own page transition so it would not
+  // look like a drill-down — a screen that was pushed but was not on top of
+  // anything, with a back arrow that behaved differently from every other back
+  // arrow in the app.
+  group('destinations are not pushes', () {
+    testWidgets(
+      'the phone layout has a navigation bar, not a settings button',
+      (tester) async {
+        await _pumpApp(tester, db);
+
+        expect(find.byType(NavigationBar), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(AppBar),
+            matching: find.byIcon(Icons.settings_outlined),
+          ),
+          findsNothing,
+          reason: 'navigation belongs in one place, and this is not it',
+        );
+
+        await _unmount(tester);
+      },
+    );
+
+    testWidgets('switching destination leaves nothing to pop', (tester) async {
       await _pumpApp(tester, db);
 
       expect(_router(tester).canPop(), isFalse, reason: 'starts at the root');
@@ -49,30 +92,103 @@ void main() {
       await tester.tap(find.byIcon(Icons.settings_outlined));
       await tester.pumpAndSettle();
 
-      expect(find.text('Settings'), findsOneWidget);
+      expect(find.widgetWithText(AppBar, 'Settings'), findsOneWidget);
+      expect(find.byType(NavigationBar), findsOneWidget);
+      expect(
+        find.byType(BackButton),
+        findsNothing,
+        reason: 'Settings is beside Groups, not on top of it',
+      );
+      expect(_router(tester).canPop(), isFalse);
+
+      await _unmount(tester);
+    });
+
+    testWidgets('and comes back to a Groups list that kept its place', (
+      tester,
+    ) async {
+      await _seedGroup(db);
+      await _pumpApp(tester, db);
+
+      await tester.tap(find.byIcon(Icons.settings_outlined));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.groups_outlined));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Flat 4B'), findsOneWidget);
+
+      await _unmount(tester);
+    });
+  });
+
+  // The other half of the same rule.
+  group('drilling down leaves something to come back to', () {
+    testWidgets('a group covers the navigation bar and pops back', (
+      tester,
+    ) async {
+      await _seedGroup(db);
+      await _pumpApp(tester, db);
+
+      await tester.tap(find.text('Flat 4B'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byType(NavigationBar),
+        findsNothing,
+        reason: 'a group is a screen you are inside, not a destination',
+      );
       expect(
         _router(tester).canPop(),
         isTrue,
         reason: 'a pushed screen has to be poppable, or back is a dead end',
       );
 
-      await _unmount(tester);
-    });
-
-    testWidgets('and back returns to the group list', (tester) async {
-      await _pumpApp(tester, db);
-
-      await tester.tap(find.byIcon(Icons.settings_outlined));
-      await tester.pumpAndSettle();
-
-      // The AppBar grows its own back button once there is a stack, which is
-      // the whole point of pushing.
-      expect(find.byType(BackButton), findsOneWidget);
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
 
-      expect(find.text('OpenSplit'), findsOneWidget);
+      expect(find.byType(NavigationBar), findsOneWidget);
       expect(_router(tester).canPop(), isFalse);
+
+      await _unmount(tester);
+    });
+  });
+
+  group('archived groups', () {
+    testWidgets('are out of the list but not out of reach', (tester) async {
+      await _seedGroup(db, archivedAt: DateTime.utc(2026, 3));
+      await _pumpApp(tester, db);
+
+      expect(
+        find.text('Flat 4B'),
+        findsNothing,
+        reason: 'the list is for groups still in use',
+      );
+
+      await tester.tap(find.text('Archived groups (1)'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Flat 4B'), findsOneWidget);
+      expect(find.text('Restore'), findsOneWidget);
+
+      await _unmount(tester);
+    });
+
+    testWidgets('restoring one puts it back', (tester) async {
+      await _seedGroup(db, archivedAt: DateTime.utc(2026, 3));
+      await _pumpApp(tester, db);
+
+      await tester.tap(find.text('Archived groups (1)'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Restore'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nothing is archived.'), findsOneWidget);
+
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Flat 4B'), findsOneWidget);
+      expect(find.textContaining('Archived groups'), findsNothing);
 
       await _unmount(tester);
     });

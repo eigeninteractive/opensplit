@@ -57,6 +57,7 @@
       --on-primary-container: #434078;
       --primary: #5b5891;             /* the brand mark */
       --on-surface-variant: #47464f; /* the unselected rail label */
+      --surface-container: #f0ecf4;    /* the navigation bar */
     }
     @media (prefers-color-scheme: dark) {
       :root {
@@ -69,6 +70,7 @@
         --on-primary-container: #e3dfff;
         --primary: #c4c0ff;
         --on-surface-variant: #c8c5d0;
+        --surface-container: #201f25;
       }
     }
 
@@ -110,10 +112,6 @@
      * here — an <img> would also be a second request, and could not be tinted.
      * See lib/presentation/widgets/brand_mark.dart. */
     .bar .mark { width: 35px; height: 35px; flex: none; margin-right: 7.5px; color: var(--primary); }
-
-    /* Where the settings IconButton lands: a 24dp icon centred in a 48dp
-     * target, so the title beside it keeps its true measure. */
-    .bar .action { width: 24px; height: 24px; margin: 0 12px; border-radius: 4px; background: var(--placeholder); }
 
     /* ListView(padding: fromLTRB(16, 8, 16, 96)) inside PageBody(maxWidth: 760).
      *
@@ -232,27 +230,59 @@
         font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px;
       }
       .rail .selected { top: 44px; color: var(--on-surface); }
-      .rail .unselected { top: 108px; color: var(--on-surface-variant); }
+      .rail .u1 { top: 108px; color: var(--on-surface-variant); }
+      .rail .u2 { top: 172px; color: var(--on-surface-variant); }
 
-      /* Only the glyphs stand in, the same way the app bar's action does. */
+      /* Only the glyphs stand in; the labels are the real words. */
       .rail .glyph {
         width: 24px; height: 24px; left: 28px; border-radius: 4px;
         background: var(--placeholder);
       }
       .rail .g1 { top: 12px; }
       .rail .g2 { top: 76px; }
+      .rail .g3 { top: 140px; }
     }
+
+    /* Below the rail breakpoint the same three destinations are a
+     * NavigationBar along the bottom: 80dp tall on surfaceContainer, each
+     * destination a 64x32 indicator on secondaryContainer with a labelMedium
+     * beneath it. Drawn here for the same reason the rail is — it is chrome
+     * that is on screen from the first frame of the real app, so leaving a
+     * gap where it goes is the one thing that visibly pops into place. */
+    .nav { display: flex; position: fixed; left: 0; right: 0; bottom: 0; height: 80px;
+           background: var(--surface-container); }
+    .nav > div { flex: 1; position: relative; }
+    .nav .pill {
+      position: absolute; top: 12px; left: 50%; margin-left: -32px;
+      width: 64px; height: 32px; border-radius: 16px;
+      background: var(--secondary-container);
+    }
+    .nav .glyph {
+      position: absolute; top: 16px; left: 50%; margin-left: -12px;
+      width: 24px; height: 24px; border-radius: 4px; background: var(--placeholder);
+    }
+    /* textTheme.labelMedium, the navigation bar's label style. */
+    .nav .label {
+      position: absolute; top: 48px; left: 0; right: 0; text-align: center;
+      font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px;
+      color: var(--on-surface-variant);
+    }
+    .nav .selected .label { color: var(--on-surface); }
+
+    @media (min-width: 840px) { .nav { display: none; } }
+    /* The FAB clears the bar rather than sitting on it: 16dp above 80dp. */
+    @media (max-width: 839px) { .fab { bottom: 96px; } }
 
     /* One slow pulse, on the placeholders only. Pulsing the card would fade
      * its border and its avatar, which are not placeholders at all — they are
      * already exactly what the app is about to draw. */
     @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
-    .line, .bar .action { animation: breathe 1.8s ease-in-out infinite; }
+    .line { animation: breathe 1.8s ease-in-out infinite; }
     .card:nth-child(2) .line { animation-delay: 0.15s; }
     .card:nth-child(3) .line { animation-delay: 0.3s; }
 
     @media (prefers-reduced-motion: reduce) {
-      .line, .bar .action { animation: none; }
+      .line { animation: none; }
       #skeleton.done { transition: none; }
     }
 
@@ -266,7 +296,9 @@
       <div class="glyph g1"></div>
       <div class="label selected">Groups</div>
       <div class="glyph g2"></div>
-      <div class="label unselected">Settings</div>
+      <div class="label u1">Account</div>
+      <div class="glyph g3"></div>
+      <div class="label u2">Settings</div>
     </div>
     <div class="bar">
       <svg class="mark" viewBox="0 0 48 48" aria-hidden="true">
@@ -277,7 +309,6 @@
         <circle cx="24" cy="24" r="17" fill="none" stroke="currentColor" stroke-width="6.5" mask="url(#slash)"></circle>
       </svg>
       <h1>OpenSplit</h1>
-      <div class="action"></div>
     </div>
     <div class="list" id="cards" hidden>
       <div class="card">
@@ -296,6 +327,21 @@
     <div class="fab">
       <div class="icon"></div>
       <div class="label">New group</div>
+    </div>
+    <div class="nav">
+      <div class="selected">
+        <div class="pill"></div>
+        <div class="glyph"></div>
+        <div class="label">Groups</div>
+      </div>
+      <div>
+        <div class="glyph"></div>
+        <div class="label">Account</div>
+      </div>
+      <div>
+        <div class="glyph"></div>
+        <div class="label">Settings</div>
+      </div>
     </div>
   </div>
 

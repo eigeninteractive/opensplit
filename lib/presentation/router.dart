@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import 'screens/account_screen.dart';
 import 'screens/activity_screen.dart';
+import 'screens/archived_groups_screen.dart';
 import 'screens/entry_editor_screen.dart';
 import 'screens/group_detail_screen.dart';
 import 'screens/group_list_screen.dart';
@@ -15,12 +16,62 @@ import 'screens/settings_screen.dart';
 import 'screens/settle_up_screen.dart';
 import 'screens/welcome_screen.dart';
 
+/// The app's three top-level destinations, in the order the branches below
+/// declare them.
+///
+/// One list, read by the navigation bar and the rail alike, so the two
+/// presentations of the same three destinations cannot drift apart.
+const _destinations = <_Destination>[
+  _Destination(
+    label: 'Groups',
+    icon: Icons.groups_outlined,
+    selectedIcon: Icons.groups,
+  ),
+  _Destination(
+    label: 'Account',
+    icon: Icons.person_outline,
+    selectedIcon: Icons.person,
+  ),
+  _Destination(
+    label: 'Settings',
+    icon: Icons.settings_outlined,
+    selectedIcon: Icons.settings,
+  ),
+];
+
+class _Destination {
+  const _Destination({
+    required this.label,
+    required this.icon,
+    required this.selectedIcon,
+  });
+
+  final String label;
+  final IconData icon;
+  final IconData selectedIcon;
+}
+
 /// One route table serving both Android and the web.
 ///
 /// The URL is the state. Every meaningful screen is deep-linkable and browser
 /// back works, because these same paths have to function as Android App Links
 /// later — a route that only exists as an in-memory navigation push cannot be
 /// opened from a shared link.
+///
+/// The shape is deliberate, and it is what makes navigation behave the same
+/// way everywhere:
+///
+///  * The three destinations are branches of a [StatefulShellRoute]. Switching
+///    between them swaps an [IndexedStack] child, so it is instant, keeps each
+///    branch's scroll position, and is never a push — there is no back arrow
+///    to Groups from Settings, because Settings is not on top of anything.
+///  * Everything else — a group, an expense, an invite — is an ordinary route
+///    above the shell. Those are pushed, so they animate with the platform's
+///    own page transition (predictive back on Android), grow a back button by
+///    themselves, and cover the navigation bar rather than sitting under it.
+///
+/// Which is the whole rule: if a screen shows the navigation bar it is a
+/// destination, and if it does not, it was pushed and can be popped.
 GoRouter buildRouter({
   required bool Function() isSignedIn,
 
@@ -52,46 +103,32 @@ GoRouter buildRouter({
     return path == '/welcome' ? '/' : null;
   },
   routes: [
-    GoRoute(
-      path: '/welcome',
-      builder: (context, state) => const WelcomeScreen(),
-    ),
-    // Everything lives under one shell so that the selection wrapper is applied
-    // in exactly one place.
+    // One shell around everything, for one reason: SelectionArea.
     //
-    // It cannot go in MaterialApp.builder: that runs above the Navigator, and
-    // SelectableRegion needs an Overlay ancestor, which only exists inside a
-    // route.
+    // It cannot go in MaterialApp.builder, which runs above the Navigator,
+    // because SelectableRegion needs an Overlay ancestor and only a route has
+    // one. Putting it on the destinations alone would leave every pushed
+    // screen — which is most of the app — unselectable.
     ShellRoute(
-      builder: (context, state, child) => SelectionArea(
-        child: _AdaptiveShell(state: state, child: child),
-      ),
+      builder: (context, state, child) => SelectionArea(child: child),
       routes: [
         GoRoute(
-          path: '/',
-          pageBuilder: (context, state) =>
-              const NoTransitionPage(child: GroupListScreen()),
-        ),
-        GoRoute(
-          path: '/settings',
-          pageBuilder: (context, state) =>
-              const NoTransitionPage(child: SettingsScreen()),
-        ),
-        // A top-level destination now, not a detail reached from Settings.
-        // It holds the name everybody in your groups sees, the payment handle
-        // they settle against, and whether the account survives this device —
-        // none of which is a setting.
-        GoRoute(
-          path: '/account',
-          pageBuilder: (context, state) =>
-              const NoTransitionPage(child: AccountScreen()),
+          path: '/welcome',
+          builder: (context, state) => const WelcomeScreen(),
         ),
         // The link a friend sends. Deliberately free of any guard: this route
-        // has to work for someone who has never opened the app before.
+        // has to work for someone who has never opened the app before, and
+        // deliberately outside the destinations, because an arrival has one
+        // decision to make and a navigation bar is an invitation to wander off
+        // before making it.
         GoRoute(
           path: '/join/:token',
           builder: (context, state) =>
               JoinScreen(token: state.pathParameters['token']!),
+        ),
+        GoRoute(
+          path: '/archived',
+          builder: (context, state) => const ArchivedGroupsScreen(),
         ),
         GoRoute(
           path: '/g/:groupId',
@@ -145,99 +182,128 @@ GoRouter buildRouter({
             ),
           ],
         ),
+        StatefulShellRoute.indexedStack(
+          builder: (context, state, shell) => AdaptiveNavigation(shell: shell),
+          branches: [
+            StatefulShellBranch(
+              routes: [
+                GoRoute(
+                  path: '/',
+                  builder: (context, state) => const GroupListScreen(),
+                ),
+              ],
+            ),
+            // A top-level destination, not a detail reached from Settings. It
+            // holds the name everybody in your groups sees, the payment handle
+            // they settle against, and whether the account survives this
+            // device — none of which is a setting.
+            StatefulShellBranch(
+              routes: [
+                GoRoute(
+                  path: '/account',
+                  builder: (context, state) => const AccountScreen(),
+                ),
+              ],
+            ),
+            StatefulShellBranch(
+              routes: [
+                GoRoute(
+                  path: '/settings',
+                  builder: (context, state) => const SettingsScreen(),
+                ),
+              ],
+            ),
+          ],
+        ),
       ],
     ),
   ],
 );
 
-/// A top-level destination, which is not a page pushed on top of anything.
+/// The app's only navigation surface, in whichever form the window has room
+/// for.
 ///
-/// Material's page transitions describe a hierarchy: a screen slides in from
-/// the edge because it sits on top of the one before it, and the direction is
-/// what tells you a level was entered and can be left again. Moving between
-/// destinations in the navigation rail is not that. There is no deeper or
-/// shallower, so a slide claims a spatial relationship that does not exist —
-/// which is what made switching from Groups to Settings look like a drill-down
-/// in the wrong direction.
+/// Material 3 gives the same set of destinations two presentations and this
+/// picks between them by width: a navigation bar along the bottom on a phone,
+/// a rail down the side once there is room. Both are driven by the same
+/// [StatefulNavigationShell], so "which destination am I on" has exactly one
+/// answer and neither can disagree with the URL.
 ///
-/// [NoTransitionPage] is go_router's own answer for this, and no transition is
-/// the honest one. It is also what Flutter's own NavigationRail and
-/// NavigationBar samples do: the destination's body is swapped, not routed to.
-///
-/// Everything pushed on top of these keeps the platform's page transition,
-/// which on Android is the predictive-back one and is exactly right for a
-/// drill-down.
-/// Adds a navigation rail once there is room for one.
-///
-/// On a phone the app bar and the back stack are the navigation, and a rail
-/// would eat a quarter of the width. On a desktop browser there is otherwise no
-/// persistent chrome at all — the only way back to the group list is the app
-/// bar's back arrow, which is a phone affordance shown on a 27-inch monitor.
-class _AdaptiveShell extends StatelessWidget {
-  const _AdaptiveShell({required this.state, required this.child});
+/// There used to be no third option — a settings button in the app bar, which
+/// pushed a screen that was not on top of anything, on a route that then had
+/// to suppress its own transition to avoid looking like a drill-down. That is
+/// the arrangement this replaces.
+class AdaptiveNavigation extends StatelessWidget {
+  const AdaptiveNavigation({super.key, required this.shell});
 
-  /// Below this the rail is not shown at all.
+  /// Below this the destinations are shown along the bottom instead.
   ///
   /// 840 is Material 3's own boundary between the medium and expanded window
-  /// classes, rather than a number picked because it looked right. The spec
-  /// puts a rail at medium too, from 600 up; this app stops short of that
-  /// because it has two destinations and one of them is Settings, and 80dp of
-  /// permanent chrome to reach a screen with an app bar button already on it is
-  /// a poor trade on a tablet held in portrait.
+  /// classes. The spec allows a rail from 600 up; this app stays with the
+  /// bottom bar to 840 because a bar is reachable one-handed and a phone-sized
+  /// window is held in a hand however many pixels it reports.
   static const double _railBreakpoint = 840;
 
   /// Material 3's own default destination width, and the rail's width outright:
   /// a destination is padded 8dp either side *within* this, and only pushes
-  /// past it if a label needs more. "Groups" and "Settings" are nowhere near,
+  /// past it if a label needs more. None of the three labels is anywhere near,
   /// so the rail is a fixed 80dp and the skeleton can count on it.
   static const double _railWidth = 80;
 
-  final GoRouterState state;
-  final Widget child;
+  final StatefulNavigationShell shell;
+
+  /// Switches destination, or returns to the top of the one already open.
+  ///
+  /// `initialLocation: true` when the destination is already selected is
+  /// go_router's own idiom for the second half, and it is what people expect
+  /// from a navigation bar: tapping the lit destination goes back to its root
+  /// rather than doing nothing.
+  void _select(int index) =>
+      shell.goBranch(index, initialLocation: index == shell.currentIndex);
 
   @override
   Widget build(BuildContext context) {
-    if (MediaQuery.sizeOf(context).width < _railBreakpoint) return child;
-
-    final path = state.uri.path;
-    const destinations = ['/', '/account', '/settings'];
-    final selected = destinations.indexOf(path);
+    if (MediaQuery.sizeOf(context).width < _railBreakpoint) {
+      return Scaffold(
+        body: shell,
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: shell.currentIndex,
+          onDestinationSelected: _select,
+          destinations: [
+            for (final destination in _destinations)
+              NavigationDestination(
+                icon: Icon(destination.icon),
+                selectedIcon: Icon(destination.selectedIcon),
+                label: destination.label,
+              ),
+          ],
+        ),
+      );
+    }
 
     return Scaffold(
       body: Row(
         children: [
           NavigationRail(
-            // Anything deeper than a destination — a group, an expense —
-            // keeps Groups lit rather than nothing, because that is the
-            // branch it is inside.
-            selectedIndex: selected < 0 ? 0 : selected,
+            selectedIndex: shell.currentIndex,
             labelType: NavigationRailLabelType.all,
             // Material's own default, stated rather than inherited because
             // the web loading skeleton draws a rail of exactly this width
             // before Flutter starts — see the 840px block in web/index.html,
             // and the test that holds the two numbers together.
             minWidth: _railWidth,
-            onDestinationSelected: (index) => context.go(destinations[index]),
-            destinations: const [
-              NavigationRailDestination(
-                icon: Icon(Icons.groups_outlined),
-                selectedIcon: Icon(Icons.groups),
-                label: Text('Groups'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.person_outline),
-                selectedIcon: Icon(Icons.person),
-                label: Text('Account'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.settings_outlined),
-                selectedIcon: Icon(Icons.settings),
-                label: Text('Settings'),
-              ),
+            onDestinationSelected: _select,
+            destinations: [
+              for (final destination in _destinations)
+                NavigationRailDestination(
+                  icon: Icon(destination.icon),
+                  selectedIcon: Icon(destination.selectedIcon),
+                  label: Text(destination.label),
+                ),
             ],
           ),
           const VerticalDivider(width: 1),
-          Expanded(child: child),
+          Expanded(child: shell),
         ],
       ),
     );
