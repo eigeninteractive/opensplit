@@ -5,7 +5,8 @@
       "namespace": "android_app",
       "package_name": "com.eigeninteractive.opensplit",
       "sha256_cert_fingerprints": [
-        "1D:38:70:BC:61:03:AD:AF:78:4D:1B:41:33:0B:12:83:AF:40:79:F7:30:2B:17:26:C7:CE:C7:E1:27:1D:C3:96"
+        "1D:38:70:BC:61:03:AD:AF:78:4D:1B:41:33:0B:12:83:AF:40:79:F7:30:2B:17:26:C7:CE:C7:E1:27:1D:C3:96",
+        "5A:A5:05:44:DE:AF:3A:77:BC:90:D6:BD:8C:D3:B4:68:AE:24:15:55:5C:54:55:C6:87:F0:7B:C7:0A:A9:C5:07"
       ]
     }
   }
