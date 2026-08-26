@@ -1,7 +1,7 @@
 -- Device tokens: strictly private, and the fan-out skips the author.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(6);
+select plan(11);
 
 insert into auth.users (id, instance_id, aud, role, email, raw_user_meta_data,
                         created_at, updated_at)
@@ -82,6 +82,48 @@ select results_eq(
   $$select token from tokens_for_entry('88888888-8888-4888-8888-888888888888')$$,
   $$values ('token-priya')$$,
   'only the other members are woken: never the person who just typed it');
+
+-- ---------------------------------------------------------------------------
+-- Registering, including taking a token over
+--
+-- A device changes hands: somebody signs in as a different account, or
+-- reinstalls, and FCM hands back the same registration. The stored row still
+-- names the previous owner, and RLS evaluates an upsert's UPDATE half against
+-- that row — so a plain upsert is refused and the device silently stops
+-- receiving anything. register_device_token is what makes the handover
+-- possible, and it can only ever write auth.uid().
+-- ---------------------------------------------------------------------------
+-- Last, because it deliberately moves a token between accounts and the fan-out
+-- assertion above depends on who holds what.
+set local role authenticated;
+set local "request.jwt.claims" to
+  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated"}';
+
+select lives_ok(
+  $$select register_device_token('token-ravi', 'android')$$,
+  're-registering your own token is idempotent');
+
+select lives_ok(
+  $$select register_device_token('token-priya', 'android')$$,
+  'a token held by somebody else can be claimed by the device holding it');
+
+select is(
+  (select profile_id from device_tokens where token = 'token-priya'),
+  '11111111-1111-4111-8111-111111111111'::uuid,
+  'and it now belongs to whoever claimed it');
+
+select throws_ok(
+  $$select register_device_token('token-ravi', 'symbian')$$,
+  '23514', null,
+  'an unknown platform is refused rather than stored');
+
+-- Reading is still nobody else's business: claiming a token you physically
+-- hold is not the same as being able to enumerate anyone's.
+select is(
+  (select count(*)::int from device_tokens
+    where profile_id = '22222222-2222-4222-8222-222222222222'),
+  0,
+  'claiming one grants no visibility of anybody else');
 
 select * from finish();
 rollback;

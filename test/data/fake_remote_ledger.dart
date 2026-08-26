@@ -140,6 +140,36 @@ class FakeRemoteLedger implements RemoteLedgerApi {
       if (json['group_id'] == groupId) memberFromJson(json),
   ];
 
+  /// Who the fake believes is holding the session.
+  ///
+  /// Set it to stand in for a device that has signed in and holds nothing
+  /// locally — the case group discovery exists for.
+  String? signedInProfileId;
+
+  /// Redeems an invite, server-side: sets `profile_id` on a member row without
+  /// any device having asked for it.
+  ///
+  /// The only way to reproduce the race the push path has to survive — a claim
+  /// landing on the server while a device still believes the member is a
+  /// placeholder.
+  void claimMember(String memberId, String profileId) {
+    final json = _members[memberId];
+    if (json == null) throw StateError('No such member $memberId');
+    json['profile_id'] = profileId;
+    json['updated_at'] = _stamp().toIso8601String();
+  }
+
+  @override
+  Future<List<String>> pullMyGroupIds() async {
+    final uid = signedInProfileId;
+    if (uid == null) return const [];
+    return {
+      for (final json in _members.values)
+        if (json['profile_id'] == uid && json['left_at'] == null)
+          json['group_id'] as String,
+    }.toList()..sort();
+  }
+
   @override
   Future<Group> pushGroup(Group group) async {
     // Stamped from the fake's own clock, exactly as Postgres does with now().
@@ -153,8 +183,17 @@ class FakeRemoteLedger implements RemoteLedgerApi {
 
   @override
   Future<Member> pushMember(Member member) async {
-    final json = memberToJson(member)
-      ..['updated_at'] = _stamp().toIso8601String();
+    // Merged over what is already stored, not substituted for it. PostgREST
+    // builds an upsert's SET list from the keys actually present in the body,
+    // so a column the client leaves out keeps its stored value — which is the
+    // entire mechanism protecting a freshly claimed profile_id from a device
+    // that has not pulled the claim yet. A fake that replaced the row wholesale
+    // would pass a test the real server fails.
+    final json = {
+      ...?_members[member.id],
+      ...memberToJson(member),
+      'updated_at': _stamp().toIso8601String(),
+    };
     _members[member.id] = json;
     return memberFromJson(json);
   }

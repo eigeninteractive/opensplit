@@ -61,6 +61,18 @@ abstract interface class RemoteLedgerApi {
     int limit = 200,
   });
 
+  /// Every group this account is currently a member of.
+  ///
+  /// Without this a device can only ever sync groups it already knows about,
+  /// and there is no way to come to know about one: everything else here is
+  /// scoped to a `groupId` the caller has to supply. A second device, or a
+  /// reinstall, would show an empty app forever — with the data sitting on the
+  /// server, readable, and never asked for.
+  ///
+  /// Groups left behind are excluded. Leaving is the one way membership ends,
+  /// and rediscovering a group on the next sync would undo it.
+  Future<List<String>> pullMyGroupIds();
+
   Future<Group?> pullGroup(String groupId);
 
   Future<List<Member>> pullMembers(String groupId);

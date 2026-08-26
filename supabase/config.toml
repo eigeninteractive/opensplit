@@ -183,8 +183,13 @@ enable_signup = true
 # hour per IP), and cleanup_abandoned_anonymous_users(), which deletes anon
 # accounts that never joined a group. See docs/opensplit-prd.md §9.
 enable_anonymous_sign_ins = true
-# Allow/disallow testing manual linking of accounts
-enable_manual_linking = false
+# Required, not optional. Attaching Google to an anonymous session goes through
+# linkIdentityWithIdToken, which is refused outright when this is off — and the
+# refusal is what pushes a client back onto signInWithIdToken, which does not
+# link at all: it signs in as a *different* user and abandons everything the
+# anonymous one recorded. Set the same switch in the hosted dashboard under
+# Authentication -> Providers -> "Allow manual linking".
+enable_manual_linking = true
 # Passwords shorter than this value will be rejected as weak. Minimum 6, recommended 8 or more.
 minimum_password_length = 6
 # Passwords that do not meet the following requirements will be rejected as weak. Supported values
@@ -230,7 +235,14 @@ enable_signup = true
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
 # If enabled, users need to confirm their email address before signing in.
-enable_confirmations = false
+#
+# On, and not merely as good practice. This is the same switch as GoTrue's
+# MAILER_AUTOCONFIRM, and with it off an email CHANGE is applied outright: an
+# anonymous session can attach any address at all, having proved nothing, and
+# the real owner of that address then finds it already spoken for. It also
+# means no code is ever sent, so the app's "check your email" step waits on
+# something that is never coming.
+enable_confirmations = true
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
 secure_password_change = false
 # Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.
@@ -254,6 +266,26 @@ otp_expiry = 3600
 # [auth.email.template.invite]
 # subject = "You have been invited"
 # content_path = "./supabase/templates/invite.html"
+
+# The app asks for a six-digit code, and the stock templates send a magic link
+# and no token at all — so without these three the "check your email" step
+# waits for a number that is never sent, on every path there is. See
+# supabase/templates/README.md, and note that templates are NOT deployed by
+# `supabase db push`: a hosted project needs them pasted into
+# Authentication -> Emails -> Templates by hand.
+[auth.email.template.confirmation]
+subject = "Your OpenSplit code"
+content_path = "./supabase/templates/confirmation.html"
+
+[auth.email.template.magic_link]
+subject = "Your OpenSplit code"
+content_path = "./supabase/templates/magic_link.html"
+
+# The "save my account" flow, and the one most easily missed: it is a different
+# token type from the other two (OtpType.emailChange).
+[auth.email.template.email_change]
+subject = "Confirm your OpenSplit email address"
+content_path = "./supabase/templates/email_change.html"
 
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]

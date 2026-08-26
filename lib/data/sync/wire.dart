@@ -114,7 +114,17 @@ Group groupFromJson(Map<String, dynamic> json) => Group(
 Map<String, dynamic> memberToJson(Member member) => {
   'id': member.id,
   'group_id': member.groupId,
-  'profile_id': member.profileId,
+  // Omitted entirely when this device does not know of an account for this
+  // member, rather than sent as null.
+  //
+  // PostgREST builds the upsert's SET list from the keys present, so an absent
+  // key leaves the stored value alone while a null overwrites it. That matters
+  // for exactly one column and exactly one race: someone claims their invite,
+  // and before this device has pulled the claim it pushes an unrelated edit to
+  // the same row — a rename, a UPI handle. Sending profile_id: null there would
+  // blank the claim and un-join the person who had just joined. Absent on an
+  // INSERT is the same as null, so the placeholder case still works.
+  if (member.profileId != null) 'profile_id': member.profileId,
   'display_name': member.displayName,
   'role': member.role.name,
   'joined_at': member.joinedAt.toUtc().toIso8601String(),

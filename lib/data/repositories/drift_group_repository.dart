@@ -156,11 +156,23 @@ final class DriftGroupRepository {
     );
   }
 
+  /// Writes a group's editable fields.
+  ///
+  /// `defaultCurrency` is deliberately not among them, even though the column
+  /// is writable. Every entry carries an `fx_rate` snapshot taken against the
+  /// group's default at the time it was recorded, so changing the default
+  /// afterwards would silently reinterpret every one of those numbers against a
+  /// currency they were never converted to. Nothing in the UI offers it, and
+  /// this is where that would stop being true.
   Future<void> updateGroup(Group group) async {
+    final trimmed = group.name.trim();
+    if (trimmed.isEmpty) {
+      throw ArgumentError.value(group.name, 'name', 'A group needs a name.');
+    }
+
     await (_db.update(_db.groups)..where((t) => t.id.equals(group.id))).write(
       GroupsCompanion(
-        name: Value(group.name),
-        defaultCurrency: Value(group.defaultCurrency),
+        name: Value(trimmed),
         simplifyDebts: Value(group.simplifyDebts),
         archivedAt: Value(group.archivedAt),
         // Bumped on every local write. Without this a rename made offline
@@ -170,6 +182,49 @@ final class DriftGroupRepository {
       ),
     );
     await outbox?.enqueue(OutboxTarget.group, group.id);
+  }
+
+  /// Promotes or demotes a member.
+  ///
+  /// Only an owner can do this, and the server enforces that rather than
+  /// trusting the caller — see `guard_member_update`. It exists mostly so an
+  /// owner can hand the role over before leaving, since a group whose only
+  /// owner has left has nobody who can appoint another.
+  Future<void> setMemberRole(String memberId, MemberRole role) async {
+    await (_db.update(_db.members)..where((t) => t.id.equals(memberId))).write(
+      MembersCompanion(role: Value(role), updatedAt: Value(_clock())),
+    );
+    await outbox?.enqueue(OutboxTarget.member, memberId);
+  }
+
+  /// Leaves a group: marks your own member row as having left, and archives the
+  /// group on this device.
+  ///
+  /// Two steps because they answer different questions. `left_at` is the fact
+  /// the rest of the group needs — it is what stops you being counted in new
+  /// splits, and what makes the server stop letting you read the group at all.
+  /// Archiving is this device's own bookkeeping: once the leave has landed
+  /// nothing here can ever sync again, so the group would otherwise sit in the
+  /// list quietly going stale.
+  ///
+  /// Not a local delete, and that ordering matters. The leave has to survive
+  /// long enough to be pushed, and the outbox pushes by reading the row back —
+  /// so deleting the group offline would drop the very write that tells anyone
+  /// you left.
+  Future<void> leaveGroup({
+    required String groupId,
+    required String memberId,
+  }) async {
+    final now = _clock();
+    await _db.transaction(() async {
+      await (_db.update(_db.members)..where((t) => t.id.equals(memberId)))
+          .write(MembersCompanion(leftAt: Value(now), updatedAt: Value(now)));
+      await (_db.update(_db.groups)..where((t) => t.id.equals(groupId))).write(
+        GroupsCompanion(archivedAt: Value(now), updatedAt: Value(now)),
+      );
+    });
+
+    await outbox?.enqueue(OutboxTarget.member, memberId);
   }
 
   /// Adds a member. A null [profileId] creates a placeholder — someone who is

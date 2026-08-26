@@ -1,8 +1,10 @@
+import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:uuid/uuid.dart';
 
+import 'entry_notification.dart';
 import '../data/fx/drift_fx_repository.dart';
 import '../data/local/database.dart';
 import '../data/repositories/drift_analytics_repository.dart';
@@ -13,6 +15,7 @@ import '../data/repositories/drift_group_repository.dart';
 import '../data/repositories/drift_profile_repository.dart';
 import '../data/auth/supabase_auth_service.dart';
 import '../data/local/identity_reconciler.dart';
+import '../data/local/local_reset.dart';
 import '../data/push/push_service.dart';
 import '../data/sync/outbox_queue.dart';
 import '../data/sync/remote_ledger_api.dart';
@@ -27,14 +30,13 @@ import '../domain/balance/simplify.dart';
 import '../domain/models/category.dart';
 import '../domain/models/currency.dart';
 import '../domain/models/entry.dart';
-import '../domain/notification_text.dart';
 import '../domain/models/group.dart';
-import '../domain/money_format.dart';
 import '../domain/models/member.dart';
 import '../domain/models/profile.dart';
 import '../domain/analytics/analytics_query.dart';
 import '../domain/repositories/auth_service.dart';
 import '../domain/repositories/invite_api.dart';
+import '../presentation/router.dart';
 
 part 'providers.g.dart';
 
@@ -131,6 +133,7 @@ class LocalIdentity {
     required this.profileId,
     required this.displayName,
     this.upiVpa,
+    this.isAccount = false,
   });
 
   final String profileId;
@@ -138,6 +141,17 @@ class LocalIdentity {
 
   /// UPI virtual payment address, used to build settle-up handoffs.
   final String? upiVpa;
+
+  /// Whether [profileId] is a real account id rather than the locally invented
+  /// one this device starts with.
+  ///
+  /// The distinction decides whether a change of id is a promotion or a
+  /// switch. A locally invented id becoming an account id is the first case,
+  /// and everything filed under the old one is repointed. One account id
+  /// becoming a different account id is the second, and repointing would hand
+  /// somebody else's rows to whoever just signed in — rows the server will
+  /// refuse anyway, since they still belong to the account that wrote them.
+  final bool isAccount;
 
   bool get hasName => displayName.trim().isNotEmpty;
 }
@@ -147,6 +161,7 @@ class LocalIdentityController extends _$LocalIdentityController {
   static const _profileIdKey = 'local_profile_id';
   static const _displayNameKey = 'local_display_name';
   static const _upiVpaKey = 'local_upi_vpa';
+  static const _isAccountKey = 'local_profile_is_account';
 
   @override
   LocalIdentity build() {
@@ -162,6 +177,7 @@ class LocalIdentityController extends _$LocalIdentityController {
       profileId: profileId,
       displayName: prefs.getString(_displayNameKey) ?? '',
       upiVpa: prefs.getString(_upiVpaKey),
+      isAccount: prefs.getBool(_isAccountKey) ?? false,
     );
   }
 
@@ -172,6 +188,7 @@ class LocalIdentityController extends _$LocalIdentityController {
       profileId: state.profileId,
       displayName: name.trim(),
       upiVpa: state.upiVpa,
+      isAccount: state.isAccount,
     );
     await _mirrorToProfile();
   }
@@ -188,24 +205,58 @@ class LocalIdentityController extends _$LocalIdentityController {
       profileId: state.profileId,
       displayName: state.displayName,
       upiVpa: trimmed == null || trimmed.isEmpty ? null : trimmed,
+      isAccount: state.isAccount,
     );
     await _mirrorToProfile();
   }
 
-  /// Replaces the locally generated id with a real account id.
+  /// Points this device at [authUserId].
   ///
-  /// Called once, when a session first appears. Everything that referenced the
-  /// old id has already been repointed by [adoptAuthIdentity].
+  /// Called when a session first appears, and again if a different account ever
+  /// takes the session over. Whether the rows filed under the previous id come
+  /// with it is [adoptAuthIdentity]'s decision, not this one's — see
+  /// [LocalIdentity.isAccount].
   Future<void> adoptProfileId(String authUserId) async {
-    if (state.profileId == authUserId) return;
     final prefs = ref.read(sharedPreferencesProvider);
+    // Written even when the id is unchanged: the very first anonymous session
+    // adopts an id this device invented, and the fact that it is now an account
+    // is the thing worth remembering.
+    await prefs.setBool(_isAccountKey, true);
+    if (state.profileId == authUserId) {
+      state = LocalIdentity(
+        profileId: state.profileId,
+        displayName: state.displayName,
+        upiVpa: state.upiVpa,
+        isAccount: true,
+      );
+      return;
+    }
+
     await prefs.setString(_profileIdKey, authUserId);
     state = LocalIdentity(
       profileId: authUserId,
       displayName: state.displayName,
       upiVpa: state.upiVpa,
+      isAccount: true,
     );
     await _mirrorToProfile();
+  }
+
+  /// Forgets the name and handle this device was using, keeping its id.
+  ///
+  /// Part of switching to an account that already exists: the display name and
+  /// UPI handle belonged to whoever was using the device before, and carrying
+  /// them into somebody else's session would put a stranger's payment address
+  /// on their settle-up screen.
+  Future<void> clearPersonalDetails() async {
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.remove(_displayNameKey);
+    await prefs.remove(_upiVpaKey);
+    state = LocalIdentity(
+      profileId: state.profileId,
+      displayName: '',
+      isAccount: state.isAccount,
+    );
   }
 
   /// Mirrors the identity into the profiles table.
@@ -439,16 +490,30 @@ class SessionController extends _$SessionController {
 
     final user = auth.currentUser ?? await auth.signInAnonymously();
 
-    // Everything recorded before this session existed was filed under a locally
-    // generated id. Move it across — one column, no financial rows touched.
     final identity = ref.read(localIdentityControllerProvider);
     if (identity.profileId != user.id) {
-      await adoptAuthIdentity(
-        ref.read(appDatabaseProvider),
-        localProfileId: identity.profileId,
-        authUserId: user.id,
-        outbox: ref.read(outboxQueueProvider),
-      );
+      // Everything recorded before this session existed was filed under a
+      // locally generated id. Move it across — one column, no financial rows
+      // touched.
+      //
+      // Only from a locally invented id, though. If this device was already an
+      // account and a different one now holds the session, the rows filed under
+      // the old id are not this account's to take: the server still has them
+      // under the previous user and refuses every write made under the new one.
+      // That path wipes instead, in AccountController.
+      if (!identity.isAccount) {
+        await adoptAuthIdentity(
+          ref.read(appDatabaseProvider),
+          localProfileId: identity.profileId,
+          authUserId: user.id,
+          outbox: ref.read(outboxQueueProvider),
+        );
+      }
+      await ref
+          .read(localIdentityControllerProvider.notifier)
+          .adoptProfileId(user.id);
+    } else if (!identity.isAccount) {
+      // Same id, but this is the first time it has been backed by a session.
       await ref
           .read(localIdentityControllerProvider.notifier)
           .adoptProfileId(user.id);
@@ -479,14 +544,20 @@ class SyncController extends _$SyncController {
     state = await engine.syncGroup(groupId);
   }
 
+  /// Syncs every group this account belongs to, including ones this device has
+  /// never seen.
+  ///
+  /// The list comes from the server, not from the local database. Sweeping
+  /// local groups only is what made a second device — and a reinstall, and
+  /// signing in after clearing browser data — show an empty app forever: the
+  /// groups were on the server, readable, and nothing ever asked for them.
   Future<void> syncAll() async {
     final engine = ref.read(syncEngineProvider);
     if (engine == null) return;
     await ref.read(sessionControllerProvider.future);
 
-    final groups = await ref.read(groupRepositoryProvider).watchGroups().first;
-    for (final group in groups) {
-      state = await engine.syncGroup(group.id);
+    for (final groupId in await engine.discoverGroups()) {
+      state = await engine.syncGroup(groupId);
     }
   }
 
@@ -499,6 +570,102 @@ class SyncController extends _$SyncController {
   Future<void> retryFailed() async {
     await ref.read(outboxQueueProvider).retryDeadLetters();
     await syncAll();
+  }
+}
+
+/// Attaching a real account to this device, and the sign-in it sometimes turns
+/// out to be instead.
+///
+/// The two outcomes are opposites and the difference is the whole reason this
+/// exists rather than the screen calling [AuthService] directly. Linking keeps
+/// the user id, so every group, member and expense on this device stays exactly
+/// where it is. Signing in as an account that already exists replaces the
+/// session, and those rows are then unreachable: the server holds them under
+/// the anonymous user that wrote them, and row-level security refuses every
+/// write made under the new one. Keeping them on screen would produce a group
+/// list where some rows sync and some never can, with nothing to say which.
+///
+/// So a sign-in wipes the device first — after the screen has said so and been
+/// answered — and re-syncs from the server as the account that now holds it.
+@Riverpod(keepAlive: true)
+class AccountController extends _$AccountController {
+  @override
+  void build() {}
+
+  /// How many expenses signing in as somebody else would leave behind.
+  ///
+  /// Used to make the warning specific. "You will lose what is on this device"
+  /// is ignorable; "the 34 expenses on this device stay with the anonymous
+  /// account" is not.
+  Future<int> entriesLeftBehind() async {
+    final db = ref.read(appDatabaseProvider);
+    final rows = await db.select(db.entries).get();
+    return rows.where((row) => row.deletedAt == null).length;
+  }
+
+  AuthService _auth() {
+    final auth = ref.read(authServiceProvider);
+    if (auth == null) {
+      throw StateError('This build has no backend, so it has no accounts.');
+    }
+    return auth;
+  }
+
+  Future<EmailFlow> sendEmailCode(String email) async {
+    final auth = _auth();
+    // There has to be a session to attach the address to.
+    await ref.read(sessionControllerProvider.future);
+    return auth.sendEmailCode(email);
+  }
+
+  Future<IdentityOutcome> verifyEmailCode({
+    required String email,
+    required String code,
+    required EmailFlow flow,
+  }) async {
+    final outcome = await _auth().verifyEmailCode(
+      email: email,
+      code: code,
+      flow: flow,
+    );
+    await _settle(outcome);
+    return outcome;
+  }
+
+  /// Throws [IdentityAlreadyInUse] unless [allowSignIn], so the screen gets a
+  /// chance to say what signing in would cost before the session is replaced.
+  Future<IdentityOutcome> continueWithGoogle({
+    required String idToken,
+    String? accessToken,
+    bool allowSignIn = false,
+  }) async {
+    await ref.read(sessionControllerProvider.future);
+    final outcome = await _auth().continueWithGoogle(
+      idToken: idToken,
+      accessToken: accessToken,
+      allowSignIn: allowSignIn,
+    );
+    await _settle(outcome);
+    return outcome;
+  }
+
+  /// Brings the device into line with whatever just happened to the session.
+  Future<void> _settle(IdentityOutcome outcome) async {
+    if (!outcome.keptTheSession) {
+      await forgetLocalLedger(ref.read(appDatabaseProvider));
+      await ref
+          .read(localIdentityControllerProvider.notifier)
+          .clearPersonalDetails();
+    }
+
+    // Before the session is rebuilt, so SessionController sees an identity that
+    // already matches and does not try to repoint anything.
+    await ref
+        .read(localIdentityControllerProvider.notifier)
+        .adoptProfileId(outcome.account.id);
+
+    ref.invalidate(sessionControllerProvider);
+    await ref.read(syncControllerProvider.notifier).syncAll();
   }
 }
 
@@ -596,54 +763,29 @@ PushService pushService(Ref ref) {
       if (engine == null) return;
       await engine.syncGroup(groupId);
     },
-    describe: (groupId, entryId) async {
-      final entry = await ref.read(entryRepositoryProvider).getEntry(entryId);
-      if (entry == null) return null;
-
-      final group = await ref.read(groupRepositoryProvider).getGroup(groupId);
-      final members = await ref
-          .read(groupRepositoryProvider)
-          .getMembers(groupId);
-      final currencies = await ref.read(currencyRepositoryProvider).all();
-      final me = ref.read(localIdentityControllerProvider).profileId;
-
-      String nameOf(String memberId) =>
-          members
-              .where((m) => m.id == memberId)
-              .map((m) => m.displayName)
-              .firstOrNull ??
-          'Someone';
-
-      final myMemberId = members
-          .where((m) => m.profileId == me)
-          .map((m) => m.id)
-          .firstOrNull;
-      final myShare =
-          entry.shares
-              .where((s) => s.memberId == myMemberId)
-              .map((s) => s.amountMinor)
-              .firstOrNull ??
-          0;
-
-      final currency = currencies
-          .where((c) => c.code == entry.currency)
-          .firstOrNull;
-
-      return describeEntry(
-        entry: entry,
-        groupName: group?.name ?? 'OpenSplit',
-        authorName: nameOf(entry.createdBy),
-        currency: currency,
-        shareMinor: myShare,
-        // The screens' formatter, so a banner and the app can never quote
-        // different figures.
-        format: (minor) => formatMoney(currency, minor),
-      );
-    },
+    // The same composer the background isolate calls, so a notification says
+    // the same thing whether the app was open when it arrived or not.
+    describe: (groupId, entryId) => composeEntryNotification(
+      entries: ref.read(entryRepositoryProvider),
+      groups: ref.read(groupRepositoryProvider),
+      currencies: ref.read(currencyRepositoryProvider),
+      myProfileId: ref.read(localIdentityControllerProvider).profileId,
+      groupId: groupId,
+      entryId: entryId,
+    ),
+    onOpenRoute: (route) => ref.read(routerProvider).go(route),
   );
   ref.onDispose(service.dispose);
   return service;
 }
+
+/// The one router instance.
+///
+/// A provider rather than a field on the app widget's state so that things
+/// outside the widget tree can navigate — specifically a notification tap,
+/// which arrives from the OS with no `BuildContext` anywhere in sight.
+@Riverpod(keepAlive: true)
+GoRouter router(Ref ref) => buildRouter();
 
 /// Sends this device's token to the server.
 ///
@@ -654,12 +796,21 @@ Future<void> _registerDeviceToken(Ref ref, String token) async {
   final account = await ref.read(sessionControllerProvider.future);
   if (client == null || account == null) return;
 
-  await client.from('device_tokens').upsert({
-    'token': token,
-    'profile_id': account.id,
-    'platform': ref.read(pushServiceProvider).platform,
-    'last_seen_at': DateTime.now().toUtc().toIso8601String(),
-  });
+  // An RPC rather than an upsert, because a device changes hands. Signing in
+  // as a different account, or reinstalling, gets the same registration back
+  // from FCM while the stored row still names the previous owner — and RLS
+  // evaluates an upsert's UPDATE half against that row and refuses it. The
+  // symptom is a device that silently stops receiving anything.
+  //
+  // register_device_token always writes auth.uid(), so the takeover is the
+  // only thing it can do.
+  await client.rpc(
+    'register_device_token',
+    params: {
+      'p_token': token,
+      'p_platform': ref.read(pushServiceProvider).platform,
+    },
+  );
 }
 
 /// Registers this device for push, if the user has already agreed to it.

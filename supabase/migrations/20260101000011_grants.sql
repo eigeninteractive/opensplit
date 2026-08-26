@@ -61,6 +61,10 @@ grant execute on function redeem_invite(uuid) to authenticated;
 
 grant execute on function request_fx_backfill(date, char(3)) to authenticated;
 
+-- Registering a device, including taking a token over from whoever held it
+-- before. See the note on the function: it can only ever write auth.uid().
+grant execute on function register_device_token(text, text) to authenticated;
+
 -- Helpers used inside policies.
 grant execute on function is_group_member(uuid)  to authenticated;
 grant execute on function is_group_owner(uuid)   to authenticated;
@@ -75,6 +79,10 @@ grant execute on function is_group_creator(uuid) to authenticated;
 revoke execute on function fx_rate_as_of(char(3), date) from public, anon, authenticated;
 revoke execute on function fx_convert(char(3), char(3), date) from public, anon, authenticated;
 
+-- Likewise: the fetcher asks what it already holds, and nobody else needs to.
+revoke execute on function fx_currencies_covered(date)
+  from public, anon, authenticated;
+
 -- ----------------------------------------------------------------------------
 -- The Edge Functions.
 --
@@ -88,6 +96,7 @@ revoke execute on function fx_convert(char(3), char(3), date) from public, anon,
 grant select                 on currencies   to service_role;
 grant select, insert, update on fx_rates     to service_role;
 grant select, update         on fx_providers to service_role;
+grant execute on function fx_currencies_covered(date) to service_role;
 
 -- notify-entry deletes registrations FCM has reported as dead. Without this the
 -- send succeeds, the cleanup fails, and stale tokens accumulate forever while

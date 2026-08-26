@@ -171,6 +171,41 @@ comment on function fx_convert is
   'has no published rate. Display only.';
 
 -- ----------------------------------------------------------------------------
+-- Which currencies can already be priced on a date.
+--
+-- The fetcher needs this to decide what is worth asking a provider for, and
+-- the obvious way to get it — select the fx_rates rows on or before the date
+-- and collect the distinct currencies — is wrong through PostgREST, which caps
+-- a response at `max_rows` (1000). Sixteen currencies over a couple of years
+-- is well past that, the tail is silently dropped, and every currency in the
+-- dropped part looks unpriced. The fetcher then spends real requests, against
+-- a 1,500-a-month free tier, re-fetching rates it already holds.
+--
+-- One row per currency, computed where the rows are, so there is nothing to
+-- truncate.
+-- ----------------------------------------------------------------------------
+create or replace function fx_currencies_covered(p_as_of date)
+returns table (currency char(3))
+language sql
+stable
+set search_path = public
+as $$
+  select c.code
+    from currencies c
+   where exists (
+     select 1
+       from fx_rates r
+      where r.currency = c.code
+        and r.as_of <= p_as_of
+   );
+$$;
+
+comment on function fx_currencies_covered is
+  'Currencies with a rate published on or before p_as_of. "On or before" '
+  'because ECB does not publish at weekends and Friday''s rate is the correct '
+  'answer for a Sunday.';
+
+-- ----------------------------------------------------------------------------
 -- Asking the fetcher to run.
 --
 -- The fetch itself is an Edge Function, so Postgres reaches it over HTTP. The

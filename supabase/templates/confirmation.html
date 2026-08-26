@@ -1,0 +1,13 @@
+<!-- Code only, no confirmation link. See supabase/templates/README.md:
+     a link opens in the wrong browser, and mail scanners follow it and spend
+     the single-use token before the recipient ever opens the message. -->
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.5; color: #1a1a1a; max-width: 480px;">
+  <h2 style="font-size: 20px; font-weight: 600; margin: 0 0 16px;">Your OpenSplit code</h2>
+
+  <p style="margin: 0 0 24px;">Enter this code in OpenSplit to finish signing in.</p>
+
+  <p style="font-size: 32px; font-weight: 700; letter-spacing: 6px; margin: 0 0 24px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">{{ .Token }}</p>
+
+  <p style="margin: 0 0 8px; color: #666; font-size: 14px;">The code is good for one hour.</p>
+  <p style="margin: 0; color: #666; font-size: 14px;">If you did not ask for this, you can ignore this email — nothing changes until the code is entered.</p>
+</div>

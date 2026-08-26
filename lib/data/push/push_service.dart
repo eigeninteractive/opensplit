@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../../config.dart';
+import 'background_handler.dart';
+import 'notification_channel.dart';
 
 /// Wakes the app when something changes, and lets the app say what changed.
 ///
@@ -28,6 +30,7 @@ class PushService {
     required this.onWake,
     required this.describe,
     required this.onTokenChanged,
+    required this.onOpenRoute,
   });
 
   /// Pull the delta for a group. Runs before anything is shown.
@@ -44,16 +47,18 @@ class PushService {
   /// every time FCM rotates it.
   final Future<void> Function(String token) onTokenChanged;
 
+  /// Navigate, because somebody tapped a notification.
+  ///
+  /// A notification about one expense that opens the app's front door has
+  /// wasted the tap: whatever it said, the thing it said it about is now
+  /// several screens away.
+  final void Function(String route) onOpenRoute;
+
   final _local = FlutterLocalNotificationsPlugin();
   bool _ready = false;
   StreamSubscription<String>? _refresh;
-
-  static const _channel = AndroidNotificationChannel(
-    'opensplit_activity',
-    'Group activity',
-    description: 'New expenses and settlements in your groups.',
-    importance: Importance.defaultImportance,
-  );
+  StreamSubscription<RemoteMessage>? _messages;
+  StreamSubscription<RemoteMessage>? _opened;
 
   /// Sets everything up, or does nothing at all if push is not configured.
   ///
@@ -73,27 +78,47 @@ class PushService {
     );
 
     await _local.initialize(
-      // A dedicated status bar icon, not the launcher icon. Android draws
-      // these as a silhouette — it reads the alpha channel and paints its own
-      // colour through it — so a full-colour launcher icon arrives as a white
-      // blob. This one is generated from the brand mark's monochrome layer by
-      // tool/brand_icons.dart.
-      //
-      // Named rather than referenced, which means resource shrinking cannot
-      // see it: android/app/src/main/res/raw/keep.xml is what stops the
-      // release build dropping it and failing to post silently.
       settings: const InitializationSettings(
-        android: AndroidInitializationSettings('@drawable/ic_stat_opensplit'),
+        android: AndroidInitializationSettings(statusBarIcon),
       ),
+      // Tapping a notification this app posted, while it is running.
+      onDidReceiveNotificationResponse: (response) {
+        final route = response.payload;
+        if (route != null && route.isNotEmpty) onOpenRoute(route);
+      },
     );
     await _local
         .resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin
         >()
-        ?.createNotificationChannel(_channel);
+        ?.createNotificationChannel(activityChannel);
 
-    FirebaseMessaging.onMessage.listen(_handle);
-    FirebaseMessaging.onBackgroundMessage(_backgroundStub);
+    _messages ??= FirebaseMessaging.onMessage.listen(_handle);
+
+    // Not supported on the web, where a service worker handles background
+    // delivery and cannot run Dart. See web/firebase-messaging-sw.js.
+    if (!kIsWeb) {
+      FirebaseMessaging.onBackgroundMessage(handleBackgroundEntryMessage);
+    }
+
+    // Tapping a notification the OS posted for a message, while the app was
+    // backgrounded but alive.
+    _opened ??= FirebaseMessaging.onMessageOpenedApp.listen(_open);
+
+    // The same, but the app was not running at all and this launched it. Both
+    // are needed: they cover different states and neither fires for the other.
+    final initial = await FirebaseMessaging.instance.getInitialMessage();
+    if (initial != null) _open(initial);
+
+    // And the case that produced the notification in the first place: one this
+    // app posted from the background isolate, tapped while the app was dead.
+    final launch = await _local.getNotificationAppLaunchDetails();
+    final payload = launch?.notificationResponse?.payload;
+    if ((launch?.didNotificationLaunchApp ?? false) &&
+        payload != null &&
+        payload.isNotEmpty) {
+      onOpenRoute(payload);
+    }
 
     // FCM rotates a registration token on reinstall, on restore to a new
     // device, and whenever it decides one is stale — after 270 days of
@@ -148,9 +173,14 @@ class PushService {
 
   Future<void> dispose() async {
     await _refresh?.cancel();
+    await _messages?.cancel();
+    await _opened?.cancel();
     _refresh = null;
+    _messages = null;
+    _opened = null;
   }
 
+  /// A message that arrived while somebody was looking at the app.
   Future<void> _handle(RemoteMessage message) async {
     final groupId = message.data['group_id'];
     final entryId = message.data['entry_id'];
@@ -167,22 +197,22 @@ class PushService {
       id: entryId.hashCode,
       title: text.title,
       body: text.body,
-      notificationDetails: NotificationDetails(
+      notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(
-          _channel.id,
-          _channel.name,
-          channelDescription: _channel.description,
+          activityChannelId,
+          activityChannelName,
+          channelDescription: activityChannelDescription,
         ),
       ),
-      // Tapping it should open the entry it is about, not just the app.
+      // Tapping it opens the entry it is about, not just the app.
       payload: '/g/$groupId/e/$entryId',
     );
   }
-}
 
-/// Registered so Android does not drop messages that arrive while the app is
-/// not running. The work happens when the app next opens: doing a full sync in
-/// a background isolate would need a second database connection and its own
-/// copy of every provider, for a notification nobody is looking at yet.
-@pragma('vm:entry-point')
-Future<void> _backgroundStub(RemoteMessage message) async {}
+  void _open(RemoteMessage message) {
+    final groupId = message.data['group_id'];
+    final entryId = message.data['entry_id'];
+    if (groupId is! String || entryId is! String) return;
+    onOpenRoute('/g/$groupId/e/$entryId');
+  }
+}

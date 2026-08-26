@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 // Imported for the generated part file: `textEnum` columns resolve these types
 // in database.g.dart, and a part shares the imports of its parent library.
@@ -61,12 +62,48 @@ class AppDatabase extends _$AppDatabase {
       await _createSearchIndex();
       await _seedReferenceData();
     },
+
+    // Empty because there is nothing to upgrade *from* yet, and spelled out
+    // rather than omitted because of what happens the first time there is.
+    //
+    // A local-first app cannot drop and recreate: the device holds the only
+    // copy of anything recorded offline and never pushed. So every schema
+    // change from v1 onwards needs a step here, and the way to know a step is
+    // right is to run it against a real v1 database — which is what the
+    // committed snapshot in `drift_schemas/` is for, and why it is committed
+    // now rather than reconstructed later from a schemaVersion bump nobody
+    // wrote down.
+    //
+    //   dart run drift_dev schema dump lib/data/local/database.dart drift_schemas/
+    //   dart run drift_dev schema generate drift_schemas/ test/data/generated_migrations/
+    //
+    // See test/data/migration_test.dart.
+    onUpgrade: (m, from, to) async {
+      throw StateError(
+        'No migration from schema v$from to v$to. Add a step in '
+        'AppDatabase.migration and a case in test/data/migration_test.dart '
+        'before shipping a schemaVersion bump.',
+      );
+    },
     beforeOpen: (details) async {
       // SQLite disables foreign keys per connection by default, so the
       // `references` declarations in tables.dart would be documentation only.
       // They are what stops an entry_share pointing at a member who is not in
       // the group.
       await customStatement('PRAGMA foreign_keys = ON');
+
+      if (!kIsWeb) {
+        // Two isolates open this file: the app, and the push background
+        // handler, which wakes with the app closed and syncs before it can say
+        // what arrived. The default rollback journal locks the whole database
+        // for a writer, so the two would collide as SQLITE_BUSY at exactly the
+        // moment there is nobody to retry.
+        //
+        // journal_mode is persisted in the file, so this is really only set
+        // once; busy_timeout is per connection and has to be set every time.
+        await customStatement('PRAGMA journal_mode = WAL');
+        await customStatement('PRAGMA busy_timeout = 5000');
+      }
     },
   );
 

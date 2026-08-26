@@ -5,6 +5,7 @@ import 'screens/account_screen.dart';
 import 'screens/entry_editor_screen.dart';
 import 'screens/group_detail_screen.dart';
 import 'screens/group_list_screen.dart';
+import 'screens/group_settings_screen.dart';
 import 'screens/insights_screen.dart';
 import 'screens/join_screen.dart';
 import 'screens/members_screen.dart';
@@ -72,6 +73,12 @@ GoRouter buildRouter() => GoRouter(
               path: 'insights',
               builder: (context, state) =>
                   InsightsScreen(groupId: state.pathParameters['groupId']!),
+            ),
+            GoRoute(
+              path: 'settings',
+              builder: (context, state) => GroupSettingsScreen(
+                groupId: state.pathParameters['groupId']!,
+              ),
             ),
             GoRoute(
               path: 'members',

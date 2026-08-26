@@ -202,17 +202,32 @@ Deno.serve(async (request) => {
 /// "On or before" rather than "on", because ECB does not publish at weekends
 /// and a Friday rate is the correct answer for a Sunday. Treating a Sunday as a
 /// gap would make every backfill chase rates that will never exist.
+///
+/// Goes through an RPC rather than selecting the fx_rates rows and collecting
+/// the distinct currencies here. That reads as the obvious thing and is wrong:
+/// PostgREST caps a response at `max_rows` (1000), sixteen currencies over a
+/// couple of years is well past it, and the silently dropped tail makes
+/// currencies look unpriced. The fetcher then spends requests — against a
+/// 1,500-a-month free tier — re-fetching rates it already holds. One row per
+/// currency, computed where the rows are, has nothing to truncate.
 async function missingFor(
   supabase: SupabaseClient,
   currencies: string[],
   asOf: string,
 ): Promise<string[]> {
-  const { data } = await supabase
-    .from('fx_rates')
-    .select('currency')
-    .lte('as_of', asOf)
-    .in('currency', currencies);
+  const { data, error } = await supabase.rpc('fx_currencies_covered', {
+    p_as_of: asOf,
+  });
+  if (error) {
+    // Better to fetch a day we already hold than to skip one we do not: the
+    // waterfall is idempotent, and an upsert of an identical rate costs a row
+    // write. Treating the whole day as missing is the safe direction.
+    console.error('fx_currencies_covered failed', error);
+    return currencies;
+  }
 
-  const held = new Set((data ?? []).map((r: { currency: string }) => r.currency.trim()));
+  const held = new Set(
+    (data ?? []).map((r: { currency: string }) => r.currency.trim()),
+  );
   return currencies.filter((c) => !held.has(c));
 }

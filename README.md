@@ -57,12 +57,43 @@ this shape of schema), that entries cannot be hard-deleted, that an anonymous
 account cannot destroy a group, and that an invite token can be spent exactly
 once by someone with no other access to the group.
 
-`test/data/supabase_integration_test.dart` runs the real adapter against that
-local instance. It skips itself when nothing is listening, so `flutter test`
-stays green without it — but it is the only thing that catches a wrong RPC
-signature, a PostgREST filter that does not mean what it looks like, or an RLS
-policy that forbids something the app has to do. Every one of those has already
-happened once.
+They also cover what one member of a group can do to another, which is a
+different question from what a stranger can do and has a much less obvious
+answer. An RLS policy chooses rows; it cannot say "this column, but only on
+your own row", and its `WITH CHECK` cannot see the old row at all. So the
+column rules live in `guard_member_update` instead, and the tests are what say
+that an ordinary member cannot promote themselves to owner, cannot blank
+somebody's `profile_id` and evict them, and — the one that moves real money —
+cannot rewrite another member's UPI handle so a settle-up handoff pays the
+wrong person.
+
+```bash
+flutter test test/data/supabase_integration_test.dart   # needs supabase start
+```
+
+That runs the real adapter against the local instance. It skips itself when
+nothing is listening, so `flutter test` stays green without it — which is also
+why it has to be run somewhere that *does* have a backend, or it never runs at
+all. CI does, in the `database` job. It is the only thing that catches a wrong
+RPC signature, a PostgREST filter that does not mean what it looks like, or an
+RLS policy that forbids something the app has to do. Every one of those has
+already happened once.
+
+### The local database schema is versioned
+
+The device holds the only copy of anything recorded offline and never pushed,
+so a Drift migration that drops a table takes real money with it and there is
+no server-side backup to restore from — by design. `drift_schemas/` holds a
+snapshot of every shipped schema, and `test/data/migration_test.dart` fails the
+moment the code drifts from the newest one.
+
+After changing anything in `lib/data/local/tables.dart`, bump
+`AppDatabase.schemaVersion`, add a step to `onUpgrade`, and then:
+
+```bash
+dart run drift_dev schema dump lib/data/local/database.dart drift_schemas/
+dart run drift_dev schema generate drift_schemas/ test/data/generated_migrations/
+```
 
 The domain layer is also run in a real browser:
 
@@ -83,6 +114,7 @@ built against the wrong backend.
 
 ```bash
 cp env/app.example.json env/app.json      # gitignored; fill it in
+cp android/key.properties.example android/key.properties   # gitignored too
 
 # Android
 flutter build appbundle --release --dart-define-from-file=env/app.json
@@ -90,6 +122,20 @@ flutter build appbundle --release --dart-define-from-file=env/app.json
 # Web, WasmGC with an automatic JS fallback for older browsers.
 flutter build web --wasm --release --dart-define-from-file=env/app.json
 ```
+
+`android/key.properties` points at the upload keystore and carries its
+passwords, which makes it the one genuinely secret file in this project. Create
+the key once, keep the `.jks` outside the repository, and do not lose it:
+
+```bash
+keytool -genkey -v -keystore ~/opensplit-upload.jks \
+  -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+```
+
+Without that file a release **APK** falls back to the debug key — fine for
+putting on your own phone — and a release **bundle refuses to build**, because
+that is the artefact Play would reject. The failure is a Gradle error naming
+the file, rather than an upload rejected an hour later.
 
 Check it before you build, because a wrong value here fails at runtime and
 often silently:
@@ -251,6 +297,35 @@ keytool -list -v -keystore ~/.android/debug.keystore \
   -alias androiddebugkey -storepass android | grep SHA1
 ```
 
+### Accounts: two settings that are not optional
+
+Everyone starts anonymous, and attaching a real account later has to **link** —
+same user id, same rows, nothing to migrate. Two things on the Supabase side
+have to be right or that silently becomes something else entirely.
+
+**1. Allow manual linking.** *Authentication → Providers → Allow manual
+linking*, and `enable_manual_linking = true` in `supabase/config.toml` for
+local. Attaching Google goes through `linkIdentityWithIdToken`, which is
+refused outright when this is off. Its cousin `signInWithIdToken` does not
+link: it signs in as a *different* user and leaves the anonymous one holding
+every group the person had created, at which point the new account is a
+stranger to its own data and every push is refused by RLS. The app refuses to
+fall back to it silently, and says which switch is off instead — but the switch
+still has to be on.
+
+**2. Email templates.** The app asks for a six-digit code. Supabase's stock
+templates send a magic link and no token at all, so against them the "check
+your email" step waits for a number that is never sent. `supabase/templates/`
+holds three that carry `{{ .Token }}`; local picks them up from `config.toml`,
+and a hosted project needs them pasted into *Authentication → Emails →
+Templates* by hand, because templates are **not** deployed by `supabase db
+push`. See [`supabase/templates/README.md`](supabase/templates/README.md).
+
+Also leave `enable_confirmations = true`. With it off an email change is
+applied outright, so an anonymous session can claim any address at all, having
+proved nothing — and the real owner of that address finds it already spoken
+for.
+
 ### Push notifications
 
 The client values above cover the app. The fan-out also needs a service account,
@@ -283,6 +358,22 @@ system settings as the only way back. The app asks in two places instead: the
 Settings switch, and once after someone shares an invite — the first moment
 being notified about a group means anything. Both show an in-app rationale
 first, so the OS dialog is only ever spent on someone who has already agreed.
+
+**Backgrounded is the case that matters, and it costs an isolate.** The message
+is data-only, so nothing is drawn unless the app draws it — and a stub
+background handler therefore means the only notifications anyone ever sees are
+the ones that arrive while they are already looking at the app, which is the
+one case a notification is not for. `lib/data/push/background_handler.dart`
+runs in a background isolate with its own Firebase, its own Supabase client and
+a second connection to the SQLite file (which is why the database is opened in
+WAL mode with a busy timeout). It syncs, then formats with the same Dart the
+screens use.
+
+On the web there is no equivalent — a service worker cannot run Dart — so
+`web/firebase-messaging-sw.js` deliberately draws nothing and web push only
+wakes an open tab. Tapping any of these opens the entry it was about rather
+than the app's front door, on all three paths: foreground, backgrounded, and
+launched from cold.
 
 ## Developing against local Supabase with the real Firebase
 
@@ -403,10 +494,14 @@ rewrite swallowed it, and App Links will not verify.
 
 **Before the first Play Store release**, read
 [`web/.well-known/README.md`](web/.well-known/README.md). `assetlinks.json`
-currently lists only a local debug key. App Links will verify perfectly on your
-machine and fail for every real user until it also lists the upload key *and*
-the Google Play App Signing key — and the failure is silent: links just open in
-a browser.
+now lists the Google Play App Signing key, which is the certificate every
+install from the Store actually carries — Play re-signs each upload with it, so
+it and not the upload key is what Android checks.
+
+It should also list the **upload key**, so that release APKs installed directly
+verify too. Both fingerprints are shown together under *Play Console → Test and
+release → Setup → App signing*. Getting this wrong is silent in the worst way:
+links simply open in a browser, with nothing in the app to say why.
 
 Anonymous sign-in is unauthenticated row creation, so it is rate limited rather
 than gated: `anonymous_users = 30` per hour per IP in `supabase/config.toml`,
@@ -429,8 +524,19 @@ lib/presentation/   screens and widgets.
 supabase/           migrations, organised by subject rather than by date:
                     foundation, currencies, identity, groups, entries, fx,
                     invites, push, write path, security, grants, jobs.
+                    Plus templates/, the email templates that carry the code
+                    the app asks for.
+drift_schemas/      a snapshot of every shipped local schema, so a future
+                    migration can be tested against a real old database
+                    rather than a guess at one.
 docs/               the product requirements document.
 ```
+
+The migrations are edited in place rather than appended to while the app is
+unreleased — that is what keeps them readable by subject — so applying a change
+locally means `supabase db reset`, not `supabase db push`. Once there is a
+deployment holding real data that stops being true, and the file numbering
+starts going up.
 
 The domain layer is pure functions over immutable data, which is why it is
 tested with generated cases rather than examples: thousands of random entry

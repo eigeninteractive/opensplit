@@ -1,25 +1,16 @@
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../application/providers.dart';
-import 'router.dart';
 import 'theme.dart';
 import 'theme_mode.dart';
 
-class OpenSplitApp extends ConsumerStatefulWidget {
+class OpenSplitApp extends ConsumerWidget {
   const OpenSplitApp({super.key});
 
   @override
-  ConsumerState<OpenSplitApp> createState() => _OpenSplitAppState();
-}
-
-class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
-  late final GoRouter _router = buildRouter();
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     // Establishes a session and registers for push, both silently and both
     // optional. Neither blocks a single frame: every screen renders from the
     // local database regardless of how these turn out.
@@ -36,7 +27,7 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
         // Both themes are always supplied, and this decides between them.
         // Defaults to following the platform — see [ThemeModeController].
         themeMode: ref.watch(themeModeProvider),
-        routerConfig: _router,
+        routerConfig: ref.watch(routerProvider),
       ),
     );
   }

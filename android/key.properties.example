@@ -1,0 +1,30 @@
+# Upload key, for release builds. Copy to android/key.properties, which is
+# gitignored, and fill in.
+#
+#   cp android/key.properties.example android/key.properties
+#
+# Without this file a release APK falls back to the debug key — fine for
+# installing on your own device — and a release *bundle* refuses to build at
+# all, because that is the artefact Play would reject.
+#
+# Generating the key, once, and then never losing it:
+#
+#   keytool -genkey -v -keystore ~/opensplit-upload.jks \
+#     -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+#
+# Keep the .jks outside the repository. With Play App Signing switched on,
+# losing the upload key is recoverable — Google can reset it — but losing it
+# without Play App Signing means the app can never be updated again.
+
+storeFile=/Users/you/opensplit-upload.jks
+storePassword=
+keyAlias=upload
+keyPassword=
+
+# After the first upload, App Links need the SHA-256 of BOTH certificates in
+# web/.well-known/assetlinks.json: the app signing key Play re-signs with, and
+# this upload key, so that directly installed release APKs verify too. Play
+# Console -> Test and release -> Setup -> App signing shows both.
+#
+#   keytool -list -v -keystore ~/opensplit-upload.jks -alias upload \
+#     | grep 'SHA256:'

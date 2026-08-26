@@ -142,4 +142,60 @@ void main() {
 
     expect(csv, contains(',Transport,'));
   });
+
+  group('a description is somebody else\'s input', () {
+    // Every field in this file is free text a member of the group typed, and
+    // the person opening the export is somebody else. Excel, Sheets and
+    // LibreOffice all execute a cell that begins = + - or @.
+    for (final lead in ['=', '+', '-', '@']) {
+      test('a leading $lead is not left as a live formula', () {
+        final csv = entriesToCsv(
+          [_entry(description: '${lead}HYPERLINK("http://evil","Refund")')],
+          memberNames: _names,
+          currencies: _currencies,
+        );
+
+        expect(
+          csv,
+          contains("'$lead"),
+          reason: 'the cell should be forced to text with an apostrophe',
+        );
+      });
+    }
+
+    test('tab and carriage return cannot smuggle one past', () {
+      // Excel strips leading whitespace before deciding whether a cell is a
+      // formula, so these put the next character back in first position.
+      for (final lead in ['\t', '\r']) {
+        final csv = entriesToCsv(
+          [_entry(description: '$lead=1+1')],
+          memberNames: _names,
+          currencies: _currencies,
+        );
+        expect(csv, contains("'$lead"));
+      }
+    });
+
+    test('an ordinary description is left exactly as typed', () {
+      final csv = entriesToCsv(
+        [_entry(description: 'Dinner at Toit')],
+        memberNames: _names,
+        currencies: _currencies,
+      );
+
+      expect(csv, contains('Dinner at Toit'));
+      expect(csv, isNot(contains("'Dinner")));
+    });
+
+    test('escaping still applies on top of it', () {
+      final csv = entriesToCsv(
+        [_entry(description: '=cmd|"/c calc"!A1')],
+        memberNames: _names,
+        currencies: _currencies,
+      );
+
+      // Neutralised AND quoted, since the value also contains a quote.
+      expect(csv, contains('"\'=cmd|""/c calc""!A1"'));
+    });
+  });
 }

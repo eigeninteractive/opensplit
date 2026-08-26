@@ -6,7 +6,7 @@
 -- could attempt against a real deployment with a valid session.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(12);
+select plan(23);
 
 -- ---------------------------------------------------------------------------
 -- Two groups that share nothing. Ravi owns Goa; Zara owns Manali.
@@ -189,6 +189,121 @@ select throws_ok(
   '23514',
   null,
   'a zero exchange rate is refused');
+
+-- ===========================================================================
+-- Inside the group: what one member can do to another
+--
+-- The policy on `members` admits any member of a group to update any member
+-- row of that group, and it cannot do better — a policy cannot say "this
+-- column, but only on your own row", and its WITH CHECK cannot see OLD at all.
+-- Every one of the first five below was reachable until guard_member_update()
+-- existed, and the second of them redirects real money.
+-- ===========================================================================
+reset role;
+
+insert into auth.users (id, instance_id, aud, role, email, raw_user_meta_data,
+                        created_at, updated_at)
+values ('77777777-7777-4777-8777-777777777777',
+        '00000000-0000-0000-0000-000000000000', 'authenticated',
+        'authenticated', 'kabir@example.com', '{"display_name":"Kabir"}',
+        now(), now());
+
+-- Kabir holds an account and is an ordinary member. Priya is still a
+-- placeholder, and the difference between them is exactly what the rules
+-- turn on: a placeholder has to stay editable by the group, because somebody
+-- has to be able to name and pay a person who has never opened the app.
+insert into members (id, group_id, profile_id, display_name, role)
+values ('66666666-6666-4666-8666-666666666666',
+        '33333333-3333-4333-8333-333333333333',
+        '77777777-7777-4777-8777-777777777777', 'Kabir', 'member');
+
+set local role authenticated;
+set local "request.jwt.claims" to
+  '{"sub":"77777777-7777-4777-8777-777777777777","role":"authenticated"}';
+
+select throws_ok(
+  $$update members set role = 'owner'
+     where id = '66666666-6666-4666-8666-666666666666'$$,
+  '42501',
+  null,
+  'a member cannot promote themselves to owner');
+
+select throws_ok(
+  $$update members set upi_vpa = 'attacker@okaxis'
+     where id = '44444444-4444-4444-8444-444444444444'$$,
+  '42501',
+  null,
+  'a member cannot redirect another member''s settle-up handle');
+
+select throws_ok(
+  $$update members set profile_id = null
+     where id = '44444444-4444-4444-8444-444444444444'$$,
+  '42501',
+  null,
+  'a member cannot evict another by blanking their profile');
+
+select throws_ok(
+  $$update members set display_name = 'Not Ravi'
+     where id = '44444444-4444-4444-8444-444444444444'$$,
+  '42501',
+  null,
+  'a member cannot rename another account holder');
+
+select throws_ok(
+  $$update members set left_at = now()
+     where id = '44444444-4444-4444-8444-444444444444'$$,
+  '42501',
+  null,
+  'a member cannot mark somebody else as having left');
+
+select throws_ok(
+  $$update members set group_id = 'a3333333-3333-4333-8333-333333333333'
+     where id = '66666666-6666-4666-8666-666666666666'$$,
+  '42501',
+  null,
+  'a member cannot carry themselves into another group');
+
+-- ---------------------------------------------------------------------------
+-- And everything the app legitimately does, which all of the above must not
+-- have cost. A guard that also blocks the product is not a fix.
+-- ---------------------------------------------------------------------------
+select lives_ok(
+  $$update members set display_name = 'Priya S', upi_vpa = 'priya@okhdfcbank'
+     where id = '55555555-5555-4555-8555-555555555555'$$,
+  'a placeholder stays editable by anyone in the group');
+
+select lives_ok(
+  $$update members set upi_vpa = 'kabir@oksbi'
+     where id = '66666666-6666-4666-8666-666666666666'$$,
+  'your own payment handle stays yours to set');
+
+-- Last, because it ends Kabir's membership and with it his access.
+select lives_ok(
+  $$update members set left_at = now()
+     where id = '66666666-6666-4666-8666-666666666666'$$,
+  'you can always leave of your own accord');
+
+set local "request.jwt.claims" to
+  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated"}';
+
+select lives_ok(
+  $$update members set role = 'owner'
+     where id = '55555555-5555-4555-8555-555555555555'$$,
+  'an owner can still change a role');
+
+-- ===========================================================================
+-- Deleting a group
+--
+-- entry_payers references members with ON DELETE RESTRICT, so the cascade from
+-- `groups` stops dead as soon as the group holds a single expense. That is the
+-- right outcome and the wrong message: unguarded it surfaces as a foreign key
+-- the caller has never heard of.
+-- ===========================================================================
+select throws_ok(
+  $$delete from groups where id = '33333333-3333-4333-8333-333333333333'$$,
+  '2BP01',
+  null,
+  'a group with expenses in it refuses deletion rather than half-succeeding');
 
 select * from finish();
 rollback;

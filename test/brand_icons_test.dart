@@ -41,22 +41,46 @@ void main() {
   });
 
   group('the notification icon', () {
-    /// The name push_service.dart asks Android for, at runtime, by string.
+    /// The name the app asks Android for, at runtime, by string.
     late final String declared;
 
     setUpAll(() {
-      final match = RegExp(
-        r"AndroidInitializationSettings\('@drawable/(\w+)'\)",
-      ).firstMatch(File('lib/data/push/push_service.dart').readAsStringSync());
+      final match = RegExp(r"const String statusBarIcon = '@drawable/(\w+)'")
+          .firstMatch(
+            File('lib/data/push/notification_channel.dart').readAsStringSync(),
+          );
 
       expect(
         match,
         isNotNull,
         reason:
-            'push_service.dart must name a @drawable notification icon; a '
-            '@mipmap launcher icon renders as a white blob',
+            'notification_channel.dart must name a @drawable notification '
+            'icon; a @mipmap launcher icon renders as a white blob',
       );
       declared = match!.group(1)!;
+    });
+
+    test('is named in one place, not once per isolate', () {
+      // The app and the push background isolate each initialise the plugin,
+      // and they run in separate memory with no shared setup. Two literals
+      // here is not a compile error — it is one of them being changed and the
+      // other quietly keeping the old icon, on whichever path nobody tested.
+      for (final path in [
+        'lib/data/push/push_service.dart',
+        'lib/data/push/background_handler.dart',
+      ]) {
+        final source = File(path).readAsStringSync();
+        expect(
+          source,
+          contains('AndroidInitializationSettings(statusBarIcon)'),
+          reason: '$path should use the shared statusBarIcon constant',
+        );
+        expect(
+          source,
+          isNot(contains("'@drawable/")),
+          reason: '$path should not name a drawable directly',
+        );
+      }
     });
 
     test('exists at every density Android resolves between', () {

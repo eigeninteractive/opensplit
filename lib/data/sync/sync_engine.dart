@@ -56,6 +56,29 @@ class SyncEngine {
   final DateTime Function() _clock;
   final int pageSize;
 
+  /// Every group the server says this account belongs to, including ones this
+  /// device has never seen.
+  ///
+  /// The local group list is not the answer to "what should I sync?" — it is
+  /// the answer to "what have I synced already", and on a second device or
+  /// after a reinstall those are very different. Local ids are folded in so a
+  /// group created offline, which the server does not know about yet, is not
+  /// dropped from the sweep on its way to being pushed.
+  ///
+  /// Failure falls back to what is local. Being offline must not empty the
+  /// list and skip pushing the very rows that are waiting to go out.
+  Future<List<String>> discoverGroups() async {
+    final local = await db.select(db.groups).get();
+    final ids = <String>{for (final row in local) row.id};
+
+    try {
+      ids.addAll(await api.pullMyGroupIds());
+    } catch (_) {
+      // Offline, or the account has no session yet. Local is a safe answer.
+    }
+    return ids.toList()..sort();
+  }
+
   Future<SyncReport> syncGroup(String groupId) async {
     final pushed = await push();
     try {

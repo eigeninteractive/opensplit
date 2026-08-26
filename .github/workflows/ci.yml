@@ -37,10 +37,24 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: latest
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
 
       - run: supabase start
-      # Invariant trigger, RLS non-recursion, invite claim flow.
+      # Invariant trigger, RLS non-recursion, invite claim flow, and what a
+      # modified client can do to another member of its own group.
       - run: supabase test db
+
+      # The adapter against the real thing. These skip themselves when nothing
+      # is listening, which is why the `dart` job above stays green without a
+      # backend — and is also why they have to be run somewhere that DOES have
+      # one, or they never run at all. They are the only thing that catches a
+      # wrong RPC signature, a PostgREST filter that does not mean what it
+      # looks like, or a policy that forbids something the app has to do.
+      - run: flutter pub get
+      - run: dart run build_runner build
+      - run: flutter test test/data/supabase_integration_test.dart
 
   build:
     name: Build

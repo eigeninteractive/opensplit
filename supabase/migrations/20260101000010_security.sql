@@ -104,6 +104,117 @@ create policy members_update on members
   with check (is_group_member(group_id) or is_group_creator(group_id));
 
 -- ----------------------------------------------------------------------------
+-- Column rules for members, as a trigger rather than a policy.
+--
+-- RLS decides which ROWS a statement may touch and stops there. It cannot say
+-- "this column, but only on your own row", and WITH CHECK cannot see OLD at
+-- all — so the policy above, on its own, admits any member of a group to
+-- rewrite any other member of that group. That is too much:
+--
+--   * set role = 'owner' on yourself, and then delete the group;
+--   * rewrite somebody else's upi_vpa, so the settle-up handoff pays you;
+--   * null out somebody's profile_id, and they lose the group entirely.
+--
+-- All three were reachable. So the row scope stays in the policy and the
+-- column rules live here, where OLD and NEW are both in hand and a refusal can
+-- say what it refused — an RLS failure on UPDATE just matches zero rows and
+-- reports nothing at all.
+-- ----------------------------------------------------------------------------
+create or replace function guard_member_update()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+declare
+  -- Rows whose descriptive fields you may edit: your own, and any placeholder.
+  -- Placeholders are deliberately open — somebody has to be able to name and
+  -- pay a person who has never opened the app, which is the entire point of
+  -- them existing.
+  v_own_or_placeholder boolean :=
+    old.profile_id is null or old.profile_id = auth.uid();
+  v_owner boolean := is_group_owner(old.group_id);
+begin
+  if new.id is distinct from old.id
+     or new.group_id is distinct from old.group_id
+     or new.joined_at is distinct from old.joined_at then
+    raise exception 'A member cannot be moved between groups or re-identified'
+      using errcode = 'insufficient_privilege';
+  end if;
+
+  -- The invite claim, and nothing else. null -> yourself is redeem_invite
+  -- doing its one job. Every other transition either hands your place to
+  -- somebody else or takes somebody's away.
+  if new.profile_id is distinct from old.profile_id
+     and not (old.profile_id is null and new.profile_id = auth.uid()) then
+    raise exception
+      'A member''s account can only be claimed, never reassigned'
+      using errcode = 'insufficient_privilege';
+  end if;
+
+  if new.role is distinct from old.role and not v_owner then
+    raise exception 'Only an owner can change a role'
+      using errcode = 'insufficient_privilege';
+  end if;
+
+  if (new.display_name is distinct from old.display_name
+      or new.upi_vpa is distinct from old.upi_vpa)
+     and not (v_own_or_placeholder or v_owner) then
+    raise exception
+      'Only % or an owner can change that name or payment handle',
+      old.display_name
+      using errcode = 'insufficient_privilege';
+  end if;
+
+  if new.left_at is distinct from old.left_at
+     and not (v_own_or_placeholder or v_owner) then
+    raise exception 'Only an owner can remove somebody else from a group'
+      using errcode = 'insufficient_privilege';
+  end if;
+
+  return new;
+end;
+$$;
+
+-- Fires before trg_members_touch, which is alphabetical and therefore luck;
+-- it does not matter either way, since touching updated_at is not something
+-- this guards.
+create trigger trg_members_guard
+  before update on members
+  for each row execute function guard_member_update();
+
+-- ----------------------------------------------------------------------------
+-- Deleting a group.
+--
+-- entry_payers and entry_shares reference members with ON DELETE RESTRICT, so
+-- the cascade from `groups` stops dead the moment a group has a single expense
+-- in it. That is the correct outcome — financial rows are never destroyed —
+-- but the message Postgres produces for it names a foreign key the caller has
+-- never heard of.
+--
+-- The policy and the GRANT therefore describe a capability that only really
+-- exists for an empty group, and this says so in those words.
+-- ----------------------------------------------------------------------------
+create or replace function guard_group_delete()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if exists (select 1 from entries where group_id = old.id) then
+    raise exception
+      'This group has expenses recorded in it, so it cannot be deleted. '
+      'Archive it instead.'
+      using errcode = 'dependent_objects_still_exist';
+  end if;
+  return old;
+end;
+$$;
+
+create trigger trg_groups_guard_delete
+  before delete on groups
+  for each row execute function guard_group_delete();
+
+-- ----------------------------------------------------------------------------
 -- Categories: a fixed global list, readable by anyone signed in.
 --
 -- No write policy, deliberately. The list is seeded by migration and is the

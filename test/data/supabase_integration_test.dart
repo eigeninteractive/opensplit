@@ -1,11 +1,13 @@
 @Tags(['integration'])
 library;
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:opensplit/data/auth/supabase_auth_service.dart';
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';
@@ -15,6 +17,7 @@ import 'package:opensplit/data/sync/supabase_ledger_api.dart';
 import 'package:opensplit/data/sync/sync_engine.dart';
 import 'package:opensplit/domain/balance/balance_fold.dart';
 import 'package:opensplit/domain/entry_draft.dart';
+import 'package:opensplit/domain/repositories/auth_service.dart';
 import 'package:opensplit/domain/repositories/invite_api.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -34,6 +37,60 @@ const _anonKey =
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.'
     'eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.'
     'CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
+
+const _mailpitUrl = 'http://127.0.0.1:54324';
+
+/// The six-digit code GoTrue just mailed to [email], read out of Mailpit.
+///
+/// Reading the actual email rather than the database is the point: it proves
+/// the template carries `{{ .Token }}`. The stock Supabase templates send a
+/// magic link and no token at all, against which every code flow in the app
+/// waits forever for something that was never sent — which is exactly the bug
+/// this asserts is gone.
+Future<String> _mailedCode(String email) async {
+  final http = HttpClient();
+  try {
+    // GoTrue mails asynchronously; a fixed sleep would be a flake either way.
+    for (var attempt = 0; attempt < 40; attempt++) {
+      final request = await http.getUrl(
+        Uri.parse(
+          '$_mailpitUrl/api/v1/search',
+        ).replace(queryParameters: {'query': 'to:$email', 'limit': '1'}),
+      );
+      final body = await (await request.close()).transform(utf8.decoder).join();
+      final messages = (jsonDecode(body) as Map)['messages'] as List;
+      if (messages.isNotEmpty) {
+        final snippet = (messages.first as Map)['Snippet'] as String;
+        final code = RegExp(r'\b(\d{6})\b').firstMatch(snippet);
+        if (code != null) return code.group(1)!;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    fail('no code was mailed to $email within four seconds');
+  } finally {
+    http.close(force: true);
+  }
+}
+
+/// The PKCE code verifier has to live somewhere between asking for a code and
+/// verifying it.
+///
+/// `Supabase.initialize` installs a real one; a bare [SupabaseClient] has none
+/// and asserts as soon as a PKCE flow starts. In-memory and per-client is the
+/// faithful shape: it is what makes each client below a separate device.
+class _MemoryStore extends GotrueAsyncStorage {
+  final Map<String, String> _items = {};
+
+  @override
+  Future<String?> getItem({required String key}) async => _items[key];
+
+  @override
+  Future<void> setItem({required String key, required String value}) async =>
+      _items[key] = value;
+
+  @override
+  Future<void> removeItem({required String key}) async => _items.remove(key);
+}
 
 Future<bool> _serverIsUp() async {
   try {
@@ -375,6 +432,241 @@ void main() {
       expect(await strangerApi.pullMembers(created.group.id), isEmpty);
       final delta = await strangerApi.pullEntries(groupId: created.group.id);
       expect(delta.entries, isEmpty);
+    });
+
+    test('a second device finds the groups the account belongs to', () async {
+      if (!available) return;
+
+      // The gap that made a reinstall, a second device and "sign in on another
+      // device" all show an empty app. Worth an integration test rather than
+      // only a fake one, because it is a PostgREST filter and a policy —
+      // members_read has to admit your own row — and neither is visible from
+      // the Dart side.
+      final user = (await client.auth.signInAnonymously()).user!;
+      final created = await groups.createGroup(
+        name: 'Discoverable ${DateTime.now().microsecondsSinceEpoch}',
+        defaultCurrency: 'INR',
+        ownerDisplayName: 'Ravi',
+        ownerProfileId: user.id,
+      );
+      await sync.syncGroup(created.group.id);
+
+      expect(await api.pullMyGroupIds(), contains(created.group.id));
+
+      // Somebody else's session must not see it.
+      final stranger = SupabaseClient(_apiUrl, _anonKey);
+      addTearDown(stranger.dispose);
+      await stranger.auth.signInAnonymously();
+      expect(
+        await SupabaseLedgerApi(stranger).pullMyGroupIds(),
+        isNot(contains(created.group.id)),
+      );
+    });
+
+    test('a group that has been left is not rediscovered', () async {
+      if (!available) return;
+
+      final user = (await client.auth.signInAnonymously()).user!;
+      final created = await groups.createGroup(
+        name: 'Leavable ${DateTime.now().microsecondsSinceEpoch}',
+        defaultCurrency: 'INR',
+        ownerDisplayName: 'Ravi',
+        ownerProfileId: user.id,
+      );
+      await sync.syncGroup(created.group.id);
+      expect(await api.pullMyGroupIds(), contains(created.group.id));
+
+      await groups.leaveGroup(
+        groupId: created.group.id,
+        memberId: created.owner.id,
+      );
+      await sync.syncGroup(created.group.id);
+
+      expect(await api.pullMyGroupIds(), isNot(contains(created.group.id)));
+    });
+
+    test('a member cannot rewrite another member payment handle', () async {
+      if (!available) return;
+
+      // guard_member_update, through the adapter rather than through psql.
+      // Redirecting somebody else's UPI handle is the one escalation here that
+      // moves real money.
+      final owner = (await client.auth.signInAnonymously()).user!;
+      final created = await groups.createGroup(
+        name: 'Guarded ${DateTime.now().microsecondsSinceEpoch}',
+        defaultCurrency: 'INR',
+        ownerDisplayName: 'Ravi',
+        ownerProfileId: owner.id,
+      );
+      final slot = await groups.addMember(
+        created.group.id,
+        displayName: 'Priya',
+      );
+      await sync.syncGroup(created.group.id);
+
+      // Priya claims her place, so she is a real member with an account.
+      final priya = SupabaseClient(_apiUrl, _anonKey);
+      addTearDown(priya.dispose);
+      await priya.auth.signInAnonymously();
+      final invite = await SupabaseInviteApi(client).create(slot.id);
+      await SupabaseInviteApi(priya).redeem(invite.token);
+
+      // She may set her own handle.
+      await expectLater(
+        priya
+            .from('members')
+            .update({'upi_vpa': 'priya@oksbi'})
+            .eq('id', slot.id),
+        completes,
+      );
+
+      // She may not set the owner's.
+      await expectLater(
+        priya
+            .from('members')
+            .update({'upi_vpa': 'attacker@okaxis'})
+            .eq('id', created.owner.id),
+        throwsA(isA<PostgrestException>()),
+      );
+
+      // And she may not promote herself.
+      await expectLater(
+        priya.from('members').update({'role': 'owner'}).eq('id', slot.id),
+        throwsA(isA<PostgrestException>()),
+      );
+    });
+  });
+
+  /// Linking versus signing in, against the real thing.
+  ///
+  /// Every branch below has one outcome the user can never undo, so none of it
+  /// is safe to leave to a fake: whether the user id survives is the whole
+  /// question, and only GoTrue can answer it.
+  group('SupabaseAuthService against a live GoTrue', () {
+    late SupabaseClient client;
+    late SupabaseAuthService auth;
+
+    setUp(() {
+      if (!available) return;
+      client = SupabaseClient(
+        _apiUrl,
+        _anonKey,
+        authOptions: AuthClientOptions(pkceAsyncStorage: _MemoryStore()),
+      );
+      auth = SupabaseAuthService(client);
+    });
+
+    tearDown(() async {
+      if (!available) return;
+      await client.auth.signOut();
+      await client.dispose();
+    });
+
+    String freshAddress() =>
+        'link-${DateTime.now().microsecondsSinceEpoch}@example.com';
+
+    test(
+      'an email address free to take is LINKED, keeping the user id',
+      () async {
+        if (!available) return;
+
+        final before = await auth.signInAnonymously();
+        final email = freshAddress();
+
+        expect(await auth.sendEmailCode(email), EmailFlow.linkPending);
+
+        final outcome = await auth.verifyEmailCode(
+          email: email,
+          code: await _mailedCode(email),
+          flow: EmailFlow.linkPending,
+        );
+
+        expect(
+          outcome.keptTheSession,
+          isTrue,
+          reason: 'linking must not replace the session',
+        );
+        expect(
+          outcome.account.id,
+          before.id,
+          reason:
+              'the id is what every group, member and expense is filed '
+              'under; a new one strands all of them',
+        );
+        expect(outcome.account.isAnonymous, isFalse);
+        expect(outcome.account.email, email);
+      },
+    );
+
+    test('an address somebody already has is a SIGN-IN, not a link', () async {
+      if (!available) return;
+
+      // Somebody already owns it.
+      final email = freshAddress();
+      await auth.signInAnonymously();
+      await auth.sendEmailCode(email);
+      final owner = await auth.verifyEmailCode(
+        email: email,
+        code: await _mailedCode(email),
+        flow: EmailFlow.linkPending,
+      );
+      await client.auth.signOut();
+
+      // A second device, anonymous, gives the same address.
+      final stranger = await auth.signInAnonymously();
+      expect(
+        await auth.sendEmailCode(email),
+        EmailFlow.signInPending,
+        reason: 'there is nothing to link it to, so it can only be a sign-in',
+      );
+
+      final outcome = await auth.verifyEmailCode(
+        email: email,
+        code: await _mailedCode(email),
+        flow: EmailFlow.signInPending,
+      );
+
+      expect(
+        outcome.keptTheSession,
+        isFalse,
+        reason: 'the caller has to be told, or it cannot warn anyone in time',
+      );
+      expect(outcome.account.id, owner.account.id);
+      expect(
+        outcome.account.id,
+        isNot(stranger.id),
+        reason:
+            'this is the anonymous account being left behind — the whole '
+            'reason the screen stops and asks first',
+      );
+    });
+
+    test('GoTrue refuses to invent the account the fallback declines', () async {
+      if (!available) return;
+
+      // Pins the server half of the contract sendEmailCode's fallback rests on.
+      // That fallback is only reached for an address that provably belongs to
+      // somebody, so it cannot be driven here through the public API — but if
+      // it ever were reached for a free one, the default of shouldCreateUser
+      // would mint a new user and silently abandon the session holding every
+      // group on the device. Refusing is what makes that recoverable, and this
+      // is the assertion that the refusal is real.
+      await auth.signInAnonymously();
+      final unowned = freshAddress();
+
+      await expectLater(
+        client.auth.signInWithOtp(email: unowned, shouldCreateUser: false),
+        throwsA(
+          isA<AuthException>().having((e) => e.code, 'code', 'otp_disabled'),
+        ),
+      );
+
+      final minted = await client
+          .from('profiles')
+          .select('id')
+          .eq('display_name', unowned)
+          .maybeSingle();
+      expect(minted, isNull);
     });
   });
 }

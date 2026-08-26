@@ -677,4 +677,121 @@ void main() {
       expect(report.isClean, isTrue);
     });
   });
+
+  group('finding groups this device has never seen', () {
+    // The gap that made a second device, a reinstall, and "sign in on another
+    // device" all show an empty app: everything else in the sync API is scoped
+    // to a groupId the caller has to already know.
+    test('a fresh device discovers the groups it belongs to', () async {
+      final created = await a.groups.createGroup(
+        name: 'Goa Trip',
+        defaultCurrency: 'INR',
+        ownerDisplayName: 'Ravi',
+        ownerProfileId: 'profile-ravi',
+      );
+      await a.entries.create(
+        EntryDraft(
+          groupId: created.group.id,
+          currency: 'INR',
+          amountMinor: 240000,
+          description: 'Dinner',
+          split: EqualSplit([created.owner.id]),
+          payerAmounts: {created.owner.id: 240000},
+        ),
+        createdBy: created.owner.id,
+      );
+      await a.sync.syncGroup(created.group.id);
+
+      // Device B holds nothing at all and is signed in as the same person.
+      server.signedInProfileId = 'profile-ravi';
+      expect(await b.db.select(b.db.groups).get(), isEmpty);
+
+      final found = await b.sync.discoverGroups();
+      expect(found, [created.group.id]);
+
+      for (final id in found) {
+        await b.sync.syncGroup(id);
+      }
+
+      final groups = await b.db.select(b.db.groups).get();
+      expect(groups.single.name, 'Goa Trip');
+      expect((await b.ledger(created.group.id)).single.amountMinor, 240000);
+    });
+
+    test('a group left behind is not rediscovered', () async {
+      final created = await a.groups.createGroup(
+        name: 'Goa Trip',
+        defaultCurrency: 'INR',
+        ownerDisplayName: 'Ravi',
+        ownerProfileId: 'profile-ravi',
+      );
+      await a.sync.syncGroup(created.group.id);
+
+      await a.groups.leaveGroup(
+        groupId: created.group.id,
+        memberId: created.owner.id,
+      );
+      await a.sync.syncGroup(created.group.id);
+
+      server.signedInProfileId = 'profile-ravi';
+      expect(await b.sync.discoverGroups(), isEmpty);
+    });
+
+    test('local groups survive a server that cannot be reached', () async {
+      // Being offline must not empty the sweep and skip pushing the very rows
+      // that are queued to go out.
+      final created = await a.groups.createGroup(
+        name: 'Goa Trip',
+        defaultCurrency: 'INR',
+        ownerDisplayName: 'Ravi',
+        ownerProfileId: 'profile-ravi',
+      );
+      server.signedInProfileId = null;
+
+      expect(await a.sync.discoverGroups(), [created.group.id]);
+    });
+  });
+
+  group('pushing a member', () {
+    test('does not blank a claim this device has not pulled yet', () async {
+      // The race: somebody redeems their invite, and before this device learns
+      // of it the user renames them. profile_id must not travel with that.
+      final created = await a.groups.createGroup(
+        name: 'Goa Trip',
+        defaultCurrency: 'INR',
+        ownerDisplayName: 'Ravi',
+        ownerProfileId: 'profile-ravi',
+      );
+      final priya = await a.groups.addMember(
+        created.group.id,
+        displayName: 'Priya',
+      );
+      await a.sync.syncGroup(created.group.id);
+
+      // Priya claims her place on the server, as redeem_invite would.
+      server.claimMember(priya.id, 'profile-priya');
+
+      // Device A still believes she is a placeholder, and renames her.
+      await a.groups.renameMember(priya.id, 'Priya S');
+      await a.sync.syncGroup(created.group.id);
+
+      // The server's own view, read before anything else touches it: the
+      // rename has to have landed, and the claim has to have survived it.
+      final onServer = (await server.pullMembers(
+        created.group.id,
+      )).firstWhere((m) => m.id == priya.id);
+      expect(onServer.displayName, 'Priya S', reason: 'the rename still lands');
+      expect(
+        onServer.profileId,
+        'profile-priya',
+        reason:
+            'the push carried a stale profile_id of null and un-joined the '
+            'person who had just claimed their invite',
+      );
+
+      // And she can therefore still find the group from a device of her own.
+      server.signedInProfileId = 'profile-priya';
+      expect(await b.sync.discoverGroups(), [created.group.id]);
+    });
+  });
 }

@@ -61,10 +61,16 @@ create table entries (
 -- The delta pull is:
 --   select ... where group_id = ? and (updated_at, id) > cursor order by ...
 --
+-- `id` is the third column and not decoration: the cursor is the pair, because
+-- `now()` is transaction time and a batch written together shares one
+-- `updated_at`. Without `id` in the index the pull can seek on the timestamp
+-- but has to sort the ties in memory, which is exactly the case a bulk sync
+-- produces most of.
+--
 -- Deliberately NOT partial on `deleted_at is null`: a soft delete is itself a
 -- delta the client must receive, otherwise a deleted expense lives forever on
 -- every device that already synced it.
-create index idx_entries_group_updated on entries (group_id, updated_at);
+create index idx_entries_group_updated on entries (group_id, updated_at, id);
 
 -- on delete restrict: a member with financial history can never be deleted.
 -- Use members.left_at instead.

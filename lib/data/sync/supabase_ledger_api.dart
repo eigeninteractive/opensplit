@@ -139,6 +139,28 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
   }
 
   @override
+  Future<List<String>> pullMyGroupIds() async {
+    final uid = _client.auth.currentUser?.id;
+    if (uid == null) return const [];
+
+    try {
+      // members_read admits your own rows — is_group_member() is true of them
+      // by definition — so this needs no RPC and no extra policy. A row you
+      // have left fails that same predicate, which is why `left_at` is filtered
+      // here as documentation rather than as the thing doing the work.
+      final rows = await _client
+          .from('members')
+          .select('group_id')
+          .eq('profile_id', uid)
+          .isFilter('left_at', null);
+
+      return [for (final row in rows) row['group_id'] as String];
+    } on PostgrestException catch (e) {
+      throw _translate(e);
+    }
+  }
+
+  @override
   Future<Group?> pullGroup(String groupId) async {
     final row = await _client
         .from('groups')
@@ -186,29 +208,52 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
     }
   }
 
+  /// Rows per request when sweeping the rate table.
+  ///
+  /// Comfortably under PostgREST's `max_rows`, which is 1000 by default and is
+  /// a silent ceiling: a larger request is not an error, it is a short answer.
+  static const int _fxPageSize = 500;
+
   @override
   Future<List<RemoteFxRate>> pullFxRates({required String since}) async {
-    try {
-      final rows = await _client
-          .from('fx_rates')
-          .select('as_of, currency, rate, source')
-          .gte('as_of', since)
-          .order('as_of', ascending: true);
+    final rates = <RemoteFxRate>[];
 
-      return [
-        for (final row in rows)
-          RemoteFxRate(
-            asOf: row['as_of'] as String,
-            currency: (row['currency'] as String).trim(),
-            // numeric arrives as a string from PostgREST, since a double
-            // cannot represent every numeric exactly.
-            rate: double.parse('${row['rate']}'),
-            source: row['source'] as String,
-          ),
-      ];
+    try {
+      // Paged, because this is the one pull with no cursor on it. A device with
+      // no rates asks for a 400-day window, which at sixteen currencies is
+      // thousands of rows — and an unpaged request would come back truncated at
+      // max_rows with no indication that it had been. The high-water mark then
+      // advances by only as much as arrived, so the table filled in a few
+      // hundred rows per sync and a fresh install spent days catching up to
+      // today's rate.
+      for (var offset = 0; ; offset += _fxPageSize) {
+        final rows = await _client
+            .from('fx_rates')
+            .select('as_of, currency, rate, source')
+            .gte('as_of', since)
+            .order('as_of', ascending: true)
+            .order('currency', ascending: true)
+            .range(offset, offset + _fxPageSize - 1);
+
+        rates.addAll([
+          for (final row in rows)
+            RemoteFxRate(
+              asOf: row['as_of'] as String,
+              currency: (row['currency'] as String).trim(),
+              // numeric arrives as a string from PostgREST, since a double
+              // cannot represent every numeric exactly.
+              rate: double.parse('${row['rate']}'),
+              source: row['source'] as String,
+            ),
+        ]);
+
+        if (rows.length < _fxPageSize) break;
+      }
     } on PostgrestException catch (e) {
       throw _translate(e);
     }
+
+    return rates;
   }
 
   @override
@@ -246,7 +291,8 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
       '23514', // check_violation — the balance invariant
       '23503', // foreign_key_violation
       '23505', // unique_violation
-      '42501', // insufficient_privilege — RLS refused
+      '42501', // insufficient_privilege — RLS, or a member guard, refused
+      '2BP01', // dependent_objects_still_exist — a group with expenses in it
       'P0002', // no_data_found
     };
     return RemoteRejected(

@@ -73,33 +73,61 @@ class MembersScreen extends ConsumerWidget {
                           'invite' => showInviteSheet(context, ref, member),
                           'rename' => _rename(context, ref, member),
                           'upi' => _setUpi(context, ref, member),
+                          'owner' => _makeOwner(context, ref, member),
                           'remove' => _remove(context, ref, member, ledger),
                           _ => null,
                         },
-                        itemBuilder: (context) => [
-                          if (member.isPlaceholder)
-                            const PopupMenuItem(
-                              value: 'invite',
-                              child: Text('Send invite link'),
-                            ),
-                          const PopupMenuItem(
-                            value: 'rename',
-                            child: Text('Rename'),
-                          ),
-                          PopupMenuItem(
-                            value: 'upi',
-                            child: Text(
-                              member.upiVpa == null
-                                  ? 'Add UPI ID'
-                                  : 'Change UPI ID',
-                            ),
-                          ),
-                          if (member.role != MemberRole.owner)
-                            const PopupMenuItem(
-                              value: 'remove',
-                              child: Text('Remove from group'),
-                            ),
-                        ],
+                        // Mirrors guard_member_update on the server: your own
+                        // row, any placeholder, or anything at all if you are
+                        // an owner. Offering more than that would produce a
+                        // menu whose items fail, which is worse than a shorter
+                        // menu — rewriting another member's payment handle in
+                        // particular is a way to be paid somebody else's
+                        // settlement.
+                        itemBuilder: (context) {
+                          final mine = member.id == ledger.me?.id;
+                          final iAmOwner = ledger.me?.role == MemberRole.owner;
+                          final editable =
+                              member.isPlaceholder || mine || iAmOwner;
+
+                          return [
+                            if (member.isPlaceholder)
+                              const PopupMenuItem(
+                                value: 'invite',
+                                child: Text('Send invite link'),
+                              ),
+                            if (editable)
+                              const PopupMenuItem(
+                                value: 'rename',
+                                child: Text('Rename'),
+                              ),
+                            if (editable)
+                              PopupMenuItem(
+                                value: 'upi',
+                                child: Text(
+                                  member.upiVpa == null
+                                      ? 'Add UPI ID'
+                                      : 'Change UPI ID',
+                                ),
+                              ),
+                            // How an owner hands the role over, which is what
+                            // has to happen before the last one can leave.
+                            if (iAmOwner &&
+                                !member.isPlaceholder &&
+                                member.role != MemberRole.owner)
+                              const PopupMenuItem(
+                                value: 'owner',
+                                child: Text('Make an owner'),
+                              ),
+                            if (editable &&
+                                !mine &&
+                                member.role != MemberRole.owner)
+                              const PopupMenuItem(
+                                value: 'remove',
+                                child: Text('Remove from group'),
+                              ),
+                          ];
+                        },
                       ),
                     ),
                   const Padding(
@@ -205,6 +233,44 @@ class MembersScreen extends ConsumerWidget {
 
     if (confirmed ?? false) {
       await ref.read(groupRepositoryProvider).removeMember(member.id);
+    }
+  }
+
+  /// Hands the owner role to somebody else.
+  ///
+  /// There is no matching "demote", and that is deliberate: the way to stop
+  /// being an owner is to leave, and a group that can be left ownerless by one
+  /// tap is one nobody can rename or remove anyone from afterwards.
+  Future<void> _makeOwner(
+    BuildContext context,
+    WidgetRef ref,
+    Member member,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Make ${member.displayName} an owner?'),
+        content: const Text(
+          'Owners can rename the group, remove people, and make other owners. '
+          'You stay an owner too.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Make an owner'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed ?? false) {
+      await ref
+          .read(groupRepositoryProvider)
+          .setMemberRole(member.id, MemberRole.owner);
     }
   }
 }

@@ -71,11 +71,26 @@ String entriesToCsv(
 
 String _row(List<String> fields) => fields.map(_escape).join(',');
 
-/// RFC 4180 escaping.
+/// Characters that make a spreadsheet treat a cell as a formula rather than
+/// text. Tab and carriage return are here because Excel strips leading
+/// whitespace before deciding, so they smuggle the next character into first
+/// position.
+final RegExp _formulaLead = RegExp(r'^[=+\-@\t\r]');
+
+/// RFC 4180 escaping, plus formula neutralisation.
 ///
 /// Descriptions routinely contain commas, and notes contain newlines; a naïve
 /// join produces a file that opens misaligned and is then silently trusted.
+///
+/// The leading apostrophe is the second half, and it guards against a person
+/// rather than against punctuation. Every field here is free text somebody in
+/// the group typed, and Excel, Sheets and LibreOffice all execute a cell
+/// beginning `=`, `+`, `-` or `@`. So one member writes an expense called
+/// `=HYPERLINK(...)`, another exports the group, and it runs on their machine
+/// with their files. The apostrophe forces the cell to text and is not itself
+/// displayed.
 String _escape(String value) {
-  if (!value.contains(RegExp('[",\n\r]'))) return value;
-  return '"${value.replaceAll('"', '""')}"';
+  final safe = _formulaLead.hasMatch(value) ? "'$value" : value;
+  if (!safe.contains(RegExp('[",\n\r]'))) return safe;
+  return '"${safe.replaceAll('"', '""')}"';
 }

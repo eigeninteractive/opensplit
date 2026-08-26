@@ -13,29 +13,39 @@ long as any link naming it is still in someone's chat history.
 A vanity domain pointed here later should redirect to `opensplit.web.app`
 rather than be added as a second host. A redirect needs no `assetlinks.json` of
 its own and cannot drift out of step with this one.
+`test/deep_link_host_test.dart` is what keeps the manifest and `linkHost` from
+drifting apart.
 
 ## The fingerprint list is not optional reading
 
-`sha256_cert_fingerprints` currently holds **only the local debug key**. That is
-enough to test App Links on a development machine and is guaranteed to fail in
-production.
+`sha256_cert_fingerprints` currently holds **the Google Play App Signing key**,
+which is the certificate every install from the Play Store actually carries —
+Play re-signs each upload with it, so it, and not the upload key, is what
+Android checks. It is the one that has to be there.
 
-Before release the list must contain **both**:
-
-1. **The upload key** — the key used to sign the bundle you upload.
-2. **The Google Play App Signing key** — the key Play re-signs with before
-   distributing. Find it under *Play Console → Release → Setup → App signing*.
-
-Ship only the upload key and verification passes every test you run locally and
-fails for every real user, because the app they install is signed with a
-certificate the file has never heard of. This is the single most common way App
-Links break, and the failure is silent: links simply open in the browser.
+It should also hold **the upload key**, the key `android/key.properties` points
+at. Play never distributes anything signed with it, but every release APK built
+on this machine and installed directly is — for testing, for a bug report, for
+anyone sideloading. Without its fingerprint here, App Links verify from the
+Store and fail on exactly those builds, which is a confusing way to spend an
+afternoon.
 
 ```bash
-# Upload key
-keytool -list -v -keystore upload-keystore.jks -alias upload | grep SHA256
+# Upload key, if it is not already in the list:
+keytool -list -v -keystore ~/opensplit-upload.jks -alias upload | grep SHA256
+```
 
-# Then verify on a device against the real, deployed file:
+Both are shown together under *Play Console → Test and release → Setup → App
+signing*, and Play offers a ready-made JSON snippet there containing the app
+signing key alone. Adding a second fingerprint to the array is the manual part.
+
+Get this wrong and verification passes every test run locally and fails for
+every real user, because the app they install is signed with a certificate the
+file has never heard of. It is the single most common way App Links break, and
+the failure is silent: links simply open in the browser.
+
+```bash
+# Verify on a device against the real, deployed file:
 adb shell pm verify-app-links --re-verify com.eigeninteractive.opensplit
 adb shell pm get-app-links com.eigeninteractive.opensplit
 ```
