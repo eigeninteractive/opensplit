@@ -12,7 +12,7 @@
 /// what actually decides who can read what.
 library;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 
 const String supabaseUrl = String.fromEnvironment(
   'SUPABASE_URL',
@@ -67,6 +67,35 @@ String get deleteAccountUrl => 'https://$linkHost/delete-account';
 /// this only gates sync and account features rather than the product.
 bool get hasBackend =>
     supabaseUrl.isNotEmpty && supabasePublishableKey.isNotEmpty;
+
+/// Whether this build points at a developer's own machine.
+///
+/// `127.0.0.1` is the default above, and on a phone it means the phone: a build
+/// that keeps it reaches nothing, ever. `10.0.2.2` is the Android emulator's
+/// alias for its host, which is right in an emulator and wrong on hardware.
+bool get isLocalBackend =>
+    supabaseUrl.contains('127.0.0.1') ||
+    supabaseUrl.contains('localhost') ||
+    supabaseUrl.contains('10.0.2.2');
+
+/// What is wrong with this build's configuration, if anything.
+///
+/// Exists because of the one mistake this file makes easy. The defaults above
+/// are a local `supabase start`, so a fresh clone works with no setup — but
+/// they are also what a release build gets when somebody forgets
+/// `--dart-define-from-file=env/app.json`, and nothing about the result looks
+/// wrong. The app launches, the welcome screen appears, and every request goes
+/// to a host that is not there. That shipped once and cost an afternoon of
+/// wondering why no accounts were appearing in the dashboard.
+///
+/// Null when the build is fine, which is every debug build and every release
+/// build that was given its defines.
+String? get configurationProblem {
+  if (kDebugMode || !isLocalBackend) return null;
+  return 'This build points at $supabaseUrl, which is a developer machine and '
+      'is not reachable from a phone or a browser. It was almost certainly '
+      'built without --dart-define-from-file=env/app.json.';
+}
 
 /// The **web** OAuth client id, from the Google Cloud project.
 ///

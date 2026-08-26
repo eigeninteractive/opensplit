@@ -54,10 +54,61 @@ Future<void> main() async {
     }
   }
 
+  // A build that cannot reach its backend says so, rather than looking correct
+  // and quietly doing nothing. See [configurationProblem]: this only ever fires
+  // on a release build that was made without its dart-defines, which is
+  // indistinguishable from a working one until somebody tries to sign in.
+  final problem = configurationProblem;
+  if (problem != null) {
+    developer.log(
+      problem,
+      name: 'opensplit.startup',
+      level: 1000, // SEVERE
+    );
+    runApp(_Misconfigured(problem));
+    return;
+  }
+
   runApp(
     ProviderScope(
       overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
       child: const OpenSplitApp(),
+    ),
+  );
+}
+
+/// Shown instead of the app when the build itself is wrong.
+///
+/// Deliberately plain: no theme, no router, no providers. Everything that would
+/// make this look like the app is a thing that could fail for the same reason
+/// the app cannot run.
+class _Misconfigured extends StatelessWidget {
+  const _Misconfigured(this.problem);
+
+  final String problem;
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    debugShowCheckedModeBanner: false,
+    home: Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.build_outlined, size: 40),
+              const SizedBox(height: 16),
+              const Text(
+                'This build is not configured',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 12),
+              Text(problem, textAlign: TextAlign.center),
+            ],
+          ),
+        ),
+      ),
     ),
   );
 }
