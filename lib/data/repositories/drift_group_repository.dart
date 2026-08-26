@@ -78,15 +78,19 @@ final class DriftGroupRepository {
     return [for (final row in rows) row.toDomain()];
   }
 
-  /// Creates a group along with its first member — the creator, as owner.
+  /// Creates a group along with its first member — whoever made it.
   ///
   /// One operation because a group with no members is not a valid state; it
   /// would render as an empty screen with no way to add an expense.
-  Future<({Group group, Member owner})> createGroup({
+  ///
+  /// That first member is not privileged in any way. `groups.created_by`
+  /// records who made it, and is read only as the bootstrap escape hatch for
+  /// the instant before this member row lands on the server.
+  Future<({Group group, Member creator})> createGroup({
     required String name,
     required String defaultCurrency,
-    required String ownerDisplayName,
-    String? ownerProfileId,
+    required String creatorDisplayName,
+    String? creatorProfileId,
     bool isDirect = false,
   }) async {
     final trimmed = name.trim();
@@ -100,15 +104,14 @@ final class DriftGroupRepository {
       name: trimmed,
       defaultCurrency: defaultCurrency,
       isDirect: isDirect,
-      createdBy: ownerProfileId,
+      createdBy: creatorProfileId,
       createdAt: now,
     );
-    final owner = Member(
+    final creator = Member(
       id: _uuid.v4(),
       groupId: group.id,
-      profileId: ownerProfileId,
-      displayName: ownerDisplayName.trim(),
-      role: MemberRole.owner,
+      profileId: creatorProfileId,
+      displayName: creatorDisplayName.trim(),
       joinedAt: now,
     );
 
@@ -126,7 +129,7 @@ final class DriftGroupRepository {
               // id, and the previous fallback wrote a *member* id into it —
               // an id from a different table that nothing could resolve, and
               // which disagreed with the Group object this method returned.
-              createdBy: Value(ownerProfileId),
+              createdBy: Value(creatorProfileId),
               createdAt: group.createdAt,
               updatedAt: Value(now),
             ),
@@ -135,12 +138,11 @@ final class DriftGroupRepository {
           .into(_db.members)
           .insert(
             MembersCompanion.insert(
-              id: owner.id,
+              id: creator.id,
               groupId: group.id,
-              profileId: Value(owner.profileId),
-              displayName: owner.displayName,
-              role: owner.role,
-              joinedAt: owner.joinedAt,
+              profileId: Value(creator.profileId),
+              displayName: creator.displayName,
+              joinedAt: creator.joinedAt,
               updatedAt: Value(now),
             ),
           );
@@ -149,13 +151,13 @@ final class DriftGroupRepository {
     // Both rows have to reach the server, and the group has to land first:
     // members and entries reference it by foreign key.
     await outbox?.enqueue(OutboxTarget.group, group.id);
-    await outbox?.enqueue(OutboxTarget.member, owner.id);
+    await outbox?.enqueue(OutboxTarget.member, creator.id);
 
-    // `group` already carries ownerProfileId, so there is nothing left to
-    // correct here. This used to overwrite it with the owner's *member* id —
+    // `group` already carries creatorProfileId, so there is nothing left to
+    // correct here. This used to overwrite it with the creator's *member* id —
     // an id from a different table, in a column that holds profile ids — so
     // that the returned object disagreed with the row just written.
-    return (group: group, owner: owner);
+    return (group: group, creator: creator);
   }
 
   /// Writes a group's editable fields.
@@ -184,19 +186,6 @@ final class DriftGroupRepository {
       ),
     );
     await outbox?.enqueue(OutboxTarget.group, group.id);
-  }
-
-  /// Promotes or demotes a member.
-  ///
-  /// Only an owner can do this, and the server enforces that rather than
-  /// trusting the caller — see `guard_member_update`. It exists mostly so an
-  /// owner can hand the role over before leaving, since a group whose only
-  /// owner has left has nobody who can appoint another.
-  Future<void> setMemberRole(String memberId, MemberRole role) async {
-    await (_db.update(_db.members)..where((t) => t.id.equals(memberId))).write(
-      MembersCompanion(role: Value(role), updatedAt: Value(_clock())),
-    );
-    await outbox?.enqueue(OutboxTarget.member, memberId);
   }
 
   /// Leaves a group: marks your own member row as having left, and archives the
@@ -264,7 +253,6 @@ final class DriftGroupRepository {
             groupId: member.groupId,
             profileId: Value(member.profileId),
             displayName: member.displayName,
-            role: member.role,
             joinedAt: member.joinedAt,
             updatedAt: Value(member.joinedAt),
           ),
@@ -290,6 +278,11 @@ final class DriftGroupRepository {
 
   /// Marks a member as having left. Never deletes: their past entries have to
   /// keep making sense.
+  ///
+  /// The server refuses this for anybody but yourself unless they are settled
+  /// up — removing somebody also cuts off their read access, and the person
+  /// most worth cutting off is the one still owed money. Callers should not
+  /// offer it for an unsettled member; see `guard_member_update`.
   Future<void> removeMember(String memberId) async {
     // Marked as left, never deleted. Their name still has to render on every
     // expense they were part of, and their balance still has to be settleable.

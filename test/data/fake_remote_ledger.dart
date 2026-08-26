@@ -56,6 +56,22 @@ class FakeRemoteLedger implements RemoteLedgerApi {
 
   DateTime _stamp() => _frozenAt ?? _tick();
 
+  /// The referential half of what the real server enforces.
+  ///
+  /// `members.group_id` and `entries.group_id` are real foreign keys, and both
+  /// write policies additionally go through `is_group_member`/
+  /// `is_group_creator`, neither of which can be true of a group the server has
+  /// never seen. Both refusals are permanent — 23503 and 42501 are in
+  /// SupabaseLedgerApi's permanent set — so a fake that accepted these would
+  /// pass a push order the real server sends straight to the dead letters.
+  void _assertGroupKnown(String groupId, String what) {
+    if (_groups.containsKey(groupId)) return;
+    throw RemoteRejected(
+      '$what references group $groupId, which the server has never seen',
+      permanent: true,
+    );
+  }
+
   /// The server-side invariant. The most valuable check in the system.
   void _assertBalanced(Entry entry) {
     final paid = entry.payers.fold(0, (sum, p) => sum + p.amountMinor);
@@ -72,6 +88,7 @@ class FakeRemoteLedger implements RemoteLedgerApi {
   @override
   Future<Entry> upsertEntry(Entry entry) async {
     upsertCalls++;
+    _assertGroupKnown(entry.groupId, 'An expense');
     _assertBalanced(entry);
 
     // Idempotency on the client key: a retry after a dropped connection must
@@ -191,6 +208,7 @@ class FakeRemoteLedger implements RemoteLedgerApi {
     // entire mechanism protecting a freshly claimed profile_id from a device
     // that has not pulled the claim yet. A fake that replaced the row wholesale
     // would pass a test the real server fails.
+    _assertGroupKnown(member.groupId, 'A member');
     final json = {
       ...?_members[member.id],
       ...memberToJson(member),

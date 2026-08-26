@@ -34,15 +34,19 @@ void main() {
     final created = await groups.createGroup(
       name: 'Goa Trip',
       defaultCurrency: 'INR',
-      ownerDisplayName: 'Ravi',
-      ownerProfileId: 'profile-ravi',
+      creatorDisplayName: 'Ravi',
+      creatorProfileId: 'profile-ravi',
     );
     final priya = await groups.addMember(
       created.group.id,
       displayName: 'Priya',
       profileId: 'profile-priya',
     );
-    return (groupId: created.group.id, ravi: created.owner.id, priya: priya.id);
+    return (
+      groupId: created.group.id,
+      ravi: created.creator.id,
+      priya: priya.id,
+    );
   }
 
   Future<String> addExpense(

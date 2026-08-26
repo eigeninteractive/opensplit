@@ -21,9 +21,15 @@ import 'drift_entry_repository.dart';
 /// Settlements are excluded throughout. Paying a friend back is not spending,
 /// and counting it would double every settled expense.
 final class DriftAnalyticsRepository {
-  DriftAnalyticsRepository(this._db);
+  /// [_entries] hydrates the rows a search matches.
+  ///
+  /// Injected rather than constructed here, so there is one place that knows
+  /// how an entry is assembled from its three tables and analytics is a caller
+  /// of it rather than a second copy.
+  DriftAnalyticsRepository(this._db, this._entries);
 
   final AppDatabase _db;
+  final DriftEntryRepository _entries;
 
   /// Builds the shared WHERE clause and its variables.
   ///
@@ -106,20 +112,14 @@ final class DriftAnalyticsRepository {
           readsFrom: {_db.entries, _db.entryShares},
         )
         .watch()
-        .asyncMap((rows) async {
-          final ids = [for (final row in rows) row.read<String>('id')];
-          if (ids.isEmpty) return const <Entry>[];
-
-          // Reuse the repository so entries come back fully hydrated, rather
-          // than maintaining a second way to build one.
-          final repository = DriftEntryRepository(_db);
-          final entries = await repository.getEntries(filter.groupId);
-          final byId = {for (final entry in entries) entry.id: entry};
-          return [
-            for (final id in ids)
-              if (byId[id] != null) byId[id]!,
-          ];
-        });
+        // Hydrating only what matched, rather than the group's whole journal
+        // and then discarding most of it. A search for one restaurant used to
+        // load every expense in the group on every keystroke.
+        .asyncMap(
+          (rows) => _entries.getByIds([
+            for (final row in rows) row.read<String>('id'),
+          ]),
+        );
   }
 
   Stream<List<SpendBucket>> _aggregate({

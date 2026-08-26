@@ -192,10 +192,10 @@ class Groups extends Table with TableInfo {
   late final GeneratedColumn<String> createdBy = GeneratedColumn<String>(
     'created_by',
     aliasedName,
-    false,
+    true,
     type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
   );
   late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
     'created_at',
@@ -297,14 +297,6 @@ class Members extends Table with TableInfo {
     requiredDuringInsert: true,
     $customConstraints: 'NOT NULL',
   );
-  late final GeneratedColumn<String> role = GeneratedColumn<String>(
-    'role',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
   late final GeneratedColumn<int> joinedAt = GeneratedColumn<int>(
     'joined_at',
     aliasedName,
@@ -347,7 +339,6 @@ class Members extends Table with TableInfo {
     groupId,
     profileId,
     displayName,
-    role,
     joinedAt,
     leftAt,
     upiVpa,
@@ -768,7 +759,7 @@ class EntryEvents extends Table with TableInfo {
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL REFERENCES entries(id)',
+    $customConstraints: 'NOT NULL REFERENCES entries(id)ON DELETE CASCADE',
   );
   late final GeneratedColumn<String> groupId = GeneratedColumn<String>(
     'group_id',
@@ -776,7 +767,7 @@ class EntryEvents extends Table with TableInfo {
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL REFERENCES "groups"(id)',
+    $customConstraints: 'NOT NULL REFERENCES "groups"(id)ON DELETE CASCADE',
   );
   late final GeneratedColumn<String> actorId = GeneratedColumn<String>(
     'actor_id',
@@ -784,7 +775,7 @@ class EntryEvents extends Table with TableInfo {
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL REFERENCES members(id)',
+    $customConstraints: 'NOT NULL REFERENCES members(id)ON DELETE CASCADE',
   );
   late final GeneratedColumn<String> kind = GeneratedColumn<String>(
     'kind',
@@ -1147,6 +1138,27 @@ class DatabaseAtV1 extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('entry_shares', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'entries',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('entry_events', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'groups',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('entry_events', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'members',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('entry_events', kind: UpdateKind.delete)],
     ),
   ]);
   @override

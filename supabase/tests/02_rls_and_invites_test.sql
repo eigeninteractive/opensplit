@@ -23,12 +23,12 @@ insert into groups (id, name, default_currency, created_by)
 values ('33333333-3333-4333-8333-333333333333', 'Goa Trip', 'INR',
         '11111111-1111-4111-8111-111111111111');
 
-insert into members (id, group_id, profile_id, display_name, role) values
+insert into members (id, group_id, profile_id, display_name) values
   ('44444444-4444-4444-8444-444444444444',
    '33333333-3333-4333-8333-333333333333',
-   '11111111-1111-4111-8111-111111111111', 'Ravi', 'owner'),
+   '11111111-1111-4111-8111-111111111111', 'Ravi'),
   ('55555555-5555-4555-8555-555555555555',
-   '33333333-3333-4333-8333-333333333333', null, 'Priya', 'member');
+   '33333333-3333-4333-8333-333333333333', null, 'Priya');
 
 -- An expense so that the placeholder has a real balance before she ever joins.
 insert into entries (id, group_id, currency, amount_minor, created_by)
@@ -81,23 +81,25 @@ select is((select count(*)::int from v_member_balances), 0,
 select is((select count(*)::int from invites), 0, 'nor any invite rows');
 
 -- ---------------------------------------------------------------------------
--- Anonymous users may not destroy shared history
+-- Nobody destroys shared history
+--
+-- There is no delete policy on groups and no DELETE grant to match. This used
+-- to be a narrower rule — owners could, unless the session was anonymous — but
+-- nothing in the app has ever deleted a group, and a capability nobody uses is
+-- one nobody should have. Archiving is the operation people actually want.
 -- ---------------------------------------------------------------------------
-set local "request.jwt.claims" to
-  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated",
-    "is_anonymous":true}';
-
-select lives_ok(
+select throws_ok(
   $$delete from groups where id = '33333333-3333-4333-8333-333333333333'$$,
-  'an anonymous owner may attempt a delete');
+  '42501',
+  null,
+  'a member cannot delete a group, however long they have been in it');
 
 set local role postgres;
 select is(
   (select count(*)::int from groups
     where id = '33333333-3333-4333-8333-333333333333'),
   1,
-  'but nothing is removed: an anonymous account is one device with no '
-  'recovery, so it must not be able to destroy shared history');
+  'and it is still there');
 
 set local role authenticated;
 set local "request.jwt.claims" to

@@ -101,41 +101,77 @@ create table entry_shares (
 --   sum(payers.amount) = sum(shares.amount) = entries.amount_minor
 --
 -- A cross-table CHECK is impossible, so this is a DEFERRED constraint trigger:
--- it fires at COMMIT, letting an entry and its children be inserted in any
--- order inside one transaction.
+-- it fires at COMMIT, letting an entry and its children be written in any order
+-- inside one transaction.
 --
--- This single trigger catches every rounding bug, every bad largest-remainder
--- implementation, and every partial write. It is the most valuable thirty lines
--- in the schema, and it is what makes it safe for the client to compute splits.
+-- It hangs off all THREE tables, and that is the whole point. Hung off the
+-- children alone — which is how this started — the invariant only held for a
+-- statement that touched a payer or a share, so `update entries set
+-- amount_minor = <anything>` committed happily against untouched children, and
+-- an entry inserted with no children at all was never checked by anything.
+-- Neither goes through upsert_entry, but neither has to: `authenticated` holds
+-- INSERT and UPDATE on entries because upsert_entry is SECURITY INVOKER and
+-- needs them, so any client that skips the RPC and speaks to PostgREST
+-- directly had both. The trigger is what makes the invariant a property of the
+-- data rather than of the one code path that happens to respect it.
+--
+-- This catches every rounding bug, every bad largest-remainder implementation
+-- and every partial write, and it is what makes it safe for the client to
+-- compute splits.
 -- ============================================================================
 
-create or replace function assert_entry_balanced()
-returns trigger
+-- The check itself, addressed by entry id so both sides of the relationship
+-- can ask the same question. Extracted rather than duplicated: two copies of
+-- an invariant are two chances for one of them to be wrong.
+create or replace function assert_balanced(p_entry uuid)
+returns void
 language plpgsql
+set search_path = public
 as $$
 declare
-  v_entry uuid   := coalesce(new.entry_id, old.entry_id);
   v_total bigint;
   v_paid  bigint;
   v_owed  bigint;
 begin
-  select amount_minor into v_total from entries where id = v_entry;
+  select amount_minor into v_total from entries where id = p_entry;
   if v_total is null then
-    return null;  -- entry was deleted in the same transaction
+    return;  -- entry was deleted in the same transaction
   end if;
 
   select coalesce(sum(amount_minor), 0) into v_paid
-    from entry_payers where entry_id = v_entry;
+    from entry_payers where entry_id = p_entry;
   select coalesce(sum(amount_minor), 0) into v_owed
-    from entry_shares where entry_id = v_entry;
+    from entry_shares where entry_id = p_entry;
 
   if v_paid <> v_total or v_owed <> v_total then
     raise exception
       'Entry % does not balance: amount=%, paid=%, owed=%',
-      v_entry, v_total, v_paid, v_owed
+      p_entry, v_total, v_paid, v_owed
       using errcode = 'check_violation';
   end if;
+end;
+$$;
 
+-- From a payer or share row, whichever way it moved.
+create or replace function assert_entry_balanced()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  perform assert_balanced(coalesce(new.entry_id, old.entry_id));
+  return null;
+end;
+$$;
+
+-- From the entry itself.
+create or replace function assert_entry_row_balanced()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  perform assert_balanced(new.id);
   return null;
 end;
 $$;
@@ -149,6 +185,92 @@ create constraint trigger trg_shares_balanced
   after insert or update or delete on entry_shares
   deferrable initially deferred
   for each row execute function assert_entry_balanced();
+
+-- Deliberately not fired on DELETE: an entry going away takes its payers and
+-- shares with it by cascade, and there is nothing left to balance. Soft
+-- deletion is an UPDATE and is checked like any other.
+create constraint trigger trg_entries_balanced
+  after insert or update on entries
+  deferrable initially deferred
+  for each row execute function assert_entry_row_balanced();
+
+-- ----------------------------------------------------------------------------
+-- Column rules for entries, as a trigger rather than a policy.
+--
+-- The same gap guard_member_update closes for members, and for the same
+-- reason: RLS decides which ROWS a statement may touch and cannot say "this
+-- column, but only like so", and WITH CHECK cannot see OLD at all. So
+-- entries_update, on its own, admits any member of a group to rewrite any
+-- column of any entry in it. Three of those were reachable:
+--
+--   * move an expense into another group you belong to, which leaves its
+--     payers and shares naming members of the group it came from — and
+--     v_member_balances then reports balances in the destination group for
+--     people who are not in it. assert_member_in_group cannot catch this: it
+--     fires on the children, and the children did not move.
+--   * rewrite created_by, attributing your expense to somebody else.
+--     upsert_entry deliberately has no parameter for authorship; this was the
+--     way around that.
+--   * rewrite created_at or client_key, the second of which is what makes a
+--     retried push idempotent rather than a duplicate expense.
+--
+-- Authorship on INSERT is checked here too. upsert_entry resolves the caller's
+-- own member row and writes that, so a direct insert was the only way to name
+-- somebody else, and now it is not.
+--
+-- auth.uid() is null exactly when there is no JWT — a migration, a pgTAP
+-- fixture, or the service role — and those are left alone. The scheduled jobs
+-- and delete_account() run that way, and each has already checked far more
+-- than this trigger could.
+-- ----------------------------------------------------------------------------
+create or replace function guard_entry_write()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_mine uuid;
+begin
+  if auth.uid() is null then
+    return new;
+  end if;
+
+  if tg_op = 'INSERT' then
+    select id into v_mine
+      from members
+     where group_id = new.group_id
+       and profile_id = auth.uid()
+       and left_at is null;
+
+    if new.created_by is distinct from v_mine then
+      raise exception
+        'An expense can only be recorded under your own name in this group'
+        using errcode = 'insufficient_privilege';
+    end if;
+
+    return new;
+  end if;
+
+  if new.group_id is distinct from old.group_id then
+    raise exception
+      'An expense belongs to the group it was recorded in and cannot be moved'
+      using errcode = 'insufficient_privilege';
+  end if;
+
+  if new.created_by is distinct from old.created_by
+     or new.created_at is distinct from old.created_at
+     or new.client_key is distinct from old.client_key then
+    raise exception 'Who recorded an expense, and when, cannot be rewritten'
+      using errcode = 'insufficient_privilege';
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger trg_entries_guard
+  before insert or update on entries
+  for each row execute function guard_entry_write();
 
 -- ----------------------------------------------------------------------------
 -- Members on an entry must belong to that entry's group.

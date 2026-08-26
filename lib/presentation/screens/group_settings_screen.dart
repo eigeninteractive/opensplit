@@ -95,26 +95,12 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
     ];
   }
 
+  /// Leaving is always available, settled or not.
+  ///
+  /// There used to be a check here refusing to let the last owner leave until
+  /// they had promoted somebody. With no roles there is nothing to hand over
+  /// and nothing to strand — which is most of the reason the role went.
   Future<void> _leave(GroupLedger ledger, Member me) async {
-    final owners = ledger.members.where(
-      (m) => m.role == MemberRole.owner && m.leftAt == null,
-    );
-    final others = ledger.members.where(
-      (m) => m.id != me.id && m.leftAt == null,
-    );
-
-    if (me.role == MemberRole.owner &&
-        owners.length == 1 &&
-        others.isNotEmpty) {
-      await _tell(
-        'Make somebody else an owner first',
-        'You are the only owner of this group. If you leave now, nobody left '
-            'in it can add an owner, rename it or remove anyone.\n\n'
-            'Open People, and make another member an owner.',
-      );
-      return;
-    }
-
     final debts = _outstanding(ledger, me);
     final confirmed = await showDialog<bool>(
       context: context,
@@ -159,20 +145,6 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
     }
     if (mounted) goBack(context, '/');
   }
-
-  Future<void> _tell(String title, String body) => showDialog<void>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(title),
-      content: Text(body),
-      actions: [
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('OK'),
-        ),
-      ],
-    ),
-  );
 
   @override
   Widget build(BuildContext context) {

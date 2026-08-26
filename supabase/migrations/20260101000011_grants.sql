@@ -29,7 +29,7 @@ grant select on fx_rates   to authenticated;
 -- Group-scoped data.
 -- ----------------------------------------------------------------------------
 grant select, insert, update         on profiles to authenticated;
-grant select, insert, update, delete on groups   to authenticated;
+grant select, insert, update         on groups   to authenticated;
 grant select, insert, update         on members  to authenticated;
 grant select, insert, update         on entries  to authenticated;
 grant select, insert, update, delete on invites    to authenticated;
@@ -38,6 +38,16 @@ grant select, insert, update, delete on invites    to authenticated;
 -- DELETE on these two.
 grant select, insert, update, delete on entry_payers to authenticated;
 grant select, insert, update, delete on entry_shares to authenticated;
+
+-- assert_balanced() keeps its default PUBLIC execute grant, and has to: the
+-- three constraint triggers that enforce the balance invariant are SECURITY
+-- INVOKER, so each of them calls it as whoever made the write. Revoking it
+-- would make every entry write fail at COMMIT.
+--
+-- Harmless as API surface. It returns nothing, and it reads entries,
+-- entry_payers and entry_shares as the caller — so an entry the caller cannot
+-- see reads as absent and the function returns silently, exactly as it does
+-- for one deleted in the same transaction.
 
 -- The activity log: readable by the group, appended to by nobody.
 --
@@ -48,8 +58,15 @@ grant select, insert, update, delete on entry_shares to authenticated;
 -- trail somebody can quietly rewrite is not one.
 grant select on entry_events to authenticated;
 
--- Deliberately no DELETE on entries or members. Neither has an RLS delete
--- policy either; this is the second lock on the same door.
+-- Deliberately no DELETE on entries, members or groups. None of the three has
+-- an RLS delete policy either; this is the second lock on the same door.
+--
+-- Groups joined that list when the owner role went. The capability was already
+-- unreachable — nothing in the app has ever deleted a group, and a trigger
+-- refused it for any group with an expense in it — so it was a policy, a grant
+-- and a guard describing something nobody could do. Archiving is the operation
+-- people actually want, and the scheduled purge is what eventually collects a
+-- group that is archived, a year silent and settled to zero.
 
 grant select on v_member_balances to authenticated;
 
@@ -83,7 +100,6 @@ grant execute on function register_device_token(text, text) to authenticated;
 
 -- Helpers used inside policies.
 grant execute on function is_group_member(uuid)  to authenticated;
-grant execute on function is_group_owner(uuid)   to authenticated;
 grant execute on function is_group_creator(uuid) to authenticated;
 
 -- fx_rate_as_of() and fx_convert() are deliberately callable by nobody. They

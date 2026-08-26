@@ -46,8 +46,6 @@ create type split_kind as enum ('equal', 'exact', 'shares', 'percent');
 -- 'shares'  -> weight = share count (2:1:1)
 -- 'percent' -> weight = percentage (must sum to 100)
 
-create type member_role as enum ('owner', 'member');
-
 -- What happened to an expense, for the activity feed.
 --
 -- 'restored' exists because delete is soft: an entry can come back, and a feed

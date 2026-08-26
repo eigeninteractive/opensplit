@@ -66,20 +66,19 @@ create policy groups_read on groups
 create policy groups_insert on groups
   for insert to authenticated with check (created_by = auth.uid());
 
+-- Any member may rename a group, archive it, or turn debt simplification on
+-- and off. None of it touches money, all of it is reversible by anybody who
+-- disagrees, and all of it is visible — which is the test for whether
+-- something needs a rank behind it.
 create policy groups_update on groups
   for update to authenticated
-  using (is_group_owner(id) or created_by = auth.uid())
-  with check (is_group_owner(id) or created_by = auth.uid());
+  using (is_group_member(id) or created_by = auth.uid())
+  with check (is_group_member(id) or created_by = auth.uid());
 
--- An anonymous session is one device with no recovery path. It may record
--- expenses freely, but it must not be able to destroy a group other people are
--- relying on, because the account cannot be recovered to undo it.
-create policy groups_delete on groups
-  for delete to authenticated
-  using (
-    is_group_owner(id)
-    and coalesce((auth.jwt()->>'is_anonymous')::boolean, false) = false
-  );
+-- There is deliberately no delete policy, and no DELETE grant to match — see
+-- the note in the grants file. A group is archived, never destroyed, and the
+-- only paths that remove one are the scheduled purge and delete_account(),
+-- both of which run as the definer and both of which check far more first.
 
 -- ----------------------------------------------------------------------------
 -- Members.
@@ -111,14 +110,19 @@ create policy members_update on members
 -- all — so the policy above, on its own, admits any member of a group to
 -- rewrite any other member of that group. That is too much:
 --
---   * set role = 'owner' on yourself, and then delete the group;
 --   * rewrite somebody else's upi_vpa, so the settle-up handoff pays you;
---   * null out somebody's profile_id, and they lose the group entirely.
+--   * null out somebody's profile_id, and they lose the group entirely;
+--   * set left_at on somebody else, cutting them out of the group.
 --
 -- All three were reachable. So the row scope stays in the policy and the
 -- column rules live here, where OLD and NEW are both in hand and a refusal can
 -- say what it refused — an RLS failure on UPDATE just matches zero rows and
 -- reports nothing at all.
+--
+-- These rules used to carry an exemption for a group owner. They no longer do,
+-- and the first of the three is why: an owner could rewrite another member's
+-- payment handle, which is the one power in this schema that can redirect real
+-- money. Nobody needs it, so nobody has it.
 -- ----------------------------------------------------------------------------
 create or replace function guard_member_update()
 returns trigger
@@ -132,7 +136,6 @@ declare
   -- them existing.
   v_own_or_placeholder boolean :=
     old.profile_id is null or old.profile_id = auth.uid();
-  v_owner boolean := is_group_owner(old.group_id);
 begin
   if new.id is distinct from old.id
      or new.group_id is distinct from old.group_id
@@ -163,23 +166,40 @@ begin
       using errcode = 'insufficient_privilege';
   end if;
 
-  if new.role is distinct from old.role and not v_owner then
-    raise exception 'Only an owner can change a role'
-      using errcode = 'insufficient_privilege';
-  end if;
-
+  -- Your own name and handle, or a placeholder's. A placeholder's are shared
+  -- bookkeeping — somebody has to be able to name and pay a person who has
+  -- never opened the app — but a claimed member's belong to that person, and
+  -- their profile is what the app displays for them anyway.
   if (new.display_name is distinct from old.display_name
       or new.upi_vpa is distinct from old.upi_vpa)
-     and not (v_own_or_placeholder or v_owner) then
+     and not v_own_or_placeholder then
     raise exception
-      'Only % or an owner can change that name or payment handle',
-      old.display_name
+      'Only % can change their own name or payment handle', old.display_name
       using errcode = 'insufficient_privilege';
   end if;
 
+  -- Leaving is always yours to do, settled or not: a debt is not a reason
+  -- somebody can be held in a group, and the app says plainly that leaving
+  -- does not clear one.
+  --
+  -- Removing somebody else is different, because it is not only a removal.
+  -- `is_group_member` requires `left_at is null`, so it also cuts them off from
+  -- reading the group — and the person most worth cutting off is exactly the
+  -- one still owed money, or the one still chasing you for it. Requiring a zero
+  -- balance in every currency is what makes removal a piece of tidying up
+  -- rather than a way to walk away from a debt or to hide from one.
+  --
+  -- v_member_balances lists only non-zero positions, so "no rows" is the
+  -- definition of settled — the same one purge_settled_dormant_groups uses.
   if new.left_at is distinct from old.left_at
-     and not (v_own_or_placeholder or v_owner) then
-    raise exception 'Only an owner can remove somebody else from a group'
+     and old.profile_id is distinct from auth.uid()
+     and exists (
+       select 1 from v_member_balances b
+        where b.group_id = old.group_id and b.member_id = old.id
+     ) then
+    raise exception
+      '% is not settled up in this group, so they cannot be removed from it',
+      old.display_name
       using errcode = 'insufficient_privilege';
   end if;
 
@@ -193,45 +213,6 @@ $$;
 create trigger trg_members_guard
   before update on members
   for each row execute function guard_member_update();
-
--- ----------------------------------------------------------------------------
--- Deleting a group.
---
--- entry_payers and entry_shares reference members with ON DELETE RESTRICT, so
--- the cascade from `groups` stops dead the moment a group has a single expense
--- in it. That is the correct outcome — financial rows are never destroyed —
--- but the message Postgres produces for it names a foreign key the caller has
--- never heard of.
---
--- The policy and the GRANT therefore describe a capability that only really
--- exists for an empty group, and this says so in those words.
--- ----------------------------------------------------------------------------
-create or replace function guard_group_delete()
-returns trigger
-language plpgsql
-set search_path = public
-as $$
-begin
-  -- Only people are stopped. auth.uid() is null exactly when there is no JWT,
-  -- which is to say when this is the scheduled purge running as postgres —
-  -- and that job has already checked far more than this trigger does: archived,
-  -- a year silent, and every balance settled to zero. Refusing it here would
-  -- mean the only groups the reaper could ever collect are the empty ones,
-  -- which are not the ones taking up room.
-  if auth.uid() is not null
-     and exists (select 1 from entries where group_id = old.id) then
-    raise exception
-      'This group has expenses recorded in it, so it cannot be deleted. '
-      'Archive it instead.'
-      using errcode = 'dependent_objects_still_exist';
-  end if;
-  return old;
-end;
-$$;
-
-create trigger trg_groups_guard_delete
-  before delete on groups
-  for each row execute function guard_group_delete();
 
 -- ----------------------------------------------------------------------------
 -- Categories: a fixed global list, readable by anyone signed in.

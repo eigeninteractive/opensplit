@@ -178,8 +178,8 @@ void main() {
       final created = await groups.createGroup(
         name: 'Integration ${DateTime.now().microsecondsSinceEpoch}',
         defaultCurrency: 'INR',
-        ownerDisplayName: 'Ravi',
-        ownerProfileId: user.id,
+        creatorDisplayName: 'Ravi',
+        creatorProfileId: user.id,
       );
       final priya = await groups.addMember(
         created.group.id,
@@ -192,10 +192,10 @@ void main() {
           currency: 'INR',
           amountMinor: 240000,
           description: 'Dinner at Toit',
-          split: EqualSplit([created.owner.id, priya.id]),
-          payerAmounts: {created.owner.id: 240000},
+          split: EqualSplit([created.creator.id, priya.id]),
+          payerAmounts: {created.creator.id: 240000},
         ),
-        createdBy: created.owner.id,
+        createdBy: created.creator.id,
       );
 
       final report = await sync.syncGroup(created.group.id);
@@ -242,18 +242,18 @@ void main() {
       final created = await groups.createGroup(
         name: 'Invariant ${DateTime.now().microsecondsSinceEpoch}',
         defaultCurrency: 'INR',
-        ownerDisplayName: 'Ravi',
-        ownerProfileId: user.id,
+        creatorDisplayName: 'Ravi',
+        creatorProfileId: user.id,
       );
       final entry = await entries.create(
         EntryDraft(
           groupId: created.group.id,
           currency: 'INR',
           amountMinor: 100000,
-          split: EqualSplit([created.owner.id]),
-          payerAmounts: {created.owner.id: 100000},
+          split: EqualSplit([created.creator.id]),
+          payerAmounts: {created.creator.id: 100000},
         ),
-        createdBy: created.owner.id,
+        createdBy: created.creator.id,
       );
       await sync.syncGroup(created.group.id);
 
@@ -284,8 +284,8 @@ void main() {
         final created = await groups.createGroup(
           name: 'Cursor ${DateTime.now().microsecondsSinceEpoch}',
           defaultCurrency: 'INR',
-          ownerDisplayName: 'Ravi',
-          ownerProfileId: user.id,
+          creatorDisplayName: 'Ravi',
+          creatorProfileId: user.id,
         );
         for (var i = 0; i < 6; i++) {
           await entries.create(
@@ -294,10 +294,10 @@ void main() {
               currency: 'INR',
               amountMinor: 1000 * (i + 1),
               description: 'Expense $i',
-              split: EqualSplit([created.owner.id]),
-              payerAmounts: {created.owner.id: 1000 * (i + 1)},
+              split: EqualSplit([created.creator.id]),
+              payerAmounts: {created.creator.id: 1000 * (i + 1)},
             ),
-            createdBy: created.owner.id,
+            createdBy: created.creator.id,
           );
         }
         await sync.syncGroup(created.group.id);
@@ -329,8 +329,8 @@ void main() {
       final created = await groups.createGroup(
         name: 'Invite ${DateTime.now().microsecondsSinceEpoch}',
         defaultCurrency: 'INR',
-        ownerDisplayName: 'Ravi',
-        ownerProfileId: ravi.id,
+        creatorDisplayName: 'Ravi',
+        creatorProfileId: ravi.id,
       );
       // Priya is added as a placeholder: a full member of the group who has
       // never heard of the app.
@@ -344,10 +344,10 @@ void main() {
           currency: 'INR',
           amountMinor: 240000,
           description: 'Dinner at Toit',
-          split: EqualSplit([created.owner.id, priya.id]),
-          payerAmounts: {created.owner.id: 240000},
+          split: EqualSplit([created.creator.id, priya.id]),
+          payerAmounts: {created.creator.id: 240000},
         ),
-        createdBy: created.owner.id,
+        createdBy: created.creator.id,
       );
       await sync.syncGroup(created.group.id);
 
@@ -407,18 +407,18 @@ void main() {
       final created = await groups.createGroup(
         name: 'Private ${DateTime.now().microsecondsSinceEpoch}',
         defaultCurrency: 'INR',
-        ownerDisplayName: 'Ravi',
-        ownerProfileId: user.id,
+        creatorDisplayName: 'Ravi',
+        creatorProfileId: user.id,
       );
       await entries.create(
         EntryDraft(
           groupId: created.group.id,
           currency: 'INR',
           amountMinor: 50000,
-          split: EqualSplit([created.owner.id]),
-          payerAmounts: {created.owner.id: 50000},
+          split: EqualSplit([created.creator.id]),
+          payerAmounts: {created.creator.id: 50000},
         ),
-        createdBy: created.owner.id,
+        createdBy: created.creator.id,
       );
       await sync.syncGroup(created.group.id);
 
@@ -446,8 +446,8 @@ void main() {
       final created = await groups.createGroup(
         name: 'Discoverable ${DateTime.now().microsecondsSinceEpoch}',
         defaultCurrency: 'INR',
-        ownerDisplayName: 'Ravi',
-        ownerProfileId: user.id,
+        creatorDisplayName: 'Ravi',
+        creatorProfileId: user.id,
       );
       await sync.syncGroup(created.group.id);
 
@@ -470,15 +470,15 @@ void main() {
       final created = await groups.createGroup(
         name: 'Leavable ${DateTime.now().microsecondsSinceEpoch}',
         defaultCurrency: 'INR',
-        ownerDisplayName: 'Ravi',
-        ownerProfileId: user.id,
+        creatorDisplayName: 'Ravi',
+        creatorProfileId: user.id,
       );
       await sync.syncGroup(created.group.id);
       expect(await api.pullMyGroupIds(), contains(created.group.id));
 
       await groups.leaveGroup(
         groupId: created.group.id,
-        memberId: created.owner.id,
+        memberId: created.creator.id,
       );
       await sync.syncGroup(created.group.id);
 
@@ -495,8 +495,8 @@ void main() {
       final created = await groups.createGroup(
         name: 'Guarded ${DateTime.now().microsecondsSinceEpoch}',
         defaultCurrency: 'INR',
-        ownerDisplayName: 'Ravi',
-        ownerProfileId: owner.id,
+        creatorDisplayName: 'Ravi',
+        creatorProfileId: owner.id,
       );
       final slot = await groups.addMember(
         created.group.id,
@@ -525,7 +525,7 @@ void main() {
         priya
             .from('members')
             .update({'upi_vpa': 'attacker@okaxis'})
-            .eq('id', created.owner.id),
+            .eq('id', created.creator.id),
         throwsA(isA<PostgrestException>()),
       );
 
@@ -714,8 +714,8 @@ void main() {
       final created = await hostGroups.createGroup(
         name: 'Goa trip',
         defaultCurrency: 'INR',
-        ownerDisplayName: 'Priya',
-        ownerProfileId: me.id,
+        creatorDisplayName: 'Priya',
+        creatorProfileId: me.id,
       );
       final friend = await hostGroups.addMember(
         created.group.id,

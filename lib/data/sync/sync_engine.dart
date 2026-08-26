@@ -84,6 +84,7 @@ class SyncEngine {
   Future<SyncReport> syncGroup(String groupId) async {
     final pushed = await push();
     try {
+      await pullShared();
       final pulled = await pull(groupId);
       return SyncReport(
         pushed: pushed.sent,
@@ -98,6 +99,52 @@ class SyncEngine {
         error: error,
       );
     }
+  }
+
+  /// Syncs every group this account belongs to, in one run.
+  ///
+  /// Here rather than in the caller because the saving is only available here:
+  /// the outbox is drained once for the whole sweep, and rates and profiles —
+  /// which are not group-scoped at all — are pulled once rather than once per
+  /// group. Driven from outside, this was N pushes and 2N requests for
+  /// reference data to sync N groups.
+  ///
+  /// One report for the run, not the last group's. Failures pushing are counted
+  /// once; a group that cannot be pulled ends the sweep, since the likely cause
+  /// is the connection rather than that group.
+  Future<SyncReport> syncEverything() async {
+    final pushed = await push();
+    var pulled = 0;
+    try {
+      await pullShared();
+      for (final groupId in await discoverGroups()) {
+        pulled += await pull(groupId);
+      }
+      return SyncReport(
+        pushed: pushed.sent,
+        pulled: pulled,
+        failed: pushed.failed,
+      );
+    } catch (error) {
+      return SyncReport(
+        pushed: pushed.sent,
+        pulled: pulled,
+        failed: pushed.failed,
+        error: error,
+      );
+    }
+  }
+
+  /// Everything a pull needs that is not about one group.
+  ///
+  /// Exchange rates and profiles are app-wide: rates are reference data, and
+  /// `profiles_read` already scopes profiles to you plus your co-members, so
+  /// one request answers for every group at once. Pulling them per group meant
+  /// a person in three of your groups was fetched three times and the rate
+  /// table was swept three times, to no effect after the first.
+  Future<void> pullShared() async {
+    await pullFxRates();
+    await pullProfiles();
   }
 
   /// Drains everything currently due from the outbox.
@@ -288,9 +335,12 @@ class SyncEngine {
       change.field: {'from': change.from, 'to': change.to},
   };
 
+  /// Applies one group's changes: its row, its members, its entries and its
+  /// activity.
+  ///
+  /// Deliberately does NOT pull rates or profiles — see [pullShared], which the
+  /// callers run once per sync rather than once per group.
   Future<int> pull(String groupId) async {
-    await pullFxRates();
-    await pullProfiles();
     await _pullGroupAndMembers(groupId);
 
     var cursor = await _readCursor(groupId);
@@ -434,7 +484,6 @@ class SyncEngine {
               groupId: member.groupId,
               profileId: Value(member.profileId),
               displayName: member.displayName,
-              role: member.role,
               joinedAt: member.joinedAt,
               leftAt: Value(member.leftAt),
               upiVpa: Value(member.upiVpa),

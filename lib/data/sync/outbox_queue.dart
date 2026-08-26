@@ -50,38 +50,63 @@ class OutboxQueue {
   static String idFor(OutboxTarget target, String targetId) =>
       '${target.name}:$targetId';
 
-  /// Queues [targetId] for pushing, replacing any pending item for the same
-  /// row.
+  /// Marks [targetId] as dirty, coalescing with any item already waiting for
+  /// the same row.
   ///
-  /// Replacing rather than appending is what makes repeated offline edits cheap
-  /// and keeps the queue bounded by the number of rows touched, not the number
-  /// of times they were touched.
+  /// Coalescing rather than appending is what makes repeated offline edits
+  /// cheap and keeps the queue bounded by the number of rows touched, not the
+  /// number of times they were touched. It is also why this queue is a set of
+  /// dirty rows rather than a log of operations — see [due].
+  ///
+  /// [Outbox.createdAt] is deliberately left alone when the row is already
+  /// queued: it records when the row first went dirty, and re-dirtying a row is
+  /// not the row becoming new. Rewriting it was how a second edit could
+  /// reorder a row ahead of something it depends on.
   Future<void> enqueue(OutboxTarget target, String targetId) async {
     await _db
         .into(_db.outbox)
-        .insertOnConflictUpdate(
+        .insert(
           OutboxCompanion.insert(
             id: idFor(target, targetId),
             operation: target.name,
             targetId: targetId,
             createdAt: _clock(),
-            // A fresh change deserves an immediate attempt even if a previous
-            // one had been backed off.
-            attempts: const Value(0),
-            nextAttemptAt: const Value(null),
-            lastError: const Value(null),
-            deadLetteredAt: const Value(null),
+          ),
+          onConflict: DoUpdate(
+            // A fresh change deserves an immediate attempt even if a previous one
+            // had been backed off, or set aside as a dead letter: whatever the
+            // server refused may be exactly what this edit changed.
+            (_) => const OutboxCompanion(
+              attempts: Value(0),
+              nextAttemptAt: Value(null),
+              lastError: Value(null),
+              deadLetteredAt: Value(null),
+            ),
           ),
         );
   }
 
   /// Items ready to be attempted now, in an order the server can accept.
   ///
-  /// Oldest first, but ties broken by dependency: a group has to exist before
-  /// the members that belong to it, and both before any entry that references
-  /// them, or the foreign keys reject the write. Timestamps alone are not
-  /// enough to guarantee that — creating a group queues the group and its owner
-  /// in the same millisecond.
+  /// Sorted by dependency, and only then by age. That ordering follows from
+  /// what this queue actually holds: an item says "row X is dirty", not "apply
+  /// this change at time T" — [SyncEngine] re-reads the row's current state
+  /// when it pushes it — and entries carry no cross-entry ordering requirement
+  /// of their own. So there is no chronology to preserve here, and the one
+  /// constraint that does exist is referential: a group has to exist before the
+  /// members that belong to it, and both before any entry that references them,
+  /// or the foreign keys and the membership policies reject the write.
+  ///
+  /// Sorting the other way round — age first, dependency as a tiebreak — is
+  /// what shipped, and it inverted on any second edit. Creating a group offline
+  /// and then renaming it moved the group behind its own owner, whose push the
+  /// server then refused with a permission error it treats as permanent, so the
+  /// owner's member row went to the dead letters and every expense in the group
+  /// followed it. Dependency first cannot invert, because rank is a property of
+  /// the kind of row rather than of when anyone touched it.
+  ///
+  /// Age still decides within a rank, so paging under [limit] is stable and the
+  /// oldest dirty row of a kind goes first.
   Future<List<OutboxRow>> due({int limit = 100}) async {
     final now = _clock();
     final rows =
@@ -94,16 +119,24 @@ class OutboxQueue {
             .get();
 
     rows.sort((a, b) {
-      final byTime = a.createdAt.compareTo(b.createdAt);
-      if (byTime != 0) return byTime;
-      return _rank(a.operation).compareTo(_rank(b.operation));
+      final byDependency = _pushOrder(
+        a.operation,
+      ).compareTo(_pushOrder(b.operation));
+      if (byDependency != 0) return byDependency;
+      return a.createdAt.compareTo(b.createdAt);
     });
 
     return rows.take(limit).toList();
   }
 
-  /// Push order: a row must not reference something the server has not seen.
-  static int _rank(String operation) => switch (operation) {
+  /// Where a kind of row sits in the dependency graph.
+  ///
+  /// A total order over the three levels the schema actually has, which is what
+  /// makes sorting by it a valid topological sort: entries reference members,
+  /// members reference groups, and profiles reference nothing group-scoped at
+  /// all. There is no edge pointing back up, so no item ever needs to precede
+  /// one of a lower rank.
+  static int _pushOrder(String operation) => switch (operation) {
     'group' => 0,
     'member' => 1,
     _ => 2,

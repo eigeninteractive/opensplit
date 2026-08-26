@@ -24,20 +24,31 @@ class GroupListScreen extends ConsumerWidget {
     // Archived groups are pulled in here rather than queried separately, so
     // the list and the "archived" row at the bottom of it are two readings of
     // one stream and cannot disagree about which group is where.
-    final groupsAsync = ref.watch(groupsProvider(includeArchived: true));
+    final source = groupsProvider(includeArchived: true);
+
+    // Leaves a note for the next cold start, so the web loader knows whether to
+    // draw group cards or just the chrome. See [recordHasGroups] — it does
+    // nothing on Android.
+    //
+    // A listener rather than a line in the body, because it writes to browser
+    // storage and a build has to be free of side effects. `ref.listen` fires on
+    // change, which is every occasion that matters here: the provider is
+    // created when this screen mounts and goes from loading to loaded while it
+    // is watching.
+    ref.listen(source, (_, next) {
+      final loaded = next.value;
+      if (loaded != null) {
+        recordHasGroups(loaded.any((group) => !group.isArchived));
+      }
+    });
+
+    final groupsAsync = ref.watch(source);
     final all = groupsAsync.value ?? const <Group>[];
     final groups = [
       for (final group in all)
         if (!group.isArchived) group,
     ];
     final archived = all.length - groups.length;
-
-    // Leaves a note for the next cold start, so the web loader knows whether
-    // to draw group cards or just the chrome. See [recordHasGroups] — it does
-    // nothing on Android.
-    if (groupsAsync.hasValue) {
-      recordHasGroups(groups.isNotEmpty);
-    }
 
     return Scaffold(
       appBar: AppBar(title: const BrandLockup()),

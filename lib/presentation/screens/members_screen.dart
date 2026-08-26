@@ -64,8 +64,6 @@ class MembersScreen extends ConsumerWidget {
                             // here: it is what makes settling with this person
                             // one tap instead of a chat message asking for it.
                             ? ledger.upiOf(member)!
-                            : member.role == MemberRole.owner
-                            ? 'Owner'
                             : member.isPlaceholder
                             // Blunt on purpose: a placeholder is a real member
                             // with real money attached, not a draft.
@@ -78,7 +76,6 @@ class MembersScreen extends ConsumerWidget {
                           'me' => context.go('/account'),
                           'rename' => _rename(context, ref, member),
                           'upi' => _setUpi(context, ref, member),
-                          'owner' => _makeOwner(context, ref, member),
                           'remove' => _remove(context, ref, member, ledger),
                           _ => null,
                         },
@@ -97,9 +94,18 @@ class MembersScreen extends ConsumerWidget {
                         // items fail.
                         itemBuilder: (context) {
                           final mine = member.id == ledger.me?.id;
-                          final iAmOwner = ledger.me?.role == MemberRole.owner;
-                          final editable =
-                              member.isPlaceholder || mine || iAmOwner;
+
+                          // Your own row, or a placeholder's. A claimed
+                          // member's name and handle are theirs — the server
+                          // refuses anybody else, including whoever made the
+                          // group.
+                          final editable = member.isPlaceholder || mine;
+
+                          // Removing somebody also cuts off their access to the
+                          // group, so it is offered only once nothing is owed
+                          // either way. Leaving is separate, and always yours.
+                          final removable =
+                              !mine && ledger.isSettledUp(member.id);
 
                           return [
                             if (member.isPlaceholder)
@@ -126,21 +132,21 @@ class MembersScreen extends ConsumerWidget {
                                 value: 'me',
                                 child: Text('Edit your name and UPI ID'),
                               ),
-                            // How an owner hands the role over, which is what
-                            // has to happen before the last one can leave.
-                            if (iAmOwner &&
-                                !member.isPlaceholder &&
-                                member.role != MemberRole.owner)
-                              const PopupMenuItem(
-                                value: 'owner',
-                                child: Text('Make an owner'),
-                              ),
-                            if (editable &&
-                                !mine &&
-                                member.role != MemberRole.owner)
+                            if (removable)
                               const PopupMenuItem(
                                 value: 'remove',
                                 child: Text('Remove from group'),
+                              )
+                            // Said rather than silently withheld: an absent
+                            // menu item reads as a bug, and the reason here is
+                            // something the group can act on.
+                            else if (!mine)
+                              PopupMenuItem(
+                                enabled: false,
+                                child: Text(
+                                  '${ledger.nameOfMember(member)} is not '
+                                  'settled up',
+                                ),
                               ),
                           ];
                         },
@@ -249,44 +255,6 @@ class MembersScreen extends ConsumerWidget {
 
     if (confirmed ?? false) {
       await ref.read(groupRepositoryProvider).removeMember(member.id);
-    }
-  }
-
-  /// Hands the owner role to somebody else.
-  ///
-  /// There is no matching "demote", and that is deliberate: the way to stop
-  /// being an owner is to leave, and a group that can be left ownerless by one
-  /// tap is one nobody can rename or remove anyone from afterwards.
-  Future<void> _makeOwner(
-    BuildContext context,
-    WidgetRef ref,
-    Member member,
-  ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Make ${member.displayName} an owner?'),
-        content: const Text(
-          'Owners can rename the group, remove people, and make other owners. '
-          'You stay an owner too.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Make an owner'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed ?? false) {
-      await ref
-          .read(groupRepositoryProvider)
-          .setMemberRole(member.id, MemberRole.owner);
     }
   }
 }

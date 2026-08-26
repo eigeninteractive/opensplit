@@ -8,7 +8,12 @@
 
 create table profiles (
   id           uuid primary key references auth.users(id) on delete cascade,
-  display_name text not null,
+
+  -- Non-empty, like groups.name and members.display_name. This is the name
+  -- every co-member reads a shared ledger by, and GroupLedger.nameOfMember
+  -- falls back to the member row when it is blank — so an empty one is not a
+  -- visible error, it is a name that quietly stops travelling.
+  display_name text not null check (length(trim(display_name)) > 0),
   avatar_url   text,
 
   -- UPI virtual payment address, for the settle-up handoff. Personal rather
@@ -40,12 +45,17 @@ security definer
 set search_path = public
 as $$
 begin
+  -- nullif on each candidate, not just coalesce over them. An identity
+  -- provider that supplies display_name as an empty string, and an account
+  -- with no email at all, both produce '' rather than null — which coalesce
+  -- would happily accept and the non-empty check would then reject, failing
+  -- the signup itself.
   insert into public.profiles (id, display_name)
   values (
     new.id,
     coalesce(
-      new.raw_user_meta_data->>'display_name',
-      split_part(new.email, '@', 1),
+      nullif(trim(new.raw_user_meta_data->>'display_name'), ''),
+      nullif(split_part(coalesce(new.email, ''), '@', 1), ''),
       'Someone'
     )
   );
@@ -141,10 +151,10 @@ alter table profiles enable row level security;
 -- Those are deleted outright.
 --
 -- Entries go before invites, members and the group itself, and that ordering is
--- load-bearing twice over: entries cascade to their payers and shares, so the
--- deferred balance trigger never sees a parent without children; and
--- guard_group_delete refuses to drop a group that still has expenses, which by
--- then it does not.
+-- load-bearing: entries cascade to their payers and shares, so the deferred
+-- balance trigger never sees a parent without children, and entry_payers
+-- references members with ON DELETE RESTRICT, so the members cannot go until
+-- the expenses naming them have.
 create or replace function delete_account()
 returns void
 language plpgsql

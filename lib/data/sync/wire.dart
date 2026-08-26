@@ -128,7 +128,6 @@ Map<String, dynamic> memberToJson(Member member) => {
   // INSERT is the same as null, so the placeholder case still works.
   if (member.profileId != null) 'profile_id': member.profileId,
   'display_name': member.displayName,
-  'role': member.role.name,
   'joined_at': member.joinedAt.toUtc().toIso8601String(),
   'left_at': member.leftAt?.toUtc().toIso8601String(),
   'upi_vpa': member.upiVpa,
@@ -139,7 +138,6 @@ Member memberFromJson(Map<String, dynamic> json) => Member(
   groupId: json['group_id'] as String,
   profileId: json['profile_id'] as String?,
   displayName: json['display_name'] as String,
-  role: MemberRole.values.byName((json['role'] as String?) ?? 'member'),
   joinedAt: DateTime.parse(json['joined_at'] as String),
   leftAt: _parseOrNull(json['left_at']),
   upiVpa: json['upi_vpa'] as String?,

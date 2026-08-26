@@ -26,7 +26,6 @@ void main() {
     // Deliberately stale: the account renamed itself afterwards, and this is
     // the copy that used to be the source of truth.
     displayName: 'Priya (old)',
-    role: MemberRole.owner,
   );
 
   final ravi = Member(
@@ -34,7 +33,6 @@ void main() {
     groupId: 'g1',
     joinedAt: DateTime.utc(2026, 6, 2),
     displayName: 'Ravi',
-    role: MemberRole.member,
     upiVpa: 'ravi@bank',
   );
 

@@ -42,7 +42,6 @@ create table members (
   -- Null means a placeholder. This is the column an invite claim sets.
   profile_id   uuid references profiles(id) on delete set null,
   display_name text not null check (length(trim(display_name)) > 0),
-  role         member_role not null default 'member',
   joined_at    timestamptz not null default now(),
 
   -- Members are never deleted; they leave. A member who has paid for anything
@@ -145,6 +144,17 @@ create index idx_members_group_active on members (group_id) where left_at is nul
 -- ----------------------------------------------------------------------------
 -- Membership predicates.
 --
+-- Membership is the only question. There is deliberately no owner, admin or
+-- any other rank: a shared ledger is a thing a group of friends keeps between
+-- them, and the powers a role was gating turned out to be either destructive
+-- enough that nobody should have them over somebody else, or harmless enough
+-- that everybody should. What is left is one predicate, applied evenly.
+--
+-- Removing the role also removed a whole class of problem rather than solving
+-- it. An owner who left, or deleted their account, stranded a group nobody
+-- could then administer, and every remedy for that was some flavour of handing
+-- authority to somebody who had not asked for it.
+--
 -- THE FOOTGUN: a policy on `members` that itself selects from `members` causes
 -- infinite recursion (Postgres 42P17). Every project with group membership hits
 -- it. The fix is a SECURITY DEFINER helper, which bypasses RLS on its internal
@@ -165,22 +175,6 @@ as $$
     select 1 from members
      where group_id = gid
        and profile_id = auth.uid()
-       and left_at is null
-  );
-$$;
-
-create or replace function is_group_owner(gid uuid)
-returns boolean
-language sql
-security definer
-set search_path = public
-stable
-as $$
-  select exists (
-    select 1 from members
-     where group_id = gid
-       and profile_id = auth.uid()
-       and role = 'owner'
        and left_at is null
   );
 $$;

@@ -43,6 +43,41 @@ final class DriftEntryRepository {
   Future<void> _enqueue(String entryId) async =>
       outbox?.enqueue(OutboxTarget.entry, entryId);
 
+  /// How many live entries this device holds, across every group.
+  ///
+  /// Counted in SQL rather than by reading every row and taking the length of
+  /// the result — this is watched for as long as the app is open, and the
+  /// caller only ever compares it against a small number.
+  Stream<int> watchTotalCount() => _liveCount().watchSingle();
+
+  /// The same count, once.
+  ///
+  /// Asked before signing in as somebody else, to say how many expenses that
+  /// would leave behind — so it is a number in a warning, never a list.
+  Future<int> countLiveEntries() => _liveCount().getSingle();
+
+  Selectable<int> _liveCount() {
+    final total = _db.entries.id.count();
+    final query = _db.selectOnly(_db.entries)
+      ..addColumns([total])
+      ..where(_db.entries.deletedAt.isNull());
+    return query.map((row) => row.read(total) ?? 0);
+  }
+
+  /// Hydrates specific entries, in the order asked for.
+  ///
+  /// Ids the group no longer holds are skipped rather than reported: the caller
+  /// is a search whose id list came from a query that has since moved on.
+  Future<List<Entry>> getByIds(List<String> ids) async {
+    if (ids.isEmpty) return const [];
+    final rows = await (_db.select(
+      _db.entries,
+    )..where((t) => t.id.isIn(ids))).get();
+
+    final byId = {for (final entry in await _hydrate(rows)) entry.id: entry};
+    return [for (final id in ids) ?byId[id]];
+  }
+
   /// Every entry in a group, most recent first.
   ///
   /// Returns the whole journal rather than a page: balances are a fold over all
@@ -50,19 +85,6 @@ final class DriftEntryRepository {
   /// app targets that is microseconds, and it is what removes the spinner from
   /// every screen.
   ///
-  /// How many live entries this device holds, across every group.
-  ///
-  /// Counted in SQL rather than by reading every row and taking the length of
-  /// the result — this is watched for as long as the app is open, and the
-  /// caller only ever compares it against a small number.
-  Stream<int> watchTotalCount() {
-    final total = _db.entries.id.count();
-    final query = _db.selectOnly(_db.entries)
-      ..addColumns([total])
-      ..where(_db.entries.deletedAt.isNull());
-    return query.map((row) => row.read(total) ?? 0).watchSingle();
-  }
-
   /// Soft-deleted entries are excluded unless [includeDeleted] is set. The
   /// balance fold ignores them either way; history screens want them.
   Stream<List<Entry>> watchEntries(

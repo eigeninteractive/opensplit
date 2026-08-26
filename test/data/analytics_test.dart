@@ -27,15 +27,15 @@ void main() {
     groups = DriftGroupRepository(db);
     entries = DriftEntryRepository(db);
     categories = DriftCategoryRepository(db);
-    analytics = DriftAnalyticsRepository(db);
+    analytics = DriftAnalyticsRepository(db, entries);
 
     final created = await groups.createGroup(
       name: 'Goa Trip',
       defaultCurrency: 'INR',
-      ownerDisplayName: 'Ravi',
+      creatorDisplayName: 'Ravi',
     );
     groupId = created.group.id;
-    ravi = created.owner.id;
+    ravi = created.creator.id;
     priya = (await groups.addMember(groupId, displayName: 'Priya')).id;
 
     final all = await categories.all();

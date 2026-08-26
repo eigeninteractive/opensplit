@@ -22,6 +22,15 @@ Future<void> forgetLocalLedger(AppDatabase db) async {
     // Children first. Foreign keys are on (see the beforeOpen PRAGMA), and
     // entry_payers/entry_shares reference members, which the cascade from
     // groups would otherwise trip over.
+    //
+    // Every table is named, in order, rather than any of them being left to a
+    // cascade. Relying on one is how entry_events came to be missing here: its
+    // references had no ON DELETE action, so it refused the delete of the
+    // entries it describes and signing out failed on a foreign key as soon as
+    // a device had synced any activity at all. The references cascade now, so
+    // this list is belt as well as braces — but the list is the part a reader
+    // can check against the schema.
+    await db.delete(db.entryEvents).go();
     await db.delete(db.entryPayers).go();
     await db.delete(db.entryShares).go();
     await db.delete(db.entries).go();

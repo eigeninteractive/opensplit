@@ -27,8 +27,8 @@ void main() {
     await groups.createGroup(
       name: 'Just me',
       defaultCurrency: 'INR',
-      ownerDisplayName: 'Ravi',
-      ownerProfileId: ravi,
+      creatorDisplayName: 'Ravi',
+      creatorProfileId: ravi,
     );
 
     expect(await groups.membershipBreakdown(ravi), (solo: 1, shared: 0));
@@ -38,8 +38,8 @@ void main() {
     final created = await groups.createGroup(
       name: 'Beach trip',
       defaultCurrency: 'INR',
-      ownerDisplayName: 'Ravi',
-      ownerProfileId: ravi,
+      creatorDisplayName: 'Ravi',
+      creatorProfileId: ravi,
     );
     await groups.addMember(created.group.id, displayName: 'Arun');
 
@@ -56,8 +56,8 @@ void main() {
     final created = await groups.createGroup(
       name: 'Flat 4B',
       defaultCurrency: 'INR',
-      ownerDisplayName: 'Ravi',
-      ownerProfileId: ravi,
+      creatorDisplayName: 'Ravi',
+      creatorProfileId: ravi,
     );
     await groups.addMember(
       created.group.id,
@@ -72,8 +72,8 @@ void main() {
     await groups.createGroup(
       name: 'Someone else\'s',
       defaultCurrency: 'INR',
-      ownerDisplayName: 'Priya',
-      ownerProfileId: priya,
+      creatorDisplayName: 'Priya',
+      creatorProfileId: priya,
     );
 
     expect(await groups.membershipBreakdown(ravi), (solo: 0, shared: 0));
@@ -113,7 +113,7 @@ void main() {
       final created = await groups.createGroup(
         name: 'Offline',
         defaultCurrency: 'INR',
-        ownerDisplayName: 'Ravi',
+        creatorDisplayName: 'Ravi',
       );
 
       // What this guards: the row used to be written with the owner's *member*

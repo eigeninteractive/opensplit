@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 // Imported for the generated part file: `textEnum` columns resolve these types
 // in database.g.dart, and a part shares the imports of its parent library.
 import '../../domain/models/entry.dart';
-import '../../domain/models/member.dart';
 import '../../domain/split/splitter.dart';
 import 'reference_data.dart';
 import 'tables.dart';

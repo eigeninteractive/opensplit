@@ -2,9 +2,6 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'member.freezed.dart';
 
-/// A member's authority within a group.
-enum MemberRole { owner, member }
-
 /// A group-scoped identity — the load-bearing decision in this data model.
 ///
 /// Members are not auth users. Every financial row references a member id, and
@@ -16,6 +13,13 @@ enum MemberRole { owner, member }
 /// When Arun does sign up and claim his slot, exactly one column changes. If
 /// entries referenced profile ids instead, every person joining a group would
 /// require a data migration.
+///
+/// Members are equal. There is no role, and deliberately so: the powers an
+/// owner had were either destructive enough that nobody should hold them over
+/// somebody else — rewriting another member's payment handle, cutting them out
+/// of a group they are owed money in — or harmless enough that everybody
+/// should, like renaming the group. See `guard_member_update` in
+/// 0010_security.sql, which is where the rules that replaced it live.
 @freezed
 abstract class Member with _$Member {
   const factory Member({
@@ -25,7 +29,6 @@ abstract class Member with _$Member {
     /// Null while this member is a placeholder.
     String? profileId,
     required String displayName,
-    @Default(MemberRole.member) MemberRole role,
     required DateTime joinedAt,
 
     /// Set when a member leaves. They are never deleted — a member with

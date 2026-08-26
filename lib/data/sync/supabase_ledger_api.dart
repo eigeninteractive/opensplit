@@ -21,6 +21,16 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
 
   final SupabaseClient _client;
 
+  /// Rows per request on every unbounded sweep.
+  ///
+  /// Comfortably under PostgREST's `max_rows`, which is 1000 by default and is
+  /// a silent ceiling: a larger request is not an error, it is a short answer,
+  /// with nothing in the response to say it was cut. Anything here that reads
+  /// "everything since a cursor" has to page, because the alternative is a
+  /// cursor that advances by only as much as arrived and a device that takes
+  /// days to catch up — which is exactly what the rate table did.
+  static const int _pageSize = 500;
+
   /// Embedded selects, aliased so the payload matches the wire codec.
   static const String _entryColumns =
       '*, '
@@ -216,16 +226,32 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
     // your own row plus anybody sharing a group with you, so asking for
     // "everything I can see" returns exactly the set that matters. Doing it
     // per group would fetch the same person once per group they are in.
-    var query = _client.from('profiles').select();
-    // UTC and ISO, matching how the entries cursor is written. A local-zone
-    // string here would silently shift the boundary by the offset and skip
-    // every change made inside it.
-    if (since != null) {
-      query = query.gt('updated_at', since.toUtc().toIso8601String());
+    final profiles = <Profile>[];
+
+    // Paged by offset rather than by advancing the cursor, and ordered by
+    // (updated_at, id) so the offsets mean something. Advancing the cursor
+    // between pages would need the same row-value comparison pullEntries
+    // spells out, because two profiles genuinely can share an updated_at —
+    // redeem_invite writes a profile and a member in one transaction.
+    for (var offset = 0; ; offset += _pageSize) {
+      var query = _client.from('profiles').select();
+      // UTC and ISO, matching how the entries cursor is written. A local-zone
+      // string here would silently shift the boundary by the offset and skip
+      // every change made inside it.
+      if (since != null) {
+        query = query.gt('updated_at', since.toUtc().toIso8601String());
+      }
+
+      final rows = await query
+          .order('updated_at', ascending: true)
+          .order('id', ascending: true)
+          .range(offset, offset + _pageSize - 1);
+
+      profiles.addAll([for (final row in rows) profileFromJson(row)]);
+      if (rows.length < _pageSize) break;
     }
 
-    final rows = await query.order('updated_at');
-    return [for (final row in rows) profileFromJson(row)];
+    return profiles;
   }
 
   @override
@@ -247,20 +273,29 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
     required String groupId,
     DateTime? since,
   }) async {
-    var query = _client.from('entry_events').select().eq('group_id', groupId);
-    if (since != null) {
-      query = query.gt('created_at', since.toUtc().toIso8601String());
+    final events = <EntryEvent>[];
+
+    // Paged, and it matters most here: a device seeing an active group for the
+    // first time asks for its entire history at once. Truncated at max_rows,
+    // the high-water mark would advance only as far as the page reached and the
+    // feed would fill in a thousand events per sync.
+    for (var offset = 0; ; offset += _pageSize) {
+      var query = _client.from('entry_events').select().eq('group_id', groupId);
+      if (since != null) {
+        query = query.gt('created_at', since.toUtc().toIso8601String());
+      }
+
+      final rows = await query
+          .order('created_at', ascending: true)
+          .order('id', ascending: true)
+          .range(offset, offset + _pageSize - 1);
+
+      events.addAll([for (final row in rows) entryEventFromJson(row)]);
+      if (rows.length < _pageSize) break;
     }
 
-    final rows = await query.order('created_at');
-    return [for (final row in rows) entryEventFromJson(row)];
+    return events;
   }
-
-  /// Rows per request when sweeping the rate table.
-  ///
-  /// Comfortably under PostgREST's `max_rows`, which is 1000 by default and is
-  /// a silent ceiling: a larger request is not an error, it is a short answer.
-  static const int _fxPageSize = 500;
 
   @override
   Future<List<RemoteFxRate>> pullFxRates({required String since}) async {
@@ -274,14 +309,14 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
       // advances by only as much as arrived, so the table filled in a few
       // hundred rows per sync and a fresh install spent days catching up to
       // today's rate.
-      for (var offset = 0; ; offset += _fxPageSize) {
+      for (var offset = 0; ; offset += _pageSize) {
         final rows = await _client
             .from('fx_rates')
             .select('as_of, currency, rate, source')
             .gte('as_of', since)
             .order('as_of', ascending: true)
             .order('currency', ascending: true)
-            .range(offset, offset + _fxPageSize - 1);
+            .range(offset, offset + _pageSize - 1);
 
         rates.addAll([
           for (final row in rows)
@@ -295,7 +330,7 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
             ),
         ]);
 
-        if (rows.length < _fxPageSize) break;
+        if (rows.length < _pageSize) break;
       }
     } on PostgrestException catch (e) {
       throw _translate(e);

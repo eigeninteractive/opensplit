@@ -65,8 +65,8 @@ void main() {
     final created = await a.groups.createGroup(
       name: 'Goa Trip',
       defaultCurrency: 'INR',
-      ownerDisplayName: 'Ravi',
-      ownerProfileId: 'profile-ravi',
+      creatorDisplayName: 'Ravi',
+      creatorProfileId: 'profile-ravi',
     );
     final priya = await a.groups.addMember(
       created.group.id,
@@ -78,7 +78,7 @@ void main() {
     );
     return (
       groupId: created.group.id,
-      ravi: created.owner.id,
+      ravi: created.creator.id,
       priya: priya.id,
       arun: arun.id,
     );
@@ -540,6 +540,46 @@ void main() {
         foldBalances(await a.ledger(g.groupId)),
       );
     });
+
+    test('an offline edit does not reorder a row ahead of its group', () async {
+      // The whole group is created offline and then touched again before
+      // anything has been pushed. Every edit re-queues its row, and the outbox
+      // used to date the item from the latest touch rather than the first —
+      // which put the group behind the members and entries that reference it.
+      // The server refuses those permanently, so they went to the dead letters
+      // and the group was stuck with nobody able to see it.
+      final g = await seedGroup();
+      await a.entries.create(
+        EntryDraft(
+          groupId: g.groupId,
+          currency: 'INR',
+          amountMinor: 40000,
+          description: 'Dinner',
+          split: EqualSplit([g.ravi, g.priya]),
+          payerAmounts: {g.ravi: 40000},
+        ),
+        createdBy: g.ravi,
+      );
+
+      final group = (await a.groups.getGroup(g.groupId))!;
+      await a.groups.updateGroup(group.copyWith(name: 'Goa trip'));
+      await a.groups.renameMember(g.priya, 'Priya S');
+
+      expect(
+        [for (final row in await a.outbox.due()) row.operation],
+        ['group', 'member', 'member', 'member', 'entry'],
+        reason: 'the group has to reach the server before anything naming it',
+      );
+
+      final report = await a.sync.syncGroup(g.groupId);
+      expect(report.failed, 0, reason: 'nothing should be refused');
+      expect(await a.outbox.deadLetters(), isEmpty);
+      expect(await a.outbox.pendingCount(), 0);
+
+      await b.sync.syncGroup(g.groupId);
+      expect((await b.groups.getGroup(g.groupId))!.name, 'Goa trip');
+      expect(await b.ledger(g.groupId), hasLength(1));
+    });
   });
 
   group('group and member rows', () {
@@ -549,8 +589,8 @@ void main() {
         final created = await a.groups.createGroup(
           name: 'Goa Trip',
           defaultCurrency: 'INR',
-          ownerDisplayName: 'Ravi',
-          ownerProfileId: 'ravi',
+          creatorDisplayName: 'Ravi',
+          creatorProfileId: 'ravi',
         );
         await a.sync.syncGroup(created.group.id);
         await b.sync.syncGroup(created.group.id);
@@ -574,8 +614,8 @@ void main() {
       final created = await a.groups.createGroup(
         name: 'Goa Trip',
         defaultCurrency: 'INR',
-        ownerDisplayName: 'Ravi',
-        ownerProfileId: 'ravi',
+        creatorDisplayName: 'Ravi',
+        creatorProfileId: 'ravi',
       );
       await a.sync.syncGroup(created.group.id);
       await b.sync.syncGroup(created.group.id);
@@ -594,8 +634,8 @@ void main() {
       final created = await a.groups.createGroup(
         name: 'Flat 4B',
         defaultCurrency: 'INR',
-        ownerDisplayName: 'Ravi',
-        ownerProfileId: 'ravi',
+        creatorDisplayName: 'Ravi',
+        creatorProfileId: 'ravi',
       );
       final priya = await a.groups.addMember(
         created.group.id,
@@ -624,8 +664,8 @@ void main() {
       final created = await a.groups.createGroup(
         name: 'Goa Trip',
         defaultCurrency: 'INR',
-        ownerDisplayName: 'Ravi',
-        ownerProfileId: 'ravi',
+        creatorDisplayName: 'Ravi',
+        creatorProfileId: 'ravi',
       );
       await a.sync.syncGroup(created.group.id);
 
@@ -649,8 +689,8 @@ void main() {
         final created = await a.groups.createGroup(
           name: 'Goa Trip',
           defaultCurrency: 'INR',
-          ownerDisplayName: 'Ravi',
-          ownerProfileId: 'ravi',
+          creatorDisplayName: 'Ravi',
+          creatorProfileId: 'ravi',
         );
         await a.sync.syncGroup(created.group.id);
 
@@ -672,8 +712,8 @@ void main() {
       final created = await a.groups.createGroup(
         name: 'Goa Trip',
         defaultCurrency: 'INR',
-        ownerDisplayName: 'Ravi',
-        ownerProfileId: 'ravi',
+        creatorDisplayName: 'Ravi',
+        creatorProfileId: 'ravi',
       );
       final report = await a.sync.syncGroup(created.group.id);
       expect(report.isClean, isTrue);
@@ -688,8 +728,8 @@ void main() {
       final created = await a.groups.createGroup(
         name: 'Goa Trip',
         defaultCurrency: 'INR',
-        ownerDisplayName: 'Ravi',
-        ownerProfileId: 'profile-ravi',
+        creatorDisplayName: 'Ravi',
+        creatorProfileId: 'profile-ravi',
       );
       await a.entries.create(
         EntryDraft(
@@ -697,10 +737,10 @@ void main() {
           currency: 'INR',
           amountMinor: 240000,
           description: 'Dinner',
-          split: EqualSplit([created.owner.id]),
-          payerAmounts: {created.owner.id: 240000},
+          split: EqualSplit([created.creator.id]),
+          payerAmounts: {created.creator.id: 240000},
         ),
-        createdBy: created.owner.id,
+        createdBy: created.creator.id,
       );
       await a.sync.syncGroup(created.group.id);
 
@@ -724,14 +764,14 @@ void main() {
       final created = await a.groups.createGroup(
         name: 'Goa Trip',
         defaultCurrency: 'INR',
-        ownerDisplayName: 'Ravi',
-        ownerProfileId: 'profile-ravi',
+        creatorDisplayName: 'Ravi',
+        creatorProfileId: 'profile-ravi',
       );
       await a.sync.syncGroup(created.group.id);
 
       await a.groups.leaveGroup(
         groupId: created.group.id,
-        memberId: created.owner.id,
+        memberId: created.creator.id,
       );
       await a.sync.syncGroup(created.group.id);
 
@@ -745,8 +785,8 @@ void main() {
       final created = await a.groups.createGroup(
         name: 'Goa Trip',
         defaultCurrency: 'INR',
-        ownerDisplayName: 'Ravi',
-        ownerProfileId: 'profile-ravi',
+        creatorDisplayName: 'Ravi',
+        creatorProfileId: 'profile-ravi',
       );
       server.signedInProfileId = null;
 
@@ -761,8 +801,8 @@ void main() {
       final created = await a.groups.createGroup(
         name: 'Goa Trip',
         defaultCurrency: 'INR',
-        ownerDisplayName: 'Ravi',
-        ownerProfileId: 'profile-ravi',
+        creatorDisplayName: 'Ravi',
+        creatorProfileId: 'profile-ravi',
       );
       final priya = await a.groups.addMember(
         created.group.id,
@@ -855,4 +895,45 @@ void main() {
       );
     });
   });
+
+  group('the outbox is a set of dirty rows, not a log', () {
+    test('re-dirtying a row keeps when it first went dirty', () async {
+      final clock = _StepClock();
+      final outbox = OutboxQueue(a.db, clock: clock.now);
+
+      await outbox.enqueue(OutboxTarget.group, 'g1');
+      final first = (await outbox.due()).single.createdAt;
+
+      await outbox.enqueue(OutboxTarget.group, 'g1');
+      expect(
+        (await outbox.due()).single.createdAt,
+        first,
+        reason: 'a second edit is not the row becoming new',
+      );
+    });
+
+    test('re-dirtying a row does clear its retry state', () async {
+      final outbox = OutboxQueue(a.db);
+      await outbox.enqueue(OutboxTarget.group, 'g1');
+      await outbox.fail(
+        OutboxQueue.idFor(OutboxTarget.group, 'g1'),
+        'refused',
+        permanent: true,
+      );
+      expect(await outbox.deadLetters(), hasLength(1));
+
+      // Whatever the server objected to may be exactly what this edit changed.
+      await outbox.enqueue(OutboxTarget.group, 'g1');
+      expect(await outbox.deadLetters(), isEmpty);
+      expect(await outbox.due(), hasLength(1));
+    });
+  });
+}
+
+/// A clock that never returns the same instant twice, so an ordering assertion
+/// cannot pass by two writes happening to share a microsecond.
+class _StepClock {
+  DateTime _at = DateTime.utc(2026, 8, 26);
+
+  DateTime now() => _at = _at.add(const Duration(seconds: 1));
 }

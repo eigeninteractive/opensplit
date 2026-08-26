@@ -17,13 +17,13 @@ insert into groups (id, name, default_currency, created_by)
 values ('33333333-3333-4333-8333-333333333333', 'Flat 4B', 'INR',
         '11111111-1111-4111-8111-111111111111');
 
-insert into members (id, group_id, profile_id, display_name, role) values
+insert into members (id, group_id, profile_id, display_name) values
   ('44444444-4444-4444-8444-444444444444',
    '33333333-3333-4333-8333-333333333333',
-   '11111111-1111-4111-8111-111111111111', 'Ravi', 'owner'),
+   '11111111-1111-4111-8111-111111111111', 'Ravi'),
   ('55555555-5555-4555-8555-555555555555',
    '33333333-3333-4333-8333-333333333333',
-   '22222222-2222-4222-8222-222222222222', 'Priya', 'member');
+   '22222222-2222-4222-8222-222222222222', 'Priya');
 
 set local role authenticated;
 set local "request.jwt.claims" to

@@ -29,12 +29,29 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   final _name = TextEditingController();
   final _vpa = TextEditingController();
 
-  /// Seeded once, from the first profile that arrives. Re-seeding on every
-  /// build would fight whoever is typing.
+  /// Seeded once, from the first profile that arrives. Re-seeding would fight
+  /// whoever is typing.
   bool _seeded = false;
   bool _saving = false;
   bool _deleting = false;
+  String? _nameError;
   String? _vpaError;
+
+  @override
+  void initState() {
+    super.initState();
+    // Filling a form from asynchronous data is initialisation, not something to
+    // do while building: writing to a controller notifies the field attached to
+    // it, and doing that from inside a build is how a widget ends up marking
+    // itself dirty mid-frame. listenManual fires once with whatever is already
+    // known and again when the profile lands, runs outside the build phase, and
+    // unsubscribes with the widget.
+    ref.listenManual(
+      myProfileProvider,
+      (_, next) => _seed(next.value),
+      fireImmediately: true,
+    );
+  }
 
   @override
   void dispose() {
@@ -43,6 +60,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     super.dispose();
   }
 
+  /// No setState: the controllers notify the fields bound to them, which is the
+  /// only thing on screen that any of this changes.
   void _seed(Profile? profile) {
     if (_seeded || profile == null) return;
     _seeded = true;
@@ -51,19 +70,30 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   }
 
   Future<void> _save() async {
+    final name = _name.text.trim();
     final vpa = _vpa.text.trim();
+
+    // Refused here as well as by the column's own CHECK, because a blank name
+    // is not a visible error: GroupLedger.nameOfMember falls back to the member
+    // row, so the field would look saved while the name quietly stopped
+    // travelling to anybody else.
+    if (name.isEmpty) {
+      setState(() => _nameError = 'Your name cannot be blank.');
+      return;
+    }
     if (vpa.isNotEmpty && !isValidUpiVpa(vpa)) {
       setState(() => _vpaError = 'That does not look like a UPI ID.');
       return;
     }
     setState(() {
+      _nameError = null;
       _vpaError = null;
       _saving = true;
     });
     try {
       await ref
           .read(myProfileControllerProvider.notifier)
-          .save(displayName: _name.text, upiVpa: vpa);
+          .save(displayName: name, upiVpa: vpa);
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -182,8 +212,6 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final account = ref.watch(accountProvider).value;
-    final profile = ref.watch(myProfileProvider).value;
-    _seed(profile);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Account')),
@@ -214,7 +242,10 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
             TextField(
               controller: _name,
               textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(labelText: 'Name'),
+              decoration: InputDecoration(
+                labelText: 'Name',
+                errorText: _nameError,
+              ),
             ),
 
             const SizedBox(height: 32),

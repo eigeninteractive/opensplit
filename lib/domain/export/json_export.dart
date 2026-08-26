@@ -57,7 +57,6 @@ String groupToJson({
           'placeholder_name': member.displayName,
           'has_account': member.profileId != null,
           'upi_vpa': profiles[member.profileId]?.upiVpa ?? member.upiVpa,
-          'role': member.role.name,
           'joined_at': member.joinedAt.toIso8601String(),
           'left_at': member.leftAt?.toIso8601String(),
         },

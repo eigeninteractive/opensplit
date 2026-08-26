@@ -63,10 +63,10 @@ class _CreateGroupSheetState extends ConsumerState<_CreateGroupSheet> {
           .createGroup(
             name: name,
             defaultCurrency: _currency,
-            ownerDisplayName: yourName,
+            creatorDisplayName: yourName,
             // Claims the owner slot, which is what makes "you" findable among
             // the members later.
-            ownerProfileId: accountId,
+            creatorProfileId: accountId,
           );
 
       if (!mounted) return;

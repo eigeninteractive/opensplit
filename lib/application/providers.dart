@@ -257,9 +257,16 @@ Stream<List<Group>> groups(Ref ref, {bool includeArchived = false}) => ref
 Stream<Group?> group(Ref ref, String groupId) =>
     ref.watch(groupRepositoryProvider).watchGroup(groupId);
 
+/// Everybody who has ever been in the group, departed members included.
+///
+/// [GroupLedger] splits them: rosters and pickers get the active ones, and name
+/// resolution gets all of them. Fetching only the active ones is what made a
+/// departed member's outstanding balance render as "—" — the balances panel
+/// iterates balances, not members, and a member it could not find had no name
+/// to show.
 @riverpod
 Stream<List<Member>> members(Ref ref, String groupId) =>
-    ref.watch(groupRepositoryProvider).watchMembers(groupId);
+    ref.watch(groupRepositoryProvider).watchMembers(groupId, includeLeft: true);
 
 @riverpod
 Stream<List<Entry>> entries(Ref ref, String groupId) =>
@@ -275,6 +282,7 @@ class GroupLedger {
   const GroupLedger({
     required this.group,
     required this.members,
+    required this.pastMembers,
     required this.entries,
     required this.balances,
     required this.transfers,
@@ -283,7 +291,14 @@ class GroupLedger {
   });
 
   final Group group;
+
+  /// Members still in the group. What a roster, a picker or a split offers.
   final List<Member> members;
+
+  /// Members who have left. Never offered as a choice, but still resolvable by
+  /// name: they appear in past expenses, and — if they left without settling —
+  /// in the balances.
+  final List<Member> pastMembers;
 
   /// Live entries, most recent first.
   final List<Entry> entries;
@@ -319,12 +334,25 @@ class GroupLedger {
   String? upiOf(Member member) =>
       profiles[member.profileId]?.upiVpa ?? member.upiVpa;
 
+  /// Looks through departed members too. A name is needed wherever an id
+  /// appears, and ids outlive membership by design.
   Member? memberById(String id) {
     for (final member in members) {
       if (member.id == id) return member;
     }
+    for (final member in pastMembers) {
+      if (member.id == id) return member;
+    }
     return null;
   }
+
+  /// Whether [memberId] is square with the group in every currency.
+  ///
+  /// [balances] holds only non-zero positions, so absence is the definition of
+  /// settled — the same one `v_member_balances` uses, and the same one the
+  /// server checks before letting anybody remove somebody else.
+  bool isSettledUp(String memberId) =>
+      !balances.any((balance) => balance.memberId == memberId);
 
   String nameOf(String memberId) {
     final member = memberById(memberId);
@@ -357,9 +385,14 @@ class GroupLedger {
 @riverpod
 GroupLedger? groupLedger(Ref ref, String groupId) {
   final group = ref.watch(groupProvider(groupId)).value;
-  final memberList = ref.watch(membersProvider(groupId)).value;
+  final everyone = ref.watch(membersProvider(groupId)).value;
   final entryList = ref.watch(entriesProvider(groupId)).value;
-  if (group == null || memberList == null || entryList == null) return null;
+  if (group == null || everyone == null || entryList == null) return null;
+
+  final memberList = [
+    for (final m in everyone)
+      if (m.isActive) m,
+  ];
 
   final accountId = ref.watch(currentAccountIdProvider);
   final profiles = ref.watch(profilesByIdProvider).value ?? const {};
@@ -368,6 +401,10 @@ GroupLedger? groupLedger(Ref ref, String groupId) {
   return GroupLedger(
     group: group,
     members: memberList,
+    pastMembers: [
+      for (final m in everyone)
+        if (!m.isActive) m,
+    ],
     entries: entryList,
     balances: balances,
     transfers: group.simplifyDebts ? simplifyDebts(balances) : const [],
@@ -556,21 +593,34 @@ bool signedIn(Ref ref) {
 /// concurrent realtime peers is what a hosted backend bills for, and pushing a
 /// wake-up costs nothing. Live subscriptions are reserved for the rare case of
 /// two people editing the same group at the same moment.
+/// Runs sync on demand.
+///
+/// Holds no state, and that is deliberate rather than an omission. Nothing on
+/// screen is driven by "how the last sync went": every panel is a query over
+/// the local database, a pull that cannot reach the server changes nothing
+/// visible, and a write the server refuses outright is surfaced by
+/// [failedWritesProvider] instead — which outlives any one run, as it has to.
+/// A [SyncReport] held here was read by nobody.
 @riverpod
 class SyncController extends _$SyncController {
   @override
-  SyncReport? build() => null;
+  void build() {}
+
+  /// Whether there is anything to sync to, and anybody to sync as.
+  ///
+  /// Syncing as nobody would have every request refused by RLS. That is the
+  /// ordinary state before somebody has chosen an account, not an error, so it
+  /// returns quietly.
+  Future<SyncEngine?> _engine() async {
+    final engine = ref.read(syncEngineProvider);
+    if (engine == null) return null;
+    if (await ref.read(sessionControllerProvider.future) == null) return null;
+    return engine;
+  }
 
   Future<void> syncGroup(String groupId) async {
-    final engine = ref.read(syncEngineProvider);
-    if (engine == null) return;
-
-    // Nothing to sync as nobody: every request would be refused by RLS. This
-    // is the ordinary state before somebody has chosen an account, not an
-    // error, so it returns quietly.
-    if (await ref.read(sessionControllerProvider.future) == null) return;
-
-    state = await engine.syncGroup(groupId);
+    final engine = await _engine();
+    await engine?.syncGroup(groupId);
   }
 
   /// Syncs every group this account belongs to, including ones this device has
@@ -580,14 +630,13 @@ class SyncController extends _$SyncController {
   /// local groups only is what made a second device — and a reinstall, and
   /// signing in after clearing browser data — show an empty app forever: the
   /// groups were on the server, readable, and nothing ever asked for them.
+  ///
+  /// The sweep itself belongs to [SyncEngine.syncEverything], which is the only
+  /// place that can drain the outbox once and pull rates and profiles once for
+  /// the whole run rather than per group.
   Future<void> syncAll() async {
-    final engine = ref.read(syncEngineProvider);
-    if (engine == null) return;
-    if (await ref.read(sessionControllerProvider.future) == null) return;
-
-    for (final groupId in await engine.discoverGroups()) {
-      state = await engine.syncGroup(groupId);
-    }
+    final engine = await _engine();
+    await engine?.syncEverything();
   }
 
   /// Requeues everything the server previously refused and pushes again.
@@ -626,11 +675,8 @@ class AccountController extends _$AccountController {
   /// Used to make the warning specific. "You will lose what is on this device"
   /// is ignorable; "the 34 expenses on this device stay with the anonymous
   /// account" is not.
-  Future<int> entriesLeftBehind() async {
-    final db = ref.read(appDatabaseProvider);
-    final rows = await db.select(db.entries).get();
-    return rows.where((row) => row.deletedAt == null).length;
-  }
+  Future<int> entriesLeftBehind() =>
+      ref.read(entryRepositoryProvider).countLiveEntries();
 
   AuthService _auth() {
     final auth = ref.read(authServiceProvider);
@@ -745,7 +791,10 @@ DriftCategoryRepository categoryRepository(Ref ref) =>
 
 @Riverpod(keepAlive: true)
 DriftAnalyticsRepository analyticsRepository(Ref ref) =>
-    DriftAnalyticsRepository(ref.watch(appDatabaseProvider));
+    DriftAnalyticsRepository(
+      ref.watch(appDatabaseProvider),
+      ref.watch(entryRepositoryProvider),
+    );
 
 /// The fixed global category list. Not group-scoped: there are no per-group
 /// categories, so this is one query for the whole app.

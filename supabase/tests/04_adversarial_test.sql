@@ -6,7 +6,7 @@
 -- could attempt against a real deployment with a valid session.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(23);
+select plan(30);
 
 -- ---------------------------------------------------------------------------
 -- Two groups that share nothing. Ravi owns Goa; Zara owns Manali.
@@ -27,15 +27,15 @@ insert into groups (id, name, default_currency, created_by) values
   ('a3333333-3333-4333-8333-333333333333', 'Manali', 'INR',
    '99999999-9999-4999-8999-999999999999');
 
-insert into members (id, group_id, profile_id, display_name, role) values
+insert into members (id, group_id, profile_id, display_name) values
   ('44444444-4444-4444-8444-444444444444',
    '33333333-3333-4333-8333-333333333333',
-   '11111111-1111-4111-8111-111111111111', 'Ravi', 'owner'),
+   '11111111-1111-4111-8111-111111111111', 'Ravi'),
   ('55555555-5555-4555-8555-555555555555',
-   '33333333-3333-4333-8333-333333333333', null, 'Priya', 'member'),
+   '33333333-3333-4333-8333-333333333333', null, 'Priya'),
   ('a4444444-4444-4444-8444-444444444444',
    'a3333333-3333-4333-8333-333333333333',
-   '99999999-9999-4999-8999-999999999999', 'Zara', 'owner');
+   '99999999-9999-4999-8999-999999999999', 'Zara');
 
 insert into entries (id, group_id, currency, amount_minor, created_by)
 values ('88888888-8888-4888-8888-888888888888',
@@ -141,6 +141,70 @@ select is(
   '44444444-4444-4444-8444-444444444444'::uuid,
   'authorship is the caller''s own member row, not anything they can supply');
 
+-- ---------------------------------------------------------------------------
+-- Writing to entries directly, without going through upsert_entry.
+--
+-- `authenticated` holds INSERT and UPDATE on entries because upsert_entry is
+-- SECURITY INVOKER and needs them, so none of this needs anything more than a
+-- client that talks to PostgREST instead of calling the RPC. All five of these
+-- committed before guard_entry_write and trg_entries_balanced existed.
+-- ---------------------------------------------------------------------------
+select throws_ok(
+  $$update entries set created_by = '55555555-5555-4555-8555-555555555555'
+     where id = '88888888-8888-4888-8888-888888888888'$$,
+  '42501', null,
+  'authorship cannot be reassigned by writing to the column directly');
+
+select throws_ok(
+  $$update entries set group_id = '66666666-6666-4666-8666-666666666666'
+     where id = '88888888-8888-4888-8888-888888888888'$$,
+  '42501', null,
+  'an expense cannot be moved into another group, stranding its own '
+  'payers and shares in the one it left');
+
+select throws_ok(
+  $$insert into entries (group_id, currency, amount_minor, created_by)
+    values ('33333333-3333-4333-8333-333333333333', 'INR', 100,
+            '55555555-5555-4555-8555-555555555555')$$,
+  '42501', null,
+  'an expense cannot be recorded under another member''s name');
+
+-- Both of the next two are the balance invariant, reached without touching a
+-- payer or a share — which is exactly why hanging it off the children alone
+-- was not enough.
+savepoint restated;
+update entries set amount_minor = 999999999
+ where id = '88888888-8888-4888-8888-888888888888';
+select throws_ok(
+  'set constraints all immediate',
+  '23514', null,
+  'the stated amount cannot be restated away from what was paid and owed');
+rollback to savepoint restated;
+set constraints all deferred;
+
+savepoint childless;
+insert into entries (id, group_id, currency, amount_minor, created_by)
+values ('ffffffff-ffff-4fff-8fff-ffffffffffff',
+        '33333333-3333-4333-8333-333333333333', 'INR', 500000,
+        '44444444-4444-4444-8444-444444444444');
+select throws_ok(
+  'set constraints all immediate',
+  '23514', null,
+  'an expense with no payers or shares at all does not balance either');
+rollback to savepoint childless;
+set constraints all deferred;
+
+-- The legitimate path is untouched by all of the above.
+select lives_ok(
+  $$select upsert_entry(
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'::uuid,
+      '33333333-3333-4333-8333-333333333333'::uuid,
+      'INR'::char(3), 30000::bigint,
+      '[{"member_id":"44444444-4444-4444-8444-444444444444","amount_minor":30000}]'::jsonb,
+      '[{"member_id":"44444444-4444-4444-8444-444444444444","amount_minor":15000},
+        {"member_id":"55555555-5555-4555-8555-555555555555","amount_minor":15000}]'::jsonb)$$,
+  'and upsert_entry still records an expense normally');
+
 -- The invariant, checked at COMMIT.
 savepoint unbalanced;
 insert into entries (id, group_id, currency, amount_minor, created_by)
@@ -212,21 +276,14 @@ values ('77777777-7777-4777-8777-777777777777',
 -- placeholder, and the difference between them is exactly what the rules
 -- turn on: a placeholder has to stay editable by the group, because somebody
 -- has to be able to name and pay a person who has never opened the app.
-insert into members (id, group_id, profile_id, display_name, role)
+insert into members (id, group_id, profile_id, display_name)
 values ('66666666-6666-4666-8666-666666666666',
         '33333333-3333-4333-8333-333333333333',
-        '77777777-7777-4777-8777-777777777777', 'Kabir', 'member');
+        '77777777-7777-4777-8777-777777777777', 'Kabir');
 
 set local role authenticated;
 set local "request.jwt.claims" to
   '{"sub":"77777777-7777-4777-8777-777777777777","role":"authenticated"}';
-
-select throws_ok(
-  $$update members set role = 'owner'
-     where id = '66666666-6666-4666-8666-666666666666'$$,
-  '42501',
-  null,
-  'a member cannot promote themselves to owner');
 
 select throws_ok(
   $$update members set upi_vpa = 'attacker@okaxis'
@@ -286,24 +343,43 @@ select lives_ok(
 set local "request.jwt.claims" to
   '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated"}';
 
-select lives_ok(
-  $$update members set role = 'owner'
-     where id = '55555555-5555-4555-8555-555555555555'$$,
-  'an owner can still change a role');
-
 -- ===========================================================================
--- Deleting a group
+-- Equal members, and the one asymmetry left
 --
--- entry_payers references members with ON DELETE RESTRICT, so the cascade from
--- `groups` stops dead as soon as the group holds a single expense. That is the
--- right outcome and the wrong message: unguarded it surfaces as a foreign key
--- the caller has never heard of.
+-- There is no owner. What an owner used to gate is now either everybody's or
+-- nobody's, with one exception: you may remove somebody else only once the
+-- group is square with them.
 -- ===========================================================================
+select lives_ok(
+  $$update groups set name = 'Flat 4B, renamed'
+     where id = '33333333-3333-4333-8333-333333333333'$$,
+  'any member can rename the group — it touches no money, and anybody who '
+  'disagrees can rename it back');
+
 select throws_ok(
   $$delete from groups where id = '33333333-3333-4333-8333-333333333333'$$,
-  '2BP01',
+  '42501',
   null,
-  'a group with expenses in it refuses deletion rather than half-succeeding');
+  'but nobody can delete one, however long they have been in it');
+
+-- Removing somebody does not only remove them: is_group_member requires
+-- left_at is null, so it cuts off their read access too — and the member most
+-- worth cutting off is the one still owed money.
+select throws_ok(
+  $$update members set left_at = now()
+     where id = '55555555-5555-4555-8555-555555555555'$$,
+  '42501',
+  null,
+  'an unsettled member cannot be removed by somebody else');
+
+insert into members (id, group_id, profile_id, display_name)
+values ('b6666666-6666-4666-8666-666666666666',
+        '33333333-3333-4333-8333-333333333333', null, 'Nobody');
+
+select lives_ok(
+  $$update members set left_at = now()
+     where id = 'b6666666-6666-4666-8666-666666666666'$$,
+  'a settled one can be: with nothing owed either way it is just tidying up');
 
 select * from finish();
 rollback;

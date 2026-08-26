@@ -31,7 +31,6 @@ extension MemberRowMapper on MemberRow {
     groupId: groupId,
     profileId: profileId,
     displayName: displayName,
-    role: role,
     joinedAt: joinedAt,
     leftAt: leftAt,
     upiVpa: upiVpa,

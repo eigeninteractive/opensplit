@@ -1,7 +1,6 @@
 import 'package:drift/drift.dart';
 
 import '../../domain/models/entry.dart';
-import '../../domain/models/member.dart';
 import '../../domain/split/splitter.dart';
 
 /// ISO 4217 reference data, mirrored locally so that formatting works offline
@@ -50,15 +49,25 @@ class Profiles extends Table {
 /// and arrives by sync. Nothing here is ever generated locally, which is why
 /// there is no outbox target for it and no client-side write path at all — an
 /// audit trail a device can author is not an audit trail.
+/// Every reference cascades, which is where this deliberately differs from the
+/// server. There, `actor_id` is ON DELETE RESTRICT so that a member with
+/// history can never be deleted out from under the record — but the record it
+/// protects is the server's, and this table is a mirror of it. Locally there is
+/// nothing to protect and something to break: with no action declared, an
+/// entry_events row refuses the delete of the very entry it describes, and
+/// clearing the ledger on sign-out failed on a foreign key.
 @DataClassName('EntryEventRow')
 class EntryEvents extends Table {
   TextColumn get id => text()();
-  TextColumn get entryId => text().references(Entries, #id)();
-  TextColumn get groupId => text().references(Groups, #id)();
+  TextColumn get entryId =>
+      text().references(Entries, #id, onDelete: KeyAction.cascade)();
+  TextColumn get groupId =>
+      text().references(Groups, #id, onDelete: KeyAction.cascade)();
 
   /// The member who did it, not the account: authorship is group-scoped, so a
   /// placeholder's edits survive them claiming an account.
-  TextColumn get actorId => text().references(Members, #id)();
+  TextColumn get actorId =>
+      text().references(Members, #id, onDelete: KeyAction.cascade)();
 
   /// created, edited, deleted, restored.
   TextColumn get kind => text()();
@@ -118,7 +127,6 @@ class Members extends Table {
   /// yet. Claiming an invite sets this column and touches nothing else.
   TextColumn get profileId => text().nullable()();
   TextColumn get displayName => text()();
-  TextColumn get role => textEnum<MemberRole>()();
   DateTimeColumn get joinedAt => dateTime()();
 
   /// Members are never deleted; they leave. Their financial history has to stay

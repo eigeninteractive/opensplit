@@ -51,13 +51,40 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
   String? _categoryId;
   DateTime _date = DateTime.now();
   SplitKind _splitKind = SplitKind.equal;
-  final _participants = <String>{};
-  final _shares = <String, int>{};
-  final _payers = <String>{};
+
+  /// Who is in the split, who paid, and the relative weights.
+  ///
+  /// Replaced rather than mutated. They used to be `final` collections handed
+  /// down to the two section widgets, which edited them in place and then asked
+  /// for a rebuild — so a widget declaring itself immutable was the thing
+  /// changing this screen's state, and the fields lied about who owned them.
+  Set<String> _participants = {};
+  Map<String, int> _shares = {};
+  Set<String> _payers = {};
+
   bool _multiplePayers = false;
   bool _loaded = false;
   bool _saving = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    // Seeding the form is initialisation from asynchronous data, so it listens
+    // instead of running inside build. Writing to a TextEditingController
+    // notifies the field bound to it, and a build is the wrong place to do
+    // that.
+    //
+    // Two subscriptions because the seed needs both the ledger and the currency
+    // list, and either can arrive second. Only the first fires immediately;
+    // whichever lands later brings the other with it.
+    ref.listenManual(
+      groupLedgerProvider(widget.groupId),
+      (_, _) => _seedWhenReady(),
+      fireImmediately: true,
+    );
+    ref.listenManual(currenciesProvider, (_, _) => _seedWhenReady());
+  }
 
   @override
   void dispose() {
@@ -80,14 +107,27 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
     String id,
   ) => map.putIfAbsent(id, TextEditingController.new);
 
-  /// Seeds the form once the ledger — and, when editing, the entry — is known.
-  void _loadOnce(
-    GroupLedger ledger,
-    Entry? existing,
-    Map<String, Currency> cx,
-  ) {
+  /// Seeds the form as soon as everything it needs has arrived.
+  ///
+  /// No setState: the only things this changes on screen are the controllers,
+  /// which notify their own fields, and state that the build watching these
+  /// same providers is about to read anyway.
+  void _seedWhenReady() {
     if (_loaded) return;
+
+    final ledger = ref.read(groupLedgerProvider(widget.groupId));
+    final currencies = ref.read(currenciesProvider).value;
+    if (ledger == null || currencies == null) return;
+
+    final existing = widget.isEditing
+        ? ledger.entries.where((e) => e.id == widget.entryId).firstOrNull
+        : null;
     if (widget.isEditing && existing == null) return;
+
+    _load(ledger, existing, currencies);
+  }
+
+  void _load(GroupLedger ledger, Entry? existing, Map<String, Currency> cx) {
     _loaded = true;
 
     _currencyCode = existing?.currency ?? ledger.group.defaultCurrency;
@@ -95,9 +135,9 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
     if (existing == null) {
       // Everyone splits, the person adding it paid. The overwhelmingly common
       // case, pre-filled so the fast path is two fields and a button.
-      _participants.addAll(ledger.members.map((m) => m.id));
+      _participants = {for (final member in ledger.members) member.id};
       final me = ledger.me?.id ?? ledger.members.firstOrNull?.id;
-      if (me != null) _payers.add(me);
+      if (me != null) _payers = {me};
       return;
     }
 
@@ -110,10 +150,11 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
       _amount.text = currency.formatPlain(existing.amountMinor);
     }
 
-    _participants.addAll(existing.shares.map((s) => s.memberId));
-    _payers.addAll(existing.payers.map((p) => p.memberId));
+    _participants = {for (final share in existing.shares) share.memberId};
+    _payers = {for (final payer in existing.payers) payer.memberId};
     _multiplePayers = existing.payers.length > 1;
 
+    _shares = {};
     for (final share in existing.shares) {
       if (currency != null) {
         _controllerFor(_exact, share.memberId).text = currency.formatPlain(
@@ -323,18 +364,10 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
   Widget build(BuildContext context) {
     final ledger = ref.watch(groupLedgerProvider(widget.groupId));
     final currencies = ref.watch(currenciesProvider).value ?? const {};
-    final existing = widget.isEditing
-        ? ref
-              .watch(entriesProvider(widget.groupId))
-              .value
-              ?.where((e) => e.id == widget.entryId)
-              .firstOrNull
-        : null;
 
     if (ledger == null) {
       return Scaffold(appBar: AppBar(leading: const BackButton()));
     }
-    _loadOnce(ledger, existing, currencies);
 
     final currency = currencies[_currencyCode];
     final totalMinor = currency?.parseToMinor(_amount.text);
@@ -349,28 +382,27 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
     // Resolved here rather than in _save so saving never waits on a lookup, and
     // re-resolved when the date picker changes because the date is part of the
     // question.
-    final fx = currency == null || currency.code == ledger.group.defaultCurrency
-        ? null
-        : ref
-              .watch(
-                fxQuoteProvider(
-                  currency.code,
-                  ledger.group.defaultCurrency,
-                  DateTime.utc(_date.year, _date.month, _date.day),
-                ),
-              )
-              .value;
+    final target = ledger.group.defaultCurrency;
+    FxQuote? fx;
+    if (currency != null && currency.code != target) {
+      final day = DateTime.utc(_date.year, _date.month, _date.day);
+      final quote = fxQuoteProvider(currency.code, target, day);
+      fx = ref.watch(quote).value;
 
-    // Nothing local can price this date. Ask the server once; the rate lands on
-    // a later sync and the entry saves without a snapshot in the meantime,
-    // which the schema allows.
-    if (fx == null &&
-        currency != null &&
-        currency.code != ledger.group.defaultCurrency) {
-      _requestRate(
-        DateTime.utc(_date.year, _date.month, _date.day),
-        currency.code,
-      );
+      // Nothing local can price this date, so ask the server: the rate lands on
+      // a later sync and the entry saves without a snapshot in the meantime,
+      // which the schema allows.
+      //
+      // A listener, not a line in the body — this is a network call, and a
+      // build must not make one. It still fires exactly when it should: a
+      // FutureProvider always goes loading, then data, and changing the date or
+      // the currency asks a different provider instance which makes that
+      // transition of its own.
+      final code = currency.code;
+      ref.listen(quote, (_, next) {
+        if (next.isLoading || next.value != null) return;
+        _requestRate(day, code);
+      });
     }
 
     return Scaffold(
@@ -471,13 +503,11 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
               onToggleMultiple: (value) => setState(() {
                 _multiplePayers = value;
                 if (!value && _payers.length > 1) {
-                  final first = _payers.first;
-                  _payers
-                    ..clear()
-                    ..add(first);
+                  _payers = {_payers.first};
                 }
               }),
-              onChanged: () => setState(() {}),
+              onPayersChanged: (next) => setState(() => _payers = next),
+              onAmountEdited: () => setState(() {}),
             ),
             const Divider(height: 32),
             _SplitSection(
@@ -490,7 +520,10 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
               exactControllerFor: (id) => _controllerFor(_exact, id),
               percentControllerFor: (id) => _controllerFor(_percent, id),
               onKindChanged: (kind) => setState(() => _splitKind = kind),
-              onChanged: () => setState(() {}),
+              onParticipantsChanged: (next) =>
+                  setState(() => _participants = next),
+              onSharesChanged: (next) => setState(() => _shares = next),
+              onAmountEdited: () => setState(() {}),
             ),
             if (_error != null) ...[
               const SizedBox(height: 16),
@@ -535,16 +568,35 @@ class _PayerSection extends StatelessWidget {
     required this.multiple,
     required this.controllerFor,
     required this.onToggleMultiple,
-    required this.onChanged,
+    required this.onPayersChanged,
+    required this.onAmountEdited,
   });
 
   final GroupLedger ledger;
   final Currency? currency;
+
+  /// Who paid, to render. Read only: a new selection goes back up through
+  /// [onPayersChanged] rather than being edited in place.
   final Set<String> payers;
+
   final bool multiple;
   final TextEditingController Function(String) controllerFor;
   final ValueChanged<bool> onToggleMultiple;
-  final VoidCallback onChanged;
+  final ValueChanged<Set<String>> onPayersChanged;
+
+  /// An amount was typed. The controllers belong to the editor, and the field
+  /// has already written to one, so this only asks for a rebuild.
+  final VoidCallback onAmountEdited;
+
+  Set<String> _with(String memberId, {required bool selected}) {
+    final next = {...payers};
+    if (selected) {
+      next.add(memberId);
+    } else {
+      next.remove(memberId);
+    }
+    return next;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -574,12 +626,7 @@ class _PayerSection extends StatelessWidget {
                         (member.id == ledger.me?.id ? ' (you)' : ''),
                   ),
                   selected: payers.contains(member.id),
-                  onSelected: (_) {
-                    payers
-                      ..clear()
-                      ..add(member.id);
-                    onChanged();
-                  },
+                  onSelected: (_) => onPayersChanged({member.id}),
                 ),
             ],
           )
@@ -595,14 +642,9 @@ class _PayerSection extends StatelessWidget {
                         controlAffinity: ListTileControlAffinity.leading,
                         value: payers.contains(member.id),
                         title: Text(ledger.nameOfMember(member)),
-                        onChanged: (checked) {
-                          if (checked ?? false) {
-                            payers.add(member.id);
-                          } else {
-                            payers.remove(member.id);
-                          }
-                          onChanged();
-                        },
+                        onChanged: (checked) => onPayersChanged(
+                          _with(member.id, selected: checked ?? false),
+                        ),
                       ),
                     ),
                     SizedBox(
@@ -617,7 +659,7 @@ class _PayerSection extends StatelessWidget {
                           isDense: true,
                           prefixText: currency?.symbol,
                         ),
-                        onChanged: (_) => onChanged(),
+                        onChanged: (_) => onAmountEdited(),
                       ),
                     ),
                   ],
@@ -648,19 +690,40 @@ class _SplitSection extends StatelessWidget {
     required this.exactControllerFor,
     required this.percentControllerFor,
     required this.onKindChanged,
-    required this.onChanged,
+    required this.onParticipantsChanged,
+    required this.onSharesChanged,
+    required this.onAmountEdited,
   });
 
   final GroupLedger ledger;
   final Currency? currency;
   final int? totalMinor;
   final SplitKind splitKind;
+
+  /// Who is in the split and their relative weights, to render. Both read only:
+  /// a new value goes back up through the callbacks below.
   final Set<String> participants;
   final Map<String, int> shares;
+
   final TextEditingController Function(String) exactControllerFor;
   final TextEditingController Function(String) percentControllerFor;
   final ValueChanged<SplitKind> onKindChanged;
-  final VoidCallback onChanged;
+  final ValueChanged<Set<String>> onParticipantsChanged;
+  final ValueChanged<Map<String, int>> onSharesChanged;
+
+  /// An amount or a percentage was typed. The controllers belong to the editor,
+  /// so this only asks for a rebuild of the preview.
+  final VoidCallback onAmountEdited;
+
+  /// The weight for [memberId], nudged by [by] and never below zero.
+  ///
+  /// Zero is legitimate — somebody present who owes nothing for this bill — so
+  /// the floor is zero rather than one.
+  Map<String, int> _nudge(String memberId, int by) {
+    final next = {...shares};
+    next[memberId] = ((next[memberId] ?? 1) + by).clamp(0, 1 << 30);
+    return next;
+  }
 
   /// A live preview of what each person ends up owing.
   ///
@@ -730,12 +793,13 @@ class _SplitSection extends StatelessWidget {
                         )
                       : null,
                   onChanged: (checked) {
+                    final next = {...participants};
                     if (checked ?? false) {
-                      participants.add(member.id);
+                      next.add(member.id);
                     } else {
-                      participants.remove(member.id);
+                      next.remove(member.id);
                     }
-                    onChanged();
+                    onParticipantsChanged(next);
                   },
                 ),
               ),
@@ -752,7 +816,7 @@ class _SplitSection extends StatelessWidget {
                         isDense: true,
                         prefixText: currency?.symbol,
                       ),
-                      onChanged: (_) => onChanged(),
+                      onChanged: (_) => onAmountEdited(),
                     ),
                   ),
                   SplitKind.percent => SizedBox(
@@ -766,7 +830,7 @@ class _SplitSection extends StatelessWidget {
                         isDense: true,
                         suffixText: '%',
                       ),
-                      onChanged: (_) => onChanged(),
+                      onChanged: (_) => onAmountEdited(),
                     ),
                   ),
                   SplitKind.shares => Row(
@@ -774,19 +838,12 @@ class _SplitSection extends StatelessWidget {
                     children: [
                       IconButton(
                         icon: const Icon(Icons.remove_circle_outline),
-                        onPressed: () {
-                          final next = (shares[member.id] ?? 1) - 1;
-                          shares[member.id] = next < 0 ? 0 : next;
-                          onChanged();
-                        },
+                        onPressed: () => onSharesChanged(_nudge(member.id, -1)),
                       ),
                       Text('${shares[member.id] ?? 1}'),
                       IconButton(
                         icon: const Icon(Icons.add_circle_outline),
-                        onPressed: () {
-                          shares[member.id] = (shares[member.id] ?? 1) + 1;
-                          onChanged();
-                        },
+                        onPressed: () => onSharesChanged(_nudge(member.id, 1)),
                       ),
                     ],
                   ),

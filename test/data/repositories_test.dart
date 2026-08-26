@@ -8,7 +8,6 @@ import 'package:opensplit/data/repositories/drift_group_repository.dart';
 import 'package:opensplit/data/repositories/mappers.dart';
 import 'package:opensplit/domain/balance/balance_fold.dart';
 import 'package:opensplit/domain/entry_draft.dart';
-import 'package:opensplit/domain/models/member.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:test/test.dart';
 
@@ -65,23 +64,27 @@ void main() {
   });
 
   group('groups and members', () {
-    test('creating a group creates its owner in the same breath', () async {
-      final created = await groups.createGroup(
-        name: '  Goa Trip  ',
-        defaultCurrency: 'INR',
-        ownerDisplayName: 'Ravi',
-      );
+    test(
+      'creating a group creates its first member in the same breath',
+      () async {
+        final created = await groups.createGroup(
+          name: '  Goa Trip  ',
+          defaultCurrency: 'INR',
+          creatorDisplayName: 'Ravi',
+        );
 
-      expect(created.group.name, 'Goa Trip', reason: 'name is trimmed');
-      expect(created.owner.role, MemberRole.owner);
-      expect(await groups.getMembers(created.group.id), hasLength(1));
-    });
+        expect(created.group.name, 'Goa Trip', reason: 'name is trimmed');
+        expect(created.creator.displayName, 'Ravi');
+        expect(created.creator.groupId, created.group.id);
+        expect(await groups.getMembers(created.group.id), hasLength(1));
+      },
+    );
 
     test('a placeholder member is a full member with no account', () async {
       final created = await groups.createGroup(
         name: 'Flat 4B',
         defaultCurrency: 'INR',
-        ownerDisplayName: 'Ravi',
+        creatorDisplayName: 'Ravi',
       );
 
       final arun = await groups.addMember(
@@ -98,7 +101,7 @@ void main() {
       final created = await groups.createGroup(
         name: 'Flat 4B',
         defaultCurrency: 'INR',
-        ownerDisplayName: 'Ravi',
+        creatorDisplayName: 'Ravi',
       );
       final arun = await groups.addMember(
         created.group.id,
@@ -119,7 +122,7 @@ void main() {
       final created = await groups.createGroup(
         name: 'Old Trip',
         defaultCurrency: 'INR',
-        ownerDisplayName: 'Ravi',
+        creatorDisplayName: 'Ravi',
       );
 
       await groups.setArchived(created.group.id, archived: true);
@@ -142,10 +145,10 @@ void main() {
       final created = await groups.createGroup(
         name: 'Flat 4B',
         defaultCurrency: 'INR',
-        ownerDisplayName: 'Ravi',
+        creatorDisplayName: 'Ravi',
       );
       groupId = created.group.id;
-      ravi = created.owner.id;
+      ravi = created.creator.id;
       priya = (await groups.addMember(groupId, displayName: 'Priya')).id;
       arun = (await groups.addMember(groupId, displayName: 'Arun')).id;
     });

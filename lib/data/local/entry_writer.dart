@@ -14,10 +14,25 @@ import 'database.dart';
 /// and it mirrors what the server's `upsert_entry` does, so the two cannot
 /// disagree about what an edit means.
 Future<void> writeEntryLocally(AppDatabase db, Entry entry) async {
-  assert(
-    entry.isBalanced,
-    'refusing to store an unbalanced entry: ${entry.id}',
-  );
+  // A real check, not an assert. Asserts are stripped from a release build,
+  // which left the one invariant this app is actually about — that what was
+  // paid, what is owed and the stated amount agree — enforced only in debug.
+  // Both producers guarantee it today, `composeEntry` by construction and the
+  // server by a deferred constraint trigger, and this is the line that means a
+  // third one cannot quietly not. Cheap, too: two sums over a handful of rows.
+  //
+  // Throwing is the right failure. A row arriving from a sync is applied inside
+  // SyncEngine.pull, whose caller reports the error, and refusing it leaves the
+  // previous known-good entry in place — where storing it would put a balance on
+  // screen that nothing on this device could explain.
+  if (!entry.isBalanced) {
+    throw StateError(
+      'Refusing to store entry ${entry.id}: it does not balance. '
+      'amount=${entry.amountMinor}, '
+      'paid=${entry.payers.fold(0, (sum, p) => sum + p.amountMinor)}, '
+      'owed=${entry.shares.fold(0, (sum, s) => sum + s.amountMinor)}.',
+    );
+  }
 
   await db.transaction(() async {
     await db
