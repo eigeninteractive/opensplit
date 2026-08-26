@@ -81,6 +81,86 @@ create policy groups_update on groups
 -- both of which run as the definer and both of which check far more first.
 
 -- ----------------------------------------------------------------------------
+-- Column rules for groups, as a trigger rather than a policy.
+--
+-- The third of these, and it exists for the same reason as the other two: RLS
+-- decides which ROWS a statement may touch and cannot say "this column", and
+-- WITH CHECK cannot see OLD. groups_update therefore admitted any member to
+-- rewrite any column of their own group — and one of those columns is
+-- `created_by`, which is not descriptive. It is an authorisation: every policy
+-- above reads `is_group_member(id) OR created_by = auth.uid()`, and
+-- `is_group_creator()` is an alternative to membership on members_read,
+-- members_insert and members_update as well.
+--
+-- So a member could write themselves, or anybody at all, into a permission.
+-- Three things were reachable, and none of them needed more than one PATCH:
+--
+--   * Seize it, then leave or be removed, and rejoin at will. `left_at` is the
+--     only way somebody is taken out of a group, and members_update admits the
+--     creator regardless of it — so the removed member simply sets their own
+--     `left_at` back to null. Removal stopped meaning anything.
+--
+--   * Hand it to a stranger. `created_by` only has to reference a profile, not
+--     a member, so any account in the world could be made "creator" of a group
+--     it had never been in — after which members_insert let it add itself and
+--     read the entire ledger.
+--
+--   * Keep it forever. The genuine creator never loses is_group_creator(), so
+--     the one person who can never really be removed from a group is the one
+--     who made it. That one is not even an attack; it is just what the policy
+--     said.
+--
+-- The fix is to make the column mean what its comment always claimed: an
+-- escape hatch for the instant between creating a group and the creator's own
+-- member row landing, fixed at insert and never rewritten.
+--
+-- `created_at` travels with it because the client echoes both back on every
+-- upsert, and because moving it backwards is how a settled group is aged into
+-- purge_settled_dormant_groups ahead of time.
+--
+-- auth.uid() is null exactly when there is no JWT — a migration, a pgTAP
+-- fixture, the service role, or a pg_cron job — and those are left alone, as
+-- guard_entry_write leaves them.
+-- ----------------------------------------------------------------------------
+create or replace function guard_group_update()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    return new;
+  end if;
+
+  if new.id is distinct from old.id
+     or new.created_at is distinct from old.created_at then
+    raise exception 'A group cannot be re-identified or back-dated'
+      using errcode = 'insufficient_privilege';
+  end if;
+
+  -- With one exception, and it is the same one guard_member_update carries:
+  -- the cascade from a deleted profile. `groups.created_by` is ON DELETE SET
+  -- NULL so that a group outlives the account that made it, and that arrives
+  -- here as a rewrite like any other. It is told apart by the only thing that
+  -- can be true of it — the account is already gone.
+  if new.created_by is distinct from old.created_by
+     and not (
+       new.created_by is null
+       and not exists (select 1 from profiles where id = old.created_by)
+     ) then
+    raise exception 'Who created a group cannot be rewritten'
+      using errcode = 'insufficient_privilege';
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger trg_groups_guard
+  before update on groups
+  for each row execute function guard_group_update();
+
+-- ----------------------------------------------------------------------------
 -- Members.
 --
 -- THE BOOTSTRAP: gating every write behind is_group_member() is unsatisfiable

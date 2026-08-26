@@ -1,7 +1,7 @@
 -- Row-level security, and the invite claim flow.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(24);
+select plan(26);
 
 -- ---------------------------------------------------------------------------
 -- Fixtures: Ravi owns a group with a placeholder for Priya. Zara is a stranger.
@@ -116,6 +116,21 @@ select throws_ok(
   $$select create_invite('44444444-4444-4444-8444-444444444444')$$,
   '23514', null,
   'but not for a place someone already holds — that is a takeover');
+
+-- p_ttl is the caller's to choose and `authenticated` may execute this, so a
+-- modified client could otherwise mint a link that never expires — removing
+-- the only thing that stops a token outliving the reason it was sent.
+select ok(
+  (select expires_at from create_invite(
+     '55555555-5555-4555-8555-555555555555', interval '100 years'))
+    < now() + interval '31 days',
+  'an absurd lifetime is clamped rather than honoured');
+
+select ok(
+  (select expires_at from create_invite(
+     '55555555-5555-4555-8555-555555555555', interval '1 day'))
+    < now() + interval '2 days',
+  'and a shorter one than the default is left exactly as asked');
 
 -- ---------------------------------------------------------------------------
 -- Redeeming it

@@ -541,6 +541,42 @@ void main() {
       );
     });
 
+    test('a queue longer than one page drains in a single sync', () async {
+      // `due()` answers a bounded page, so a push that made a single pass left
+      // the rest of the queue behind — and `pull` runs straight afterwards,
+      // comparing those un-pushed rows, which still carry a device clock,
+      // against the server's own timestamps.
+      final g = await seedGroup();
+      const count = 120;
+      for (var i = 0; i < count; i++) {
+        await a.entries.create(
+          EntryDraft(
+            groupId: g.groupId,
+            currency: 'INR',
+            amountMinor: 10000 + i,
+            description: 'Offline $i',
+            split: EqualSplit([g.ravi, g.priya]),
+            payerAmounts: {g.ravi: 10000 + i},
+          ),
+          createdBy: g.ravi,
+        );
+      }
+
+      // Comfortably more than the 100 rows one `due()` page can return.
+      expect(await a.outbox.pendingCount(), count + 4);
+
+      final report = await a.sync.syncGroup(g.groupId);
+      expect(report.failed, 0);
+      expect(
+        await a.outbox.pendingCount(),
+        0,
+        reason: 'one sync should leave nothing queued',
+      );
+
+      await b.sync.syncGroup(g.groupId);
+      expect(await b.ledger(g.groupId), hasLength(count));
+    });
+
     test('an offline edit does not reorder a row ahead of its group', () async {
       // The whole group is created offline and then touched again before
       // anything has been pushed. Every edit re-queues its row, and the outbox

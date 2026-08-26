@@ -6,7 +6,7 @@
 -- could attempt against a real deployment with a valid session.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(30);
+select plan(36);
 
 -- ---------------------------------------------------------------------------
 -- Two groups that share nothing. Ravi owns Goa; Zara owns Manali.
@@ -381,5 +381,82 @@ select lives_ok(
      where id = 'b6666666-6666-4666-8666-666666666666'$$,
   'a settled one can be: with nothing owed either way it is just tidying up');
 
+-- ===========================================================================
+-- groups.created_by is a permission, not a description
+--
+-- Every policy on groups and members reads `is_group_member(...) OR
+-- is_group_creator(...)`, so whoever this column names holds an alternative to
+-- membership. groups_update let any member write it, which made the second
+-- half of that condition assignable — see guard_group_update().
+-- ===========================================================================
+set local role postgres;
+insert into auth.users (id, instance_id, aud, role, email, raw_user_meta_data,
+                        created_at, updated_at)
+values
+  ('c1111111-1111-4111-8111-111111111111',
+   '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
+   'ishan@example.com', '{"display_name":"Ishan"}', now(), now()),
+  ('c2222222-2222-4222-8222-222222222222',
+   '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
+   'mallory@example.com', '{"display_name":"Mallory"}', now(), now());
+
+-- Ishan is an ordinary member of Ravi's group. Mallory is in no group at all.
+insert into members (id, group_id, profile_id, display_name)
+values ('c3333333-3333-4333-8333-333333333333',
+        '33333333-3333-4333-8333-333333333333',
+        'c1111111-1111-4111-8111-111111111111', 'Ishan');
+
+set local role authenticated;
+set local "request.jwt.claims" to
+  '{"sub":"c1111111-1111-4111-8111-111111111111","role":"authenticated"}';
+
+select throws_ok(
+  $$update groups set created_by = 'c1111111-1111-4111-8111-111111111111'
+     where id = '33333333-3333-4333-8333-333333333333'$$,
+  '42501', null,
+  'a member cannot make themselves the creator — which would survive their '
+  'own removal and let them rejoin at will');
+
+select throws_ok(
+  $$update groups set created_by = 'c2222222-2222-4222-8222-222222222222'
+     where id = '33333333-3333-4333-8333-333333333333'$$,
+  '42501', null,
+  'nor hand it to an account that has never been in the group, which '
+  'members_insert would then let add itself');
+
+select throws_ok(
+  $$update groups set created_at = now() - interval '20 years'
+     where id = '33333333-3333-4333-8333-333333333333'$$,
+  '42501', null,
+  'nor back-date the group into the dormancy purge ahead of time');
+
+-- The legitimate paths, which all of the above must leave alone.
+select lives_ok(
+  $$update groups set name = 'Renamed by a member who did not create it'
+     where id = '33333333-3333-4333-8333-333333333333'$$,
+  'a member who did not create the group can still rename it');
+
+-- The client upserts the whole row on every push, so it re-sends both guarded
+-- columns every time. Echoing a value is not rewriting it, and if it were,
+-- every rename by a non-creator would dead-letter.
+select lives_ok(
+  $$update groups
+       set name       = 'Renamed again, echoing the row back',
+           created_by = '11111111-1111-4111-8111-111111111111',
+           created_at = (select created_at from groups
+                          where id = '33333333-3333-4333-8333-333333333333')
+     where id = '33333333-3333-4333-8333-333333333333'$$,
+  'and re-sending the same created_by and created_at is not a rewrite');
+
+-- Not an owner power either: the column is fixed at insert for everybody.
+set local "request.jwt.claims" to
+  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated"}';
+select throws_ok(
+  $$update groups set created_by = 'c1111111-1111-4111-8111-111111111111'
+     where id = '33333333-3333-4333-8333-333333333333'$$,
+  '42501', null,
+  'and the genuine creator cannot pass it on either');
+
 select * from finish();
+
 rollback;

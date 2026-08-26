@@ -147,25 +147,50 @@ class SyncEngine {
     await pullProfiles();
   }
 
-  /// Drains everything currently due from the outbox.
+  /// A backstop on [push], not the thing that ends it — see there.
+  static const int _maxPushRounds = 50;
+
+  /// Drains the outbox until nothing more is due.
+  ///
+  /// A page at a time, because [OutboxQueue.due] answers a bounded one — it
+  /// sorts in memory, so it has to. A single pass therefore drained at most
+  /// that many rows and left the rest for the next sync, and that was not
+  /// merely slow: [pull] runs immediately afterwards, and a row still waiting
+  /// to be pushed carries a *device* clock in `updated_at`, which is what
+  /// `_applyRemote` then compares against the server's. A long offline session
+  /// could have an edit overwritten by the pull that followed the push which
+  /// had not reached it — silently, and without even a dead letter to show for
+  /// it, since the item was never attempted.
+  ///
+  /// Terminating is not an assumption. Every item in a page is either
+  /// completed, which deletes it, or failed, which either sets a future
+  /// `nextAttemptAt` or dead-letters it — and `due` excludes both. So each
+  /// round strictly shrinks what the next one can see. The round cap guards
+  /// only against a queue being refilled from elsewhere as fast as it drains.
   Future<({int sent, int failed})> push() async {
     var sent = 0;
     var failed = 0;
 
-    for (final item in await outbox.due()) {
-      try {
-        await _pushOne(item);
-        await outbox.complete(item.id);
-        sent++;
-      } on RemoteRejected catch (e) {
-        // A rejected invariant or a permission failure will be rejected exactly
-        // the same way next time. Retrying forever would wedge everything
-        // queued behind it, so it is dropped and recorded instead.
-        await outbox.fail(item.id, e.message, permanent: e.permanent);
-        failed++;
-      } catch (e) {
-        await outbox.fail(item.id, '$e');
-        failed++;
+    for (var round = 0; round < _maxPushRounds; round++) {
+      final due = await outbox.due();
+      if (due.isEmpty) break;
+
+      for (final item in due) {
+        try {
+          await _pushOne(item);
+          await outbox.complete(item.id);
+          sent++;
+        } on RemoteRejected catch (e) {
+          // A rejected invariant or a permission failure will be rejected
+          // exactly the same way next time. Retrying forever would wedge
+          // everything queued behind it, so it is dropped and recorded
+          // instead.
+          await outbox.fail(item.id, e.message, permanent: e.permanent);
+          failed++;
+        } catch (e) {
+          await outbox.fail(item.id, '$e');
+          failed++;
+        }
       }
     }
 

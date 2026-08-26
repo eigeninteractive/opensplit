@@ -138,8 +138,15 @@ begin
   delete from invites
    where member_id = p_member_id and redeemed_at is null;
 
+  -- Clamped, because p_ttl comes from the caller and `authenticated` holds
+  -- execute on this function. The expiry is the only thing stopping a token
+  -- outliving the reason it was sent, and a modified client asking for
+  -- `interval '100 years'` would simply have removed it. The app never passes
+  -- this argument at all; it is here so an operator can issue a shorter link,
+  -- which the clamp leaves alone.
   insert into invites (group_id, member_id, created_by, expires_at)
-  values (v_member.group_id, p_member_id, auth.uid(), now() + p_ttl)
+  values (v_member.group_id, p_member_id, auth.uid(),
+          now() + least(p_ttl, interval '30 days'))
   returning * into v_invite;
 
   return v_invite;
