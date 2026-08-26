@@ -61,7 +61,7 @@ Future<void> _deadLetter(
           id: 'g1',
           name: 'Goa trip',
           defaultCurrency: 'INR',
-          createdBy: 'me',
+          createdBy: const Value('me'),
           createdAt: DateTime.utc(2026, 8, 21),
         ),
         mode: InsertMode.insertOrIgnore,

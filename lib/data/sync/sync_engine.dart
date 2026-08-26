@@ -411,7 +411,7 @@ class SyncEngine {
               defaultCurrency: group.defaultCurrency,
               isDirect: Value(group.isDirect),
               simplifyDebts: Value(group.simplifyDebts),
-              createdBy: group.createdBy,
+              createdBy: Value(group.createdBy),
               createdAt: group.createdAt,
               archivedAt: Value(group.archivedAt),
               updatedAt: Value(group.updatedAt ?? _clock()),

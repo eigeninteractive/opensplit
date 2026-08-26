@@ -18,7 +18,7 @@ abstract class Group with _$Group {
     required String defaultCurrency,
     @Default(false) bool isDirect,
     @Default(true) bool simplifyDebts,
-    required String createdBy,
+    String? createdBy,
     required DateTime createdAt,
     DateTime? archivedAt,
 

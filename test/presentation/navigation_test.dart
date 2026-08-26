@@ -42,7 +42,7 @@ Future<void> _seedGroup(AppDatabase db, {DateTime? archivedAt}) async {
           id: 'g1',
           name: 'Flat 4B',
           defaultCurrency: 'INR',
-          createdBy: testAccountId,
+          createdBy: const Value(testAccountId),
           createdAt: DateTime.utc(2026),
           archivedAt: Value(archivedAt),
         ),

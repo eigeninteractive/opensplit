@@ -100,10 +100,7 @@ final class DriftGroupRepository {
       name: trimmed,
       defaultCurrency: defaultCurrency,
       isDirect: isDirect,
-      // `createdBy` is a profile id, which an anonymous local-only user
-      // does not have yet. Falling back to the owner member id keeps the
-      // column populated and is corrected when the account is linked.
-      createdBy: ownerProfileId ?? '',
+      createdBy: ownerProfileId,
       createdAt: now,
     );
     final owner = Member(
@@ -125,7 +122,11 @@ final class DriftGroupRepository {
               defaultCurrency: group.defaultCurrency,
               isDirect: Value(group.isDirect),
               simplifyDebts: Value(group.simplifyDebts),
-              createdBy: ownerProfileId ?? owner.id,
+              // Null rather than a stand-in. This column holds a profile
+              // id, and the previous fallback wrote a *member* id into it —
+              // an id from a different table that nothing could resolve, and
+              // which disagreed with the Group object this method returned.
+              createdBy: Value(ownerProfileId),
               createdAt: group.createdAt,
               updatedAt: Value(now),
             ),
@@ -150,10 +151,11 @@ final class DriftGroupRepository {
     await outbox?.enqueue(OutboxTarget.group, group.id);
     await outbox?.enqueue(OutboxTarget.member, owner.id);
 
-    return (
-      group: group.copyWith(createdBy: ownerProfileId ?? owner.id),
-      owner: owner,
-    );
+    // `group` already carries ownerProfileId, so there is nothing left to
+    // correct here. This used to overwrite it with the owner's *member* id —
+    // an id from a different table, in a column that holds profile ids — so
+    // that the returned object disagreed with the row just written.
+    return (group: group, owner: owner);
   }
 
   /// Writes a group's editable fields.

@@ -82,28 +82,30 @@ void _legalPages() {
     });
   }
 
-  test(
-    'none of them is still carrying a placeholder',
-    () {
-      // These pages ship with an address and a jurisdiction nobody has filled
-      // in yet, marked with a red box on the page itself. Publishing one in that
-      // state gives Play a policy that tells people to write to nobody.
-      for (final name in ['privacy', 'terms', 'delete-account']) {
-        final page = File('web/$name/index.html').readAsStringSync();
-        expect(
-          page,
-          isNot(contains('[contact email]')),
-          reason: 'web/$name/index.html still has an unfilled contact address',
-        );
-        expect(
-          page,
-          isNot(contains('[jurisdiction]')),
-          reason: 'web/$name/index.html still has an unfilled jurisdiction',
-        );
-      }
-    },
-    skip:
-        'Fill in the contact address and jurisdiction, then remove this '
-        'skip — it is what stops the placeholders reaching Play.',
-  );
+  test('none of them is carrying a placeholder', () {
+    // They shipped with an address and a jurisdiction nobody had filled in,
+    // and a page in that state reads perfectly well — it simply tells people
+    // to write to nobody, which is not something a reviewer or a user would
+    // notice on our behalf.
+    for (final name in ['privacy', 'terms', 'delete-account']) {
+      final page = File('web/$name/index.html').readAsStringSync();
+      expect(
+        page,
+        isNot(contains('[contact email]')),
+        reason: 'web/$name/index.html still has an unfilled contact address',
+      );
+      expect(
+        page,
+        isNot(contains('[jurisdiction]')),
+        reason: 'web/$name/index.html still has an unfilled jurisdiction',
+      );
+      expect(
+        page,
+        contains('hello@eigeninteractive.com'),
+        reason:
+            'web/$name/index.html has no contact address, which Play requires '
+            'a privacy policy to carry',
+      );
+    }
+  });
 }
