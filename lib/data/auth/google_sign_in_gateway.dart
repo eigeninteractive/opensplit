@@ -1,7 +1,12 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/widgets.dart' show Widget;
 import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../config.dart';
+// web_only.dart exists only in the web implementation of the plugin, so it
+// cannot be imported unconditionally without breaking the Android build.
+import 'google_button.dart'
+    if (dart.library.js_interop) 'google_button_web.dart';
 
 /// Obtains a Google ID token natively.
 ///
@@ -17,27 +22,31 @@ class GoogleSignInGateway {
   /// Whether this build can actually complete the flow, not merely whether it
   /// was given a client id.
   ///
-  /// The web implementation of `google_sign_in` reports
-  /// `supportsAuthenticate() == false` and throws `UnimplementedError` from
-  /// [GoogleSignIn.authenticate]: Google Identity Services will only start a
-  /// sign-in from a button it renders itself, so there is no call to make. A
-  /// build that has the client id — which every web build does, it is the same
-  /// define — would otherwise show the button and fail on tap. Email codes work
-  /// everywhere and are the path web offers instead; wiring `renderButton`, or
-  /// the OAuth redirect via `linkIdentity`, is the follow-up that brings Google
-  /// to the web.
+  /// Two platforms, two different answers to "how does a sign-in start", and
+  /// this is where that stops being the caller's problem.
+  ///
+  /// Android has an interactive call: [obtainIdToken] awaits a token. The web
+  /// does not — `supportsAuthenticate()` is false there and
+  /// [GoogleSignIn.authenticate] throws `UnimplementedError`, because Google
+  /// Identity Services will only begin a sign-in from a button it renders
+  /// itself. So the web offers [button] and listens on [signIns] instead, and
+  /// is just as configured as Android is.
   ///
   /// Platforms with no implementation registered at all — a unit test, a
-  /// desktop build — throw from the same call, and are equally unable to offer
-  /// it.
+  /// desktop build — report neither, and correctly offer nothing.
   static bool get isConfigured {
     if (googleWebClientId.isEmpty) return false;
+    if (kIsWeb) return true;
     try {
       return GoogleSignIn.instance.supportsAuthenticate();
     } on UnimplementedError {
       return false;
     }
   }
+
+  /// Whether starting the flow means awaiting a call rather than waiting for a
+  /// button the user taps.
+  static bool get startsOnDemand => !kIsWeb;
 
   /// Held statically, and as the future rather than a flag.
   ///
@@ -58,22 +67,64 @@ class GoogleSignInGateway {
       );
 
   /// Returns the ID token, or null if the user backed out.
-  Future<({String idToken, String? accessToken})?> obtainIdToken() async {
-    if (!isConfigured) {
+  ///
+  /// Android only — see [startsOnDemand]. On the web this throws, because there
+  /// is nothing to call.
+  Future<GoogleCredential?> obtainIdToken() async {
+    if (!isConfigured || !startsOnDemand) {
       throw StateError(
-        'This build cannot start a Google sign-in: it has no client id, or '
-        'the platform has no interactive flow to start. Use an email code.',
+        'This build cannot start a Google sign-in on demand: it has no client '
+        'id, or the platform only signs in from a button Google renders. Use '
+        '[button] and [signIns], or an email code.',
       );
     }
     await _ensureInitialised();
 
     final account = await GoogleSignIn.instance.authenticate();
+    return _credentialFor(account);
+  }
+
+  /// Google's own button, for the platform that will not start without one.
+  ///
+  /// Null off the web. Initialisation has to have happened before this renders,
+  /// which is what [prepare] is for.
+  Widget? button() => googleSignInButton();
+
+  /// Readies the plugin so [button] can render and [signIns] can emit.
+  Future<void> prepare() => _ensureInitialised();
+
+  /// Sign-ins that began somewhere other than a call — which on the web is all
+  /// of them.
+  ///
+  /// The credential arrives on a stream because the button is Google's: it does
+  /// not return to a caller, it announces that somebody signed in. Sign-outs
+  /// are filtered away rather than surfaced; this app's own session is what
+  /// decides who is signed in, and Google's opinion of it is not something any
+  /// screen should react to.
+  static Stream<GoogleCredential> get signIns => GoogleSignIn
+      .instance
+      .authenticationEvents
+      .where((event) => event is GoogleSignInAuthenticationEventSignIn)
+      .cast<GoogleSignInAuthenticationEventSignIn>()
+      .asyncMap((event) => _credentialFor(event.user))
+      .where((credential) => credential != null)
+      .cast<GoogleCredential>();
+
+  static Future<GoogleCredential?> _credentialFor(
+    GoogleSignInAccount account,
+  ) async {
     final idToken = account.authentication.idToken;
     if (idToken == null) return null;
 
+    // Best effort. The web hands back an ID token without an access token
+    // unless the user is asked separately, and Supabase only needs the former —
+    // it verifies the ID token's signature and audience itself.
     final authorization = await account.authorizationClient
         .authorizationForScopes(const ['email', 'profile']);
 
     return (idToken: idToken, accessToken: authorization?.accessToken);
   }
 }
+
+/// What Supabase needs to turn a Google sign-in into a session.
+typedef GoogleCredential = ({String idToken, String? accessToken});

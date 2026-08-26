@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -44,8 +46,25 @@ class _AccountSectionState extends ConsumerState<AccountSection> {
   bool _busy = false;
   String? _error;
 
+  /// The web's Google sign-ins, which arrive from Google's own button rather
+  /// than from a call. Null on Android.
+  StreamSubscription<GoogleCredential>? _googleSignIns;
+
+  @override
+  void initState() {
+    super.initState();
+    if (GoogleSignInGateway.isConfigured &&
+        !GoogleSignInGateway.startsOnDemand) {
+      unawaited(GoogleSignInGateway().prepare());
+      _googleSignIns = GoogleSignInGateway.signIns.listen(
+        (credential) => unawaited(_run(() => _attach(credential))),
+      );
+    }
+  }
+
   @override
   void dispose() {
+    unawaited(_googleSignIns?.cancel());
     _email.dispose();
     _code.dispose();
     super.dispose();
@@ -166,16 +185,25 @@ class _AccountSectionState extends ConsumerState<AccountSection> {
   });
 
   Future<void> _google() => _run(() async {
-    final token = await GoogleSignInGateway().obtainIdToken();
-    if (token == null) return;
+    final credential = await GoogleSignInGateway().obtainIdToken();
+    if (credential == null) return;
+    await _attach(credential);
+  });
 
+  /// Attaches the Google account behind [credential], or signs in as it.
+  ///
+  /// Shared by both platforms because only the way the token arrives differs —
+  /// Android awaits it, the web is handed it — and everything that matters
+  /// happens after: linking is tried first and the refusal is the one chance to
+  /// ask before a sign-in replaces the session and strands this device's rows.
+  Future<void> _attach(GoogleCredential credential) async {
     final controller = ref.read(accountControllerProvider.notifier);
     try {
       // Linking first, and without permission to fall back. The refusal is the
       // only chance to ask before the session is replaced.
       await controller.continueWithGoogle(
-        idToken: token.idToken,
-        accessToken: token.accessToken,
+        idToken: credential.idToken,
+        accessToken: credential.accessToken,
       );
       _saved();
       return;
@@ -186,8 +214,8 @@ class _AccountSectionState extends ConsumerState<AccountSection> {
     if (!await _confirmSignIn('that Google account')) return;
 
     await controller.continueWithGoogle(
-      idToken: token.idToken,
-      accessToken: token.accessToken,
+      idToken: credential.idToken,
+      accessToken: credential.accessToken,
       allowSignIn: true,
     );
     if (mounted) {
@@ -195,7 +223,7 @@ class _AccountSectionState extends ConsumerState<AccountSection> {
         const SnackBar(content: Text('Signed in. Fetching your groups…')),
       );
     }
-  });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -290,11 +318,17 @@ class _AccountSectionState extends ConsumerState<AccountSection> {
         ),
         if (GoogleSignInGateway.isConfigured && !_codeSent) ...[
           const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: _busy ? null : _google,
-            icon: const Icon(Icons.account_circle_outlined),
-            label: const Text('Continue with Google'),
-          ),
+          // Google's own button on the web, which is the only thing Google
+          // Identity Services will start a sign-in from; an ordinary one on
+          // Android, which has a call to make.
+          if (GoogleSignInGateway.startsOnDemand)
+            OutlinedButton.icon(
+              onPressed: _busy ? null : _google,
+              icon: const Icon(Icons.account_circle_outlined),
+              label: const Text('Continue with Google'),
+            )
+          else
+            Align(child: GoogleSignInGateway().button()),
         ],
         if (_codeSent)
           TextButton(

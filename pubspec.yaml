@@ -27,6 +27,11 @@ dependencies:
   uuid: ^4.6.0
   supabase_flutter: ^2.17.2
   google_sign_in: ^7.2.0
+  # Named directly, unusually for an endorsed federated plugin, because the web
+  # build imports `web_only.dart` from it: Google Identity Services will only
+  # start a sign-in from a button it renders itself, and renderButton is not on
+  # the cross-platform surface. See data/auth/google_button_web.dart.
+  google_sign_in_web: ^1.1.3
   share_plus: ^13.3.0
   firebase_core: ^4.13.0
   firebase_messaging: ^16.5.0

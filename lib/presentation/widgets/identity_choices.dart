@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -32,12 +34,30 @@ class _IdentityChoicesState extends ConsumerState<IdentityChoices> {
   final _email = TextEditingController();
   final _code = TextEditingController();
 
+  /// Sign-ins that did not begin with a call — the web's, from Google's own
+  /// button. Null on Android, where [GoogleSignInGateway.obtainIdToken] awaits
+  /// the token instead.
+  StreamSubscription<GoogleCredential>? _googleSignIns;
+
   bool _codeSent = false;
   bool _busy = false;
   String? _error;
 
   @override
+  void initState() {
+    super.initState();
+    if (GoogleSignInGateway.isConfigured &&
+        !GoogleSignInGateway.startsOnDemand) {
+      // Rendering Google's button needs the plugin initialised first, and the
+      // button reports its result to a stream rather than to whoever drew it.
+      unawaited(GoogleSignInGateway().prepare());
+      _googleSignIns = GoogleSignInGateway.signIns.listen(_signInWith);
+    }
+  }
+
+  @override
   void dispose() {
+    unawaited(_googleSignIns?.cancel());
     _email.dispose();
     _code.dispose();
     super.dispose();
@@ -78,21 +98,28 @@ class _IdentityChoicesState extends ConsumerState<IdentityChoices> {
   });
 
   Future<void> _google() => _run(() async {
-    final token = await GoogleSignInGateway().obtainIdToken();
-    if (token == null) return;
+    final credential = await GoogleSignInGateway().obtainIdToken();
+    if (credential == null) return;
+    await _exchange(credential);
+  });
 
+  /// The web's arrival point: Google's button has already produced a token.
+  void _signInWith(GoogleCredential credential) =>
+      unawaited(_run(() => _exchange(credential)));
+
+  Future<void> _exchange(GoogleCredential credential) async {
     // allowSignIn, unconditionally: with no session this can only ever be a
     // sign-in, so the refusal that exists to protect an anonymous account's
     // data has nothing here to protect.
     await ref
         .read(accountControllerProvider.notifier)
         .continueWithGoogle(
-          idToken: token.idToken,
-          accessToken: token.accessToken,
+          idToken: credential.idToken,
+          accessToken: credential.accessToken,
           allowSignIn: true,
         );
     await widget.onSignedIn();
-  });
+  }
 
   Future<void> _guest() => _run(() async {
     await ref.read(sessionControllerProvider.notifier).continueAsGuest();
@@ -107,11 +134,17 @@ class _IdentityChoicesState extends ConsumerState<IdentityChoices> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (GoogleSignInGateway.isConfigured && !_codeSent) ...[
-          OutlinedButton.icon(
-            onPressed: _busy ? null : _google,
-            icon: const Icon(Icons.account_circle_outlined),
-            label: const Text('Continue with Google'),
-          ),
+          // Android gets an ordinary button because it has a call to make. The
+          // web gets Google's own, because Google Identity Services will not
+          // start a sign-in from anything else.
+          if (GoogleSignInGateway.startsOnDemand)
+            OutlinedButton.icon(
+              onPressed: _busy ? null : _google,
+              icon: const Icon(Icons.account_circle_outlined),
+              label: const Text('Continue with Google'),
+            )
+          else
+            Align(child: GoogleSignInGateway().button()),
           const SizedBox(height: 20),
         ],
 
