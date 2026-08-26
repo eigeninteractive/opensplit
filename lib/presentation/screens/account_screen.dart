@@ -6,6 +6,7 @@ import '../../domain/models/profile.dart';
 import '../../domain/settle/upi.dart';
 import '../widgets/account_section.dart';
 import '../widgets/page_body.dart';
+import '../router.dart';
 
 /// Who you are, in one place.
 ///
@@ -215,6 +216,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Account')),
+      drawer: AdaptiveNavigation.drawerFor(context),
       body: PageBody(
         child: ListView(
           padding: const EdgeInsets.all(16),

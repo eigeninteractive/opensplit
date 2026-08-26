@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../dynamic_colors.dart';
 import '../theme_mode.dart';
+import '../router.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -23,6 +24,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
+      drawer: AdaptiveNavigation.drawerFor(context),
       body: PageBody(
         child: ListView(
           padding: const EdgeInsets.all(16),

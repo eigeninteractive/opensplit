@@ -27,6 +27,17 @@ Future<void> _unmount(WidgetTester tester) async {
   await tester.pump(Duration.zero);
 }
 
+/// Opens the drawer and picks a destination by name.
+///
+/// Two taps rather than one, which is the trade a drawer makes: the
+/// destinations are out of the way until asked for.
+Future<void> _chooseDestination(WidgetTester tester, String label) async {
+  await tester.tap(find.byTooltip('Open navigation menu'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(label));
+  await tester.pumpAndSettle();
+}
+
 /// The router in scope, for asking what the navigation stack looks like.
 GoRouter _router(WidgetTester tester) =>
     GoRouter.of(tester.element(find.byType(Scaffold).first));
@@ -66,11 +77,11 @@ void main() {
   // arrow in the app.
   group('destinations are not pushes', () {
     testWidgets(
-      'the phone layout has a navigation bar, not a settings button',
+      'the phone layout has one menu, not a settings button beside it',
       (tester) async {
         await _pumpApp(tester, db);
 
-        expect(find.byType(NavigationBar), findsOneWidget);
+        expect(find.byTooltip('Open navigation menu'), findsOneWidget);
         expect(
           find.descendant(
             of: find.byType(AppBar),
@@ -89,11 +100,10 @@ void main() {
 
       expect(_router(tester).canPop(), isFalse, reason: 'starts at the root');
 
-      await tester.tap(find.byIcon(Icons.settings_outlined));
-      await tester.pumpAndSettle();
+      await _chooseDestination(tester, 'Settings');
 
       expect(find.widgetWithText(AppBar, 'Settings'), findsOneWidget);
-      expect(find.byType(NavigationBar), findsOneWidget);
+      expect(find.byTooltip('Open navigation menu'), findsOneWidget);
       expect(
         find.byType(BackButton),
         findsNothing,
@@ -110,10 +120,8 @@ void main() {
       await _seedGroup(db);
       await _pumpApp(tester, db);
 
-      await tester.tap(find.byIcon(Icons.settings_outlined));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.groups_outlined));
-      await tester.pumpAndSettle();
+      await _chooseDestination(tester, 'Settings');
+      await _chooseDestination(tester, 'Groups');
 
       expect(find.text('Flat 4B'), findsOneWidget);
 
@@ -123,7 +131,7 @@ void main() {
 
   // The other half of the same rule.
   group('drilling down leaves something to come back to', () {
-    testWidgets('a group covers the navigation bar and pops back', (
+    testWidgets('a group covers the navigation menu and pops back', (
       tester,
     ) async {
       await _seedGroup(db);
@@ -133,7 +141,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.byType(NavigationBar),
+        find.byTooltip('Open navigation menu'),
         findsNothing,
         reason: 'a group is a screen you are inside, not a destination',
       );
@@ -146,7 +154,7 @@ void main() {
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
 
-      expect(find.byType(NavigationBar), findsOneWidget);
+      expect(find.byTooltip('Open navigation menu'), findsOneWidget);
       expect(_router(tester).canPop(), isFalse);
 
       await _unmount(tester);

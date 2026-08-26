@@ -19,8 +19,8 @@ import 'screens/welcome_screen.dart';
 /// The app's three top-level destinations, in the order the branches below
 /// declare them.
 ///
-/// One list, read by the navigation bar and the rail alike, so the two
-/// presentations of the same three destinations cannot drift apart.
+/// One list, read by the drawer and the rail alike, so the two presentations of
+/// the same three destinations cannot drift apart.
 const _destinations = <_Destination>[
   _Destination(
     label: 'Groups',
@@ -67,11 +67,11 @@ class _Destination {
 ///    to Groups from Settings, because Settings is not on top of anything.
 ///  * Everything else — a group, an expense, an invite — is an ordinary route
 ///    above the shell. Those are pushed, so they animate with the platform's
-///    own page transition (predictive back on Android), grow a back button by
-///    themselves, and cover the navigation bar rather than sitting under it.
+///    own page transition (predictive back on Android), and grow a back button
+///    rather than a menu button.
 ///
-/// Which is the whole rule: if a screen shows the navigation bar it is a
-/// destination, and if it does not, it was pushed and can be popped.
+/// Which is the whole rule: a screen whose app bar opens the navigation menu is
+/// a destination, and one whose app bar goes back was pushed.
 GoRouter buildRouter({
   required bool Function() isSignedIn,
 
@@ -223,9 +223,9 @@ GoRouter buildRouter({
 /// The app's only navigation surface, in whichever form the window has room
 /// for.
 ///
-/// Material 3 gives the same set of destinations two presentations and this
-/// picks between them by width: a navigation bar along the bottom on a phone,
-/// a rail down the side once there is room. Both are driven by the same
+/// Material 3 gives the same set of destinations several presentations and this
+/// picks between them by width: a modal navigation drawer on a phone, a rail
+/// down the side once there is room. Both are driven by the same
 /// [StatefulNavigationShell], so "which destination am I on" has exactly one
 /// answer and neither can disagree with the URL.
 ///
@@ -236,12 +236,12 @@ GoRouter buildRouter({
 class AdaptiveNavigation extends StatelessWidget {
   const AdaptiveNavigation({super.key, required this.shell});
 
-  /// Below this the destinations are shown along the bottom instead.
+  /// Below this the destinations live in a drawer instead.
   ///
   /// 840 is Material 3's own boundary between the medium and expanded window
   /// classes. The spec allows a rail from 600 up; this app stays with the
-  /// bottom bar to 840 because a bar is reachable one-handed and a phone-sized
-  /// window is held in a hand however many pixels it reports.
+  /// drawer to 840, because a phone-sized window is held in a hand however many
+  /// pixels it reports and a rail eats width a ledger wants.
   static const double _railBreakpoint = 840;
 
   /// Material 3's own default destination width, and the rail's width outright:
@@ -252,34 +252,38 @@ class AdaptiveNavigation extends StatelessWidget {
 
   final StatefulNavigationShell shell;
 
+  /// The drawer a destination screen should hang off its own Scaffold, or null
+  /// when the window is wide enough that the rail is already showing.
+  ///
+  /// Returned to the screens rather than placed on a Scaffold here, and that is
+  /// forced rather than chosen: every destination builds its own Scaffold with
+  /// its own AppBar, and an AppBar grows its menu button from the *nearest*
+  /// Scaffold. A drawer on an outer one would exist with nothing to open it.
+  ///
+  /// Keeping the breakpoint in this class is the point of the method — the
+  /// alternative is three screens each deciding for themselves what counts as
+  /// narrow, and eventually disagreeing.
+  static Widget? drawerFor(BuildContext context) =>
+      MediaQuery.sizeOf(context).width < _railBreakpoint
+      ? const _NavigationDrawer()
+      : null;
+
   /// Switches destination, or returns to the top of the one already open.
   ///
   /// `initialLocation: true` when the destination is already selected is
-  /// go_router's own idiom for the second half, and it is what people expect
-  /// from a navigation bar: tapping the lit destination goes back to its root
-  /// rather than doing nothing.
+  /// go_router's own idiom for the second half, and it is what people expect:
+  /// choosing the destination you are already on goes back to its root rather
+  /// than doing nothing.
   void _select(int index) =>
       shell.goBranch(index, initialLocation: index == shell.currentIndex);
 
   @override
   Widget build(BuildContext context) {
-    if (MediaQuery.sizeOf(context).width < _railBreakpoint) {
-      return Scaffold(
-        body: shell,
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: shell.currentIndex,
-          onDestinationSelected: _select,
-          destinations: [
-            for (final destination in _destinations)
-              NavigationDestination(
-                icon: Icon(destination.icon),
-                selectedIcon: Icon(destination.selectedIcon),
-                label: destination.label,
-              ),
-          ],
-        ),
-      );
-    }
+    // Narrow: nothing here at all. The destinations live in a drawer each
+    // screen opens for itself — see [drawerFor] — so this adds no chrome and,
+    // deliberately, no Scaffold: a second one between the shell and the screen
+    // would be the thing an AppBar found when it looked for a drawer.
+    if (MediaQuery.sizeOf(context).width < _railBreakpoint) return shell;
 
     return Scaffold(
       body: Row(
@@ -306,6 +310,49 @@ class AdaptiveNavigation extends StatelessWidget {
           Expanded(child: shell),
         ],
       ),
+    );
+  }
+}
+
+/// The three destinations, as a Material 3 navigation drawer.
+///
+/// Reached through [AdaptiveNavigation.drawerFor] rather than constructed
+/// directly, so no screen has to know when a drawer is the right surface and
+/// when the rail has already taken over.
+///
+/// The shell comes from the tree rather than from a constructor argument.
+/// go_router puts a [StatefulNavigationShell] above every branch, and this is
+/// only ever built inside one, so asking for it is both correct and shorter
+/// than threading it through three screens.
+class _NavigationDrawer extends StatelessWidget {
+  const _NavigationDrawer();
+
+  @override
+  Widget build(BuildContext context) {
+    final shell = StatefulNavigationShell.of(context).widget;
+    final theme = Theme.of(context);
+
+    return NavigationDrawer(
+      // Counts destinations only, so the heading below does not shift it.
+      selectedIndex: shell.currentIndex,
+      onDestinationSelected: (index) {
+        // Closed first: a drawer that is still open while the destination
+        // changes behind it animates two things at once and reads as a glitch.
+        Navigator.of(context).pop();
+        shell.goBranch(index, initialLocation: index == shell.currentIndex);
+      },
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(28, 16, 16, 10),
+          child: Text('OpenSplit', style: theme.textTheme.titleSmall),
+        ),
+        for (final destination in _destinations)
+          NavigationDrawerDestination(
+            icon: Icon(destination.icon),
+            selectedIcon: Icon(destination.selectedIcon),
+            label: Text(destination.label),
+          ),
+      ],
     );
   }
 }

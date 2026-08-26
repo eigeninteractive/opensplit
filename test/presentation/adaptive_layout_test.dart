@@ -16,6 +16,10 @@ Future<void> _pumpApp(WidgetTester tester, AppDatabase db) async {
   await tester.pumpWidget(
     signedInApp(db: db, prefs: prefs, child: const OpenSplitApp()),
   );
+  await _beats(tester);
+}
+
+Future<void> _beats(WidgetTester tester) async {
   for (var i = 0; i < 25; i++) {
     await tester.pump(const Duration(milliseconds: 40));
   }
@@ -73,14 +77,26 @@ void main() {
   // is the only thing the width decides — there is never both, and never
   // neither.
   group('the navigation surface', () {
-    testWidgets('is a bar along the bottom on a phone', (tester) async {
+    testWidgets('is a drawer behind a menu button on a phone', (tester) async {
       tester.view.physicalSize = const Size(600, 1800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
       await _pumpApp(tester, db);
-      expect(find.byType(NavigationBar), findsOneWidget);
       expect(find.byType(NavigationRail), findsNothing);
+
+      // Closed to begin with: a drawer costs a tap, which is the trade it
+      // makes for giving the page its full height back.
+      expect(find.byType(NavigationDrawer), findsNothing);
+      expect(find.byTooltip('Open navigation menu'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Open navigation menu'));
+      await _beats(tester);
+
+      expect(find.byType(NavigationDrawer), findsOneWidget);
+      expect(find.text('Groups'), findsOneWidget);
+      expect(find.text('Account'), findsOneWidget);
+      expect(find.text('Settings'), findsOneWidget);
       await _unmount(tester);
     });
 
@@ -93,10 +109,35 @@ void main() {
 
       await _pumpApp(tester, db);
       expect(find.byType(NavigationRail), findsOneWidget);
-      expect(find.byType(NavigationBar), findsNothing);
+      // No menu button beside it: the rail is already showing everything a
+      // drawer would have to be opened to see.
+      expect(find.byTooltip('Open navigation menu'), findsNothing);
       expect(find.text('Groups'), findsOneWidget);
       expect(find.text('Account'), findsOneWidget);
       expect(find.text('Settings'), findsOneWidget);
+      await _unmount(tester);
+    });
+
+    testWidgets('the drawer switches destination and closes behind it', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(600, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await _pumpApp(tester, db);
+      await tester.tap(find.byTooltip('Open navigation menu'));
+      await _beats(tester);
+
+      await tester.tap(find.text('Account'));
+      await _beats(tester);
+
+      expect(find.text('Your name'), findsOneWidget);
+      expect(
+        find.byType(NavigationDrawer),
+        findsNothing,
+        reason: 'it closes rather than sitting open over the new screen',
+      );
       await _unmount(tester);
     });
 
@@ -112,9 +153,7 @@ void main() {
       // Account is the middle destination, and holds the one name a person has
       // — it used to be a field three quarters of the way down Settings.
       await tester.tap(find.byIcon(Icons.person_outline).last);
-      for (var i = 0; i < 25; i++) {
-        await tester.pump(const Duration(milliseconds: 40));
-      }
+      await _beats(tester);
 
       expect(find.text('Your name'), findsOneWidget);
       expect(
@@ -125,9 +164,7 @@ void main() {
       );
 
       await tester.tap(find.byIcon(Icons.settings_outlined).last);
-      for (var i = 0; i < 25; i++) {
-        await tester.pump(const Duration(milliseconds: 40));
-      }
+      await _beats(tester);
       expect(
         tester
             .widget<NavigationRail>(find.byType(NavigationRail))

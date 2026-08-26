@@ -15,6 +15,7 @@ import '../widgets/brand_mark.dart';
 import '../widgets/create_group_sheet.dart';
 import '../widgets/link_account_prompt.dart';
 import '../widgets/unsynced_changes_banner.dart';
+import '../router.dart';
 
 class GroupListScreen extends ConsumerWidget {
   const GroupListScreen({super.key});
@@ -52,6 +53,7 @@ class GroupListScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: const BrandLockup()),
+      drawer: AdaptiveNavigation.drawerFor(context),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => showCreateGroupSheet(context),
         icon: const Icon(Icons.group_add_outlined),
