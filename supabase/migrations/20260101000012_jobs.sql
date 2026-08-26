@@ -43,5 +43,31 @@ begin
     '17 3 * * *',
     'select public.cleanup_abandoned_anonymous_users()'
   );
+
+  -- Dormant groups, daily.
+  --
+  -- Archiving is reversible and touches one column, so it runs unattended
+  -- without ceremony. The purge is the opposite and is scheduled weekly rather
+  -- than daily to make that difference visible in the schedule itself: it can
+  -- only ever remove a group that is archived, a year silent, and settled to
+  -- zero, so there is nothing for a daily run to catch that a weekly one
+  -- misses.
+  perform cron.unschedule('opensplit-archive-dormant')
+    where exists (select 1 from cron.job where jobname = 'opensplit-archive-dormant');
+
+  perform cron.schedule(
+    'opensplit-archive-dormant',
+    '41 3 * * *',
+    'select public.archive_dormant_groups()'
+  );
+
+  perform cron.unschedule('opensplit-purge-settled')
+    where exists (select 1 from cron.job where jobname = 'opensplit-purge-settled');
+
+  perform cron.schedule(
+    'opensplit-purge-settled',
+    '13 4 * * 0',
+    'select public.purge_settled_dormant_groups()'
+  );
 end;
 $$;

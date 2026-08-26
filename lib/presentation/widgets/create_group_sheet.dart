@@ -28,7 +28,7 @@ class _CreateGroupSheetState extends ConsumerState<_CreateGroupSheet> {
   @override
   void initState() {
     super.initState();
-    _yourName.text = ref.read(localIdentityControllerProvider).displayName;
+    _yourName.text = ref.read(myProfileProvider).value?.displayName ?? '';
   }
 
   @override
@@ -45,11 +45,17 @@ class _CreateGroupSheetState extends ConsumerState<_CreateGroupSheet> {
 
     setState(() => _saving = true);
     try {
-      final identity = ref.read(localIdentityControllerProvider);
-      if (identity.displayName != yourName) {
+      final accountId = ref.read(currentAccountIdProvider);
+      if (accountId == null) return;
+
+      // Typing a name here is editing your account, not naming yourself for
+      // this group. There is one name now, and this is often the first place
+      // anybody is asked for it.
+      final profile = ref.read(myProfileProvider).value;
+      if (profile?.displayName != yourName) {
         await ref
-            .read(localIdentityControllerProvider.notifier)
-            .setDisplayName(yourName);
+            .read(myProfileControllerProvider.notifier)
+            .save(displayName: yourName, upiVpa: profile?.upiVpa);
       }
 
       final created = await ref
@@ -58,9 +64,9 @@ class _CreateGroupSheetState extends ConsumerState<_CreateGroupSheet> {
             name: name,
             defaultCurrency: _currency,
             ownerDisplayName: yourName,
-            // The local identity claims the owner slot, which is what makes
-            // "you" findable among the members later.
-            ownerProfileId: identity.profileId,
+            // Claims the owner slot, which is what makes "you" findable among
+            // the members later.
+            ownerProfileId: accountId,
           );
 
       if (!mounted) return;

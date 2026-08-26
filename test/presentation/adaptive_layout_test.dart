@@ -1,26 +1,20 @@
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 // `group` here is the Riverpod provider function, which collides with the
 // test framework's group().
-import 'package:opensplit/application/providers.dart' hide group;
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/presentation/app.dart';
 import 'package:opensplit/presentation/widgets/page_body.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../harness.dart';
+
 Future<void> _pumpApp(WidgetTester tester, AppDatabase db) async {
   SharedPreferences.setMockInitialValues({});
   final prefs = await SharedPreferences.getInstance();
   await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        sharedPreferencesProvider.overrideWithValue(prefs),
-        appDatabaseProvider.overrideWithValue(db),
-      ],
-      child: const OpenSplitApp(),
-    ),
+    signedInApp(db: db, prefs: prefs, child: const OpenSplitApp()),
   );
   for (var i = 0; i < 25; i++) {
     await tester.pump(const Duration(milliseconds: 40));
@@ -102,13 +96,18 @@ void main() {
       await _unmount(tester);
     });
 
-    testWidgets('navigates to settings and marks it selected', (tester) async {
+    testWidgets('navigates to a destination and marks it selected', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1400, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
       await _pumpApp(tester, db);
-      await tester.tap(find.byIcon(Icons.settings_outlined).last);
+
+      // Account is the middle destination, and holds the one name a person has
+      // — it used to be a field three quarters of the way down Settings.
+      await tester.tap(find.byIcon(Icons.person_outline).last);
       for (var i = 0; i < 25; i++) {
         await tester.pump(const Duration(milliseconds: 40));
       }
@@ -119,6 +118,17 @@ void main() {
             .widget<NavigationRail>(find.byType(NavigationRail))
             .selectedIndex,
         1,
+      );
+
+      await tester.tap(find.byIcon(Icons.settings_outlined).last);
+      for (var i = 0; i < 25; i++) {
+        await tester.pump(const Duration(milliseconds: 40));
+      }
+      expect(
+        tester
+            .widget<NavigationRail>(find.byType(NavigationRail))
+            .selectedIndex,
+        2,
       );
       await _unmount(tester);
     });

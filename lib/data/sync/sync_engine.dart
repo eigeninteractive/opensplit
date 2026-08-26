@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../../domain/models/entry.dart';
+import '../../domain/models/entry_event.dart';
 import '../local/database.dart';
 import '../local/entry_writer.dart';
 import '../repositories/mappers.dart';
@@ -170,12 +172,125 @@ class SyncEngine {
             MembersCompanion(updatedAt: Value(storedMember.updatedAt!)),
           );
         }
+
+      case OutboxTarget.profile:
+        // Your own name and payment handle. Only ever your own row: the server
+        // policy allows an update where `id = auth.uid()` and nothing else, so
+        // there is no queued write here that could touch anybody else's.
+        final row = await (db.select(
+          db.profiles,
+        )..where((t) => t.id.equals(item.targetId))).getSingleOrNull();
+        if (row == null) return;
+        await api.pushProfile(row.toDomain());
     }
   }
 
   /// Applies every change made since the stored cursor.
+  /// The name and payment handle of everybody you share a group with.
+  ///
+  /// Not per group: `profiles_read` on the server already scopes this to your
+  /// own row plus your co-members, so one request answers for every group at
+  /// once and a person in three of your groups is fetched once rather than
+  /// three times.
+  ///
+  /// Cursored on `updated_at` like everything else, under a reserved group id
+  /// — profiles are not group-scoped, but the cursor table is keyed that way
+  /// and inventing a second table for one row would be worse.
+  static const profilesCursorKey = '__profiles__';
+
+  Future<void> pullProfiles() async {
+    final row = await (db.select(
+      db.syncCursors,
+    )..where((t) => t.groupId.equals(profilesCursorKey))).getSingleOrNull();
+
+    final profiles = await api.pullProfiles(since: row?.cursor);
+    if (profiles.isEmpty) return;
+
+    await db.batch((batch) {
+      for (final profile in profiles) {
+        batch.insert(
+          db.profiles,
+          ProfilesCompanion.insert(
+            id: profile.id,
+            displayName: profile.displayName,
+            avatarUrl: Value(profile.avatarUrl),
+            upiVpa: Value(profile.upiVpa),
+          ),
+          onConflict: DoUpdate(
+            (_) => ProfilesCompanion(
+              displayName: Value(profile.displayName),
+              avatarUrl: Value(profile.avatarUrl),
+              upiVpa: Value(profile.upiVpa),
+            ),
+          ),
+        );
+      }
+    });
+
+    // The server orders by updated_at, so the last row carries the newest.
+    // Stored as the server reported it: comparing a device clock against a
+    // server one is exactly what this column exists to avoid.
+    final newest = profiles.last.updatedAt;
+    if (newest != null) {
+      await db
+          .into(db.syncCursors)
+          .insertOnConflictUpdate(
+            SyncCursorsCompanion.insert(
+              groupId: profilesCursorKey,
+              cursor: Value(newest),
+              lastSyncedAt: Value(_clock()),
+            ),
+          );
+    }
+  }
+
+  /// The group's activity feed, appended to locally and never written to.
+  ///
+  /// Cursored on `created_at` alone rather than the `(updated_at, id)` pair the
+  /// entries feed uses, and it can be: these rows are append-only and stamped
+  /// with `clock_timestamp()`, so no two share a value and none is ever
+  /// revised. There is nothing for a tie-breaker to break.
+  Future<void> _pullEntryEvents(String groupId) async {
+    final newest =
+        await (db.selectOnly(db.entryEvents)
+              ..addColumns([db.entryEvents.createdAt.max()])
+              ..where(db.entryEvents.groupId.equals(groupId)))
+            .map((row) => row.read(db.entryEvents.createdAt.max()))
+            .getSingleOrNull();
+
+    final events = await api.pullEntryEvents(groupId: groupId, since: newest);
+    if (events.isEmpty) return;
+
+    await db.batch((batch) {
+      for (final event in events) {
+        batch.insert(
+          db.entryEvents,
+          EntryEventsCompanion.insert(
+            id: event.id,
+            entryId: event.entryId,
+            groupId: event.groupId,
+            actorId: event.actorId,
+            kind: event.kind.name,
+            changes: Value(
+              event.changes.isEmpty ? null : jsonEncode(_encode(event.changes)),
+            ),
+            createdAt: event.createdAt,
+          ),
+          // An event never changes, so a row already here is the same row.
+          mode: InsertMode.insertOrIgnore,
+        );
+      }
+    });
+  }
+
+  Map<String, dynamic> _encode(List<FieldChange> changes) => {
+    for (final change in changes)
+      change.field: {'from': change.from, 'to': change.to},
+  };
+
   Future<int> pull(String groupId) async {
     await pullFxRates();
+    await pullProfiles();
     await _pullGroupAndMembers(groupId);
 
     var cursor = await _readCursor(groupId);
@@ -207,6 +322,13 @@ class SyncEngine {
       // A page that reports more but advances nothing would spin forever.
       if (page.entries.isEmpty) break;
     }
+
+    // Last, and it has to be. Every event references the entry it describes,
+    // and foreign keys are enforced on this database — so pulling the feed
+    // before the entries it talks about fails the constraint and takes the
+    // whole sync down with it. On a device seeing the group for the first
+    // time, that is every event there is.
+    await _pullEntryEvents(groupId);
 
     return applied;
   }

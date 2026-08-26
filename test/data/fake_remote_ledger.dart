@@ -3,7 +3,9 @@ import 'package:opensplit/data/sync/sync_cursor.dart';
 import 'package:opensplit/data/sync/wire.dart';
 import 'package:opensplit/domain/models/entry.dart';
 import 'package:opensplit/domain/models/group.dart';
+import 'package:opensplit/domain/models/entry_event.dart';
 import 'package:opensplit/domain/models/member.dart';
+import 'package:opensplit/domain/models/profile.dart';
 
 /// An in-memory stand-in for the server.
 ///
@@ -196,6 +198,71 @@ class FakeRemoteLedger implements RemoteLedgerApi {
     };
     _members[member.id] = json;
     return memberFromJson(json);
+  }
+
+  /// Profiles, exactly as the server scopes them: your own plus your
+  /// co-members'. The fake stores every one it is told about, and the tests
+  /// that care about scoping use the real adapter.
+  final Map<String, Map<String, dynamic>> _profiles = {};
+
+  /// What the last profiles pull asked for, so a test can check the cursor is
+  /// carried rather than every profile being refetched on every sync.
+  DateTime? lastProfilesSince;
+
+  @override
+  Future<List<Profile>> pullProfiles({DateTime? since}) async {
+    lastProfilesSince = since;
+    final rows =
+        _profiles.values
+            .where(
+              (json) =>
+                  since == null ||
+                  DateTime.parse(json['updated_at'] as String).isAfter(since),
+            )
+            .toList()
+          ..sort(
+            (a, b) => (a['updated_at'] as String).compareTo(
+              b['updated_at'] as String,
+            ),
+          );
+    return [for (final row in rows) profileFromJson(row)];
+  }
+
+  @override
+  Future<Profile> pushProfile(Profile profile) async {
+    final json = {
+      ...?_profiles[profile.id],
+      ...profileToJson(profile),
+      'updated_at': _stamp().toIso8601String(),
+    };
+    _profiles[profile.id] = json;
+    return profileFromJson(json);
+  }
+
+  /// The activity feed, which only the server ever writes to.
+  final List<EntryEvent> _events = [];
+
+  @override
+  Future<List<EntryEvent>> pullEntryEvents({
+    required String groupId,
+    DateTime? since,
+  }) async => [
+    for (final event in _events)
+      if (event.groupId == groupId &&
+          (since == null || event.createdAt.isAfter(since)))
+        event,
+  ];
+
+  /// Records an event as the server's trigger would.
+  void seedEvent(EntryEvent event) => _events.add(event);
+
+  /// Puts a profile on the server without going through a push, for arranging
+  /// "somebody else renamed themselves" in a test.
+  void seedProfile(Profile profile) {
+    _profiles[profile.id] = {
+      ...profileToJson(profile),
+      'updated_at': _stamp().toIso8601String(),
+    };
   }
 
   /// Published rates, keyed by "date|currency", exactly as the server holds

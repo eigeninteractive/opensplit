@@ -152,8 +152,22 @@ final class DriftEntryRepository {
     );
 
     await writeEntryLocally(_db, entry);
+    await _unarchive(entry.groupId);
     await _enqueue(entry.id);
     return entry;
+  }
+
+  /// A group somebody is still using is not dormant.
+  ///
+  /// `upsert_entry` does the same thing on the server, and this is the local
+  /// half of it. Without it, adding an expense to a group the reaper archived
+  /// three months ago leaves the group hidden until the next successful sync —
+  /// which offline is never, so the expense would land somewhere the person who
+  /// typed it cannot see.
+  Future<void> _unarchive(String groupId) async {
+    await (_db.update(_db.groups)
+          ..where((t) => t.id.equals(groupId) & t.archivedAt.isNotNull()))
+        .write(const GroupsCompanion(archivedAt: Value(null)));
   }
 
   /// Replaces an existing entry's contents, keeping its id and creation

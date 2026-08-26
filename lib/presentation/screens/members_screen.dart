@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../navigation.dart';
 
@@ -45,21 +46,24 @@ class MembersScreen extends ConsumerWidget {
                             ? scheme.onSurfaceVariant
                             : scheme.onPrimaryContainer,
                         child: Text(
-                          member.displayName.characters.firstOrNull
+                          ledger
+                                  .nameOfMember(member)
+                                  .characters
+                                  .firstOrNull
                                   ?.toUpperCase() ??
                               '?',
                         ),
                       ),
                       title: Text(
-                        member.displayName +
+                        ledger.nameOfMember(member) +
                             (member.id == ledger.me?.id ? ' (you)' : ''),
                       ),
                       subtitle: Text(
-                        member.upiVpa != null
+                        ledger.upiOf(member) != null
                             // The handle is the useful thing to see at a glance
                             // here: it is what makes settling with this person
                             // one tap instead of a chat message asking for it.
-                            ? member.upiVpa!
+                            ? ledger.upiOf(member)!
                             : member.role == MemberRole.owner
                             ? 'Owner'
                             : member.isPlaceholder
@@ -71,19 +75,26 @@ class MembersScreen extends ConsumerWidget {
                       trailing: PopupMenuButton<String>(
                         onSelected: (action) => switch (action) {
                           'invite' => showInviteSheet(context, ref, member),
+                          'me' => context.push('/account'),
                           'rename' => _rename(context, ref, member),
                           'upi' => _setUpi(context, ref, member),
                           'owner' => _makeOwner(context, ref, member),
                           'remove' => _remove(context, ref, member, ledger),
                           _ => null,
                         },
-                        // Mirrors guard_member_update on the server: your own
-                        // row, any placeholder, or anything at all if you are
-                        // an owner. Offering more than that would produce a
-                        // menu whose items fail, which is worse than a shorter
-                        // menu — rewriting another member's payment handle in
-                        // particular is a way to be paid somebody else's
-                        // settlement.
+                        // Only placeholders can be renamed or given a payment
+                        // handle here, and that is not a permission rule — it
+                        // is what the fields are. A name and a UPI ID belong to
+                        // an account, edited once on the Account screen and
+                        // true in every group at once. The member row holds
+                        // them only for somebody who has no account to hold
+                        // them yet, which is exactly a placeholder.
+                        //
+                        // Removing and promoting still mirror
+                        // guard_member_update on the server: your own row, any
+                        // placeholder, or anything at all if you are an owner.
+                        // Offering more than that would produce a menu whose
+                        // items fail.
                         itemBuilder: (context) {
                           final mine = member.id == ledger.me?.id;
                           final iAmOwner = ledger.me?.role == MemberRole.owner;
@@ -96,12 +107,11 @@ class MembersScreen extends ConsumerWidget {
                                 value: 'invite',
                                 child: Text('Send invite link'),
                               ),
-                            if (editable)
+                            if (member.isPlaceholder && editable) ...[
                               const PopupMenuItem(
                                 value: 'rename',
                                 child: Text('Rename'),
                               ),
-                            if (editable)
                               PopupMenuItem(
                                 value: 'upi',
                                 child: Text(
@@ -109,6 +119,12 @@ class MembersScreen extends ConsumerWidget {
                                       ? 'Add UPI ID'
                                       : 'Change UPI ID',
                                 ),
+                              ),
+                            ],
+                            if (mine)
+                              const PopupMenuItem(
+                                value: 'me',
+                                child: Text('Edit your name and UPI ID'),
                               ),
                             // How an owner hands the role over, which is what
                             // has to happen before the last one can leave.

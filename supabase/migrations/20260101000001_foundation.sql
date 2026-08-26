@@ -47,3 +47,10 @@ create type split_kind as enum ('equal', 'exact', 'shares', 'percent');
 -- 'percent' -> weight = percentage (must sum to 100)
 
 create type member_role as enum ('owner', 'member');
+
+-- What happened to an expense, for the activity feed.
+--
+-- 'restored' exists because delete is soft: an entry can come back, and a feed
+-- that showed the deletion but not the undo would read as a lie.
+create type entry_event_kind as enum
+  ('created', 'edited', 'deleted', 'restored');

@@ -89,14 +89,14 @@ class _SettleUpScreenState extends ConsumerState<SettleUpScreen> {
 
     final currency = currencies[_currencyCode];
     final payee = _to == null ? null : ledger.memberById(_to!);
-    final payeeProfile = ref.watch(profileProvider(payee?.profileId)).value;
 
-    // Fill the payee's handle from their profile the first time we learn it,
-    // without stamping over anything the user has typed.
-    // The member's own handle wins over the profile's: it was recorded by
-    // someone in this group about this person, and a placeholder has no
-    // profile at all — which is exactly who most often needs paying.
-    final knownVpa = payee?.upiVpa ?? payeeProfile?.upiVpa;
+    // Fill the payee's handle the first time we learn it, without stamping
+    // over anything the user has typed.
+    //
+    // Their account's handle wins, and the member row's is the fallback for
+    // somebody who has no account — which is exactly who most often needs
+    // paying, since a placeholder is a real person a friend added.
+    final knownVpa = payee == null ? null : ledger.upiOf(payee);
     if (_payeeVpa.text.isEmpty && knownVpa != null) {
       _payeeVpa.text = knownVpa;
     }
@@ -104,7 +104,7 @@ class _SettleUpScreenState extends ConsumerState<SettleUpScreen> {
     final amountMinor = currency?.parseToMinor(_amount.text);
     final upiUri = buildUpiPaymentUri(
       payeeVpa: _payeeVpa.text,
-      payeeName: payee?.displayName ?? '',
+      payeeName: payee == null ? '' : ledger.nameOfMember(payee),
       amountMinor: amountMinor ?? 0,
       currency: currency ?? const Currency(code: '', exponent: 2, name: ''),
     );
@@ -123,6 +123,7 @@ class _SettleUpScreenState extends ConsumerState<SettleUpScreen> {
             _MemberDropdown(
               label: 'Who is paying',
               members: ledger.members,
+              nameOf: ledger.nameOfMember,
               meId: ledger.me?.id,
               value: _from,
               onChanged: (id) => setState(() => _from = id),
@@ -131,6 +132,7 @@ class _SettleUpScreenState extends ConsumerState<SettleUpScreen> {
             _MemberDropdown(
               label: 'Who is being paid',
               members: ledger.members,
+              nameOf: ledger.nameOfMember,
               meId: ledger.me?.id,
               value: _to,
               excludeId: _from,
@@ -168,7 +170,7 @@ class _SettleUpScreenState extends ConsumerState<SettleUpScreen> {
             const SizedBox(height: 24),
             if (currency?.code == 'INR') ...[
               _UpiSection(
-                payeeName: payee?.displayName ?? '',
+                payeeName: payee == null ? '' : ledger.nameOfMember(payee),
                 vpaController: _payeeVpa,
                 uri: upiUri,
                 onChanged: () => setState(() {}),
@@ -418,6 +420,7 @@ class _MemberDropdown extends StatelessWidget {
   const _MemberDropdown({
     required this.label,
     required this.members,
+    required this.nameOf,
     required this.value,
     required this.onChanged,
     this.meId,
@@ -426,6 +429,11 @@ class _MemberDropdown extends StatelessWidget {
 
   final String label;
   final List<Member> members;
+
+  /// Passed in rather than reached for. A member's display name lives on their
+  /// account once they have one, and resolving that needs the ledger — which
+  /// this widget has no business holding to render a dropdown.
+  final String Function(Member) nameOf;
   final String? value;
   final String? meId;
   final String? excludeId;
@@ -449,7 +457,7 @@ class _MemberDropdown extends StatelessWidget {
         for (final member in options)
           DropdownMenuEntry(
             value: member.id,
-            label: member.displayName + (member.id == meId ? ' (you)' : ''),
+            label: nameOf(member) + (member.id == meId ? ' (you)' : ''),
           ),
       ],
       onSelected: onChanged,

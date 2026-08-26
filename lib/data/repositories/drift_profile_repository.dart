@@ -20,6 +20,16 @@ final class DriftProfileRepository {
           .watchSingleOrNull()
           .map((row) => row == null ? null : _toDomain(row));
 
+  /// Every profile this device knows about, keyed by id.
+  ///
+  /// The whole table, deliberately: it holds one row per person you share a
+  /// group with, which is tens, and every screen that renders a name needs the
+  /// lookup. Fetching them per member would be a query per row of every list.
+  Stream<Map<String, Profile>> watchAll() => _db
+      .select(_db.profiles)
+      .watch()
+      .map((rows) => {for (final row in rows) row.id: _toDomain(row)});
+
   Future<void> upsert(Profile profile) async {
     await _db
         .into(_db.profiles)
@@ -29,6 +39,7 @@ final class DriftProfileRepository {
             displayName: profile.displayName,
             avatarUrl: Value(profile.avatarUrl),
             upiVpa: Value(profile.upiVpa),
+            updatedAt: Value(profile.updatedAt),
           ),
         );
   }
@@ -38,5 +49,6 @@ final class DriftProfileRepository {
     displayName: row.displayName,
     avatarUrl: row.avatarUrl,
     upiVpa: row.upiVpa,
+    updatedAt: row.updatedAt,
   );
 }

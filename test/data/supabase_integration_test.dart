@@ -669,4 +669,151 @@ void main() {
       expect(minted, isNull);
     });
   });
+
+  /// The invite flow, in the order it now happens.
+  ///
+  /// Redeeming used to come first, before anybody had been asked who they
+  /// were, which is how somebody with an existing account ended up locked out
+  /// of the group they had just been invited to. These are the assertions that
+  /// the ordering cannot slip back.
+  group('peek before redeem, against a live instance', () {
+    late SupabaseClient host;
+    late SupabaseClient guest;
+    late SupabaseInviteApi hostInvites;
+    late SupabaseInviteApi guestInvites;
+    late AppDatabase hostDb;
+    late DriftGroupRepository hostGroups;
+
+    setUp(() async {
+      if (!available) return;
+      host = SupabaseClient(_apiUrl, _anonKey);
+      guest = SupabaseClient(_apiUrl, _anonKey);
+      hostInvites = SupabaseInviteApi(host);
+      guestInvites = SupabaseInviteApi(guest);
+      hostDb = AppDatabase(NativeDatabase.memory());
+      hostGroups = DriftGroupRepository(hostDb, outbox: OutboxQueue(hostDb));
+    });
+
+    tearDown(() async {
+      if (!available) return;
+      await host.auth.signOut();
+      await guest.auth.signOut();
+      await host.dispose();
+      await guest.dispose();
+      await hostDb.close();
+    });
+
+    /// Makes a group with one unclaimed place and returns its invite token.
+    Future<String> inviteAwaiting(String placeholderName) async {
+      final me = (await host.auth.signInAnonymously()).user!;
+      await host
+          .from('profiles')
+          .update({'display_name': 'Priya'})
+          .eq('id', me.id);
+
+      final created = await hostGroups.createGroup(
+        name: 'Goa trip',
+        defaultCurrency: 'INR',
+        ownerDisplayName: 'Priya',
+        ownerProfileId: me.id,
+      );
+      final friend = await hostGroups.addMember(
+        created.group.id,
+        displayName: placeholderName,
+      );
+      await SyncEngine(
+        db: hostDb,
+        api: SupabaseLedgerApi(host),
+        outbox: OutboxQueue(hostDb),
+      ).syncGroup(created.group.id);
+
+      return (await hostInvites.create(friend.id)).token;
+    }
+
+    test('a link describes itself before anybody has signed in', () async {
+      if (!available) return;
+
+      final token = await inviteAwaiting('Ravi');
+
+      // No session on this client at all — the state somebody is in when they
+      // tap a link, and the reason peek_invite is granted to anon.
+      expect(guest.auth.currentUser, isNull);
+
+      final preview = await guestInvites.peek(token);
+      expect(preview, isNotNull);
+      expect(preview!.groupName, 'Goa trip');
+      expect(preview.memberName, 'Ravi');
+      expect(preview.inviterName, 'Priya');
+      expect(preview.isUsable, isTrue);
+      expect(
+        preview.isRedeemed,
+        isFalse,
+        reason: 'reading a link must not spend it — that is the entire point',
+      );
+
+      // And still unspent afterwards, so the arrival can pick an account and
+      // come back.
+      final second = await guestInvites.peek(token);
+      expect(second!.isRedeemed, isFalse);
+    });
+
+    test('the account that claims it is the one that was chosen', () async {
+      if (!available) return;
+
+      final token = await inviteAwaiting('Ravi');
+
+      // Ravi already has an account, and signs in as himself BEFORE claiming —
+      // which the preview is what makes possible.
+      final ravi = (await guest.auth.signInAnonymously()).user!;
+      final member = await guestInvites.redeem(token);
+
+      expect(
+        member.profileId,
+        ravi.id,
+        reason:
+            'the place belongs to whoever was signed in when they claimed '
+            'it, and they were asked first',
+      );
+
+      final mine = await guest
+          .from('members')
+          .select('group_id')
+          .eq('profile_id', ravi.id);
+      expect(
+        mine,
+        hasLength(1),
+        reason: 'and it is a group his account can actually see',
+      );
+    });
+
+    test('a spent link says so rather than failing at the last step', () async {
+      if (!available) return;
+
+      final token = await inviteAwaiting('Ravi');
+      await guest.auth.signInAnonymously();
+      await guestInvites.redeem(token);
+
+      final preview = await guestInvites.peek(token);
+      expect(preview!.isRedeemed, isTrue);
+      expect(preview.isUsable, isFalse);
+    });
+
+    test(
+      'somebody already in the group is told, not offered a claim',
+      () async {
+        if (!available) return;
+
+        // Priya, who owns the group, opens a link meant for Ravi.
+        final token = await inviteAwaiting('Ravi');
+        final preview = await hostInvites.peek(token);
+
+        expect(
+          preview!.isMember,
+          isTrue,
+          reason: 'redeem would refuse this, so the screen must not offer it',
+        );
+        expect(preview.isUsable, isFalse);
+      },
+    );
+  });
 }

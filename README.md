@@ -299,9 +299,19 @@ keytool -list -v -keystore ~/.android/debug.keystore \
 
 ### Accounts: two settings that are not optional
 
-Everyone starts anonymous, and attaching a real account later has to **link** —
-same user id, same rows, nothing to migrate. Two things on the Supabase side
-have to be right or that silently becomes something else entirely.
+A session begins because somebody chose one of three things — Google, an email
+code, or being a guest — and being a guest is a real account with no credential
+attached, not a lesser mode. Attaching a credential to a guest session later has
+to **link**: same user id, same rows, nothing to migrate. Two things on the
+Supabase side have to be right or that silently becomes something else entirely.
+
+The app deliberately does *not* create a session on startup. It used to, and
+that broke the arrival it was meant to protect: somebody who already had an
+account and tapped an invite link had the single-use token spent by a throwaway
+anonymous account, and no way into the group afterwards. `/join/:token` now
+reads the invite with `peek_invite` — the one function granted to `anon` —
+shows what the link is for, and redeems only after the identity question has an
+answer.
 
 **1. Allow manual linking.** *Authentication → Providers → Allow manual
 linking*, and `enable_manual_linking = true` in `supabase/config.toml` for
@@ -322,9 +332,26 @@ Templates* by hand, because templates are **not** deployed by `supabase db
 push`. See [`supabase/templates/README.md`](supabase/templates/README.md).
 
 Also leave `enable_confirmations = true`. With it off an email change is
-applied outright, so an anonymous session can claim any address at all, having
-proved nothing — and the real owner of that address finds it already spoken
-for.
+applied outright, so a guest session can claim any address at all, having proved
+nothing — and the real owner of that address finds it already spoken for.
+
+### One name, one ledger per account
+
+Two structural rules that a lot of the code depends on:
+
+**A person has one name.** It lives on `profiles`, and co-members can already
+read each other's rows, so a rename travels with the next sync rather than
+being copied into `members.display_name` once per group and drifting. The member
+row's name and payment handle are placeholder storage, used only while nobody
+has claimed the place; once somebody has, their account answers both.
+`GroupLedger.nameOfMember` is the single point where that is resolved.
+
+**The local database is named after the account** — `opensplit-<uid>`. Signing
+in as somebody else opens somebody else's file, so one person's expenses cannot
+appear under another's account whatever any calling code believes. Switching is
+therefore non-destructive; signing out deletes that account's file, which is a
+privacy decision about shared devices rather than a correctness one. The cost is
+that reference data is per-account and re-pulled after a switch.
 
 ### Push notifications
 

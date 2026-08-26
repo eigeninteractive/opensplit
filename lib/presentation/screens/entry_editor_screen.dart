@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../application/providers.dart';
+import '../../domain/activity/activity_text.dart';
 import '../../domain/entry_draft.dart';
 import '../../domain/fx/fx_quote.dart';
 import '../../domain/models/category.dart';
@@ -514,6 +515,11 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
               icon: const Icon(Icons.check),
               label: Text(widget.isEditing ? 'Save changes' : 'Add expense'),
             ),
+
+            if (widget.isEditing) ...[
+              const Divider(height: 48),
+              _History(entryId: widget.entryId!, ledger: ledger),
+            ],
           ],
         ),
       ),
@@ -564,7 +570,7 @@ class _PayerSection extends StatelessWidget {
               for (final member in ledger.members)
                 ChoiceChip(
                   label: Text(
-                    member.displayName +
+                    ledger.nameOfMember(member) +
                         (member.id == ledger.me?.id ? ' (you)' : ''),
                   ),
                   selected: payers.contains(member.id),
@@ -588,7 +594,7 @@ class _PayerSection extends StatelessWidget {
                         contentPadding: EdgeInsets.zero,
                         controlAffinity: ListTileControlAffinity.leading,
                         value: payers.contains(member.id),
-                        title: Text(member.displayName),
+                        title: Text(ledger.nameOfMember(member)),
                         onChanged: (checked) {
                           if (checked ?? false) {
                             payers.add(member.id);
@@ -712,7 +718,7 @@ class _SplitSection extends StatelessWidget {
                   controlAffinity: ListTileControlAffinity.leading,
                   value: participants.contains(member.id),
                   title: Text(
-                    member.displayName +
+                    ledger.nameOfMember(member) +
                         (member.id == ledger.me?.id ? ' (you)' : ''),
                   ),
                   subtitle: preview != null && participants.contains(member.id)
@@ -839,6 +845,59 @@ class _CategoryPicker extends ConsumerWidget {
           ),
       ],
       onSelected: onChanged,
+    );
+  }
+}
+
+/// What has already happened to this expense.
+///
+/// Shown beside the fields rather than only in the group feed, because this is
+/// where somebody stands when they wonder why a number is not what they
+/// remember. Editing in place keeps the balance arithmetic simple; this is what
+/// keeps it honest.
+class _History extends ConsumerWidget {
+  const _History({required this.entryId, required this.ledger});
+
+  final String entryId;
+  final GroupLedger ledger;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final events = ref.watch(entryActivityProvider(entryId)).value;
+    if (events == null || events.isEmpty) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    final currency = ref
+        .watch(currenciesProvider)
+        .value?[ledger.group.defaultCurrency];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('History', style: theme.textTheme.titleSmall),
+        const SizedBox(height: 8),
+        for (final event in events)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${ledger.nameOf(event.actorId)} '
+                  '${describeKind(event.kind)}',
+                  style: theme.textTheme.bodyMedium,
+                ),
+                for (final change in event.changes)
+                  Text(
+                    '· ${describeChange(change, currency: currency)}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

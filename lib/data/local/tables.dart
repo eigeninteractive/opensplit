@@ -37,6 +37,38 @@ class Profiles extends Table {
   /// not group-scoped.
   TextColumn get upiVpa => text().nullable()();
 
+  /// The server's timestamp, and what the profiles pull cursors on.
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// What happened to an expense, mirrored from the server.
+///
+/// Read-only on this device: every row is written by a trigger on the server
+/// and arrives by sync. Nothing here is ever generated locally, which is why
+/// there is no outbox target for it and no client-side write path at all — an
+/// audit trail a device can author is not an audit trail.
+@DataClassName('EntryEventRow')
+class EntryEvents extends Table {
+  TextColumn get id => text()();
+  TextColumn get entryId => text().references(Entries, #id)();
+  TextColumn get groupId => text().references(Groups, #id)();
+
+  /// The member who did it, not the account: authorship is group-scoped, so a
+  /// placeholder's edits survive them claiming an account.
+  TextColumn get actorId => text().references(Members, #id)();
+
+  /// created, edited, deleted, restored.
+  TextColumn get kind => text()();
+
+  /// The diff, as JSON, for an edit. Null for everything else — "everything
+  /// changed" is not a diff, and the entry itself records what it started as.
+  TextColumn get changes => text().nullable()();
+
+  DateTimeColumn get createdAt => dateTime()();
+
   @override
   Set<Column> get primaryKey => {id};
 }

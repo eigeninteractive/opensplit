@@ -32,6 +32,74 @@ create index idx_invites_group  on invites (group_id);
 alter table invites enable row level security;
 
 -- ---------------------------------------------------------------------------
+-- Looking at an invite without spending it.
+--
+-- Redemption and deciding who you are have to happen in that order, and they
+-- used to happen in the wrong one. The app signed every arrival in anonymously
+-- and claimed the slot immediately, so somebody who already had an account —
+-- the overwhelmingly common case, since invites are how people arrive — had
+-- their place taken by a throwaway account, the token spent, and no way in.
+-- Signing in afterwards did not help: the member row pointed at the anonymous
+-- user, `unique (group_id, profile_id)` refused a second slot, and the invite
+-- was already redeemed. The group owner reissuing the link was the only repair.
+--
+-- So this reads. It shows what the link is for, so the arrival can be asked who
+-- they are with something to say yes to, and redeem_invite runs once afterwards
+-- as whoever they turned out to be.
+--
+-- SECURITY DEFINER, and callable with no session at all: at the moment this is
+-- called the caller is, by design, nobody yet. It deliberately returns only
+-- what the link already implies to whoever holds it — an expired or spent token
+-- still describes itself, so the screen can say which of those it is rather
+-- than showing "invalid link" for three different reasons.
+-- ---------------------------------------------------------------------------
+create or replace function peek_invite(p_token uuid)
+returns table (
+  group_id      uuid,
+  group_name    text,
+  member_name   text,
+  inviter_name  text,
+  member_count  integer,
+  is_redeemed   boolean,
+  is_expired    boolean,
+
+  -- Whether whoever is asking is already in this group under some other name.
+  -- False for a caller with no session, which is the common case here.
+  -- Reported so the screen can say so instead of offering a Join button that
+  -- redeem_invite is going to refuse.
+  is_member     boolean
+)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select g.id,
+         g.name,
+         m.display_name,
+         p.display_name,
+         (select count(*)::int from members
+           where group_id = g.id and left_at is null),
+         i.redeemed_at is not null,
+         i.expires_at < now(),
+         exists (
+           select 1 from members mine
+            where mine.group_id = g.id
+              and mine.profile_id = auth.uid()
+              and mine.left_at is null
+         )
+    from invites i
+    join groups   g on g.id = i.group_id
+    join members  m on m.id = i.member_id
+    join profiles p on p.id = i.created_by
+   where i.token = p_token;
+$$;
+
+comment on function peek_invite is
+  'Describes an invite without redeeming it, so the arrival can choose an '
+  'account before the slot is claimed. Returns no rows for an unknown token.';
+
+-- ---------------------------------------------------------------------------
 -- Issuing an invite.
 --
 -- Only for a slot nobody has claimed. Handing out a link to an already-claimed
@@ -146,6 +214,22 @@ begin
      set profile_id = v_uid
    where id = v_member.id
   returning * into v_member;
+
+  -- Adopt the name your friend wrote on the placeholder, if you have not
+  -- chosen one yourself.
+  --
+  -- Someone arriving on an invite link is signed in anonymously a moment
+  -- earlier, and handle_new_user has no email or metadata to work from, so
+  -- their profile is called 'Someone'. Meanwhile the group already knows them
+  -- as 'Priya', because that is what the person who invited them typed. Taking
+  -- that name means they appear as themselves from the first screen instead of
+  -- as a stranger, and it is theirs to change afterwards on the Account page.
+  --
+  -- Guarded on the default rather than on emptiness: a name the user has
+  -- actually set is never overwritten by whatever a friend guessed.
+  update profiles
+     set display_name = v_member.display_name
+   where id = v_uid and display_name = 'Someone';
 
   update invites
      set redeemed_at = now(), redeemed_by = v_uid

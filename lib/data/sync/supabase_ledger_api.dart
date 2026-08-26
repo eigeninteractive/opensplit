@@ -1,8 +1,10 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../domain/models/entry.dart';
+import '../../domain/models/entry_event.dart';
 import '../../domain/models/group.dart';
 import '../../domain/models/member.dart';
+import '../../domain/models/profile.dart';
 import 'remote_ledger_api.dart';
 import 'sync_cursor.dart';
 import 'wire.dart';
@@ -206,6 +208,52 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
     } on PostgrestException catch (e) {
       throw _translate(e);
     }
+  }
+
+  @override
+  Future<List<Profile>> pullProfiles({DateTime? since}) async {
+    // No group filter and none needed: profiles_read already limits this to
+    // your own row plus anybody sharing a group with you, so asking for
+    // "everything I can see" returns exactly the set that matters. Doing it
+    // per group would fetch the same person once per group they are in.
+    var query = _client.from('profiles').select();
+    // UTC and ISO, matching how the entries cursor is written. A local-zone
+    // string here would silently shift the boundary by the offset and skip
+    // every change made inside it.
+    if (since != null) {
+      query = query.gt('updated_at', since.toUtc().toIso8601String());
+    }
+
+    final rows = await query.order('updated_at');
+    return [for (final row in rows) profileFromJson(row)];
+  }
+
+  @override
+  Future<Profile> pushProfile(Profile profile) async {
+    try {
+      final row = await _client
+          .from('profiles')
+          .upsert(profileToJson(profile))
+          .select()
+          .single();
+      return profileFromJson(row);
+    } on PostgrestException catch (e) {
+      throw _translate(e);
+    }
+  }
+
+  @override
+  Future<List<EntryEvent>> pullEntryEvents({
+    required String groupId,
+    DateTime? since,
+  }) async {
+    var query = _client.from('entry_events').select().eq('group_id', groupId);
+    if (since != null) {
+      query = query.gt('created_at', since.toUtc().toIso8601String());
+    }
+
+    final rows = await query.order('created_at');
+    return [for (final row in rows) entryEventFromJson(row)];
   }
 
   /// Rows per request when sweeping the rate table.

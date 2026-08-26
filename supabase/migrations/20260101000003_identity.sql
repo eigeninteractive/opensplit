@@ -18,6 +18,15 @@ create table profiles (
 
   created_at   timestamptz not null default now(),
 
+  -- The delta cursor for the profiles pull.
+  --
+  -- A profile is no longer only your own business: display_name and upi_vpa are
+  -- the account-level truth that every co-member reads, so other devices have
+  -- to be able to ask what changed since they last looked. Without this column
+  -- there is no cursor and the only way to refresh a name is to fetch every
+  -- profile in every group, every sync.
+  updated_at   timestamptz not null default now(),
+
   constraint upi_vpa_format
     check (upi_vpa is null or upi_vpa ~ '^[a-zA-Z0-9._-]{2,64}@[a-zA-Z]{2,64}$')
 );
@@ -47,6 +56,21 @@ $$;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function handle_new_user();
+
+-- Maintained server-side rather than trusted from the client, for the same
+-- reason entries.updated_at is: two devices with skewed clocks must not be able
+-- to settle a conflict between themselves, and a client that forgets to send it
+-- would go invisible to every other device's cursor.
+create or replace function touch_profile()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+create trigger trg_profiles_touch before update on profiles
+  for each row execute function touch_profile();
 
 -- ----------------------------------------------------------------------------
 -- Anonymous-account hygiene.

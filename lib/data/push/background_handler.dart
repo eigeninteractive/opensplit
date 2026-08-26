@@ -79,10 +79,12 @@ Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
     final profileId = client.auth.currentUser?.id;
     if (profileId == null) return;
 
-    // A second connection to the same file. SQLite is built for this — the
-    // database is in WAL mode with a busy timeout, set in AppDatabase — and the
-    // app is by definition idle while this runs.
-    db = AppDatabase();
+    // A second connection to the same file — the same file, because the ledger
+    // is named after the account and this isolate resolved the same account
+    // from the same stored session. SQLite is built for this: the database is
+    // in WAL mode with a busy timeout, set in AppDatabase, and the app is by
+    // definition idle while this runs.
+    db = AppDatabase.forAccount(profileId);
 
     final outbox = OutboxQueue(db);
     final engine = SyncEngine(

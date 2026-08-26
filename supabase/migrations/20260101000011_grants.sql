@@ -39,6 +39,15 @@ grant select, insert, update, delete on invites    to authenticated;
 grant select, insert, update, delete on entry_payers to authenticated;
 grant select, insert, update, delete on entry_shares to authenticated;
 
+-- The activity log: readable by the group, appended to by nobody.
+--
+-- SELECT only, and no insert policy either, so there are two independent
+-- reasons a client cannot write a line of history. The only writer is
+-- record_entry_event, which is SECURITY DEFINER and reachable solely as a
+-- trigger on entries. No UPDATE or DELETE anywhere, at either level: an audit
+-- trail somebody can quietly rewrite is not one.
+grant select on entry_events to authenticated;
+
 -- Deliberately no DELETE on entries or members. Neither has an RLS delete
 -- policy either; this is the second lock on the same door.
 
@@ -58,6 +67,13 @@ grant execute on function create_invite(uuid, interval) to authenticated;
 
 -- Anyone holding a token may attempt redemption; the function does the rest.
 grant execute on function redeem_invite(uuid) to authenticated;
+
+-- Reading an invite comes BEFORE having an account, so this is the one function
+-- in the schema granted to anon. That is the whole point of it: somebody who
+-- taps a friend's link has to be shown what they were invited to before being
+-- asked who they are, and at that moment they have no session. It redeems
+-- nothing and reveals only what the link already tells whoever is holding it.
+grant execute on function peek_invite(uuid) to anon, authenticated;
 
 grant execute on function request_fx_backfill(date, char(3)) to authenticated;
 
@@ -111,3 +127,11 @@ grant  execute on function tokens_for_entry(uuid) to service_role;
 -- Operator-only: these drive outbound requests and delete accounts.
 revoke execute on function trigger_fx_fetch(jsonb) from public, anon, authenticated;
 revoke execute on function cleanup_abandoned_anonymous_users() from public, anon, authenticated;
+
+-- Dormancy, likewise. archive_dormant_groups touches one reversible column and
+-- purge_settled_dormant_groups deletes groups outright; neither is anything a
+-- client should be able to call, at any scale, for any reason.
+revoke execute on function archive_dormant_groups(interval)
+  from public, anon, authenticated;
+revoke execute on function purge_settled_dormant_groups(interval)
+  from public, anon, authenticated;

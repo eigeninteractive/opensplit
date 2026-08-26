@@ -4,6 +4,7 @@ import '../../domain/models/currency.dart';
 import '../../domain/models/entry.dart';
 import '../../domain/models/group.dart';
 import '../../domain/models/member.dart';
+import '../../domain/models/profile.dart';
 import '../local/database.dart';
 
 /// Translations between Drift row classes and domain models.
@@ -33,6 +34,16 @@ extension MemberRowMapper on MemberRow {
     role: role,
     joinedAt: joinedAt,
     leftAt: leftAt,
+    upiVpa: upiVpa,
+    updatedAt: updatedAt,
+  );
+}
+
+extension ProfileRowMapper on ProfileRow {
+  Profile toDomain() => Profile(
+    id: id,
+    displayName: displayName,
+    avatarUrl: avatarUrl,
     upiVpa: upiVpa,
     updatedAt: updatedAt,
   );

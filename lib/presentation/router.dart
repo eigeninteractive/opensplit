@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import 'screens/account_screen.dart';
+import 'screens/activity_screen.dart';
 import 'screens/entry_editor_screen.dart';
 import 'screens/group_detail_screen.dart';
 import 'screens/group_list_screen.dart';
@@ -12,6 +13,7 @@ import 'screens/members_screen.dart';
 import 'screens/not_found_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/settle_up_screen.dart';
+import 'screens/welcome_screen.dart';
 
 /// One route table serving both Android and the web.
 ///
@@ -19,11 +21,41 @@ import 'screens/settle_up_screen.dart';
 /// back works, because these same paths have to function as Android App Links
 /// later — a route that only exists as an in-memory navigation push cannot be
 /// opened from a shared link.
-GoRouter buildRouter() => GoRouter(
+GoRouter buildRouter({
+  required bool Function() isSignedIn,
+
+  /// Notifies the router that [isSignedIn] may now answer differently, so the
+  /// redirect below is reconsidered without the router itself being rebuilt.
+  Listenable? refresh,
+}) => GoRouter(
   initialLocation: '/',
+  refreshListenable: refresh,
   errorBuilder: (context, state) =>
       NotFoundScreen(location: state.uri.toString()),
+
+  /// Nothing above the welcome screen works without a session.
+  ///
+  /// Not a policy decision so much as a structural one: the local database is
+  /// named after the account, so with nobody signed in there is no ledger to
+  /// open and every repository below it would be built against nothing.
+  ///
+  /// `/join/:token` is the deliberate exception. It has to work for somebody
+  /// who has never opened the app, and it shows what the link is for *before*
+  /// asking who they are — which is the ordering that stops an invite being
+  /// spent by an account the arrival did not want.
+  redirect: (context, state) {
+    final path = state.uri.path;
+    final open = path == '/welcome' || path.startsWith('/join/');
+
+    if (!isSignedIn()) return open ? null : '/welcome';
+    // Signed in already: the welcome screen has nothing left to offer.
+    return path == '/welcome' ? '/' : null;
+  },
   routes: [
+    GoRoute(
+      path: '/welcome',
+      builder: (context, state) => const WelcomeScreen(),
+    ),
     // Everything lives under one shell so that the selection wrapper is applied
     // in exactly one place.
     //
@@ -45,12 +77,14 @@ GoRouter buildRouter() => GoRouter(
           pageBuilder: (context, state) =>
               const NoTransitionPage(child: SettingsScreen()),
         ),
-        // Pushed rather than lateral: it is reached from Settings and from the
-        // prompt on the group list, and both want a back arrow that returns
-        // where it came from.
+        // A top-level destination now, not a detail reached from Settings.
+        // It holds the name everybody in your groups sees, the payment handle
+        // they settle against, and whether the account survives this device —
+        // none of which is a setting.
         GoRoute(
           path: '/account',
-          builder: (context, state) => const AccountScreen(),
+          pageBuilder: (context, state) =>
+              const NoTransitionPage(child: AccountScreen()),
         ),
         // The link a friend sends. Deliberately free of any guard: this route
         // has to work for someone who has never opened the app before.
@@ -68,6 +102,11 @@ GoRouter buildRouter() => GoRouter(
               path: 'add',
               builder: (context, state) =>
                   EntryEditorScreen(groupId: state.pathParameters['groupId']!),
+            ),
+            GoRoute(
+              path: 'activity',
+              builder: (context, state) =>
+                  ActivityScreen(groupId: state.pathParameters['groupId']!),
             ),
             GoRoute(
               path: 'insights',
@@ -161,26 +200,34 @@ class _AdaptiveShell extends StatelessWidget {
     if (MediaQuery.sizeOf(context).width < _railBreakpoint) return child;
 
     final path = state.uri.path;
-    final onSettings = path == '/settings';
+    const destinations = ['/', '/account', '/settings'];
+    final selected = destinations.indexOf(path);
 
     return Scaffold(
       body: Row(
         children: [
           NavigationRail(
-            selectedIndex: onSettings ? 1 : 0,
+            // Anything deeper than a destination — a group, an expense —
+            // keeps Groups lit rather than nothing, because that is the
+            // branch it is inside.
+            selectedIndex: selected < 0 ? 0 : selected,
             labelType: NavigationRailLabelType.all,
             // Material's own default, stated rather than inherited because
             // the web loading skeleton draws a rail of exactly this width
             // before Flutter starts — see the 840px block in web/index.html,
             // and the test that holds the two numbers together.
             minWidth: _railWidth,
-            onDestinationSelected: (index) =>
-                context.go(index == 1 ? '/settings' : '/'),
+            onDestinationSelected: (index) => context.go(destinations[index]),
             destinations: const [
               NavigationRailDestination(
                 icon: Icon(Icons.groups_outlined),
                 selectedIcon: Icon(Icons.groups),
                 label: Text('Groups'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.person_outline),
+                selectedIcon: Icon(Icons.person),
+                label: Text('Account'),
               ),
               NavigationRailDestination(
                 icon: Icon(Icons.settings_outlined),

@@ -69,24 +69,47 @@ class IdentityAlreadyInUse implements Exception {
 
 /// What attaching an identity did.
 class IdentityOutcome {
-  const IdentityOutcome({required this.account, required this.keptTheSession});
+  const IdentityOutcome({required this.account, required this.previousUserId});
 
   final Account account;
 
-  /// True when the user id is unchanged and nothing on the device has to move.
+  /// Who held the session immediately before, or null if nobody did.
+  final String? previousUserId;
+
+  /// True when nothing on this device has to move.
   ///
-  /// False means this was a sign-in as somebody who already existed: a
-  /// different account now holds the session, and the caller is responsible
-  /// for having said so before it happened.
-  final bool keptTheSession;
+  /// Derived from the ids rather than from which code path ran, because those
+  /// two answers are not always the same. Signing in with Google using the
+  /// address an existing email account already owns lands on *that same
+  /// account*: Supabase attaches the new identity by matching a verified email.
+  /// The sign-in branch ran, but the user id never changed, and wiping the
+  /// device there would delete data that was never orphaned.
+  ///
+  /// A first sign-in with no prior session is the same story for a different
+  /// reason: there was no session to lose.
+  bool get keptTheSession =>
+      previousUserId == null || previousUserId == account.id;
 }
 
 /// Identity, kept behind an interface like everything else that touches a
 /// backend.
 ///
-/// Anonymous is the default entry path, not a fallback. Most people arrive
-/// because a friend added them as a placeholder and sent a link, and a signup
-/// wall at that moment is where they leave.
+/// Being a guest is a choice somebody makes, not a state they are put in.
+///
+/// It used to be the latter: every launch with no session signed in
+/// anonymously, silently, before the user had expressed any intent at all.
+/// That quietly broke the most common arrival there is. Someone who already had
+/// an account and tapped a friend's invite link had the slot claimed by a
+/// throwaway account, the single-use token spent, and no way in afterwards —
+/// signing in gave them a different user id, the member row still pointed at
+/// the anonymous one, and the group refused a second slot for the same person.
+/// The only repair was the group's owner issuing a fresh link.
+///
+/// So a session is now established because somebody asked for one, by one of
+/// three routes offered together: Google, an email code, or being a guest.
+/// Guests remain first class — no wall, nothing gated, and an invite is shown
+/// before it is claimed — but the app no longer decides who you are before
+/// asking.
 ///
 /// ## Linking is not signing in
 ///
@@ -110,7 +133,12 @@ abstract interface class AuthService {
   /// Creates a real account with no credentials attached.
   Future<Account> signInAnonymously();
 
-  /// Attaches Google to the current session.
+  /// Attaches Google to the current session, or signs in with it if there is
+  /// no session to attach it to.
+  ///
+  /// With no session this is simply a sign-in — the arrival is somebody who
+  /// chose "continue with Google" on a device holding nothing, so there is
+  /// nothing to weigh up and nothing to warn about.
   ///
   /// Throws [IdentityAlreadyInUse] when that Google account already belongs to
   /// an OpenSplit user and [allowSignIn] is false — the point at which the

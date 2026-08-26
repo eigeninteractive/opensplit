@@ -179,7 +179,7 @@ class _MemberFilter extends ConsumerWidget {
       children: [
         for (final member in ledger.members)
           FilterChip(
-            label: Text(member.displayName),
+            label: Text(ledger.nameOfMember(member)),
             selected: filter.memberId == member.id,
             onSelected: (selected) => onChanged(
               selected

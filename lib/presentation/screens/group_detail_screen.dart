@@ -61,6 +61,11 @@ class GroupDetailScreen extends ConsumerWidget {
             icon: const Icon(Icons.insights_outlined),
           ),
           IconButton(
+            tooltip: 'Activity',
+            onPressed: () => context.push('/g/$groupId/activity'),
+            icon: const Icon(Icons.history),
+          ),
+          IconButton(
             tooltip: 'Settle up',
             onPressed: () => context.push('/g/$groupId/settle'),
             icon: const Icon(Icons.handshake_outlined),

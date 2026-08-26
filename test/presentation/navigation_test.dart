@@ -1,26 +1,20 @@
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 // `group` here is the Riverpod provider function, which collides with the
 // test framework's group().
-import 'package:opensplit/application/providers.dart' hide group;
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/presentation/app.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../harness.dart';
 
 Future<void> _pumpApp(WidgetTester tester, AppDatabase db) async {
   SharedPreferences.setMockInitialValues({});
   final prefs = await SharedPreferences.getInstance();
   await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        sharedPreferencesProvider.overrideWithValue(prefs),
-        appDatabaseProvider.overrideWithValue(db),
-      ],
-      child: const OpenSplitApp(),
-    ),
+    signedInApp(db: db, prefs: prefs, child: const OpenSplitApp()),
   );
   for (var i = 0; i < 25; i++) {
     await tester.pump(const Duration(milliseconds: 40));

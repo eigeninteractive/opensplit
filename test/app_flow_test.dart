@@ -1,11 +1,11 @@
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:opensplit/application/providers.dart';
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/presentation/app.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'harness.dart';
 
 /// Drives the real screens, with only the storage swapped for an in-memory
 /// database — no network exists in this build at all, so "offline" is not
@@ -15,13 +15,7 @@ Future<void> _pumpApp(WidgetTester tester, AppDatabase db) async {
   final prefs = await SharedPreferences.getInstance();
 
   await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        sharedPreferencesProvider.overrideWithValue(prefs),
-        appDatabaseProvider.overrideWithValue(db),
-      ],
-      child: const OpenSplitApp(),
-    ),
+    signedInApp(db: db, prefs: prefs, child: const OpenSplitApp()),
   );
   await _settle(tester);
 }

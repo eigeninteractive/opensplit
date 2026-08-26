@@ -85,9 +85,26 @@ final class SupabaseAuthService implements AuthService {
     bool allowSignIn = false,
   }) async {
     // The ID token flow rather than the OAuth web redirect: one tap, no browser
-    // bounce, and markedly better on Android. linkIdentityWithIdToken is the
-    // linking half of it — the same endpoint with `link_identity` set — and it
-    // exists precisely because signInWithIdToken cannot do this.
+    // bounce, and markedly better on Android.
+    final before = _client.auth.currentUser?.id;
+
+    // Nobody is signed in, so there is nothing to link this to and nothing at
+    // stake. Straight to a sign-in, which for a new address is a sign-up.
+    if (before == null) {
+      final response = await _client.auth.signInWithIdToken(
+        provider: sb.OAuthProvider.google,
+        idToken: idToken,
+        accessToken: accessToken,
+      );
+      return IdentityOutcome(
+        account: _require(response.user, 'Google sign-in'),
+        previousUserId: null,
+      );
+    }
+
+    // linkIdentityWithIdToken is the linking half of the same endpoint — it
+    // sets `link_identity` — and it exists precisely because signInWithIdToken
+    // cannot do this.
     try {
       final response = await _client.auth.linkIdentityWithIdToken(
         provider: sb.OAuthProvider.google,
@@ -96,7 +113,7 @@ final class SupabaseAuthService implements AuthService {
       );
       return IdentityOutcome(
         account: _require(response.user, 'Linking Google'),
-        keptTheSession: true,
+        previousUserId: before,
       );
     } on sb.AuthException catch (error) {
       if (!_alreadyClaimed.contains(error.code)) _rethrowLinkFailure(error);
@@ -107,10 +124,11 @@ final class SupabaseAuthService implements AuthService {
       }
     }
 
-    // That Google account already belongs to an OpenSplit user, so there is
-    // nothing to link it to — this is somebody signing in, most often on a
-    // second device. The session is replaced, which the caller has by now
-    // asked about.
+    // That Google account already belongs to somebody, so this is a sign-in.
+    // Usually to a different account — but not always: if it is the same
+    // address as the email account already holding this session, Supabase
+    // attaches the identity to it and the user id does not change at all.
+    // IdentityOutcome works that out from the ids rather than assuming.
     final response = await _client.auth.signInWithIdToken(
       provider: sb.OAuthProvider.google,
       idToken: idToken,
@@ -118,12 +136,21 @@ final class SupabaseAuthService implements AuthService {
     );
     return IdentityOutcome(
       account: _require(response.user, 'Google sign-in'),
-      keptTheSession: false,
+      previousUserId: before,
     );
   }
 
   @override
   Future<EmailFlow> sendEmailCode(String email) async {
+    // Nobody is signed in: this is somebody arriving, so it is a sign-in, and
+    // for an address with no account yet it is a sign-up. shouldCreateUser is
+    // left at its default here, and only here — creating the account IS the
+    // request.
+    if (_client.auth.currentUser == null) {
+      await _client.auth.signInWithOtp(email: email);
+      return EmailFlow.signInPending;
+    }
+
     // updateUser attaches the address to the session in hand, which is what
     // keeps the user id — and therefore every group on this device — intact.
     // It sends an email-change token, so verification has to use
@@ -161,6 +188,7 @@ final class SupabaseAuthService implements AuthService {
     assert(flow != EmailFlow.linked, 'nothing to verify: already attached');
     final linking = flow == EmailFlow.linkPending;
 
+    final before = _client.auth.currentUser?.id;
     final response = await _client.auth.verifyOTP(
       email: email,
       token: code,
@@ -170,7 +198,7 @@ final class SupabaseAuthService implements AuthService {
     );
     return IdentityOutcome(
       account: _require(response.user, 'Code verification'),
-      keptTheSession: linking,
+      previousUserId: before,
     );
   }
 

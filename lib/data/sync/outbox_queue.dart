@@ -5,7 +5,7 @@ import 'package:drift/drift.dart';
 import '../local/database.dart';
 
 /// The kind of row an outbox item refers to.
-enum OutboxTarget { entry, group, member }
+enum OutboxTarget { entry, group, member, profile }
 
 /// A write the server refused outright, named the way its author would name it.
 class FailedWrite {
@@ -168,6 +168,8 @@ class OutboxQueue {
           _db.members,
         )..where((t) => t.id.equals(id))).getSingleOrNull();
         return row?.displayName ?? 'A member';
+      case OutboxTarget.profile:
+        return 'Your name and payment details';
     }
   }
 

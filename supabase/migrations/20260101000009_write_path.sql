@@ -46,6 +46,14 @@ begin
       using errcode = 'insufficient_privilege';
   end if;
 
+  -- A group somebody is still using is not dormant, whatever the reaper
+  -- decided three months ago. Archiving is reversible precisely so that being
+  -- wrong about it costs nothing, and this is the line that makes it so:
+  -- adding an expense brings the group back to the list by itself, with
+  -- nothing for the user to find or undo.
+  update groups set archived_at = null, updated_at = now()
+   where id = p_group_id and archived_at is not null;
+
   -- Authorship is the caller's own member row. There is deliberately no
   -- parameter for it: a client cannot attribute an expense to someone else.
   select id into v_member
@@ -97,7 +105,6 @@ begin
          (x->>'amount_minor')::bigint,
          (x->>'weight')::numeric
     from jsonb_array_elements(p_shares) x;
-
   return v_row;
 end;
 $$;

@@ -1,6 +1,8 @@
 import '../../domain/models/entry.dart';
+import '../../domain/models/entry_event.dart';
 import '../../domain/models/group.dart';
 import '../../domain/models/member.dart';
+import '../../domain/models/profile.dart';
 import '../../domain/split/splitter.dart';
 
 /// Codecs between domain models and the JSON the server speaks.
@@ -152,3 +154,69 @@ String _dateOnly(DateTime date) =>
     '${date.year.toString().padLeft(4, '0')}-'
     '${date.month.toString().padLeft(2, '0')}-'
     '${date.day.toString().padLeft(2, '0')}';
+
+// ---------------------------------------------------------------------------
+// Profiles
+// ---------------------------------------------------------------------------
+
+/// Only the two fields a person owns.
+///
+/// `id` is sent so the upsert knows which row, and the server's own policy
+/// pins it to auth.uid() anyway. `created_at` and `updated_at` are the
+/// server's to set: a client clock has no business deciding the cursor other
+/// devices sync against.
+Map<String, dynamic> profileToJson(Profile profile) => {
+  'id': profile.id,
+  'display_name': profile.displayName,
+  'upi_vpa': profile.upiVpa,
+};
+
+Profile profileFromJson(Map<String, dynamic> json) => Profile(
+  id: json['id'] as String,
+  displayName: json['display_name'] as String,
+  avatarUrl: json['avatar_url'] as String?,
+  upiVpa: json['upi_vpa'] as String?,
+  updatedAt: DateTime.parse(json['updated_at'] as String),
+);
+
+// ---------------------------------------------------------------------------
+// Activity
+// ---------------------------------------------------------------------------
+
+/// One-way: the server writes these, the client only reads them.
+///
+/// There is deliberately no `entryEventToJson`. The table has no insert policy
+/// and no INSERT grant, so a client that tried would be refused twice over —
+/// and a serialiser sitting here would suggest otherwise to whoever read this
+/// file next.
+EntryEvent entryEventFromJson(Map<String, dynamic> json) => EntryEvent(
+  id: json['id'] as String,
+  entryId: json['entry_id'] as String,
+  groupId: json['group_id'] as String,
+  actorId: json['actor_id'] as String,
+  kind: EntryEventKind.values.byName(json['kind'] as String),
+  createdAt: DateTime.parse(json['created_at'] as String),
+  changes: changesFromJson(json['changes']),
+);
+
+/// Turns the trigger's diff object into a flat list.
+///
+/// Shaped `{"amount_minor": {"from": 40000, "to": 30000}}` on the wire, which
+/// is convenient for Postgres to build and awkward to render. Unknown keys are
+/// carried through rather than dropped: a column added to the diff later should
+/// appear in the feed as an unfamiliar row, not vanish.
+List<FieldChange> changesFromJson(Object? raw) {
+  if (raw is! Map) return const [];
+  final changes = <FieldChange>[
+    for (final entry in raw.entries)
+      if (entry.value is Map)
+        FieldChange(
+          field: entry.key as String,
+          from: (entry.value as Map)['from']?.toString(),
+          to: (entry.value as Map)['to']?.toString(),
+        ),
+  ];
+  // Stable order, so the same edit reads the same way on every device.
+  changes.sort((a, b) => a.field.compareTo(b.field));
+  return changes;
+}

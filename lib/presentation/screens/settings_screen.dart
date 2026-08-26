@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../widgets/page_body.dart';
 import '../../application/providers.dart';
 import '../../config.dart';
-import '../../domain/settle/upi.dart';
 import 'package:go_router/go_router.dart';
 
 import '../theme_mode.dart';
@@ -17,43 +16,6 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  late final TextEditingController _name;
-  late final TextEditingController _vpa;
-  String? _vpaError;
-
-  @override
-  void initState() {
-    super.initState();
-    final identity = ref.read(localIdentityControllerProvider);
-    _name = TextEditingController(text: identity.displayName);
-    _vpa = TextEditingController(text: identity.upiVpa ?? '');
-  }
-
-  @override
-  void dispose() {
-    _name.dispose();
-    _vpa.dispose();
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    final vpa = _vpa.text.trim();
-    if (vpa.isNotEmpty && !isValidUpiVpa(vpa)) {
-      setState(() => _vpaError = 'That does not look like a UPI ID.');
-      return;
-    }
-    setState(() => _vpaError = null);
-
-    final controller = ref.read(localIdentityControllerProvider.notifier);
-    await controller.setDisplayName(_name.text);
-    await controller.setUpiVpa(vpa.isEmpty ? null : vpa);
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Saved')));
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -63,34 +25,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           padding: const EdgeInsets.all(16),
           children: [
             const _AccountRow(),
-            Text('You', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _name,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(
-                labelText: 'Your name',
-                helperText: 'How you appear to other people in a group.',
-              ),
-            ),
             const SizedBox(height: 24),
-            Text('Payments', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _vpa,
-              decoration: InputDecoration(
-                labelText: 'UPI ID (optional)',
-                hintText: 'you@bank',
-                errorText: _vpaError,
-                helperText:
-                    'Lets people in your groups open their UPI app to pay you. '
-                    'OpenSplit never handles the money.',
-                helperMaxLines: 3,
-              ),
-            ),
-            const SizedBox(height: 24),
-            FilledButton(onPressed: _save, child: const Text('Save')),
-            const Divider(height: 48),
             const _AppearanceSetting(),
             // Hidden entirely rather than shown broken when the build has
             // no FCM credentials, matching how every other integration behaves

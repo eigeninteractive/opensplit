@@ -3,11 +3,13 @@ import 'package:drift/native.dart';
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';
+import 'package:opensplit/data/repositories/drift_profile_repository.dart';
 import 'package:opensplit/data/sync/outbox_queue.dart';
 import 'package:opensplit/data/sync/sync_engine.dart';
 import 'package:opensplit/domain/balance/balance_fold.dart';
 import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/models/entry.dart';
+import 'package:opensplit/domain/models/profile.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:test/test.dart';
 
@@ -792,6 +794,65 @@ void main() {
       // And she can therefore still find the group from a device of her own.
       server.signedInProfileId = 'profile-priya';
       expect(await b.sync.discoverGroups(), [created.group.id]);
+    });
+  });
+
+  group('a name follows the account, not the group', () {
+    test('a rename by somebody else arrives on the next sync', () async {
+      final server = FakeRemoteLedger();
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      final engine = SyncEngine(db: db, api: server, outbox: OutboxQueue(db));
+
+      // Priya is on the server under the name her account carries.
+      server.seedProfile(
+        const Profile(id: 'priya-account', displayName: 'Priya'),
+      );
+
+      await engine.pullProfiles();
+      final first = await DriftProfileRepository(db).byId('priya-account');
+      expect(first?.displayName, 'Priya');
+
+      // She renames herself on her own phone. Nothing about any group changes
+      // — which is the point: the name is not copied into a member row per
+      // group any more, so this is one write reaching everybody.
+      server.seedProfile(
+        const Profile(id: 'priya-account', displayName: 'Priya S'),
+      );
+
+      await engine.pullProfiles();
+      final second = await DriftProfileRepository(db).byId('priya-account');
+      expect(
+        second?.displayName,
+        'Priya S',
+        reason: 'a rename has to reach the people who actually read the name',
+      );
+    });
+
+    test('the cursor stops it re-fetching what it already has', () async {
+      final server = FakeRemoteLedger();
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      final engine = SyncEngine(db: db, api: server, outbox: OutboxQueue(db));
+
+      server.seedProfile(const Profile(id: 'a', displayName: 'Ravi'));
+
+      await engine.pullProfiles();
+      expect(
+        server.lastProfilesSince,
+        isNull,
+        reason: 'the first pull holds nothing, so it asks for everything',
+      );
+
+      await engine.pullProfiles();
+      expect(
+        server.lastProfilesSince,
+        isNotNull,
+        reason:
+            'the second asks only for what changed after the newest row '
+            'it already has — without a cursor this refetches every profile '
+            'in every group, on every sync, forever',
+      );
     });
   });
 }

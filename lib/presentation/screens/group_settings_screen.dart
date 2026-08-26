@@ -5,6 +5,7 @@ import '../../application/providers.dart';
 import '../../domain/models/member.dart';
 import '../format.dart';
 import '../navigation.dart';
+import '../widgets/export_button.dart';
 import '../widgets/page_body.dart';
 
 /// Renaming, archiving and leaving.
@@ -210,6 +211,20 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
                 onPressed: _busy ? null : () => _rename(ledger),
                 child: const Text('Save name'),
               ),
+            ),
+
+            const Divider(height: 40),
+
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.ios_share),
+              title: const Text('Export this group'),
+              subtitle: const Text(
+                'A spreadsheet to read, or a full backup that keeps every '
+                'split, rate and change.',
+              ),
+              isThreeLine: true,
+              trailing: ExportButton(groupId: widget.groupId),
             ),
 
             const Divider(height: 40),

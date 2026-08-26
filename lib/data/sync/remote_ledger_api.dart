@@ -1,6 +1,8 @@
 import '../../domain/models/entry.dart';
+import '../../domain/models/entry_event.dart';
 import '../../domain/models/group.dart';
 import '../../domain/models/member.dart';
+import '../../domain/models/profile.dart';
 import 'sync_cursor.dart';
 
 /// One page of a group's delta feed.
@@ -83,6 +85,29 @@ abstract interface class RemoteLedgerApi {
 
   /// Returns the stored row. See [pushGroup].
   Future<Member> pushMember(Member member);
+
+  /// Every profile belonging to somebody you share a group with, plus your own.
+  ///
+  /// This is what makes a name change travel. Names used to be copied into
+  /// `members.display_name` per group, so renaming yourself meant rewriting a
+  /// row in every group you were in — and only the ones this device knew about.
+  /// Now the name lives on the account and this pull carries it, with the same
+  /// `updated_at` cursor everything else uses so a sync fetches only what
+  /// actually changed.
+  Future<List<Profile>> pullProfiles({DateTime? since});
+
+  /// Writes your own name and payment handle. The server refuses any other row.
+  Future<Profile> pushProfile(Profile profile);
+
+  /// What has happened to this group's expenses since [since].
+  ///
+  /// Pull only. These rows are written by a trigger on the server and there is
+  /// no way for a client to add one, which is the property that makes the feed
+  /// worth reading at all.
+  Future<List<EntryEvent>> pullEntryEvents({
+    required String groupId,
+    DateTime? since,
+  });
 
   /// Exchange rates published on or after [since] (`yyyy-MM-dd`).
   ///

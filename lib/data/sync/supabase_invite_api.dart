@@ -28,6 +28,29 @@ final class SupabaseInviteApi implements InviteApi {
   }
 
   @override
+  Future<InvitePreview?> peek(String token) async {
+    // A set-returning function, so PostgREST hands back an array rather than
+    // the single object create_invite returns.
+    final rows = await _client.rpc<List<dynamic>>(
+      'peek_invite',
+      params: {'p_token': token},
+    );
+    if (rows.isEmpty) return null;
+
+    final row = rows.first as Map<String, dynamic>;
+    return InvitePreview(
+      groupId: row['group_id'] as String,
+      groupName: row['group_name'] as String,
+      memberName: row['member_name'] as String,
+      inviterName: row['inviter_name'] as String,
+      memberCount: row['member_count'] as int,
+      isRedeemed: row['is_redeemed'] as bool,
+      isExpired: row['is_expired'] as bool,
+      isMember: row['is_member'] as bool,
+    );
+  }
+
+  @override
   Future<Member> redeem(String token) async {
     try {
       final row = await _client.rpc<Map<String, dynamic>>(

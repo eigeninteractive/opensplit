@@ -200,7 +200,14 @@ language plpgsql
 set search_path = public
 as $$
 begin
-  if exists (select 1 from entries where group_id = old.id) then
+  -- Only people are stopped. auth.uid() is null exactly when there is no JWT,
+  -- which is to say when this is the scheduled purge running as postgres —
+  -- and that job has already checked far more than this trigger does: archived,
+  -- a year silent, and every balance settled to zero. Refusing it here would
+  -- mean the only groups the reaper could ever collect are the empty ones,
+  -- which are not the ones taking up room.
+  if auth.uid() is not null
+     and exists (select 1 from entries where group_id = old.id) then
     raise exception
       'This group has expenses recorded in it, so it cannot be deleted. '
       'Archive it instead.'
@@ -237,6 +244,24 @@ create policy entries_update on entries
   for update to authenticated
   using (is_group_member(group_id))
   with check (is_group_member(group_id));
+
+-- ----------------------------------------------------------------------------
+-- The activity log.
+--
+-- Readable by the group, writable by nobody at all.
+--
+-- There is deliberately no insert policy, which is what stops a client writing
+-- its own history through PostgREST — and it is also why the log is not written
+-- from inside upsert_entry, which runs as the caller and would be refused here
+-- like anyone else. The single writer is record_entry_event, a SECURITY DEFINER
+-- trigger on entries.
+--
+-- No update or delete policy either, and that is the point of an audit trail:
+-- being able to quietly rewrite the record of an edit would defeat the entire
+-- reason the record exists.
+-- ----------------------------------------------------------------------------
+create policy entry_events_read on entry_events
+  for select to authenticated using (is_group_member(group_id));
 
 -- Payers and shares inherit access from the parent entry.
 create policy entry_payers_all on entry_payers

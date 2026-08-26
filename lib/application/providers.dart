@@ -1,8 +1,8 @@
+import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
-import 'package:uuid/uuid.dart';
 
 import 'entry_notification.dart';
 import '../data/fx/drift_fx_repository.dart';
@@ -12,9 +12,9 @@ import '../data/repositories/drift_category_repository.dart';
 import '../data/repositories/drift_currency_repository.dart';
 import '../data/repositories/drift_entry_repository.dart';
 import '../data/repositories/drift_group_repository.dart';
+import '../data/repositories/drift_activity_repository.dart';
 import '../data/repositories/drift_profile_repository.dart';
 import '../data/auth/supabase_auth_service.dart';
-import '../data/local/identity_reconciler.dart';
 import '../data/local/local_reset.dart';
 import '../data/push/push_service.dart';
 import '../data/sync/outbox_queue.dart';
@@ -30,6 +30,7 @@ import '../domain/balance/simplify.dart';
 import '../domain/models/category.dart';
 import '../domain/models/currency.dart';
 import '../domain/models/entry.dart';
+import '../domain/models/entry_event.dart';
 import '../domain/models/group.dart';
 import '../domain/models/member.dart';
 import '../domain/models/profile.dart';
@@ -45,9 +46,48 @@ part 'providers.g.dart';
 SharedPreferences sharedPreferences(Ref ref) =>
     throw UnimplementedError('sharedPreferencesProvider must be overridden');
 
+/// Who holds the session, synchronously.
+///
+/// Synchronous on purpose: the database is keyed on it, and a database that
+/// arrives one frame late would have every repository built against nothing.
+/// The Supabase client restores its stored session during `Supabase.initialize`
+/// — which `main` awaits — so by the time any of this runs the answer is
+/// already known. Watching the auth stream is what makes it react afterwards.
+@Riverpod(keepAlive: true)
+String? currentAccountId(Ref ref) {
+  final auth = ref.watch(authServiceProvider);
+  if (auth == null) return null;
+  // Rebuilds this provider — and therefore the database below it — whenever the
+  // session changes.
+  ref.watch(accountProvider);
+  return auth.currentUser?.id;
+}
+
+/// This account's ledger, and no other account's.
+///
+/// Keyed by account rather than shared and wiped. The previous arrangement kept
+/// one file, repointed its rows when an account arrived and erased them when a
+/// different one took over, which was correct exactly as long as every path
+/// remembered to do so. Naming the file after the account removes the question:
+/// signing in as somebody else opens somebody else's file, and there is no
+/// sequence of events that can show one person's expenses to another.
+///
+/// Switching is therefore non-destructive — the previous account's data is
+/// still there if it comes back — and the price is that reference data is
+/// per-account and re-pulled after a switch.
 @Riverpod(keepAlive: true)
 AppDatabase appDatabase(Ref ref) {
-  final db = AppDatabase();
+  final accountId = ref.watch(currentAccountIdProvider);
+  if (accountId == null) {
+    // Nothing renders above this without a session: the router sends anyone
+    // without one to the welcome screen. Reaching here means a provider was
+    // read out of order, which is a bug rather than a state to handle.
+    throw StateError(
+      'There is no account, so there is no ledger to open. Something read a '
+      'repository before anybody signed in.',
+    );
+  }
+  final db = AppDatabase.forAccount(accountId);
   ref.onDispose(db.close);
   return db;
 }
@@ -109,6 +149,29 @@ Future<FxQuote?> fxQuote(Ref ref, String base, String quote, DateTime asOf) =>
 DriftProfileRepository profileRepository(Ref ref) =>
     DriftProfileRepository(ref.watch(appDatabaseProvider));
 
+/// Every profile this device knows about, keyed by id.
+///
+/// The join behind [GroupLedger.nameOf]: a member who has claimed an account
+/// is displayed under that account's name, not under whatever a friend typed
+/// when adding them.
+@Riverpod(keepAlive: true)
+DriftActivityRepository activityRepository(Ref ref) =>
+    DriftActivityRepository(ref.watch(appDatabaseProvider));
+
+/// A group's activity feed, newest first.
+@riverpod
+Stream<List<EntryEvent>> groupActivity(Ref ref, String groupId) =>
+    ref.watch(activityRepositoryProvider).watchGroup(groupId);
+
+/// One expense's history, in the order it happened.
+@riverpod
+Stream<List<EntryEvent>> entryActivity(Ref ref, String entryId) =>
+    ref.watch(activityRepositoryProvider).watchEntry(entryId);
+
+@riverpod
+Stream<Map<String, Profile>> profilesById(Ref ref) =>
+    ref.watch(profileRepositoryProvider).watchAll();
+
 /// The stored profile for a member, when they have an account.
 ///
 /// Placeholders have none, which is why this is nullable everywhere it is used
@@ -118,163 +181,58 @@ Stream<Profile?> profile(Ref ref, String? profileId) => profileId == null
     ? Stream.value(null)
     : ref.watch(profileRepositoryProvider).watch(profileId);
 
-/// Who this device is.
+/// This account's own name and payment handle.
 ///
-/// Before there is any account, the user still needs a stable identity so that
-/// "you" can be picked out of a group's members. A locally generated id fills
-/// that role and is written to `members.profile_id` exactly as a real account
-/// id would be.
+/// The `profiles` row is the source of truth, not a preference on this device.
+/// That is what makes a rename propagate: co-members can already read each
+/// other's profiles, so the name travels with the next sync instead of being
+/// a copy frozen into whichever group happened to be open when it was typed.
 ///
-/// When a real account arrives, reconciling is one UPDATE over
-/// `members.profile_id` — which is precisely the migration that group-scoped
-/// members were chosen to make trivial.
-class LocalIdentity {
-  const LocalIdentity({
-    required this.profileId,
-    required this.displayName,
-    this.upiVpa,
-    this.isAccount = false,
-  });
-
-  final String profileId;
-  final String displayName;
-
-  /// UPI virtual payment address, used to build settle-up handoffs.
-  final String? upiVpa;
-
-  /// Whether [profileId] is a real account id rather than the locally invented
-  /// one this device starts with.
-  ///
-  /// The distinction decides whether a change of id is a promotion or a
-  /// switch. A locally invented id becoming an account id is the first case,
-  /// and everything filed under the old one is repointed. One account id
-  /// becoming a different account id is the second, and repointing would hand
-  /// somebody else's rows to whoever just signed in — rows the server will
-  /// refuse anyway, since they still belong to the account that wrote them.
-  final bool isAccount;
-
-  bool get hasName => displayName.trim().isNotEmpty;
+/// It also means there is exactly one name. There used to be three — a
+/// preference, a `profiles` row mirrored from it, and a `members.display_name`
+/// per group — and nothing kept them in step.
+@riverpod
+Stream<Profile?> myProfile(Ref ref) {
+  final accountId = ref.watch(currentAccountIdProvider);
+  if (accountId == null) return Stream.value(null);
+  return ref.watch(profileRepositoryProvider).watch(accountId);
 }
 
-@Riverpod(keepAlive: true)
-class LocalIdentityController extends _$LocalIdentityController {
-  static const _profileIdKey = 'local_profile_id';
-  static const _displayNameKey = 'local_display_name';
-  static const _upiVpaKey = 'local_upi_vpa';
-  static const _isAccountKey = 'local_profile_is_account';
-
+/// Editing your own profile.
+@riverpod
+class MyProfileController extends _$MyProfileController {
   @override
-  LocalIdentity build() {
-    final prefs = ref.watch(sharedPreferencesProvider);
+  void build() {}
 
-    var profileId = prefs.getString(_profileIdKey);
-    if (profileId == null) {
-      profileId = const Uuid().v4();
-      prefs.setString(_profileIdKey, profileId);
-    }
-
-    return LocalIdentity(
-      profileId: profileId,
-      displayName: prefs.getString(_displayNameKey) ?? '',
-      upiVpa: prefs.getString(_upiVpaKey),
-      isAccount: prefs.getBool(_isAccountKey) ?? false,
-    );
-  }
-
-  Future<void> setDisplayName(String name) async {
-    final prefs = ref.read(sharedPreferencesProvider);
-    await prefs.setString(_displayNameKey, name.trim());
-    state = LocalIdentity(
-      profileId: state.profileId,
-      displayName: name.trim(),
-      upiVpa: state.upiVpa,
-      isAccount: state.isAccount,
-    );
-    await _mirrorToProfile();
-  }
-
-  Future<void> setUpiVpa(String? vpa) async {
-    final prefs = ref.read(sharedPreferencesProvider);
-    final trimmed = vpa?.trim();
-    if (trimmed == null || trimmed.isEmpty) {
-      await prefs.remove(_upiVpaKey);
-    } else {
-      await prefs.setString(_upiVpaKey, trimmed);
-    }
-    state = LocalIdentity(
-      profileId: state.profileId,
-      displayName: state.displayName,
-      upiVpa: trimmed == null || trimmed.isEmpty ? null : trimmed,
-      isAccount: state.isAccount,
-    );
-    await _mirrorToProfile();
-  }
-
-  /// Points this device at [authUserId].
+  /// Saves both fields together, because the screen edits them together.
   ///
-  /// Called when a session first appears, and again if a different account ever
-  /// takes the session over. Whether the rows filed under the previous id come
-  /// with it is [adoptAuthIdentity]'s decision, not this one's — see
-  /// [LocalIdentity.isAccount].
-  Future<void> adoptProfileId(String authUserId) async {
-    final prefs = ref.read(sharedPreferencesProvider);
-    // Written even when the id is unchanged: the very first anonymous session
-    // adopts an id this device invented, and the fact that it is now an account
-    // is the thing worth remembering.
-    await prefs.setBool(_isAccountKey, true);
-    if (state.profileId == authUserId) {
-      state = LocalIdentity(
-        profileId: state.profileId,
-        displayName: state.displayName,
-        upiVpa: state.upiVpa,
-        isAccount: true,
-      );
-      return;
-    }
+  /// Values are built explicitly rather than with `copyWith`, which cannot set
+  /// a nullable field back to null — passing null there means "leave it alone",
+  /// so clearing a payment handle would silently do nothing.
+  Future<void> save({required String displayName, String? upiVpa}) async {
+    final accountId = ref.read(currentAccountIdProvider);
+    if (accountId == null) return;
 
-    await prefs.setString(_profileIdKey, authUserId);
-    state = LocalIdentity(
-      profileId: authUserId,
-      displayName: state.displayName,
-      upiVpa: state.upiVpa,
-      isAccount: true,
+    final profiles = ref.read(profileRepositoryProvider);
+    final current = await profiles.byId(accountId);
+    final handle = upiVpa?.trim();
+
+    await profiles.upsert(
+      Profile(
+        id: accountId,
+        displayName: displayName.trim(),
+        avatarUrl: current?.avatarUrl,
+        upiVpa: handle == null || handle.isEmpty ? null : handle,
+      ),
     );
-    await _mirrorToProfile();
-  }
 
-  /// Forgets the name and handle this device was using, keeping its id.
-  ///
-  /// Part of switching to an account that already exists: the display name and
-  /// UPI handle belonged to whoever was using the device before, and carrying
-  /// them into somebody else's session would put a stranger's payment address
-  /// on their settle-up screen.
-  Future<void> clearPersonalDetails() async {
-    final prefs = ref.read(sharedPreferencesProvider);
-    await prefs.remove(_displayNameKey);
-    await prefs.remove(_upiVpaKey);
-    state = LocalIdentity(
-      profileId: state.profileId,
-      displayName: '',
-      isAccount: state.isAccount,
-    );
-  }
-
-  /// Mirrors the identity into the profiles table.
-  ///
-  /// Preferences hold this device's own settings, but the rest of the app looks
-  /// people up by profile id — including the settle-up screen, which needs a
-  /// payee's UPI handle. Writing it in one place keeps the two from drifting.
-  Future<void> _mirrorToProfile() async {
-    if (!state.hasName) return;
+    // Queued rather than pushed, so renaming while offline is as ordinary as
+    // renaming while online. Co-members see it on their next sync: they can
+    // already read each other's profiles, which is what makes one edit here
+    // reach everybody without a copy per group.
     await ref
-        .read(profileRepositoryProvider)
-        .upsert(
-          Profile(
-            id: state.profileId,
-            displayName: state.displayName,
-            upiVpa: state.upiVpa,
-          ),
-        );
+        .read(outboxQueueProvider)
+        .enqueue(OutboxTarget.profile, accountId);
   }
 }
 
@@ -319,6 +277,7 @@ class GroupLedger {
     required this.balances,
     required this.transfers,
     required this.me,
+    required this.profiles,
   });
 
   final Group group;
@@ -337,6 +296,27 @@ class GroupLedger {
   /// This device's member in the group, if it has one.
   final Member? me;
 
+  /// Accounts belonging to the members of this group, keyed by profile id.
+  final Map<String, Profile> profiles;
+
+  /// What to call [member], and where to pay them.
+  ///
+  /// A member's own name and payment handle are placeholder storage, used only
+  /// while nobody has claimed the place. Once somebody has, their account
+  /// answers both — one name, one payment identity, edited once on the Account
+  /// screen and true everywhere, including in other people's copies of the
+  /// group.
+  ///
+  /// Falls back to the member row when the profile has not synced yet, which is
+  /// the ordinary state for a few seconds after somebody accepts an invite.
+  String nameOfMember(Member member) {
+    final claimed = profiles[member.profileId]?.displayName.trim() ?? '';
+    return claimed.isEmpty ? member.displayName : claimed;
+  }
+
+  String? upiOf(Member member) =>
+      profiles[member.profileId]?.upiVpa ?? member.upiVpa;
+
   Member? memberById(String id) {
     for (final member in members) {
       if (member.id == id) return member;
@@ -344,7 +324,10 @@ class GroupLedger {
     return null;
   }
 
-  String nameOf(String memberId) => memberById(memberId)?.displayName ?? '—';
+  String nameOf(String memberId) {
+    final member = memberById(memberId);
+    return member == null ? '—' : nameOfMember(member);
+  }
 
   /// Currencies this group actually holds money in, in a stable order.
   List<String> get activeCurrencies {
@@ -376,7 +359,8 @@ GroupLedger? groupLedger(Ref ref, String groupId) {
   final entryList = ref.watch(entriesProvider(groupId)).value;
   if (group == null || memberList == null || entryList == null) return null;
 
-  final identity = ref.watch(localIdentityControllerProvider);
+  final accountId = ref.watch(currentAccountIdProvider);
+  final profiles = ref.watch(profilesByIdProvider).value ?? const {};
   final balances = foldBalances(entryList);
 
   return GroupLedger(
@@ -385,7 +369,8 @@ GroupLedger? groupLedger(Ref ref, String groupId) {
     entries: entryList,
     balances: balances,
     transfers: group.simplifyDebts ? simplifyDebts(balances) : const [],
-    me: memberList.where((m) => m.profileId == identity.profileId).firstOrNull,
+    me: memberList.where((m) => m.profileId == accountId).firstOrNull,
+    profiles: profiles,
   );
 }
 
@@ -476,11 +461,14 @@ Stream<Account?> account(Ref ref) {
   return auth.authStateChanges();
 }
 
-/// Establishes a session and reconciles this device's local identity with it.
+/// Reports the current session, and reconciles this device's identity with it.
 ///
-/// Anonymous sign-in happens silently and is never presented as a step.
-/// Someone arriving from an invite link has to land inside the group; a signup
-/// screen at that moment is where they leave.
+/// It does NOT create one. Signing in anonymously the moment the app opened was
+/// the app deciding who somebody was before asking, and it broke the arrival it
+/// was meant to protect: a person who already had an account and tapped an
+/// invite link had the slot claimed by a throwaway account and the single-use
+/// token spent, with no way in afterwards. Every session now begins because
+/// somebody chose Google, an email code, or [continueAsGuest].
 @Riverpod(keepAlive: true)
 class SessionController extends _$SessionController {
   @override
@@ -488,39 +476,55 @@ class SessionController extends _$SessionController {
     final auth = ref.watch(authServiceProvider);
     if (auth == null) return null;
 
-    final user = auth.currentUser ?? await auth.signInAnonymously();
+    return auth.currentUser;
+  }
 
-    final identity = ref.read(localIdentityControllerProvider);
-    if (identity.profileId != user.id) {
-      // Everything recorded before this session existed was filed under a
-      // locally generated id. Move it across — one column, no financial rows
-      // touched.
-      //
-      // Only from a locally invented id, though. If this device was already an
-      // account and a different one now holds the session, the rows filed under
-      // the old id are not this account's to take: the server still has them
-      // under the previous user and refuses every write made under the new one.
-      // That path wipes instead, in AccountController.
-      if (!identity.isAccount) {
-        await adoptAuthIdentity(
-          ref.read(appDatabaseProvider),
-          localProfileId: identity.profileId,
-          authUserId: user.id,
-          outbox: ref.read(outboxQueueProvider),
-        );
-      }
-      await ref
-          .read(localIdentityControllerProvider.notifier)
-          .adoptProfileId(user.id);
-    } else if (!identity.isAccount) {
-      // Same id, but this is the first time it has been backed by a session.
-      await ref
-          .read(localIdentityControllerProvider.notifier)
-          .adoptProfileId(user.id);
+  /// Being a guest, chosen rather than assumed.
+  ///
+  /// A real account with no credential attached: same uid, same rows, same
+  /// row-level security as anybody else. What it does not have is any way back
+  /// after losing the device, which is why it is offered as one of three
+  /// choices instead of happening on its own.
+  Future<Account> continueAsGuest() async {
+    final auth = ref.read(authServiceProvider);
+    if (auth == null) {
+      throw StateError('This build has no backend, so it has no accounts.');
     }
 
+    final user = auth.currentUser ?? await auth.signInAnonymously();
+    state = AsyncData(user);
     return user;
   }
+
+  /// Ends the session.
+  ///
+  /// The local ledger is deleted rather than left behind. Keying the database
+  /// by account already makes it unreachable to anybody else who signs in
+  /// here — that is a correctness guarantee and it holds regardless — but a
+  /// shared device is a privacy question as well as a correctness one, and
+  /// "sign out" has to mean the next person cannot read what the last one
+  /// spent. It costs a re-sync on return, which is the cheap half of the
+  /// trade.
+  Future<void> signOut() async {
+    final auth = ref.read(authServiceProvider);
+    if (auth == null) return;
+
+    await forgetLocalLedger(ref.read(appDatabaseProvider));
+    await auth.signOut();
+    state = const AsyncData(null);
+  }
+}
+
+/// Whether anybody is signed in, for the router to redirect on.
+///
+/// Separate from [sessionControllerProvider] because a redirect has to answer
+/// synchronously: a router that waits on a future shows the wrong screen for a
+/// frame, which on the web is a visible flash of the welcome page for someone
+/// who is already signed in.
+@Riverpod(keepAlive: true)
+bool signedIn(Ref ref) {
+  final session = ref.watch(sessionControllerProvider);
+  return session.value != null;
 }
 
 /// Runs sync and reports what happened.
@@ -538,8 +542,10 @@ class SyncController extends _$SyncController {
     final engine = ref.read(syncEngineProvider);
     if (engine == null) return;
 
-    // Make sure a session exists first, or every push is refused by RLS.
-    await ref.read(sessionControllerProvider.future);
+    // Nothing to sync as nobody: every request would be refused by RLS. This
+    // is the ordinary state before somebody has chosen an account, not an
+    // error, so it returns quietly.
+    if (await ref.read(sessionControllerProvider.future) == null) return;
 
     state = await engine.syncGroup(groupId);
   }
@@ -554,7 +560,7 @@ class SyncController extends _$SyncController {
   Future<void> syncAll() async {
     final engine = ref.read(syncEngineProvider);
     if (engine == null) return;
-    await ref.read(sessionControllerProvider.future);
+    if (await ref.read(sessionControllerProvider.future) == null) return;
 
     for (final groupId in await engine.discoverGroups()) {
       state = await engine.syncGroup(groupId);
@@ -612,10 +618,13 @@ class AccountController extends _$AccountController {
   }
 
   Future<EmailFlow> sendEmailCode(String email) async {
-    final auth = _auth();
-    // There has to be a session to attach the address to.
-    await ref.read(sessionControllerProvider.future);
-    return auth.sendEmailCode(email);
+    // Deliberately does NOT establish a session first. With one, this attaches
+    // the address and keeps every group on the device; without one, it is a
+    // sign-in, or a sign-up for an address nobody has yet. Minting a guest
+    // account here would put the caller in the first case when they asked for
+    // the second, which is how somebody ends up owning an anonymous account
+    // they never wanted.
+    return _auth().sendEmailCode(email);
   }
 
   Future<IdentityOutcome> verifyEmailCode({
@@ -628,7 +637,7 @@ class AccountController extends _$AccountController {
       code: code,
       flow: flow,
     );
-    await _settle(outcome);
+    await _settle();
     return outcome;
   }
 
@@ -639,31 +648,23 @@ class AccountController extends _$AccountController {
     String? accessToken,
     bool allowSignIn = false,
   }) async {
-    await ref.read(sessionControllerProvider.future);
+    // No session established first, for the same reason as sendEmailCode.
     final outcome = await _auth().continueWithGoogle(
       idToken: idToken,
       accessToken: accessToken,
       allowSignIn: allowSignIn,
     );
-    await _settle(outcome);
+    await _settle();
     return outcome;
   }
 
   /// Brings the device into line with whatever just happened to the session.
-  Future<void> _settle(IdentityOutcome outcome) async {
-    if (!outcome.keptTheSession) {
-      await forgetLocalLedger(ref.read(appDatabaseProvider));
-      await ref
-          .read(localIdentityControllerProvider.notifier)
-          .clearPersonalDetails();
-    }
-
-    // Before the session is rebuilt, so SessionController sees an identity that
-    // already matches and does not try to repoint anything.
-    await ref
-        .read(localIdentityControllerProvider.notifier)
-        .adoptProfileId(outcome.account.id);
-
+  ///
+  /// Almost nothing, now. There is no ledger to wipe and no id to repoint:
+  /// the database is named after the account, so invalidating the session is
+  /// enough to close one account's file and open the other's. What is left is
+  /// asking the server what this account has.
+  Future<void> _settle() async {
     ref.invalidate(sessionControllerProvider);
     await ref.read(syncControllerProvider.notifier).syncAll();
   }
@@ -681,7 +682,7 @@ Future<void> groupSync(Ref ref, String groupId) async {
   final engine = ref.watch(syncEngineProvider);
   if (engine == null) return;
   try {
-    await ref.read(sessionControllerProvider.future);
+    if (await ref.read(sessionControllerProvider.future) == null) return;
     await engine.syncGroup(groupId);
   } catch (_) {
     // Offline is the normal case, not an error.
@@ -769,7 +770,7 @@ PushService pushService(Ref ref) {
       entries: ref.read(entryRepositoryProvider),
       groups: ref.read(groupRepositoryProvider),
       currencies: ref.read(currencyRepositoryProvider),
-      myProfileId: ref.read(localIdentityControllerProvider).profileId,
+      myProfileId: ref.read(currentAccountIdProvider),
       groupId: groupId,
       entryId: entryId,
     ),
@@ -785,7 +786,25 @@ PushService pushService(Ref ref) {
 /// outside the widget tree can navigate — specifically a notification tap,
 /// which arrives from the OS with no `BuildContext` anywhere in sight.
 @Riverpod(keepAlive: true)
-GoRouter router(Ref ref) => buildRouter();
+GoRouter router(Ref ref) {
+  // A Listenable, not a watched value. `ref.watch(signedInProvider)` here would
+  // rebuild this provider on every sign-in and hand MaterialApp.router a
+  // brand new GoRouter — which discards the navigation stack and, because the
+  // new router immediately re-evaluates its redirect, spins the tree. That is
+  // exactly what GoRouter's refreshListenable exists to avoid: one router for
+  // the life of the app, told when to reconsider.
+  final signedIn = ValueNotifier(ref.read(signedInProvider));
+  ref.onDispose(signedIn.dispose);
+  ref.listen(signedInProvider, (_, next) => signedIn.value = next);
+
+  return buildRouter(
+    // Read through a callback rather than captured once: the router outlives
+    // every session, and a bool frozen at construction would send a signed-in
+    // user to the welcome screen forever.
+    isSignedIn: () => ref.read(signedInProvider),
+    refresh: signedIn,
+  );
+}
 
 /// Sends this device's token to the server.
 ///

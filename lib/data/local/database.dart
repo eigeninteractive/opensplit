@@ -34,13 +34,21 @@ part 'database.g.dart';
     Entries,
     EntryPayers,
     EntryShares,
+    EntryEvents,
     FxRates,
     Outbox,
     SyncCursors,
   ],
 )
 class AppDatabase extends _$AppDatabase {
-  AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
+  /// Opens the ledger belonging to [accountId].
+  ///
+  /// The executor is injectable so tests can use an in-memory database, and so
+  /// the push background isolate can open the same file the app uses.
+  AppDatabase.forAccount(String accountId)
+    : super(openAccountDatabase(accountId));
+
+  AppDatabase(super.executor);
 
   @override
   int get schemaVersion => 1;
@@ -177,8 +185,21 @@ class AppDatabase extends _$AppDatabase {
   }
 }
 
-QueryExecutor _openConnection() => driftDatabase(
-  name: 'opensplit',
+/// One database file per account, named after it.
+///
+/// The alternative — a single file, repointed and wiped when the account
+/// changes — worked only for as long as every path remembered to wipe it, and
+/// the cost of forgetting was one person's expenses showing up under somebody
+/// else's account on a shared device. Keying the file makes that impossible
+/// rather than merely unlikely: a session that is not [accountId] cannot open
+/// this data at all, whatever any calling code believes.
+///
+/// It also makes switching non-destructive, which is why the wipe is no longer
+/// load-bearing anywhere. What it costs is that reference data — currencies,
+/// categories, exchange rates — is per file and re-pulled after a switch. That
+/// is a few hundred rows on an event that happens approximately never.
+QueryExecutor openAccountDatabase(String accountId) => driftDatabase(
+  name: 'opensplit-$accountId',
   web: DriftWebOptions(
     sqlite3Wasm: Uri.parse('sqlite3.wasm'),
     driftWorker: Uri.parse('drift_worker.js'),
