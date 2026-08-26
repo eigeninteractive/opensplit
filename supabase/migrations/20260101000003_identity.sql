@@ -115,3 +115,87 @@ comment on function cleanup_abandoned_anonymous_users is
   'skips anyone who belongs to a group, however old the account is.';
 
 alter table profiles enable row level security;
+
+-- ---------------------------------------------------------------------------
+-- Deleting an account.
+--
+-- Required by Play policy for any app that lets people create an account, and
+-- required in-app rather than only by email. It is also the harder half of the
+-- promise this app makes about your data, so it is worth being exact about
+-- what it does and does not remove.
+--
+-- It does NOT remove other people's ledgers. Money you paid, money you owe and
+-- the settlements between you are facts about *their* group as much as yours,
+-- and erasing your side of them would leave everybody else's balances wrong
+-- with nothing to explain it. What happens instead is the thing this schema was
+-- built for: `members.profile_id` is `on delete set null`, and null means
+-- placeholder — so deleting the profile demotes every membership to exactly the
+-- state of somebody a friend added who never signed up. The name stays,
+-- because it is the name your co-members recorded and read their own history
+-- by; the account behind it is gone.
+--
+-- A group where you were the only account holder is different: nobody left can
+-- ever read it again, because every read policy goes through a member row with
+-- a profile. Leaving it would mean holding your expense descriptions forever in
+-- a group with no living reader, which is the opposite of what was asked for.
+-- Those are deleted outright.
+--
+-- Entries go before invites, members and the group itself, and that ordering is
+-- load-bearing twice over: entries cascade to their payers and shares, so the
+-- deferred balance trigger never sees a parent without children; and
+-- guard_group_delete refuses to drop a group that still has expenses, which by
+-- then it does not.
+create or replace function delete_account()
+returns void
+language plpgsql
+security definer
+set search_path = public, auth
+as $$
+declare
+  v_uid     uuid := auth.uid();
+  v_orphans uuid[];
+begin
+  if v_uid is null then
+    raise exception 'There is no account signed in to delete.'
+      using errcode = '42501';
+  end if;
+
+  -- Groups this account belongs to that no other account belongs to.
+  -- Placeholders do not count: nobody can sign in as one.
+  select coalesce(array_agg(g.id), '{}')
+    into v_orphans
+    from groups g
+   where exists (
+           select 1 from members m
+            where m.group_id = g.id and m.profile_id = v_uid)
+     and not exists (
+           select 1 from members m
+            where m.group_id = g.id
+              and m.profile_id is not null
+              and m.profile_id <> v_uid);
+
+  delete from entries where group_id = any(v_orphans);
+  delete from invites where group_id = any(v_orphans);
+  delete from members where group_id = any(v_orphans);
+  delete from groups  where id       = any(v_orphans);
+
+  -- Invites reference profiles with no ON DELETE action of their own, so they
+  -- hold the profile row hostage. An invite this account minted is spent or
+  -- worthless either way; one it redeemed only records who redeemed it.
+  delete from invites where created_by = v_uid;
+  update invites set redeemed_by = null where redeemed_by = v_uid;
+
+  delete from device_tokens where profile_id = v_uid;
+
+  -- profiles cascades from auth.users, and members.profile_id sets null from
+  -- profiles. Deleting the user is therefore what demotes every remaining
+  -- membership to a placeholder.
+  delete from auth.users where id = v_uid;
+end;
+$$;
+
+comment on function delete_account is
+  'Deletes the calling account: its profile, identities, sessions and push '
+  'registrations, plus any group nobody else could still read. Memberships '
+  'elsewhere become placeholders, so co-members'' balances and history are '
+  'unchanged.';

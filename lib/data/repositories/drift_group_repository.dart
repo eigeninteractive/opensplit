@@ -315,6 +315,40 @@ final class DriftGroupRepository {
     await outbox?.enqueue(OutboxTarget.member, memberId);
   }
 
+  /// How this account's groups would fare if the account were deleted.
+  ///
+  /// `solo` counts groups where nobody else has an account. Placeholders do not
+  /// count, because nobody can sign in as one — those groups become unreadable
+  /// by anyone the moment the last profile goes, so the server deletes them
+  /// outright and this is what warns about it first.
+  ///
+  /// One query rather than one per group: a person's whole membership list is
+  /// a few dozen rows at most, and the alternative is N round trips to answer
+  /// a question asked once, inside a confirmation dialog.
+  Future<({int solo, int shared})> membershipBreakdown(String profileId) async {
+    final rows = await _db.select(_db.members).get();
+
+    final byGroup = <String, List<MemberRow>>{};
+    for (final row in rows) {
+      byGroup.putIfAbsent(row.groupId, () => []).add(row);
+    }
+
+    var solo = 0;
+    var shared = 0;
+    for (final members in byGroup.values) {
+      if (!members.any((m) => m.profileId == profileId)) continue;
+      final others = members.any(
+        (m) => m.profileId != null && m.profileId != profileId,
+      );
+      if (others) {
+        shared++;
+      } else {
+        solo++;
+      }
+    }
+    return (solo: solo, shared: shared);
+  }
+
   Future<void> setArchived(String groupId, {required bool archived}) async {
     await (_db.update(_db.groups)..where((t) => t.id.equals(groupId))).write(
       GroupsCompanion(

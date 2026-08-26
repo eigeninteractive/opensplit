@@ -12,6 +12,7 @@ import 'package:opensplit/config.dart';
 /// instead of the app — silently, on other people's phones, long after the
 /// change that caused it.
 void main() {
+  group('legal pages', _legalPages);
   late final String manifest;
 
   setUpAll(() {
@@ -49,4 +50,60 @@ void main() {
     // makes the app one option in a chooser rather than the handler.
     expect(manifest, contains('android:autoVerify="true"'));
   });
+}
+
+/// The pages the store listing points at, and the app links out to.
+///
+/// Three things have to agree and none of them reads the others: the URL
+/// submitted to Play Console, the getter the Settings screen launches, and a
+/// file that actually exists in `web/`. A rename breaks the middle one
+/// silently — the link opens, the SPA's catch-all rewrite serves the app
+/// shell, and a Play reviewer sees a loading spinner where a privacy policy
+/// should be.
+void _legalPages() {
+  for (final (name, url) in [
+    ('privacy', privacyPolicyUrl),
+    ('terms', termsUrl),
+    ('delete-account', deleteAccountUrl),
+  ]) {
+    test('$name is served from the link host', () {
+      expect(url, 'https://$linkHost/$name');
+    });
+
+    test('$name is a real file, not a route', () {
+      expect(
+        File('web/$name/index.html').existsSync(),
+        isTrue,
+        reason:
+            'web/$name/index.html must exist: flutter build web copies web/ '
+            'verbatim, and Firebase Hosting serves a real file before it '
+            'applies the single-page-app rewrite',
+      );
+    });
+  }
+
+  test(
+    'none of them is still carrying a placeholder',
+    () {
+      // These pages ship with an address and a jurisdiction nobody has filled
+      // in yet, marked with a red box on the page itself. Publishing one in that
+      // state gives Play a policy that tells people to write to nobody.
+      for (final name in ['privacy', 'terms', 'delete-account']) {
+        final page = File('web/$name/index.html').readAsStringSync();
+        expect(
+          page,
+          isNot(contains('[contact email]')),
+          reason: 'web/$name/index.html still has an unfilled contact address',
+        );
+        expect(
+          page,
+          isNot(contains('[jurisdiction]')),
+          reason: 'web/$name/index.html still has an unfilled jurisdiction',
+        );
+      }
+    },
+    skip:
+        'Fill in the contact address and jurisdiction, then remove this '
+        'skip — it is what stops the placeholders reaching Play.',
+  );
 }

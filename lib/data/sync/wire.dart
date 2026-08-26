@@ -93,7 +93,9 @@ Map<String, dynamic> groupToJson(Group group) => {
   'default_currency': group.defaultCurrency,
   'is_direct': group.isDirect,
   'simplify_debts': group.simplifyDebts,
-  'created_by': group.createdBy,
+  // Empty means "no account", which the server spells as null — a group whose
+  // creator has deleted their account keeps existing without one.
+  'created_by': group.createdBy.isEmpty ? null : group.createdBy,
   'created_at': group.createdAt.toUtc().toIso8601String(),
   'archived_at': group.archivedAt?.toUtc().toIso8601String(),
   // updated_at is deliberately absent. The server stamps it with now() on
@@ -107,7 +109,7 @@ Group groupFromJson(Map<String, dynamic> json) => Group(
   defaultCurrency: json['default_currency'] as String,
   isDirect: (json['is_direct'] as bool?) ?? false,
   simplifyDebts: (json['simplify_debts'] as bool?) ?? true,
-  createdBy: json['created_by'] as String,
+  createdBy: (json['created_by'] as String?) ?? '',
   createdAt: DateTime.parse(json['created_at'] as String),
   archivedAt: _parseOrNull(json['archived_at']),
   updatedAt: _parseOrNull(json['updated_at']),

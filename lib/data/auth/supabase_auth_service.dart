@@ -204,4 +204,14 @@ final class SupabaseAuthService implements AuthService {
 
   @override
   Future<void> signOut() => _client.auth.signOut();
+
+  @override
+  Future<void> deleteAccount() async {
+    // An RPC rather than the admin API. Deleting a user through GoTrue needs
+    // the service-role key, which cannot be in a client — so the capability
+    // lives in the database as a SECURITY DEFINER function that takes no
+    // arguments and reads auth.uid() itself. There is no parameter to point at
+    // somebody else's account.
+    await _client.rpc<void>('delete_account');
+  }
 }

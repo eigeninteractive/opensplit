@@ -16,6 +16,8 @@ import '../data/repositories/drift_activity_repository.dart';
 import '../data/repositories/drift_profile_repository.dart';
 import '../data/auth/supabase_auth_service.dart';
 import '../data/local/local_reset.dart';
+import '../data/platform/app_update_service.dart';
+import '../data/platform/review_prompt.dart';
 import '../data/push/push_service.dart';
 import '../data/sync/outbox_queue.dart';
 import '../data/sync/remote_ledger_api.dart';
@@ -513,6 +515,27 @@ class SessionController extends _$SessionController {
     await auth.signOut();
     state = const AsyncData(null);
   }
+
+  /// Deletes the account, then leaves the device as a sign-out would.
+  ///
+  /// The server call goes first and is not caught. If it fails there is nothing
+  /// to clean up locally and the account still exists, so wiping the device
+  /// would destroy the only copy of data the server still holds under an
+  /// account the user believes is gone — the one outcome worse than the delete
+  /// simply not working.
+  ///
+  /// It also has to happen while the session is still valid: the RPC is
+  /// authorised by `auth.uid()`, so signing out first would leave nothing to
+  /// identify the account by.
+  Future<void> deleteAccount() async {
+    final auth = ref.read(authServiceProvider);
+    if (auth == null) return;
+
+    await auth.deleteAccount();
+    await forgetLocalLedger(ref.read(appDatabaseProvider));
+    await auth.signOut();
+    state = const AsyncData(null);
+  }
 }
 
 /// Whether anybody is signed in, for the router to redirect on.
@@ -703,6 +726,19 @@ Future<void> groupSync(Ref ref, String groupId) async {
 Stream<int> totalEntryCount(Ref ref) =>
     ref.watch(entryRepositoryProvider).watchTotalCount();
 
+/// What deleting this account would take with it, for the dialog that asks.
+///
+/// "You will lose your data" is ignorable. "The 2 groups only you have an
+/// account in will be deleted" is not, and it is the half people get wrong —
+/// the assumption is that leaving a shared group erases your side of it, when
+/// in fact that side is your co-members' record too and stays exactly as it is.
+@riverpod
+Future<({int solo, int shared})> deletionImpact(Ref ref) async {
+  final accountId = ref.watch(currentAccountIdProvider);
+  if (accountId == null) return (solo: 0, shared: 0);
+  return ref.watch(groupRepositoryProvider).membershipBreakdown(accountId);
+}
+
 @Riverpod(keepAlive: true)
 DriftCategoryRepository categoryRepository(Ref ref) =>
     DriftCategoryRepository(ref.watch(appDatabaseProvider));
@@ -751,6 +787,15 @@ Stream<List<Entry>> analyticsResults(Ref ref, String groupId) => ref
 @riverpod
 Stream<List<String>> groupCurrencies(Ref ref, String groupId) =>
     ref.watch(analyticsRepositoryProvider).currenciesUsed(groupId);
+
+/// Play's own update flow, and nothing anywhere else.
+@Riverpod(keepAlive: true)
+AppUpdateService appUpdateService(Ref ref) => const AppUpdateService();
+
+/// Asking for a store review, rarely and unconditionally.
+@Riverpod(keepAlive: true)
+ReviewPrompt reviewPrompt(Ref ref) =>
+    ReviewPrompt(ref.watch(sharedPreferencesProvider));
 
 /// Push, wired to sync first and describe second.
 ///

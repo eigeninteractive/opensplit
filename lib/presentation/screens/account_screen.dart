@@ -33,6 +33,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   /// build would fight whoever is typing.
   bool _seeded = false;
   bool _saving = false;
+  bool _deleting = false;
   String? _vpaError;
 
   @override
@@ -98,6 +99,83 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     );
     if (!(confirmed ?? false)) return;
     await ref.read(sessionControllerProvider.notifier).signOut();
+  }
+
+  /// Deletes the account, after saying precisely what that costs.
+  ///
+  /// Two steps rather than one, and the second names numbers. Play requires
+  /// this to be reachable in the app rather than only by email, which means it
+  /// sits a few taps from a screen people open to change their name — so the
+  /// only protection against a mis-tap is a dialog nobody could confirm by
+  /// accident.
+  Future<void> _deleteAccount() async {
+    final impact = await ref.read(deletionImpactProvider.future);
+    if (!mounted) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete your account?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('This cannot be undone.'),
+            const SizedBox(height: 16),
+            if (impact.solo > 0)
+              _Bullet(
+                '${impact.solo} ${impact.solo == 1 ? 'group' : 'groups'} '
+                'nobody else has an account in will be deleted outright, '
+                'along with every expense in '
+                '${impact.solo == 1 ? 'it' : 'them'}.',
+              ),
+            if (impact.shared > 0)
+              _Bullet(
+                'In ${impact.shared} shared '
+                '${impact.shared == 1 ? 'group' : 'groups'}, what you paid '
+                'and what you owe stays, under your name. It is your '
+                "co-members' record of their own money as much as yours, and "
+                'removing it would leave their balances wrong.',
+              ),
+            const _Bullet(
+              'Your account, your sign-in and your notifications go for good. '
+              'There is no way to sign back in.',
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep my account'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete for good'),
+          ),
+        ],
+      ),
+    );
+    if (!(confirmed ?? false) || !mounted) return;
+
+    setState(() => _deleting = true);
+    try {
+      await ref.read(sessionControllerProvider.notifier).deleteAccount();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _deleting = false);
+      // Said out loud rather than swallowed. A delete that silently failed
+      // would leave somebody believing their account is gone when it is not.
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not delete your account. $error'),
+          duration: const Duration(seconds: 8),
+        ),
+      );
+    }
   }
 
   @override
@@ -182,10 +260,52 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                 isThreeLine: account.isAnonymous,
                 onTap: _signOut,
               ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  Icons.delete_forever_outlined,
+                  color: theme.colorScheme.error,
+                ),
+                title: Text(
+                  'Delete account',
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
+                subtitle: const Text(
+                  'Removes your account and everything only you can see. '
+                  'Permanent.',
+                ),
+                trailing: _deleting
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : null,
+                onTap: _deleting ? null : _deleteAccount,
+              ),
             ],
           ],
         ),
       ),
     );
   }
+}
+
+/// A dash and a line of text, for a dialog that has to list consequences.
+class _Bullet extends StatelessWidget {
+  const _Bullet(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('\u2014  '),
+        Expanded(child: Text(text)),
+      ],
+    ),
+  );
 }

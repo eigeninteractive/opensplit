@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<!--
+  A real static file, deliberately.
+
+  Firebase Hosting serves files before rewrites, so this survives the SPA
+  catch-all in firebase.json the same way .well-known/assetlinks.json does.
+  Making it a Flutter route instead would mean a Play reviewer downloads
+  several megabytes of engine to read a policy, and the text would never
+  appear in the HTML at all.
+
+  `flutter build web` copies web/ verbatim, so this lands in build/web/.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy · OpenSplit</title>
+<meta name="description" content="What OpenSplit collects, where it goes, and how to delete it.">
+<style>
+    :root {
+      --surface: #fcf8ff;
+      --on-surface: #1c1b21;
+      --on-surface-variant: #47464f;
+      --outline-variant: #c8c5d0;
+      --primary: #5b5891;
+      --surface-container: #f0ecf4;
+      --error-container: #ffdad6;
+      --on-error-container: #410002;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --surface: #131318;
+        --on-surface: #e5e1e9;
+        --on-surface-variant: #c8c5d0;
+        --outline-variant: #47464f;
+        --primary: #c4c0ff;
+        --surface-container: #201f25;
+        --error-container: #93000a;
+        --on-error-container: #ffdad6;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0 auto;
+      padding: 48px 24px 96px;
+      max-width: 720px;
+      background: var(--surface);
+      color: var(--on-surface);
+      font: 400 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    header { display: flex; align-items: center; gap: 10px; margin-bottom: 40px; }
+    header svg { width: 32px; height: 32px; color: var(--primary); flex: none; }
+    header a { color: inherit; text-decoration: none; font-size: 20px; font-weight: 600; }
+    h1 { font-size: 32px; line-height: 1.2; margin: 0 0 8px; }
+    h2 { font-size: 20px; line-height: 1.3; margin: 40px 0 12px; }
+    h3 { font-size: 16px; margin: 24px 0 8px; }
+    .updated { color: var(--on-surface-variant); font-size: 14px; margin: 0 0 32px; }
+    p, li { color: var(--on-surface); }
+    ul { padding-left: 20px; }
+    li { margin-bottom: 8px; }
+    a { color: var(--primary); }
+    strong { font-weight: 600; }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.9em; background: var(--surface-container);
+      padding: 1px 5px; border-radius: 4px;
+    }
+    .note {
+      background: var(--surface-container);
+      border-left: 3px solid var(--primary);
+      padding: 16px 20px; border-radius: 0 8px 8px 0; margin: 24px 0;
+    }
+    .note p:first-child { margin-top: 0; }
+    .note p:last-child { margin-bottom: 0; }
+    .todo {
+      background: var(--error-container); color: var(--on-error-container);
+      padding: 16px 20px; border-radius: 8px; margin: 24px 0; font-weight: 600;
+    }
+    footer {
+      margin-top: 64px; padding-top: 24px;
+      border-top: 1px solid var(--outline-variant);
+      color: var(--on-surface-variant); font-size: 14px;
+    }
+    footer a { margin-right: 16px; }
+</style>
+</head>
+<body>
+<header><svg viewBox="0 0 48 48" aria-hidden="true"><mask id="slash"><rect width="48" height="48" fill="#fff"></rect><rect x="20.75" y="-4" width="6.5" height="56" fill="#000" transform="rotate(24 24 24)"></rect></mask><circle cx="24" cy="24" r="17" fill="none" stroke="currentColor" stroke-width="6.5" mask="url(#slash)"></circle></svg><a href="/">OpenSplit</a></header>
+
+<h1>Privacy Policy</h1>
+<p class="updated">Last updated 26 August 2026</p>
+
+<p>OpenSplit is an expense splitter. It exists to answer one question — who owes
+whom — and it collects what it needs to answer that, and nothing else. There is
+no analytics SDK in the app, no advertising identifier, no crash reporting, no
+location access and no access to your contacts. We do not sell anything to
+anybody.</p>
+
+<div class="todo">
+Before publishing: replace every <code>[contact email]</code> below with a real
+address you monitor, and delete this box.
+</div>
+
+<h2>What we collect</h2>
+
+<h3>Your account</h3>
+<ul>
+<li><strong>Email address</strong>, if you sign in with email or with Google.</li>
+<li><strong>A Google account identifier</strong>, if you sign in with Google. We
+never receive your Google password.</li>
+<li>Nothing at all if you use OpenSplit as a guest. A guest account has no
+email and no way to sign in from anywhere else.</li>
+</ul>
+
+<h3>Your profile</h3>
+<ul>
+<li><strong>A display name</strong> — the one people in your groups see.</li>
+<li><strong>A UPI ID</strong>, if you choose to add one, so people in your
+groups can open their own payment app to pay you. OpenSplit never handles,
+holds, moves or processes money, and is not a payment service.</li>
+</ul>
+
+<h3>Your groups and expenses</h3>
+<ul>
+<li>Group names, and the names you type for people who do not have the app.</li>
+<li>Expenses: description, amount, currency, date, category, any notes you add,
+and who paid and who owes what.</li>
+<li>A record of changes to an expense — what was edited, by which member of the
+group, and when — so a group can see how a figure came to be what it is.</li>
+<li>Invite links you create: which group and member slot they are for, who
+created them, and who redeemed them.</li>
+</ul>
+
+<h3>Notifications</h3>
+<ul>
+<li>A <strong>Firebase Cloud Messaging registration token</strong> and whether
+this device is Android or the web, and only if you turn notifications on. The
+messages we send carry identifiers, not amounts: your device fetches the detail
+and writes the notification text itself.</li>
+</ul>
+
+<h2>What stays on your device</h2>
+<p>OpenSplit is local-first. The complete record of your groups and expenses is
+stored on your device in a local database, and every balance, search and chart
+is computed there. The app is fully usable with no connection at all, and the
+server is never asked to compute anything.</p>
+<p>If you use OpenSplit as a guest, your data never leaves your device — which
+also means nothing can be recovered if you lose it, reinstall, or clear your
+browser data. The app says so, more than once, before you have anything to
+lose.</p>
+
+<h2>Who can see what</h2>
+<p>Access is enforced in the database itself, by row-level security, rather than
+by the app asking politely.</p>
+<ul>
+<li>People who share a group with you can see your display name, your UPI ID if
+you set one, and the expenses in that group.</li>
+<li>Nobody can read a group they are not a member of.</li>
+<li>Somebody holding an invite link can see the group's name, the member slot
+the link is for, who sent it, and how many people are in it — before deciding
+whether to join. Nothing else.</li>
+</ul>
+
+<h2>Who we share it with</h2>
+<p>We do not sell your data and we do not share it for advertising. It is
+processed on our behalf by:</p>
+<ul>
+<li><strong>Supabase</strong> — database, authentication and hosting for the
+server.</li>
+<li><strong>Google Firebase</strong> — Cloud Messaging for notifications, and
+Hosting for the web app.</li>
+<li><strong>Google Sign-In</strong> — only if you choose to sign in that way.</li>
+</ul>
+<p>We may also disclose data if the law genuinely requires it.</p>
+
+<h2>How long we keep it</h2>
+<ul>
+<li>Your account and its data are kept until you delete them.</li>
+<li>A group with no activity for <strong>three months</strong> is archived. This
+changes nothing about it — it still opens, still adds up, and adding an expense
+brings it back — it simply moves out of your main list.</li>
+<li>An archived group in which every balance has been settled to zero, and which
+has had no activity for <strong>a year</strong>, is deleted. A group with money
+still outstanding is never deleted automatically, however old it is.</li>
+<li>A guest account that never joined a group and was never used again is
+deleted after <strong>30 days</strong>.</li>
+</ul>
+
+<h2>Deleting your account</h2>
+<p>You can delete your account from inside the app: <strong>Account →
+Delete account</strong>. There is no waiting period and no email to send.</p>
+<p>What that removes: your account, your sign-in identities, your profile, your
+push registrations, and every group that nobody else has an account in — along
+with every expense in those groups.</p>
+<p>What it deliberately does <em>not</em> remove: your side of a shared group.
+What you paid and what you owe stays, under your name. That record belongs to
+your co-members as much as to you — it is how their own balances add up — and
+erasing it would leave their figures wrong with nothing to explain it. The
+account behind the name is gone; nobody can sign in as you, and you no longer
+appear as a person with an account.</p>
+<p>If you cannot reach the app, see <a href="/delete-account">Delete your
+account</a>.</p>
+
+<h2>Security</h2>
+<p>Everything between the app and the server travels over HTTPS. Access to your
+rows is decided by the database, per row, on every read and write. The key the
+app ships with authorises nothing on its own.</p>
+
+<h2>Children</h2>
+<p>OpenSplit is not directed at children under 13, and we do not knowingly
+collect data from them.</p>
+
+<h2>Your rights</h2>
+<p>You can see and edit your profile in the app at any time, export a group's
+full data as CSV or JSON from the group's own screen, and delete your account
+as described above. For anything else — including a copy of what we hold or a
+correction — write to <code>[contact email]</code>.</p>
+
+<h2>Changes</h2>
+<p>If this policy changes materially we will update the date at the top and say
+so in the app before the change takes effect.</p>
+
+<h2>Contact</h2>
+<p><code>[contact email]</code></p>
+
+<footer><a href="/">OpenSplit</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/delete-account">Delete your account</a></footer>
+</body>
+</html>

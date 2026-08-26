@@ -39,6 +39,8 @@ dependencies:
   google_fonts: ^8.2.1
   web: ^1.1.1
   flutter_svg: ^2.3.0
+  in_app_update: ^5.0.0
+  in_app_review: ^2.0.12
 dev_dependencies:
   flutter_test:
     sdk: flutter

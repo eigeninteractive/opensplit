@@ -6,6 +6,8 @@ import '../../application/providers.dart';
 import '../../config.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:url_launcher/url_launcher.dart';
+
 import '../dynamic_colors.dart';
 import '../theme_mode.dart';
 
@@ -57,6 +59,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 'analytics SDK is present in this app.',
               ),
               isThreeLine: true,
+            ),
+            const Divider(height: 48),
+            _LegalLink(
+              icon: Icons.privacy_tip_outlined,
+              title: 'Privacy policy',
+              url: privacyPolicyUrl,
+            ),
+            _LegalLink(
+              icon: Icons.gavel_outlined,
+              title: 'Terms of service',
+              url: termsUrl,
             ),
           ],
         ),
@@ -177,6 +190,42 @@ class _AppearanceSetting extends ConsumerWidget {
       ],
     );
   }
+}
+
+/// A link out to one of the pages the store listing also points at.
+///
+/// Opens the real page rather than rendering the text in the app. There is one
+/// copy of a policy, it is the copy Google Play was given, and it can be
+/// corrected without shipping a build — which matters most for exactly the
+/// documents that have to stay accurate.
+class _LegalLink extends StatelessWidget {
+  const _LegalLink({
+    required this.icon,
+    required this.title,
+    required this.url,
+  });
+
+  final IconData icon;
+  final String title;
+  final String url;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    contentPadding: EdgeInsets.zero,
+    leading: Icon(icon),
+    title: Text(title),
+    trailing: const Icon(Icons.open_in_new, size: 18),
+    onTap: () async {
+      final messenger = ScaffoldMessenger.of(context);
+      final opened = await launchUrl(
+        Uri.parse(url),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!opened) {
+        messenger.showSnackBar(SnackBar(content: Text('Could not open $url')));
+      }
+    },
+  );
 }
 
 /// Whether the app takes its colours from the wallpaper, and whether it can.

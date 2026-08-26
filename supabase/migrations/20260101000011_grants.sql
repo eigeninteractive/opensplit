@@ -135,3 +135,8 @@ revoke execute on function archive_dormant_groups(interval)
   from public, anon, authenticated;
 revoke execute on function purge_settled_dormant_groups(interval)
   from public, anon, authenticated;
+
+-- Deleting your own account, and nobody else's. It takes no arguments and
+-- reads auth.uid() itself, which is what makes it safe to expose: there is no
+-- parameter to point at somebody else.
+grant execute on function delete_account() to authenticated;

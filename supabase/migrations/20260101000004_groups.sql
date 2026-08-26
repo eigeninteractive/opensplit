@@ -20,7 +20,16 @@ create table groups (
   -- the entire balance and settlement path.
   is_direct        boolean not null default false,
   simplify_debts   boolean not null default true,
-  created_by       uuid not null references profiles(id),
+  -- Nullable, and set null rather than restricting: a group outlives the
+  -- account that made it. Somebody deleting their account must not be blocked
+  -- by, or take down, a group four other people are still using — so the
+  -- honest state is "created by an account that no longer exists".
+  --
+  -- Only ever an escape hatch for the instant between creating a group and the
+  -- creator's own member row landing; see the groups_read and groups_update
+  -- policies. Null simply never matches auth.uid(), so it degrades to
+  -- membership, which is the check that actually matters.
+  created_by       uuid references profiles(id) on delete set null,
   created_at       timestamptz not null default now(),
   archived_at      timestamptz,
   updated_at       timestamptz not null default now()

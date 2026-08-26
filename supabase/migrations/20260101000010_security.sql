@@ -144,8 +144,20 @@ begin
   -- The invite claim, and nothing else. null -> yourself is redeem_invite
   -- doing its one job. Every other transition either hands your place to
   -- somebody else or takes somebody's away.
+  --
+  -- With one exception, and it is not a loophole: the cascade from a deleted
+  -- profile. `members.profile_id` is ON DELETE SET NULL, which is what turns a
+  -- membership back into a placeholder when its account is deleted — see
+  -- delete_account(). That arrives here as claimed -> null and is otherwise
+  -- indistinguishable from somebody trying to unclaim a member out from under
+  -- them, so it is told apart by the one thing only the real case can be true
+  -- of: the account is already gone.
   if new.profile_id is distinct from old.profile_id
-     and not (old.profile_id is null and new.profile_id = auth.uid()) then
+     and not (old.profile_id is null and new.profile_id = auth.uid())
+     and not (
+       new.profile_id is null
+       and not exists (select 1 from profiles where id = old.profile_id)
+     ) then
     raise exception
       'A member''s account can only be claimed, never reassigned'
       using errcode = 'insufficient_privilege';

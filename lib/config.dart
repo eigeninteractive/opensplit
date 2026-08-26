@@ -46,6 +46,21 @@ const String linkHost = String.fromEnvironment(
   defaultValue: 'opensplit.web.app',
 );
 
+/// The public policy pages, served from the same host as the web app.
+///
+/// Static HTML in `web/privacy/`, `web/terms/` and `web/delete-account/`,
+/// deliberately not Flutter routes: Google Play needs the privacy policy and
+/// the data-deletion page to be readable by a reviewer, a crawler and somebody
+/// who has already uninstalled the app, and a Flutter route is none of those.
+/// Firebase Hosting serves real files before rewrites, so they survive the
+/// single-page-app catch-all.
+///
+/// These are the exact URLs submitted to Play Console under *App content*, so
+/// the app and the store listing point at one page rather than two copies.
+String get privacyPolicyUrl => 'https://$linkHost/privacy';
+String get termsUrl => 'https://$linkHost/terms';
+String get deleteAccountUrl => 'https://$linkHost/delete-account';
+
 /// Whether a backend is configured at all.
 ///
 /// The app is fully usable without one — everything is computed locally — so

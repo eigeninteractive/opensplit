@@ -176,4 +176,18 @@ abstract interface class AuthService {
   });
 
   Future<void> signOut();
+
+  /// Deletes this account on the server, permanently.
+  ///
+  /// Not the same as [signOut] and not recoverable. The server drops the
+  /// account, its profile, its sign-in identities and its push registrations,
+  /// and deletes outright any group nobody else could ever read again.
+  /// Memberships in shared groups become placeholders with the name intact, so
+  /// co-members' balances and history are exactly as they were — the other
+  /// side of a shared ledger is their record as much as it is this account's.
+  ///
+  /// Leaves the session alone. The caller decides what to do with the device,
+  /// because wiping local storage and signing out is the same work sign-out
+  /// already does.
+  Future<void> deleteAccount();
 }

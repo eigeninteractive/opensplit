@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -237,6 +239,14 @@ class _SettleUpScreenState extends ConsumerState<SettleUpScreen> {
 
       if (!mounted) return;
       goBack(context, '/g/${widget.groupId}');
+
+      // The one place the app asks for a review: a debt has just been cleared,
+      // which is the app finishing the thing it exists to do. Deliberately
+      // after the navigation and deliberately not awaited — nothing here waits
+      // on it, and nothing about the settlement depends on the outcome, which
+      // Play's quota means is usually "nothing was shown" anyway.
+      final review = ref.read(reviewPromptProvider);
+      unawaited(review.isDue().then((due) => due ? review.ask() : null));
     } catch (error) {
       if (!mounted) return;
       setState(() => _amountError = '$error');
