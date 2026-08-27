@@ -197,7 +197,37 @@ EntryEvent entryEventFromJson(Map<String, dynamic> json) => EntryEvent(
   changes: changesFromJson(json['changes']),
 );
 
-/// Turns the trigger's diff object into a flat list.
+/// One activity event, as the server's columns.
+///
+/// The id is the client's and the clock is the server's, and the split is
+/// deliberate — it is the same one `entries` uses.
+///
+/// The id has to come from here: this device wrote the row locally before it
+/// had any way to ask, and a server-assigned id would make every push produce a
+/// second copy of an event already on screen. Choosing it here makes a retry
+/// provably the same row.
+///
+/// `created_at` must not. The activity pull is cursored on it, so a device
+/// whose clock runs fast would stamp an event in the future, and every other
+/// device would advance its cursor past it and silently skip everything
+/// recorded in between — by anyone. Left out, the column takes the server's
+/// `clock_timestamp()`, and the push adopts that value back onto the local row
+/// so the two agree and every member reads the feed in one order.
+Map<String, dynamic> entryEventToJson(EntryEvent event) => {
+  'id': event.id,
+  'entry_id': event.entryId,
+  'group_id': event.groupId,
+  'actor_id': event.actorId,
+  'kind': event.kind.name,
+  'changes': event.changes.isEmpty
+      ? null
+      : {
+          for (final change in event.changes)
+            change.field: {'from': change.from, 'to': change.to},
+        },
+};
+
+/// Turns the stored diff object into a flat list.
 ///
 /// Shaped `{"amount_minor": {"from": 40000, "to": 30000}}` on the wire, which
 /// is convenient for Postgres to build and awkward to render. Unknown keys are

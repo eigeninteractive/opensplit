@@ -335,20 +335,48 @@ create policy entries_update on entries
 -- ----------------------------------------------------------------------------
 -- The activity log.
 --
--- Readable by the group, writable by nobody at all.
+-- Readable by the group, appendable in your own name, revisable by nobody.
 --
--- There is deliberately no insert policy, which is what stops a client writing
--- its own history through PostgREST — and it is also why the log is not written
--- from inside upsert_entry, which runs as the caller and would be refused here
--- like anyone else. The single writer is record_entry_event, a SECURITY DEFINER
--- trigger on entries.
+-- The insert policy replaced a SECURITY DEFINER trigger on `entries` — see the
+-- long note where that trigger used to be. The short version: the device is
+-- what authors an expense in this app, so it is also what describes the change;
+-- writing history only on the server meant a device with no connection had none
+-- at all, which is the one screen that must work offline if any does.
 --
--- No update or delete policy either, and that is the point of an audit trail:
--- being able to quietly rewrite the record of an edit would defeat the entire
--- reason the record exists.
+-- Three conditions, and together they are what the trigger actually enforced:
+--
+--   * `actor_id` must be the caller's own live member row in this group, so an
+--     event cannot be attributed to somebody else — not to a co-member, and not
+--     to a placeholder;
+--   * `group_id` must be a group the caller belongs to, which `is_group_member`
+--     on the actor lookup already establishes;
+--   * the entry must genuinely live in that group, so a feed line cannot be
+--     filed against a group its expense is not in and be read by people with no
+--     access to it.
+--
+-- No update or delete policy, and that is unchanged and is the point of an
+-- audit trail: appending a correction is history, quietly rewriting the record
+-- of an edit is not. Nothing here lets a client take a line back.
 -- ----------------------------------------------------------------------------
 create policy entry_events_read on entry_events
   for select to authenticated using (is_group_member(group_id));
+
+create policy entry_events_insert on entry_events
+  for insert to authenticated
+  with check (
+    exists (
+      select 1 from members m
+       where m.id = entry_events.actor_id
+         and m.group_id = entry_events.group_id
+         and m.profile_id = auth.uid()
+         and m.left_at is null
+    )
+    and exists (
+      select 1 from entries e
+       where e.id = entry_events.entry_id
+         and e.group_id = entry_events.group_id
+    )
+  );
 
 -- Payers and shares inherit access from the parent entry.
 create policy entry_payers_all on entry_payers

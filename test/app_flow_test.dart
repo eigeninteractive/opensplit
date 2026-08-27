@@ -165,6 +165,52 @@ void main() {
     expect(find.text('All settled up'), findsOneWidget);
     expect(find.text('Nobody owes anybody anything.'), findsOneWidget);
 
+    // ---- The record of all of it, with no server anywhere ---------------
+    //
+    // The point of the whole exercise. These lines used to be written by a
+    // trigger on the server and arrive by sync, so this screen — in a test
+    // where no backend exists at all — was empty however much had happened,
+    // and so was the real app for anybody offline or running as a guest.
+    await tester.tap(find.byIcon(Icons.history));
+    await _settle(tester);
+
+    expect(find.text('Nothing yet'), findsNothing);
+    expect(
+      find.textContaining('added this'),
+      findsNWidgets(2),
+      reason: 'the groceries, and the settlement that squared them',
+    );
+    expect(
+      find.textContaining('Ravi'),
+      findsWidgets,
+      reason: 'attributed to the member who did it',
+    );
+
+    // ---- Editing it says what changed ------------------------------------
+    await tester.tap(find.byIcon(Icons.arrow_back));
+    await _settle(tester);
+    await tester.tap(find.text('Expenses'));
+    await _settle(tester);
+    await tester.tap(find.text('Groceries'));
+    await _settle(tester);
+
+    await _enterInto(tester, 'How much?', '2000');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save changes'));
+    await _settle(tester);
+
+    await tester.tap(find.byIcon(Icons.history));
+    await _settle(tester);
+
+    expect(find.textContaining('edited this'), findsOneWidget);
+    expect(
+      find.textContaining('the amount, from ₹2400.00 to ₹2000.00'),
+      findsOneWidget,
+      reason: 'the diff is rendered in what the group actually said out loud',
+    );
+
+    await tester.tap(find.byIcon(Icons.arrow_back));
+    await _settle(tester);
+
     // Unmount inside the test so Drift's query-stream cleanup timers fire here
     // rather than tripping the binding's "timer still pending" assertion during
     // teardown, when there is no longer a tree to pump.

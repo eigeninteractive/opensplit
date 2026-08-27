@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:opensplit/data/local/database.dart';
+import 'package:opensplit/data/repositories/drift_activity_repository.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';
 import 'package:opensplit/data/repositories/drift_profile_repository.dart';
@@ -9,6 +10,7 @@ import 'package:opensplit/data/sync/sync_engine.dart';
 import 'package:opensplit/domain/balance/balance_fold.dart';
 import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/models/entry.dart';
+import 'package:opensplit/domain/models/entry_event.dart';
 import 'package:opensplit/domain/models/profile.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:test/test.dart';
@@ -37,6 +39,9 @@ class Device {
 
   Future<List<Entry>> ledger(String groupId) =>
       entries.getEntries(groupId, includeDeleted: true);
+
+  Future<List<EntryEvent>> feed(String groupId) =>
+      DriftActivityRepository(db).watchGroup(groupId).first;
 }
 
 void main() {
@@ -102,7 +107,11 @@ void main() {
 
       final pushReport = await a.sync.syncGroup(g.groupId);
       expect(pushReport.isClean, isTrue, reason: '$pushReport');
-      expect(pushReport.pushed, 5, reason: 'group, 3 members, 1 entry');
+      expect(
+        pushReport.pushed,
+        6,
+        reason: 'group, 3 members, 1 entry, and the entry\'s feed line',
+      );
 
       final pullReport = await b.sync.syncGroup(g.groupId);
       expect(pullReport.pulled, 1);
@@ -195,7 +204,7 @@ void main() {
       await b.sync.syncGroup(g.groupId);
       expect(foldBalances(await b.ledger(g.groupId)), hasLength(2));
 
-      await a.entries.delete(entry.id);
+      await a.entries.delete(entry.id, actorId: g.ravi);
       await a.sync.syncGroup(g.groupId);
       await b.sync.syncGroup(g.groupId);
 
@@ -227,6 +236,7 @@ void main() {
       // Both edit the same entry while offline from each other.
       await a.entries.update(
         entry.id,
+        actorId: g.ravi,
         EntryDraft(
           groupId: g.groupId,
           currency: 'INR',
@@ -238,6 +248,7 @@ void main() {
       );
       await b.entries.update(
         entry.id,
+        actorId: g.ravi,
         EntryDraft(
           groupId: g.groupId,
           currency: 'INR',
@@ -315,9 +326,21 @@ void main() {
 
         // ...but not silently discarded. A write the user believes they made
         // must remain accounted for somewhere.
+        // Two rows, because one save queues two: the expense and the line
+        // recording it, which the server refuses in turn for naming an entry
+        // it does not have.
         final dead = await a.outbox.deadLetters();
-        expect(dead, hasLength(1));
-        expect(dead.single.lastError, contains('does not balance'));
+        expect(dead, hasLength(2));
+        expect(
+          dead.map((row) => row.lastError).join('\n'),
+          contains('does not balance'),
+        );
+
+        // What the user is shown is the expense alone. A single refused save
+        // is one thing that went wrong, however many rows it took to describe.
+        final reported = await a.outbox.watchDeadLetters().first;
+        expect(reported, hasLength(1));
+        expect(reported.single.target, OutboxTarget.entry);
       },
     );
 
@@ -374,7 +397,7 @@ void main() {
           .write(const EntrySharesCompanion(amountMinor: Value(1)));
       await a.outbox.enqueue(OutboxTarget.entry, entry.id);
       await a.sync.syncGroup(g.groupId);
-      expect(await a.outbox.deadLetters(), hasLength(1));
+      expect(await a.outbox.deadLetters(), hasLength(2));
 
       // Whatever the server objected to, put it right. "Permanent" only ever
       // meant permanent against the server as it stood.
@@ -382,7 +405,9 @@ void main() {
             ..where((t) => t.entryId.equals(entry.id)))
           .write(const EntrySharesCompanion(amountMinor: Value(50000)));
 
-      expect(await a.outbox.retryDeadLetters(), 1);
+      // Both rows go back in: the expense, and the feed line that could not
+      // land while the expense was missing from the server.
+      expect(await a.outbox.retryDeadLetters(), 2);
       await a.sync.syncGroup(g.groupId);
 
       expect(await a.outbox.deadLetters(), isEmpty);
@@ -528,7 +553,11 @@ void main() {
       }
 
       // Nothing has been synced yet: everything so far is queued.
-      expect(await a.outbox.pendingCount(), 9, reason: 'group + 3 members + 5');
+      expect(
+        await a.outbox.pendingCount(),
+        14,
+        reason: 'group + 3 members + 5 entries + a feed line each',
+      );
 
       await a.sync.syncGroup(g.groupId);
       expect(await a.outbox.pendingCount(), 0);
@@ -563,7 +592,7 @@ void main() {
       }
 
       // Comfortably more than the 100 rows one `due()` page can return.
-      expect(await a.outbox.pendingCount(), count + 4);
+      expect(await a.outbox.pendingCount(), count * 2 + 4);
 
       final report = await a.sync.syncGroup(g.groupId);
       expect(report.failed, 0);
@@ -603,8 +632,10 @@ void main() {
 
       expect(
         [for (final row in await a.outbox.due()) row.operation],
-        ['group', 'member', 'member', 'member', 'entry'],
-        reason: 'the group has to reach the server before anything naming it',
+        ['group', 'member', 'member', 'member', 'entry', 'event'],
+        reason:
+            'the group has to reach the server before anything naming it, '
+            'and the entry before the feed line that names *it*',
       );
 
       final report = await a.sync.syncGroup(g.groupId);
@@ -928,6 +959,123 @@ void main() {
             'the second asks only for what changed after the newest row '
             'it already has — without a cursor this refetches every profile '
             'in every group, on every sync, forever',
+      );
+    });
+  });
+
+  group('the activity feed', () {
+    test('is written locally, with no server in sight', () async {
+      final g = await seedGroup();
+      await a.entries.create(
+        EntryDraft(
+          groupId: g.groupId,
+          currency: 'INR',
+          amountMinor: 120000,
+          description: 'Dinner',
+          split: EqualSplit([g.ravi, g.priya]),
+          payerAmounts: {g.ravi: 120000},
+        ),
+        createdBy: g.ravi,
+      );
+
+      // No sync has run. This is the whole point of the redesign: the feed
+      // used to be written by a trigger on the server, so until a push
+      // succeeded there was nothing here at all — and for a guest whose
+      // backend was unreachable, there never would be.
+      final feed = await a.feed(g.groupId);
+      expect(feed, hasLength(1));
+      expect(feed.single.kind, EntryEventKind.created);
+      expect(feed.single.actorId, g.ravi);
+    });
+
+    test('reaches the other device, once and only once', () async {
+      final g = await seedGroup();
+      final entry = await a.entries.create(
+        EntryDraft(
+          groupId: g.groupId,
+          currency: 'INR',
+          amountMinor: 120000,
+          description: 'Dinner',
+          split: EqualSplit([g.ravi, g.priya]),
+          payerAmounts: {g.ravi: 120000},
+        ),
+        createdBy: g.ravi,
+      );
+      await a.entries.update(
+        entry.id,
+        actorId: g.ravi,
+        EntryDraft(
+          groupId: g.groupId,
+          currency: 'INR',
+          amountMinor: 100000,
+          description: 'Dinner',
+          split: EqualSplit([g.ravi, g.priya]),
+          payerAmounts: {g.ravi: 100000},
+        ),
+      );
+
+      await a.sync.syncGroup(g.groupId);
+      await b.sync.syncGroup(g.groupId);
+
+      expect((await b.feed(g.groupId)).map((e) => e.kind), [
+        EntryEventKind.edited,
+        EntryEventKind.created,
+      ], reason: 'newest first, and both of them arrived');
+
+      // Syncing again must not duplicate them. The id is the client's, so the
+      // row A pushed and the row A pulls back are provably the same row.
+      await a.sync.syncGroup(g.groupId);
+      await b.sync.syncGroup(g.groupId);
+      expect(await a.feed(g.groupId), hasLength(2));
+      expect(await b.feed(g.groupId), hasLength(2));
+    });
+
+    test('is not skipped when a device stamps its own clock ahead', () async {
+      final g = await seedGroup();
+      await a.entries.create(
+        EntryDraft(
+          groupId: g.groupId,
+          currency: 'INR',
+          amountMinor: 120000,
+          description: 'Dinner',
+          split: EqualSplit([g.ravi, g.priya]),
+          payerAmounts: {g.ravi: 120000},
+        ),
+        createdBy: g.ravi,
+      );
+
+      // A's local event carries A's clock, which here is a year fast. The
+      // pull cursor advances on created_at, so if the client's stamp were the
+      // one stored, B would set its cursor into the future and never see
+      // another line of this group's history from anybody.
+      await (a.db.update(a.db.entryEvents)).write(
+        EntryEventsCompanion(createdAt: Value(DateTime.utc(2027, 8, 21))),
+      );
+
+      await a.sync.syncGroup(g.groupId);
+      await b.sync.syncGroup(g.groupId);
+      expect(await b.feed(g.groupId), hasLength(1));
+
+      await b.entries.create(
+        EntryDraft(
+          groupId: g.groupId,
+          currency: 'INR',
+          amountMinor: 60000,
+          description: 'Taxi',
+          split: EqualSplit([g.ravi, g.priya]),
+          payerAmounts: {g.priya: 60000},
+        ),
+        createdBy: g.priya,
+      );
+      await b.sync.syncGroup(g.groupId);
+      await a.sync.syncGroup(g.groupId);
+
+      expect(
+        await a.feed(g.groupId),
+        hasLength(2),
+        reason:
+            'the server owns the clock, so a device with a wrong one '
+            'cannot push everybody else past what it has not read',
       );
     });
   });

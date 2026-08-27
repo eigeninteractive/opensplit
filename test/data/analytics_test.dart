@@ -192,6 +192,7 @@ void main() {
 
       await entries.update(
         target.id,
+        actorId: ravi,
         EntryDraft(
           groupId: groupId,
           currency: 'INR',

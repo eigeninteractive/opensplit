@@ -298,6 +298,38 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
   }
 
   @override
+  Future<EntryEvent> pushEntryEvent(EntryEvent event) async {
+    try {
+      // insert, not upsert. The table takes appends and nothing else — there is
+      // no update or delete policy on it — so an upsert would be asking for a
+      // permission the server is right to withhold. A retry of an event already
+      // stored conflicts on the primary key, which is exactly the idempotency
+      // wanted: the id is this device's, chosen once when the event was
+      // written, so the second attempt is provably the same row.
+      final row = await _client
+          .from('entry_events')
+          .insert(entryEventToJson(event))
+          .select()
+          .single();
+      return entryEventFromJson(row);
+    } on PostgrestException catch (e) {
+      // 23505 is unique_violation: this event is already on the server, which
+      // means the previous attempt succeeded and only its acknowledgement was
+      // lost. Read back what is there rather than reporting a failure — the
+      // caller needs the server's clock off it either way.
+      if (e.code == '23505') {
+        final row = await _client
+            .from('entry_events')
+            .select()
+            .eq('id', event.id)
+            .single();
+        return entryEventFromJson(row);
+      }
+      throw _translate(e);
+    }
+  }
+
+  @override
   Future<List<RemoteFxRate>> pullFxRates({required String since}) async {
     final rates = <RemoteFxRate>[];
 

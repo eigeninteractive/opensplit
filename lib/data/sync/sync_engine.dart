@@ -9,6 +9,7 @@ import '../repositories/mappers.dart';
 import 'outbox_queue.dart';
 import 'remote_ledger_api.dart';
 import 'sync_cursor.dart';
+import 'wire.dart' show changesFromJson;
 
 /// What one sync run did.
 class SyncReport {
@@ -254,8 +255,40 @@ class SyncEngine {
         )..where((t) => t.id.equals(item.targetId))).getSingleOrNull();
         if (row == null) return;
         await api.pushProfile(row.toDomain());
+
+      case OutboxTarget.event:
+        final row = await (db.select(
+          db.entryEvents,
+        )..where((t) => t.id.equals(item.targetId))).getSingleOrNull();
+        if (row == null) return;
+        final storedEvent = await api.pushEntryEvent(_eventToDomain(row));
+
+        // Adopt the server's clock, exactly as the entry and group paths adopt
+        // theirs. The local row was stamped with this device's clock so the
+        // feed could render the moment the expense was saved; from here on both
+        // copies agree, which is what lets every member read the group's
+        // history in one order and what keeps the activity cursor — which
+        // advances on this column — from ever being pushed into the future by
+        // a device whose clock is wrong.
+        await (db.update(
+          db.entryEvents,
+        )..where((t) => t.id.equals(row.id))).write(
+          EntryEventsCompanion(createdAt: Value(storedEvent.createdAt)),
+        );
     }
   }
+
+  static EntryEvent _eventToDomain(EntryEventRow row) => EntryEvent(
+    id: row.id,
+    entryId: row.entryId,
+    groupId: row.groupId,
+    actorId: row.actorId,
+    kind: EntryEventKind.values.asNameMap()[row.kind] ?? EntryEventKind.edited,
+    createdAt: row.createdAt,
+    changes: row.changes == null
+        ? const []
+        : changesFromJson(jsonDecode(row.changes!)),
+  );
 
   /// Applies every change made since the stored cursor.
   /// The name and payment handle of everybody you share a group with.
@@ -316,21 +349,34 @@ class SyncEngine {
     }
   }
 
-  /// The group's activity feed, appended to locally and never written to.
+  /// Where a group's activity feed has been pulled up to.
+  ///
+  /// Its own cursor row, rather than `max(created_at)` over the local table.
+  /// That worked only while every event came from the server; now that this
+  /// device writes its own the moment an expense is saved, the newest local
+  /// event is usually one of ours — often stamped a little ahead of the
+  /// server's clock — and asking for everything after it would skip whatever a
+  /// co-member recorded in between, permanently.
+  ///
+  /// Keyed off the group id so it cannot collide with the entries cursor, which
+  /// uses the bare id, or with the profiles one.
+  static String eventsCursorKey(String groupId) => 'events:$groupId';
+
+  /// The group's activity feed.
   ///
   /// Cursored on `created_at` alone rather than the `(updated_at, id)` pair the
-  /// entries feed uses, and it can be: these rows are append-only and stamped
-  /// with `clock_timestamp()`, so no two share a value and none is ever
-  /// revised. There is nothing for a tie-breaker to break.
+  /// entries feed uses, and it can be: these rows are append-only and never
+  /// revised, so there is no second write to order against the first.
   Future<void> _pullEntryEvents(String groupId) async {
-    final newest =
-        await (db.selectOnly(db.entryEvents)
-              ..addColumns([db.entryEvents.createdAt.max()])
-              ..where(db.entryEvents.groupId.equals(groupId)))
-            .map((row) => row.read(db.entryEvents.createdAt.max()))
-            .getSingleOrNull();
+    final key = eventsCursorKey(groupId);
+    final row = await (db.select(
+      db.syncCursors,
+    )..where((t) => t.groupId.equals(key))).getSingleOrNull();
 
-    final events = await api.pullEntryEvents(groupId: groupId, since: newest);
+    final events = await api.pullEntryEvents(
+      groupId: groupId,
+      since: row?.cursor,
+    );
     if (events.isEmpty) return;
 
     await db.batch((batch) {
@@ -344,21 +390,32 @@ class SyncEngine {
             actorId: event.actorId,
             kind: event.kind.name,
             changes: Value(
-              event.changes.isEmpty ? null : jsonEncode(_encode(event.changes)),
+              event.changes.isEmpty
+                  ? null
+                  : jsonEncode(encodeChanges(event.changes)),
             ),
             createdAt: event.createdAt,
           ),
-          // An event never changes, so a row already here is the same row.
+          // An event never changes, so a row already here is the same row —
+          // including one this device wrote itself and has just been handed
+          // back, which is the ordinary case now rather than an odd one.
           mode: InsertMode.insertOrIgnore,
         );
       }
     });
-  }
 
-  Map<String, dynamic> _encode(List<FieldChange> changes) => {
-    for (final change in changes)
-      change.field: {'from': change.from, 'to': change.to},
-  };
+    // The server orders by created_at ascending, so the last row is the newest
+    // the server has. Stored as the server reported it, never as a local clock.
+    await db
+        .into(db.syncCursors)
+        .insertOnConflictUpdate(
+          SyncCursorsCompanion.insert(
+            groupId: key,
+            cursor: Value(events.last.createdAt),
+            lastSyncedAt: Value(_clock()),
+          ),
+        );
+  }
 
   /// Applies one group's changes: its row, its members, its entries and its
   /// activity.

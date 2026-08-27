@@ -6,7 +6,12 @@ import '../../domain/models/entry_event.dart';
 import '../local/database.dart';
 import '../sync/wire.dart' show changesFromJson;
 
-/// Reads the activity log. There is deliberately no write path.
+/// Reads the activity log.
+///
+/// No write path here on purpose, but not because the client cannot write one:
+/// it does, in `DriftEntryRepository`, inside the same transaction as the entry
+/// the line describes. Splitting the two apart is what would let an expense
+/// exist with no history, or history with no expense.
 final class DriftActivityRepository {
   DriftActivityRepository(this._db);
 

@@ -225,6 +225,7 @@ void main() {
 
       final edited = await entries.update(
         original.id,
+        actorId: ravi,
         EntryDraft(
           groupId: groupId,
           currency: 'INR',
@@ -261,7 +262,7 @@ void main() {
         createdBy: ravi,
       );
 
-      await entries.delete(entry.id);
+      await entries.delete(entry.id, actorId: ravi);
 
       expect(await entries.getEntries(groupId), isEmpty);
       final withDeleted = await entries.getEntries(

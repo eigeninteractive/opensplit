@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../domain/activity/entry_events.dart';
 import '../../domain/entry_draft.dart';
 import '../../domain/models/entry.dart';
 import '../local/database.dart';
@@ -42,6 +43,40 @@ final class DriftEntryRepository {
   /// leave the device.
   Future<void> _enqueue(String entryId) async =>
       outbox?.enqueue(OutboxTarget.entry, entryId);
+
+  /// Writes an entry, its feed line and both queue items as one operation.
+  ///
+  /// Every local write of an entry goes through here, which is the point: the
+  /// activity feed used to be written by a trigger on the server, so an expense
+  /// added offline — or by a guest whose backend was unreachable — produced no
+  /// history at all, and the one screen that could not answer from the local
+  /// database was the one whose entire job was to say what had happened.
+  ///
+  /// [actorId] is a member id, not an account id. Authorship is group-scoped
+  /// for the same reason `entries.created_by` is: a placeholder's edits have to
+  /// survive them claiming an account later. Null when this device has no
+  /// member row in the group, in which case there is nobody to attribute the
+  /// write to and no event is recorded — the same case the trigger declined.
+  Future<void> _writeWithEvent({
+    required Entry? before,
+    required Entry after,
+    required String? actorId,
+    required DateTime at,
+  }) async {
+    final event = describeEntryWrite(
+      before: before,
+      after: after,
+      actorId: actorId,
+      id: _uuid.v4(),
+      at: at,
+    );
+
+    await writeEntryLocally(_db, after, event: event);
+    await _enqueue(after.id);
+    if (event != null) {
+      await outbox?.enqueue(OutboxTarget.event, event.id);
+    }
+  }
 
   /// How many live entries this device holds, across every group.
   ///
@@ -179,16 +214,22 @@ final class DriftEntryRepository {
   }) async {
     // Composed before the transaction opens: if the split does not resolve, no
     // database work has happened and there is nothing to roll back.
+    final at = now ?? _clock();
     final entry = composeEntry(
       draft,
       id: _uuid.v4(),
       createdBy: createdBy,
-      now: now ?? _clock(),
+      now: at,
     );
 
-    await writeEntryLocally(_db, entry);
     await _unarchive(entry.groupId);
-    await _enqueue(entry.id);
+    // The author is whoever recorded it, which is exactly what createdBy is.
+    await _writeWithEvent(
+      before: null,
+      after: entry,
+      actorId: createdBy,
+      at: at,
+    );
     return entry;
   }
 
@@ -207,9 +248,15 @@ final class DriftEntryRepository {
 
   /// Replaces an existing entry's contents, keeping its id and creation
   /// metadata.
+  ///
+  /// [actorId] is who is making the edit — the member row for this device in
+  /// this group — which is not necessarily whoever created the entry. That
+  /// distinction is the whole value of the feed: "Priya edited Ravi's expense"
+  /// is the line people actually want to see.
   Future<Entry> update(
     String entryId,
     EntryDraft draft, {
+    required String? actorId,
     DateTime? now,
   }) async {
     final existing = await getEntry(entryId);
@@ -229,21 +276,34 @@ final class DriftEntryRepository {
       clientKey: existing.clientKey,
     ).copyWith(createdAt: existing.createdAt);
 
-    await writeEntryLocally(_db, recomposed);
-    await _enqueue(recomposed.id);
+    await _writeWithEvent(
+      before: existing,
+      after: recomposed,
+      actorId: actorId,
+      at: at,
+    );
     return recomposed;
   }
 
   /// Soft delete. The row stays so that a balance which changed can always be
   /// explained, and so the deletion itself can be synced to other devices.
-  Future<void> delete(String entryId, {DateTime? now}) async {
+  Future<void> delete(
+    String entryId, {
+    required String? actorId,
+    DateTime? now,
+  }) async {
+    final existing = await getEntry(entryId);
+    if (existing == null) return;
+
     final at = now ?? _clock();
     // Soft delete, and `updatedAt` moves so the deletion is itself a delta that
     // other devices will pull. A hard delete would simply vanish from their
     // cursor sweep and live on forever on every device that already had it.
-    await (_db.update(_db.entries)..where((t) => t.id.equals(entryId))).write(
-      EntriesCompanion(deletedAt: Value(at), updatedAt: Value(at)),
+    await _writeWithEvent(
+      before: existing,
+      after: existing.copyWith(deletedAt: at, updatedAt: at),
+      actorId: actorId,
+      at: at,
     );
-    await _enqueue(entryId);
   }
 }

@@ -45,12 +45,14 @@ class Profiles extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-/// What happened to an expense, mirrored from the server.
+/// What happened to an expense.
 ///
-/// Read-only on this device: every row is written by a trigger on the server
-/// and arrives by sync. Nothing here is ever generated locally, which is why
-/// there is no outbox target for it and no client-side write path at all — an
-/// audit trail a device can author is not an audit trail.
+/// Written here first and pushed like everything else, which is the whole point
+/// of the redesign: the rows used to come only from a trigger on the server, so
+/// the one screen whose job was to say what had happened was also the one
+/// screen that could not answer without a network.
+///
+/// Still append-only. Nothing revises a row once written, on either side.
 /// Every reference cascades, which is where this deliberately differs from the
 /// server. There, `actor_id` is ON DELETE RESTRICT so that a member with
 /// history can never be deleted out from under the record — but the record it

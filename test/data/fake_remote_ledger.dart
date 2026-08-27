@@ -257,21 +257,53 @@ class FakeRemoteLedger implements RemoteLedgerApi {
     return profileFromJson(json);
   }
 
-  /// The activity feed, which only the server ever writes to.
+  /// The activity feed, appended to by whichever device made the change.
   final List<EntryEvent> _events = [];
 
+  /// Sorted, because the real feed is ordered by `created_at` and the pull
+  /// cursor takes the last row it is given as the new high-water mark. A fake
+  /// that answered in insertion order would let a test pass against an
+  /// ordering the server never produces.
   @override
   Future<List<EntryEvent>> pullEntryEvents({
     required String groupId,
     DateTime? since,
-  }) async => [
-    for (final event in _events)
-      if (event.groupId == groupId &&
-          (since == null || event.createdAt.isAfter(since)))
-        event,
-  ];
+  }) async =>
+      [
+        for (final event in _events)
+          if (event.groupId == groupId &&
+              (since == null || event.createdAt.isAfter(since)))
+            event,
+      ]..sort((a, b) {
+        final byTime = a.createdAt.compareTo(b.createdAt);
+        return byTime != 0 ? byTime : a.id.compareTo(b.id);
+      });
 
-  /// Records an event as the server's trigger would.
+  @override
+  Future<EntryEvent> pushEntryEvent(EntryEvent event) async {
+    _assertGroupKnown(event.groupId, 'an activity event');
+    if (!_entries.containsKey(event.entryId)) {
+      throw RemoteRejected(
+        'entry_events references an entry the server does not have',
+        permanent: true,
+      );
+    }
+    // Append-only and idempotent on the id, exactly as the real table is: the
+    // client chooses the id, so a retry is provably the same row rather than a
+    // second copy of it.
+    final existing = _events.where((e) => e.id == event.id).firstOrNull;
+    if (existing != null) return existing;
+
+    // The clock is the server's, like `clock_timestamp()` on the real table.
+    // Stamping it here rather than trusting the one that arrived is what the
+    // activity cursor depends on, so the fake has to do it too or a test would
+    // pass against a guarantee the server is the only thing actually making.
+    final stored = event.copyWith(createdAt: _stamp());
+    _events.add(stored);
+    return stored;
+  }
+
+  /// Records an event that arrived from somebody else's device.
   void seedEvent(EntryEvent event) => _events.add(event);
 
   /// Puts a profile on the server without going through a push, for arranging

@@ -9,6 +9,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:opensplit/data/auth/supabase_auth_service.dart';
 import 'package:opensplit/data/local/database.dart';
+import 'package:opensplit/data/repositories/drift_activity_repository.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';
 import 'package:opensplit/data/sync/outbox_queue.dart';
@@ -17,6 +18,7 @@ import 'package:opensplit/data/sync/supabase_ledger_api.dart';
 import 'package:opensplit/data/sync/sync_engine.dart';
 import 'package:opensplit/domain/balance/balance_fold.dart';
 import 'package:opensplit/domain/entry_draft.dart';
+import 'package:opensplit/domain/models/entry_event.dart';
 import 'package:opensplit/domain/repositories/auth_service.dart';
 import 'package:opensplit/domain/repositories/invite_api.dart';
 import 'package:opensplit/domain/split/splitter.dart';
@@ -202,8 +204,9 @@ void main() {
       expect(report.isClean, isTrue, reason: '$report');
       expect(
         report.pushed,
-        4,
-        reason: 'the group, its owner, the added member, and the entry',
+        5,
+        reason: 'the group, its owner, the added member, the entry, and the '
+            'activity event recording that the entry was added',
       );
 
       // Read it back through a second, empty device.
@@ -233,6 +236,22 @@ void main() {
         -120000,
         120000,
       ]);
+
+      // The feed reaches the second device too, which is the half of the
+      // activity redesign only a live server can prove: the event was written
+      // on the first device, appended through `entry_events_insert` rather than
+      // by a trigger, and read back under the policy that scopes it to members
+      // of the group.
+      final feed = await DriftActivityRepository(
+        other,
+      ).watchGroup(created.group.id).first;
+      expect(feed, hasLength(1));
+      expect(feed.single.kind, EntryEventKind.created);
+      expect(
+        feed.single.actorId,
+        created.creator.id,
+        reason: 'authorship is the member row, not the account',
+      );
     });
 
     test('the server rejects an entry that does not balance', () async {

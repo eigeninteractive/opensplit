@@ -1,7 +1,7 @@
 -- The activity log, and the dormancy jobs that eventually clear a group away.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(18);
+select plan(14);
 
 insert into auth.users (id, instance_id, aud, role, email, raw_user_meta_data,
                         created_at, updated_at)
@@ -32,6 +32,16 @@ set constraints all deferred;
 
 -- ---------------------------------------------------------------------------
 -- Recording what happened
+--
+-- The device that made the change describes it. There used to be a SECURITY
+-- DEFINER trigger on `entries` here instead, and these tests asserted that
+-- saving an expense wrote its own feed line — but a trigger only fires for a
+-- write that reached the server, so an app whose whole premise is that it works
+-- offline had an activity feed that stayed empty until it did not.
+--
+-- What the server still guarantees is what is worth testing, and it is now all
+-- policy rather than procedure: you may append in your own name, for an entry
+-- in your own group, and nothing anywhere lets you take it back.
 -- ---------------------------------------------------------------------------
 select lives_ok(
   $$select upsert_entry(
@@ -44,79 +54,67 @@ select lives_ok(
   'an expense can be recorded');
 
 select is(
-  (select kind::text from entry_events
-    where entry_id = '88888888-8888-4888-8888-888888888888'),
-  'created',
-  'creating one writes a created event');
-
-select is(
-  (select changes from entry_events
-    where entry_id = '88888888-8888-4888-8888-888888888888'),
-  null,
-  'with no diff: "everything changed" is not a diff, and the entry itself '
-  'already records what it started as');
-
--- The correction: ₹400 was really ₹300.
-select lives_ok(
-  $$select upsert_entry(
-      '88888888-8888-4888-8888-888888888888',
-      '33333333-3333-4333-8333-333333333333', 'INR', 30000,
-      '[{"member_id":"44444444-4444-4444-8444-444444444444","amount_minor":30000}]'::jsonb,
-      '[{"member_id":"44444444-4444-4444-8444-444444444444","amount_minor":15000},
-        {"member_id":"55555555-5555-4555-8555-555555555555","amount_minor":15000}]'::jsonb,
-      'Dinner')$$,
-  'and edited afterwards');
-
-select is(
-  (select changes from entry_events where kind = 'edited'),
-  '{"amount_minor": {"to": 30000, "from": 40000}}'::jsonb,
-  'the edit records what changed, from and to');
-
-select is(
-  (select actor_id from entry_events where kind = 'edited'),
-  '44444444-4444-4444-8444-444444444444'::uuid,
-  'attributed to the member who did it, not the account');
-
--- Saving something unchanged.
-select lives_ok(
-  $$select upsert_entry(
-      '88888888-8888-4888-8888-888888888888',
-      '33333333-3333-4333-8333-333333333333', 'INR', 30000,
-      '[{"member_id":"44444444-4444-4444-8444-444444444444","amount_minor":30000}]'::jsonb,
-      '[{"member_id":"44444444-4444-4444-8444-444444444444","amount_minor":15000},
-        {"member_id":"55555555-5555-4555-8555-555555555555","amount_minor":15000}]'::jsonb,
-      'Dinner')$$,
-  'saving it again unchanged is allowed');
-
-select is(
-  (select count(*)::int from entry_events where kind = 'edited'),
-  1,
-  'but is not an edit: a retried sync must not fill the feed with '
-  '"Ravi edited nothing"');
-
-select is(
   (select count(*)::int from entry_events
-    where created_at = (select created_at from entry_events
-                         where kind = 'created')),
-  1,
-  'events are stamped with the wall clock, not transaction time, so two in '
-  'one transaction do not tie and sort by a random uuid');
+    where entry_id = '88888888-8888-4888-8888-888888888888'),
+  0,
+  'and writes no history by itself: the client authors the feed line, so a '
+  'trigger doing it too would make every event arrive twice');
 
--- ---------------------------------------------------------------------------
--- Nobody can write their own history
--- ---------------------------------------------------------------------------
+select lives_ok(
+  $$insert into entry_events (id, entry_id, group_id, actor_id, kind)
+    values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            '88888888-8888-4888-8888-888888888888',
+            '33333333-3333-4333-8333-333333333333',
+            '44444444-4444-4444-8444-444444444444', 'created')$$,
+  'the member who recorded it may append the line saying so');
+
+select is(
+  (select created_at is not null from entry_events
+    where id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
+  true,
+  'stamped by the server, not by whoever sent it: the activity cursor '
+  'advances on this column, so a device with a fast clock could otherwise '
+  'push it into the future and make every other device skip what came after');
+
 select throws_ok(
   $$insert into entry_events (entry_id, group_id, actor_id, kind)
     values ('88888888-8888-4888-8888-888888888888',
             '33333333-3333-4333-8333-333333333333',
-            '44444444-4444-4444-8444-444444444444', 'edited')$$,
+            '55555555-5555-4555-8555-555555555555', 'edited')$$,
   '42501', null,
-  'a member cannot fabricate an event');
+  'but not one in somebody else''s name: Ravi cannot record that Priya did it');
+
+-- Priya's own group, which Ravi has nothing to do with.
+reset role;
+reset "request.jwt.claims";
+insert into groups (id, name, default_currency, created_by)
+values ('66666666-6666-4666-8666-666666666666', 'Elsewhere', 'INR',
+        '22222222-2222-4222-8222-222222222222');
+insert into members (id, group_id, profile_id, display_name)
+values ('77777777-7777-4777-8777-777777777777',
+        '66666666-6666-4666-8666-666666666666',
+        '22222222-2222-4222-8222-222222222222', 'Priya');
+set local role authenticated;
+set local "request.jwt.claims" to
+  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated"}';
 
 select throws_ok(
-  $$update entry_events set kind = 'created' where kind = 'edited'$$,
+  $$insert into entry_events (entry_id, group_id, actor_id, kind)
+    values ('88888888-8888-4888-8888-888888888888',
+            '66666666-6666-4666-8666-666666666666',
+            '44444444-4444-4444-8444-444444444444', 'edited')$$,
   '42501', null,
-  'nor rewrite one: an audit trail somebody can revise is not one');
+  'nor file one against a group he is not in, which would put a line about '
+  'his expense in front of people with no access to it');
+
+-- ---------------------------------------------------------------------------
+-- Nobody can rewrite their own history
+-- ---------------------------------------------------------------------------
+select throws_ok(
+  $$update entry_events set kind = 'edited'
+     where id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'$$,
+  '42501', null,
+  'an audit trail somebody can revise is not one');
 
 select throws_ok(
   $$delete from entry_events$$,
@@ -148,7 +146,7 @@ select is(
   true,
   'a silent group is archived');
 
--- Priya still owes Ravi ₹150, so this group is not finished with.
+-- Priya still owes Ravi ₹200, so this group is not finished with.
 select lives_ok(
   $$select purge_settled_dormant_groups()$$,
   'the purge runs');
@@ -168,9 +166,9 @@ set local "request.jwt.claims" to
 set constraints all deferred;
 select upsert_entry(
   '99999999-9999-4999-8999-999999999999',
-  '33333333-3333-4333-8333-333333333333', 'INR', 15000,
-  '[{"member_id":"55555555-5555-4555-8555-555555555555","amount_minor":15000}]'::jsonb,
-  '[{"member_id":"44444444-4444-4444-8444-444444444444","amount_minor":15000}]'::jsonb,
+  '33333333-3333-4333-8333-333333333333', 'INR', 20000,
+  '[{"member_id":"55555555-5555-4555-8555-555555555555","amount_minor":20000}]'::jsonb,
+  '[{"member_id":"44444444-4444-4444-8444-444444444444","amount_minor":20000}]'::jsonb,
   'Settling up', 'settlement');
 set constraints all immediate;
 reset role;

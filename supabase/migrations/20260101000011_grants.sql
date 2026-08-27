@@ -49,14 +49,16 @@ grant select, insert, update, delete on entry_shares to authenticated;
 -- see reads as absent and the function returns silently, exactly as it does
 -- for one deleted in the same transaction.
 
--- The activity log: readable by the group, appended to by nobody.
+-- The activity log: readable by the group, appended to in your own name.
 --
--- SELECT only, and no insert policy either, so there are two independent
--- reasons a client cannot write a line of history. The only writer is
--- record_entry_event, which is SECURITY DEFINER and reachable solely as a
--- trigger on entries. No UPDATE or DELETE anywhere, at either level: an audit
--- trail somebody can quietly rewrite is not one.
-grant select on entry_events to authenticated;
+-- SELECT and INSERT, and nothing else. The device that made a change is what
+-- describes it — see entry_events_insert, which pins the actor to the caller's
+-- own member row — so appending has to be reachable through PostgREST.
+--
+-- No UPDATE or DELETE anywhere, at either level, and that half is unchanged: an
+-- audit trail somebody can quietly rewrite is not one. Two independent locks on
+-- that door, since there is no policy for either verb.
+grant select, insert on entry_events to authenticated;
 
 -- Deliberately no DELETE on entries, members or groups. None of the three has
 -- an RLS delete policy either; this is the second lock on the same door.

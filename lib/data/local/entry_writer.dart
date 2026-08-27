@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 
 import '../../domain/models/entry.dart';
+import '../../domain/models/entry_event.dart';
 import 'database.dart';
 
 /// Writes an entry and its children atomically.
@@ -13,7 +16,18 @@ import 'database.dart';
 /// Payers and shares are replaced wholesale rather than diffed: it is simpler,
 /// and it mirrors what the server's `upsert_entry` does, so the two cannot
 /// disagree about what an edit means.
-Future<void> writeEntryLocally(AppDatabase db, Entry entry) async {
+///
+/// [event] is the feed line describing this write, when there is one to record.
+/// It goes in the same transaction as the entry, deliberately: the record of a
+/// change and the change itself are one fact, and committing them separately
+/// would allow either an expense with no history or history for an expense that
+/// was never stored. Null on the sync path, where events arrive on their own
+/// feed rather than being inferred from rows another device already described.
+Future<void> writeEntryLocally(
+  AppDatabase db,
+  Entry entry, {
+  EntryEvent? event,
+}) async {
   // A real check, not an assert. Asserts are stripped from a release build,
   // which left the one invariant this app is actually about — that what was
   // paid, what is owed and the stated amount agree — enforced only in debug.
@@ -86,5 +100,39 @@ Future<void> writeEntryLocally(AppDatabase db, Entry entry) async {
           ),
       ]);
     });
+
+    if (event != null) await _writeEvent(db, event);
   });
 }
+
+/// Appends one feed line.
+///
+/// insertOrIgnore because the same event can arrive twice: once written here
+/// and once pulled back from the server, under the id this device chose. An
+/// event is never revised, so a row already present is the same row.
+Future<void> _writeEvent(AppDatabase db, EntryEvent event) async {
+  await db
+      .into(db.entryEvents)
+      .insert(
+        EntryEventsCompanion.insert(
+          id: event.id,
+          entryId: event.entryId,
+          groupId: event.groupId,
+          actorId: event.actorId,
+          kind: event.kind.name,
+          changes: Value(
+            event.changes.isEmpty
+                ? null
+                : jsonEncode(encodeChanges(event.changes)),
+          ),
+          createdAt: event.createdAt,
+        ),
+        mode: InsertMode.insertOrIgnore,
+      );
+}
+
+/// The diff, in the shape the wire and the local `changes` column both hold.
+Map<String, dynamic> encodeChanges(List<FieldChange> changes) => {
+  for (final change in changes)
+    change.field: {'from': change.from, 'to': change.to},
+};

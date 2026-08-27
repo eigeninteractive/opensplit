@@ -100,14 +100,29 @@ abstract interface class RemoteLedgerApi {
   Future<Profile> pushProfile(Profile profile);
 
   /// What has happened to this group's expenses since [since].
-  ///
-  /// Pull only. These rows are written by a trigger on the server and there is
-  /// no way for a client to add one, which is the property that makes the feed
-  /// worth reading at all.
   Future<List<EntryEvent>> pullEntryEvents({
     required String groupId,
     DateTime? since,
   });
+
+  /// Appends one line to a group's activity feed.
+  ///
+  /// The device that made the change is the one that describes it, exactly as
+  /// it is the device that authors the expense itself. The server's job is to
+  /// refuse an event attributed to somebody else, or to a group the caller is
+  /// not in, and to make sure no event is ever revised or removed afterwards —
+  /// which `entry_events_insert` and the absence of any update or delete policy
+  /// together do.
+  ///
+  /// This replaced a SECURITY DEFINER trigger. The trigger could only fire for
+  /// a write that reached the server, so on a device that was offline — or a
+  /// guest whose backend was unreachable — the feed stayed empty no matter how
+  /// many expenses were added, which is the one screen in the app that did not
+  /// work from the local database.
+  /// Returns the row as stored, whose `created_at` is the server's and which
+  /// the caller adopts — see [entryEventToJson] for why the clock cannot be
+  /// this device's.
+  Future<EntryEvent> pushEntryEvent(EntryEvent event);
 
   /// Exchange rates published on or after [since] (`yyyy-MM-dd`).
   ///

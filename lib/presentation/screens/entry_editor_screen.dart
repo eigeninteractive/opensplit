@@ -291,7 +291,9 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
     try {
       final repository = ref.read(entryRepositoryProvider);
       if (widget.isEditing) {
-        await repository.update(widget.entryId!, draft);
+        // Who is editing, which need not be who created it — that difference is
+        // most of what makes a feed line worth reading.
+        await repository.update(widget.entryId!, draft, actorId: ledger.me?.id);
       } else {
         await repository.create(
           draft,
@@ -356,7 +358,12 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
     );
     if (!(confirmed ?? false)) return;
 
-    await ref.read(entryRepositoryProvider).delete(widget.entryId!);
+    await ref
+        .read(entryRepositoryProvider)
+        .delete(
+          widget.entryId!,
+          actorId: ref.read(groupLedgerProvider(widget.groupId))?.me?.id,
+        );
     if (mounted) goBack(context, '/g/${widget.groupId}');
   }
 

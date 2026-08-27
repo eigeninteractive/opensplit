@@ -15,9 +15,16 @@ import '../widgets/page_body.dart';
 /// to say why or who — which is a trust problem rather than a data one, and the
 /// kind that surfaces as an argument rather than a bug report.
 ///
-/// Read-only, and not merely by convention: the rows are written by a trigger
-/// on the server, there is no insert policy and no insert grant, so no client
-/// can add a line to this or alter one.
+/// Rendered from the local database like every other screen, which it did not
+/// used to be. The rows were written by a trigger on the server and arrived by
+/// sync, so an expense added offline — or by a guest whose backend was
+/// unreachable — produced no line here at all, and the feed stayed empty
+/// however much had happened. The device now writes the line as it writes the
+/// expense; see `describeEntryWrite`.
+///
+/// Still append-only, and not merely by convention: no client may revise or
+/// remove a line, because no update or delete policy exists on the table and no
+/// such grant is given.
 class ActivityScreen extends ConsumerWidget {
   const ActivityScreen({super.key, required this.groupId});
 

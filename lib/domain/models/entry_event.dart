@@ -18,9 +18,10 @@ abstract class FieldChange with _$FieldChange {
 
 /// A line in a group's activity feed.
 ///
-/// Read-only on the client. Every row is written by a trigger on the server and
-/// arrives by sync — there is no local write path, because a record of what
-/// happened that a device can author is not a record of what happened.
+/// Authored by the device that made the change, in the same transaction as the
+/// change itself, and pushed like any other row. See `describeEntryWrite` for
+/// why that replaced a server-side trigger, and what the server still
+/// guarantees instead.
 @freezed
 abstract class EntryEvent with _$EntryEvent {
   const factory EntryEvent({

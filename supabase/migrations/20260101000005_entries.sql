@@ -405,93 +405,29 @@ alter table entry_events enable row level security;
 -- ----------------------------------------------------------------------------
 -- Recording what happened.
 --
--- A trigger rather than a few lines inside upsert_entry, for three reasons.
+-- There is no trigger here any more, and that is the point.
 --
--- OLD is right here. Computing a diff inside the function meant reading the row
--- back before writing it, which is a second query and a race.
+-- This used to be a SECURITY DEFINER function on `entries`, so that the one
+-- path able to append history was the server's own and nothing reachable from a
+-- client could fabricate a line of it. The argument was sound in isolation and
+-- wrong for this app: the client is local-first, so an expense is written to
+-- the device and answered immediately, and only later pushed. History written
+-- by a trigger therefore existed only after a round trip — which meant that
+-- offline, or as a guest with no reachable backend, an app full of expenses had
+-- an activity feed that was permanently empty.
 --
--- It catches every path. upsert_entry is the only writer today, but an audit
--- trail that only records edits made through the one function that remembered
--- to call it is not an audit trail.
+-- Nor did the trigger buy what it appeared to. A device that wanted to lie
+-- about who spent what would write the expense that way; the server takes the
+-- entry itself on trust, bounded by RLS, so protecting only the description of
+-- the write was a guarantee about the smaller half.
 --
--- And it can actually write. upsert_entry is SECURITY INVOKER — deliberately,
--- since that is what subjects the whole write path to RLS — so an insert made
--- inside it is checked against entry_events' policies as the caller. There is
--- no insert policy, by design, so the caller is refused. This function is
--- SECURITY DEFINER and owned by the table owner, so it is the one path that can
--- append, and nothing reachable from a client can fabricate a line of history.
+-- So the client authors the event, in the same local transaction as the entry,
+-- and pushes it like any other row. What the server still guarantees is every
+-- part of that guarantee worth having, and it is now stated as policy rather
+-- than buried in a function: you may append an event only in your own name, for
+-- an entry in a group you belong to, and no policy anywhere permits an update
+-- or a delete. See `entry_events_insert` in the security migration.
 -- ----------------------------------------------------------------------------
-create or replace function record_entry_event()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_actor   uuid;
-  v_kind    entry_event_kind;
-  v_changes jsonb;
-begin
-  -- Authorship is group-scoped, exactly as entries.created_by is, so a
-  -- placeholder's edits survive them claiming an account later.
-  select id into v_actor
-    from members
-   where group_id = new.group_id and profile_id = auth.uid() and left_at is null;
-
-  -- Nothing sensible to attribute it to: a service-role backfill, or a
-  -- migration. An event with no actor would be a row the feed cannot render.
-  if v_actor is null then
-    return new;
-  end if;
-
-  if tg_op = 'INSERT' then
-    v_kind := 'created';
-  elsif old.deleted_at is null and new.deleted_at is not null then
-    v_kind := 'deleted';
-  elsif old.deleted_at is not null and new.deleted_at is null then
-    v_kind := 'restored';
-  else
-    -- Only the fields a person would recognise as "the expense changing".
-    -- fx_at moves whenever fx_rate does and would double every currency edit;
-    -- updated_at changes on every write by definition, and would make a save
-    -- that altered nothing look like an edit.
-    select jsonb_strip_nulls(jsonb_build_object(
-      'description',  case when old.description  is distinct from new.description
-                      then jsonb_build_object('from', old.description,  'to', new.description)  end,
-      'amount_minor', case when old.amount_minor is distinct from new.amount_minor
-                      then jsonb_build_object('from', old.amount_minor, 'to', new.amount_minor) end,
-      'currency',     case when old.currency     is distinct from new.currency
-                      then jsonb_build_object('from', old.currency,     'to', new.currency)     end,
-      'entry_date',   case when old.entry_date   is distinct from new.entry_date
-                      then jsonb_build_object('from', old.entry_date,   'to', new.entry_date)   end,
-      'category_id',  case when old.category_id  is distinct from new.category_id
-                      then jsonb_build_object('from', old.category_id,  'to', new.category_id)  end,
-      'split_kind',   case when old.split_kind   is distinct from new.split_kind
-                      then jsonb_build_object('from', old.split_kind,   'to', new.split_kind)   end,
-      'notes',        case when old.notes        is distinct from new.notes
-                      then jsonb_build_object('from', old.notes,        'to', new.notes)        end
-    )) into v_changes;
-
-    -- A save that changed nothing is not an edit. A retried sync and a user
-    -- opening the editor and backing out both land here, and a feed full of
-    -- "Ravi edited nothing" is worse than no feed at all.
-    if v_changes = '{}'::jsonb then
-      return new;
-    end if;
-    v_kind := 'edited';
-  end if;
-
-  insert into entry_events (entry_id, group_id, actor_id, kind, changes)
-  values (new.id, new.group_id, v_actor, v_kind, v_changes);
-
-  return new;
-end;
-$$;
-
--- AFTER, so an event is never written for a statement that then fails.
-create trigger trg_entries_record_event
-  after insert or update on entries
-  for each row execute function record_entry_event();
 
 alter table entries      enable row level security;
 alter table entry_payers enable row level security;
