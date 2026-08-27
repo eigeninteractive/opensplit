@@ -232,7 +232,10 @@ $$;
 
 -- Soft delete only. A hard delete would vanish from the delta feed, leaving the
 -- row on every device that already synced it with no way to learn it went.
-create or replace function delete_entry(p_entry_id uuid)
+create or replace function delete_entry(
+  p_entry_id uuid,
+  p_base_updated_at timestamptz
+)
 returns entries
 language plpgsql
 security definer
@@ -249,10 +252,10 @@ begin
   -- through to the "no such entry" below. Made SECURITY DEFINER with that
   -- accident left in place, it would have deleted any expense in the database
   -- from its id alone.
-  update entries set deleted_at = now()
+  select * into v_row
+    from entries
    where id = p_entry_id
-     and is_group_member(group_id)
-  returning * into v_row;
+     and is_group_member(group_id);
 
   -- Deliberately the same message whether the expense does not exist or simply
   -- is not the caller's to touch. Distinguishing them would answer "does this
@@ -261,6 +264,29 @@ begin
     raise exception 'No such entry %', p_entry_id
       using errcode = 'no_data_found';
   end if;
+
+  -- A retry after the server committed but before its response reached the
+  -- device is idempotent. The row is already in the requested state, so return
+  -- its authoritative version even though the caller still carries the older
+  -- base.
+  if v_row.deleted_at is not null then
+    return v_row;
+  end if;
+
+  -- Unlike a prose-only edit, deleting always moves money: every payer and
+  -- share disappears from the live balance. It must therefore be composed
+  -- against the exact server version the device last observed.
+  if p_base_updated_at is null
+     or v_row.updated_at is distinct from p_base_updated_at then
+    raise exception
+      'Entry % changed since this deletion was composed', p_entry_id
+      using errcode = '40001';
+  end if;
+
+  update entries
+     set deleted_at = now()
+   where id = p_entry_id
+  returning * into v_row;
 
   return v_row;
 end;

@@ -1,4 +1,10 @@
-import { FetchOptions, FxProvider, FxSnapshot, getJson, sanitise } from './types.ts';
+import {
+  FetchOptions,
+  FxProvider,
+  FxSnapshot,
+  getJson,
+  sanitise,
+} from "./types.ts";
 
 /// ExchangeRate-API's keyed v6 API.
 ///
@@ -15,26 +21,29 @@ import { FetchOptions, FxProvider, FxSnapshot, getJson, sanitise } from './types
 /// it lives in Supabase secrets rather than in a table anyone with database
 /// access can read.
 export const exchangerateV6: FxProvider = {
-  kind: 'exchangerate_v6',
+  kind: "exchangerate_v6",
 
-  async fetch({ asOf, currencies, config }: FetchOptions): Promise<FxSnapshot | null> {
-    const envName = (config.api_key_env as string) ?? 'EXCHANGERATE_API_KEY';
+  async fetch(
+    { asOf, currencies, config }: FetchOptions,
+  ): Promise<FxSnapshot | null> {
+    const envName = (config.api_key_env as string) ?? "EXCHANGERATE_API_KEY";
     const key = Deno.env.get(envName);
     if (!key) return null;
 
-    const baseUrl = (config.base_url as string) ?? 'https://v6.exchangerate-api.com';
+    const baseUrl = (config.base_url as string) ??
+      "https://v6.exchangerate-api.com";
     // Never asked for a past date in practice, because the provider row says it
     // cannot serve one. Kept correct rather than throwing, so the flag stays
     // the single place that decides.
     const url = asOf === null
       ? `${baseUrl}/v6/${key}/latest/USD`
-      : `${baseUrl}/v6/${key}/history/USD/${asOf.replaceAll('-', '/')}`;
+      : `${baseUrl}/v6/${key}/history/USD/${asOf.replaceAll("-", "/")}`;
 
     const body = await getJson(url);
-    if (typeof body !== 'object' || body === null) return null;
+    if (typeof body !== "object" || body === null) return null;
 
     const payload = body as Record<string, unknown>;
-    if (payload.result !== 'success') return null;
+    if (payload.result !== "success") return null;
 
     // The latest endpoint calls it conversion_rates; history calls it
     // conversion_rates too, but older docs use rates. Accept either.
@@ -44,11 +53,14 @@ export const exchangerateV6: FxProvider = {
     );
     if (Object.keys(clean).length === 0) return null;
 
-    return { asOf: asOf ?? isoFromUnix(payload.time_last_update_unix), rates: clean };
+    return {
+      asOf: asOf ?? isoFromUnix(payload.time_last_update_unix),
+      rates: clean,
+    };
   },
 };
 
 function isoFromUnix(value: unknown): string {
-  const seconds = typeof value === 'number' ? value : Date.now() / 1000;
+  const seconds = typeof value === "number" ? value : Date.now() / 1000;
   return new Date(seconds * 1000).toISOString().slice(0, 10);
 }

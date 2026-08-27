@@ -55,6 +55,7 @@ app.*.map.json
 # Regenerate with: dart run build_runner build
 *.g.dart
 *.freezed.dart
+lib/l10n/app_localizations*.dart
 
 # Supabase CLI local state
 supabase/.temp/

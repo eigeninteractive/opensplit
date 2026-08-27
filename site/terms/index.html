@@ -6,6 +6,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Terms of Service · OpenSplit</title>
 <meta name="description" content="The terms you agree to by using OpenSplit.">
+<!-- Absolute rather than relative, so one pair of files serves the whole origin.
+     These pages sit at different depths and carry no <base>, and the app shell
+     under /app/ points at the same two. A page that declares no icon at all
+     falls back to /favicon.ico, which does not exist here — that is what left
+     the tab showing a default glyph on every one of these pages. -->
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
+<link rel="apple-touch-icon" href="/icons/Icon-192.png">
 <style>
     :root {
       --surface: #fcf8ff;
@@ -71,7 +79,7 @@
 <header><svg viewBox="0 0 48 48" aria-hidden="true"><mask id="slash"><rect width="48" height="48" fill="#fff"></rect><rect x="20.75" y="-4" width="6.5" height="56" fill="#000" transform="rotate(24 24 24)"></rect></mask><circle cx="24" cy="24" r="17" fill="none" stroke="currentColor" stroke-width="6.5" mask="url(#slash)"></circle></svg><a href="/">OpenSplit</a></header>
 
 <h1>Terms of Service</h1>
-<p class="updated">Last updated 26 August 2026</p>
+<p class="updated">Last updated 27 August 2026</p>
 
 
 <p>By using OpenSplit you agree to these terms. They are short on purpose.</p>
@@ -97,8 +105,10 @@ owes anyone is between you.</p>
 access to your email or Google account secure. You may delete your account at
 any time from <strong>Account → Delete account</strong>; see the
 <a href="/privacy">Privacy Policy</a> for exactly what that removes.</p>
-<p>A guest account exists only on the device that created it. It cannot be
-recovered by us or by anyone else — there is nothing to recover it with.</p>
+<p>A guest account is synchronized, but has no email or Google identity. The
+device that created it holds the only session until you attach a sign-in
+method. If that session is lost, the data may remain on the service while you
+can no longer prove that the guest account is yours.</p>
 
 <h2>Your content</h2>
 <p>What you record stays yours. You give us only what is needed to run the

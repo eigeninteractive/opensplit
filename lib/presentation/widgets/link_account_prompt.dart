@@ -7,11 +7,9 @@ import '../../application/providers.dart';
 
 /// Asks the user to attach a real account, once they have something to lose.
 ///
-/// The copy is blunt on purpose. An anonymous account lives on exactly one
-/// device with no recovery path whatsoever, and on the web it is destroyed by
-/// clearing site data — something people do routinely and without expecting to
-/// lose anything. Softening that wording would make the eventual loss our
-/// fault.
+/// The copy is blunt on purpose. The guest's data synchronizes, but its only
+/// credential lives on this device. Clearing site data or losing the phone
+/// strands the server account rather than deleting it.
 ///
 /// Built like [UnsyncedChangesBanner] and coloured differently on purpose. The
 /// two are the only banners in the app and they say different kinds of thing:
@@ -65,7 +63,7 @@ class LinkAccountPrompt extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'Nothing here is backed up',
+              'Protect access to this guest account',
               style: text.titleSmall?.copyWith(
                 color: scheme.onTertiaryContainer,
               ),
@@ -73,12 +71,12 @@ class LinkAccountPrompt extends ConsumerWidget {
             const SizedBox(height: 4),
             Text(
               kIsWeb
-                  ? 'Your expenses exist only in this browser. There is no '
-                        'account attached, so clearing your browsing data '
-                        'deletes all of it, permanently.'
-                  : 'Your expenses exist only on this phone. There is no '
-                        'account attached, so nothing can be recovered if you '
-                        'lose it or reinstall the app.',
+                  ? 'Your groups synchronize, but this browser holds the only '
+                        'way back in. Clearing its data can leave you unable to '
+                        'reach the guest account.'
+                  : 'Your groups synchronize, but this phone holds the only '
+                        'way back in. Losing it or reinstalling can leave you '
+                        'unable to reach the guest account.',
             ),
           ],
         ),

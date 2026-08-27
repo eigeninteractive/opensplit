@@ -41,20 +41,27 @@
                  /.well-known/assetlinks.json. If that file does not list the
                  certificate the installed app was actually signed with, this
                  fails silently and links open in a browser instead. See
-                 web/.well-known/README.md.
+                 site/.well-known/README.md.
 
                  One host, matching linkHost in lib/config.dart. Every host
                  listed here is a permanent commitment — it has to keep serving
                  assetlinks.json for as long as any link naming it exists, which
                  for a link pasted into a chat is indefinitely. A vanity domain
                  added later should redirect here rather than be claimed as a
-                 second host. -->
+                 second host.
+
+                 pathPrefix, because the host is no longer all app. The site
+                 root serves the landing page, the privacy policy and the terms
+                 as static HTML; without this prefix the filter claims those
+                 too, and tapping a privacy-policy link on a phone with
+                 OpenSplit installed opens the app instead of a browser. -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="https"
-                      android:host="opensplit.web.app"/>
+                      android:host="opensplit.web.app"
+                      android:pathPrefix="/app"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

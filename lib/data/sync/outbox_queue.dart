@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:drift/drift.dart';
+import 'package:uuid/uuid.dart';
 
 import '../local/database.dart';
+import 'sync_session.dart';
 
 /// The kind of row an outbox item refers to.
 enum OutboxTarget { entry, group, member, profile }
@@ -33,7 +35,7 @@ class FailedWrite {
 
 /// Pending local writes waiting to reach the server.
 ///
-/// Every mutation is written to the local tables first and queued here second.
+/// Each mutation and its queue item are committed in one local transaction.
 /// The UI is answered from local state immediately and never waits on a
 /// network round trip, which is what makes the app usable with no connection
 /// at all — and what keeps "add expense" under the ten seconds it has before
@@ -86,6 +88,10 @@ class OutboxQueue {
   /// not the row becoming new. Rewriting it was how a second edit could
   /// reorder a row ahead of something it depends on.
   Future<void> enqueue(OutboxTarget target, String targetId) async {
+    if (!(await readSyncSession(_db)).enabled) {
+      throw StateError('This account session has ended.');
+    }
+    final revision = const Uuid().v4();
     await _db
         .into(_db.outbox)
         .insert(
@@ -93,13 +99,15 @@ class OutboxQueue {
             id: idFor(target, targetId),
             operation: target.name,
             targetId: targetId,
+            revision: Value(revision),
             createdAt: _clock(),
           ),
           onConflict: DoUpdate(
             // A fresh change deserves an immediate attempt even if a previous one
             // had been backed off, or set aside as a dead letter: whatever the
             // server refused may be exactly what this edit changed.
-            (_) => const OutboxCompanion(
+            (_) => OutboxCompanion(
+              revision: Value(revision),
               attempts: Value(0),
               nextAttemptAt: Value(null),
               lastError: Value(null),
@@ -180,6 +188,13 @@ class OutboxQueue {
       _db.outbox,
     )..where((t) => t.deadLetteredAt.isNull())).get();
     return rows.length;
+  }
+
+  /// Whether leaving this account would strand an edit held only here.
+  Future<bool> hasUnresolvedWrites() async {
+    final pending = await (_db.select(_db.outbox)..limit(1)).get();
+    if (pending.isNotEmpty) return true;
+    return (await (_db.select(_db.entryConflicts)..limit(1)).get()).isNotEmpty;
   }
 
   /// Writes the server refused outright.
@@ -263,8 +278,23 @@ class OutboxQueue {
     );
   }
 
-  Future<void> complete(String id) async {
-    await (_db.delete(_db.outbox)..where((t) => t.id.equals(id))).go();
+  /// Whether an in-flight request still describes the latest local edit.
+  Future<bool> isCurrent(OutboxRow item) async =>
+      await (_db.select(_db.outbox)..where(
+            (t) => t.id.equals(item.id) & t.revision.equals(item.revision),
+          ))
+          .getSingleOrNull() !=
+      null;
+
+  Future<void> complete(String id, {String? revision}) async {
+    await (_db.delete(_db.outbox)..where(
+          (t) =>
+              t.id.equals(id) &
+              (revision == null
+                  ? const Constant(true)
+                  : t.revision.equals(revision)),
+        ))
+        .go();
   }
 
   /// Records a failed attempt and schedules the next one.
@@ -278,7 +308,18 @@ class OutboxQueue {
   /// A stale write is neither retried nor kept here — see [EntryConflicts]. It
   /// leaves the queue entirely, because what is left to do about it is not a
   /// send.
-  Future<void> fail(String id, String error, {bool permanent = false}) async {
+  Future<void> fail(
+    String id,
+    String error, {
+    bool permanent = false,
+    String? revision,
+  }) => _db.transaction(() async {
+    final current = await (_db.select(
+      _db.outbox,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    if (current == null || (revision != null && current.revision != revision)) {
+      return;
+    }
     if (permanent) {
       await (_db.update(_db.outbox)..where((t) => t.id.equals(id))).write(
         OutboxCompanion(
@@ -306,5 +347,5 @@ class OutboxQueue {
         lastError: Value(error),
       ),
     );
-  }
+  });
 }

@@ -67,14 +67,15 @@ void main() {
   test('an edit records what changed, from and to', () {
     final event = describeSnapshot(
       previous: snap(),
-      current: snap(amountMinor: 30000, payers: {'m1': 30000},
-          shares: {'m1': 30000}),
+      current: snap(
+        amountMinor: 30000,
+        payers: {'m1': 30000},
+        shares: {'m1': 30000},
+      ),
     );
 
     expect(event.kind, EntryEventKind.edited);
-    final amount = event.changes.firstWhere(
-      (c) => c.field == 'amount_minor',
-    );
+    final amount = event.changes.firstWhere((c) => c.field == 'amount_minor');
     expect(amount.from, '40000');
     expect(amount.to, '30000');
   });
@@ -85,11 +86,10 @@ void main() {
       current: snap(description: 'Lunch', notes: 'split evenly'),
     );
 
-    expect(
-      event.changes.map((c) => c.field),
-      ['description', 'notes'],
-      reason: 'sorted by field, so an edit reads the same on every device',
-    );
+    expect(event.changes.map((c) => c.field), [
+      'description',
+      'notes',
+    ], reason: 'sorted by field, so an edit reads the same on every device');
   });
 
   test('saving something unchanged is not an edit', () {
@@ -193,10 +193,10 @@ void main() {
       current: snap(payers: {'m2': 40000}),
     );
 
-    expect(
-      event.changes.map((c) => c.field).toList()..sort(),
-      ['paid:m1', 'paid:m2'],
-    );
+    expect(event.changes.map((c) => c.field).toList()..sort(), [
+      'paid:m1',
+      'paid:m2',
+    ]);
   });
 
   test('a re-split is not mistaken for an unchanged expense', () {

@@ -75,6 +75,20 @@ comment on function register_device_token is
   'Registers this device against the calling account, taking the token over '
   'from a previous owner if it has one. profile_id is always auth.uid().';
 
+create or replace function unregister_device_token(p_token text)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  delete from device_tokens
+   where token = p_token
+     and profile_id = auth.uid();
+$$;
+
+comment on function unregister_device_token is
+  'Removes a device token only when it belongs to the calling account.';
+
 -- ---------------------------------------------------------------------------
 -- Who should be woken for a change to an entry.
 --

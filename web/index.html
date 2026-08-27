@@ -16,12 +16,12 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="OpenSplit">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="apple-touch-icon" href="/icons/Icon-192.png">
   <!-- The mark is a ring with one diagonal knockout, which is four shapes of
        vector and blurs into a smudge as a 32px bitmap. SVG first, so any
        browser that takes it renders it sharp at whatever size the tab is. -->
-  <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
 
   <title>OpenSplit — split expenses with friends</title>
   <link rel="manifest" href="manifest.json">
@@ -84,6 +84,35 @@
     }
 
     #skeleton { position: fixed; inset: 0; z-index: 1; }
+
+    /* Two shapes, because the app has two landing places and they look nothing
+     * alike. Signed in is the chrome below; signed out is WelcomeScreen, which
+     * is a bare Scaffold holding a centred column — no app bar, no rail, no
+     * button, no navigation bar.
+     *
+     * The chrome starts hidden and is turned on by the boot hint, so the
+     * default belongs to the visitor who has never been here. That is the
+     * right way round: they are signed out by definition, they have the
+     * emptiest cache, and they wait the longest to find out the loader was
+     * wrong. */
+    #chrome[hidden], #intro[hidden] { display: none; }
+    #intro {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+    #intro .mark { width: 56px; height: 56px; color: var(--primary); flex: none; }
+    /* textTheme.headlineMedium: the size WelcomeScreen titles itself with. */
+    #intro p {
+      margin: 0;
+      font-size: 28px;
+      line-height: 36px;
+      font-weight: 400;
+    }
 
     /* The small top app bar: 56dp, on `surface`, and flat. M3 gave up the
      * bottom rule and the drop shadow — an app bar only separates itself from
@@ -291,6 +320,7 @@
 </head>
 <body>
   <div id="skeleton" aria-hidden="true">
+   <div id="chrome" hidden>
     <div class="rail">
       <div class="pill"></div>
       <div class="glyph g1"></div>
@@ -343,6 +373,23 @@
         <div class="label">Settings</div>
       </div>
     </div>
+   </div>
+
+    <!-- What somebody signed out is about to see. Both the mark and the word
+         are certain, so both are drawn outright; the three identity buttons
+         below them are not — whether Google is offered depends on the build —
+         and a placeholder for a button that never arrives is worse than the
+         space it would have taken. -->
+    <div id="intro">
+      <svg class="mark" viewBox="0 0 48 48" aria-hidden="true">
+        <mask id="slash-intro">
+          <rect width="48" height="48" fill="#fff"></rect>
+          <rect x="20.75" y="-4" width="6.5" height="56" fill="#000" transform="rotate(24 24 24)"></rect>
+        </mask>
+        <circle cx="24" cy="24" r="17" fill="none" stroke="currentColor" stroke-width="6.5" mask="url(#slash-intro)"></circle>
+      </svg>
+      <p>OpenSplit</p>
+    </div>
   </div>
 
   <noscript>
@@ -356,18 +403,29 @@
     // nothing cached — so the cards were least truthful exactly when they were
     // most visible.
     //
-    // The app leaves a note in localStorage (see lib/data/web/boot_hint.dart)
-    // once it knows. Only a browser that has seen groups here gets cards; every
-    // other case falls back to the app bar and the button, which are on this
-    // screen for everybody in every state.
+    // The same was true one level up, and less obviously. This drew the app
+    // bar, the rail and the button for everybody, on the grounds that they are
+    // on the screen in every state — which is wrong for the one state that
+    // matters most here. Signed out lands on WelcomeScreen, a bare Scaffold
+    // with a centred column and none of that chrome, so a first-time visitor
+    // watched a whole app layout paint and then disappear.
+    //
+    // So two notes, not one (see lib/data/web/boot_hint.dart): whether anybody
+    // is signed in decides which of the two shapes to draw, and only then does
+    // whether they have groups decide about cards.
     //
     // Read synchronously, before first paint, so nothing moves afterwards.
     // Wrapped because reading storage throws outright in some privacy modes.
     try {
-      if (localStorage.getItem('opensplit.hasGroups') === '1') {
-        document.getElementById('cards').hidden = false;
+      if (localStorage.getItem('opensplit.signedIn') === '1') {
+        document.getElementById('chrome').hidden = false;
+        document.getElementById('intro').hidden = true;
+
+        if (localStorage.getItem('opensplit.hasGroups') === '1') {
+          document.getElementById('cards').hidden = false;
+        }
       }
-    } catch (e) { /* chrome only, which is the safe default */ }
+    } catch (e) { /* the mark alone, which is the safe default */ }
 
     // Flutter fires this once it has actually painted, so the swap happens
     // when there is something real underneath rather than on a timer that

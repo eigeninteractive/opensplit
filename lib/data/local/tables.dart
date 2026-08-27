@@ -382,6 +382,9 @@ class Outbox extends Table {
   /// The row's id in its own table.
   TextColumn get targetId => text()();
 
+  /// Identifies this particular edit, including edits made during an upload.
+  TextColumn get revision => text().withDefault(const Constant(''))();
+
   /// JSON arguments, for operations that have no local row to read back.
   ///
   /// Row-backed operations deliberately store nothing here: the pusher reads
@@ -432,4 +435,30 @@ class SyncCursors extends Table {
 
   @override
   Set<Column> get primaryKey => {feed};
+}
+
+/// A short, renewable cross-isolate lease for account synchronization.
+///
+/// Native push handling can open the same account database in a background
+/// isolate while the foreground app is alive. An in-memory mutex cannot span
+/// those isolates, so this row is the final authority on whether a sync may
+/// start. It is a lease rather than a permanent flag so a killed process never
+/// wedges synchronization forever.
+class SyncLeases extends Table {
+  TextColumn get name => text()();
+  TextColumn get owner => text()();
+  DateTimeColumn get expiresAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {name};
+}
+
+/// Fences late network responses after this account is cleared locally.
+class SyncSessions extends Table {
+  TextColumn get id => text()();
+  TextColumn get epoch => text()();
+  BoolColumn get enabled => boolean()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
 }

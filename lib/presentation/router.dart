@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../l10n/app_localizations.dart';
+import 'navigation.dart';
 import 'screens/account_screen.dart';
 import 'screens/activity_screen.dart';
 import 'screens/archived_groups_screen.dart';
@@ -23,17 +25,17 @@ import 'screens/welcome_screen.dart';
 /// the same three destinations cannot drift apart.
 const _destinations = <_Destination>[
   _Destination(
-    label: 'Groups',
+    kind: _DestinationKind.groups,
     icon: Icons.groups_outlined,
     selectedIcon: Icons.groups,
   ),
   _Destination(
-    label: 'Account',
+    kind: _DestinationKind.account,
     icon: Icons.person_outline,
     selectedIcon: Icons.person,
   ),
   _Destination(
-    label: 'Settings',
+    kind: _DestinationKind.settings,
     icon: Icons.settings_outlined,
     selectedIcon: Icons.settings,
   ),
@@ -41,15 +43,23 @@ const _destinations = <_Destination>[
 
 class _Destination {
   const _Destination({
-    required this.label,
+    required this.kind,
     required this.icon,
     required this.selectedIcon,
   });
 
-  final String label;
+  final _DestinationKind kind;
   final IconData icon;
   final IconData selectedIcon;
+
+  String label(AppLocalizations l10n) => switch (kind) {
+    _DestinationKind.groups => l10n.navigationGroups,
+    _DestinationKind.account => l10n.navigationAccount,
+    _DestinationKind.settings => l10n.navigationSettings,
+  };
 }
+
+enum _DestinationKind { groups, account, settings }
 
 /// One route table serving both Android and the web.
 ///
@@ -94,14 +104,8 @@ GoRouter buildRouter({
   /// who has never opened the app, and it shows what the link is for *before*
   /// asking who they are — which is the ordering that stops an invite being
   /// spent by an account the arrival did not want.
-  redirect: (context, state) {
-    final path = state.uri.path;
-    final open = path == '/welcome' || path.startsWith('/join/');
-
-    if (!isSignedIn()) return open ? null : '/welcome';
-    // Signed in already: the welcome screen has nothing left to offer.
-    return path == '/welcome' ? '/' : null;
-  },
+  redirect: (context, state) =>
+      redirectAppRoute(state.uri, signedIn: isSignedIn()),
   routes: [
     // One shell around everything, for one reason: SelectionArea.
     //
@@ -285,6 +289,7 @@ class AdaptiveNavigation extends StatelessWidget {
     // would be the thing an AppBar found when it looked for a drawer.
     if (MediaQuery.sizeOf(context).width < _railBreakpoint) return shell;
 
+    final l10n = AppLocalizations.of(context);
     return Scaffold(
       body: Row(
         children: [
@@ -302,7 +307,7 @@ class AdaptiveNavigation extends StatelessWidget {
                 NavigationRailDestination(
                   icon: Icon(destination.icon),
                   selectedIcon: Icon(destination.selectedIcon),
-                  label: Text(destination.label),
+                  label: Text(destination.label(l10n)),
                 ),
             ],
           ),
@@ -331,6 +336,7 @@ class _NavigationDrawer extends StatelessWidget {
   Widget build(BuildContext context) {
     final shell = StatefulNavigationShell.of(context).widget;
     final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context);
 
     return NavigationDrawer(
       // Counts destinations only, so the heading below does not shift it.
@@ -344,13 +350,13 @@ class _NavigationDrawer extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(28, 16, 16, 10),
-          child: Text('OpenSplit', style: theme.textTheme.titleSmall),
+          child: Text(l10n.appTitle, style: theme.textTheme.titleSmall),
         ),
         for (final destination in _destinations)
           NavigationDrawerDestination(
             icon: Icon(destination.icon),
             selectedIcon: Icon(destination.selectedIcon),
-            label: Text(destination.label),
+            label: Text(destination.label(l10n)),
           ),
       ],
     );

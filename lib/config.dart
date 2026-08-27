@@ -48,12 +48,15 @@ const String linkHost = String.fromEnvironment(
 
 /// The public policy pages, served from the same host as the web app.
 ///
-/// Static HTML in `web/privacy/`, `web/terms/` and `web/delete-account/`,
+/// Static HTML in `site/privacy/`, `site/terms/` and `site/delete-account/`,
 /// deliberately not Flutter routes: Google Play needs the privacy policy and
 /// the data-deletion page to be readable by a reviewer, a crawler and somebody
 /// who has already uninstalled the app, and a Flutter route is none of those.
-/// Firebase Hosting serves real files before rewrites, so they survive the
-/// single-page-app catch-all.
+///
+/// At the host root rather than under `/app/`, which is the whole point of the
+/// split: `site/` is plain HTML that needs no engine and no session, and the
+/// single-page-app rewrite reaches only `/app/**`, so nothing here can be
+/// swallowed by it.
 ///
 /// These are the exact URLs submitted to Play Console under *App content*, so
 /// the app and the store listing point at one page rather than two copies.

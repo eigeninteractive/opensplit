@@ -16,6 +16,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Privacy Policy · OpenSplit</title>
 <meta name="description" content="What OpenSplit collects, where it goes, and how to delete it.">
+<!-- Absolute rather than relative, so one pair of files serves the whole origin.
+     These pages sit at different depths and carry no <base>, and the app shell
+     under /app/ points at the same two. A page that declares no icon at all
+     falls back to /favicon.ico, which does not exist here — that is what left
+     the tab showing a default glyph on every one of these pages. -->
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
+<link rel="apple-touch-icon" href="/icons/Icon-192.png">
 <style>
     :root {
       --surface: #fcf8ff;
@@ -81,7 +89,7 @@
 <header><svg viewBox="0 0 48 48" aria-hidden="true"><mask id="slash"><rect width="48" height="48" fill="#fff"></rect><rect x="20.75" y="-4" width="6.5" height="56" fill="#000" transform="rotate(24 24 24)"></rect></mask><circle cx="24" cy="24" r="17" fill="none" stroke="currentColor" stroke-width="6.5" mask="url(#slash)"></circle></svg><a href="/">OpenSplit</a></header>
 
 <h1>Privacy Policy</h1>
-<p class="updated">Last updated 26 August 2026</p>
+<p class="updated">Last updated 27 August 2026</p>
 
 <p>OpenSplit is an expense splitter. It exists to answer one question — who owes
 whom — and it collects what it needs to answer that, and nothing else. There is
@@ -97,8 +105,9 @@ anybody.</p>
 <li><strong>Email address</strong>, if you sign in with email or with Google.</li>
 <li><strong>A Google account identifier</strong>, if you sign in with Google. We
 never receive your Google password.</li>
-<li>Nothing at all if you use OpenSplit as a guest. A guest account has no
-email and no way to sign in from anywhere else.</li>
+<li><strong>An anonymous account identifier</strong> if you continue as a
+guest. A guest account has no email or other recovery credential until you add
+one.</li>
 </ul>
 
 <h3>Your profile</h3>
@@ -133,10 +142,12 @@ and writes the notification text itself.</li>
 stored on your device in a local database, and every balance, search and chart
 is computed there. The app is fully usable with no connection at all, and the
 server is never asked to compute anything.</p>
-<p>If you use OpenSplit as a guest, your data never leaves your device — which
-also means nothing can be recovered if you lose it, reinstall, or clear your
-browser data. The app says so, more than once, before you have anything to
-lose.</p>
+<p>Guest accounts use the same synchronization service as other accounts, so
+their groups and expenses are stored on the server and shared with group
+members. Until you attach an email address or Google account, the session on
+that device is the only way to return to the account. Losing it, reinstalling,
+or clearing browser data can therefore leave the server data in place while
+you lose access to it.</p>
 
 <h2>Who can see what</h2>
 <p>Access is enforced in the database itself, by row-level security, rather than

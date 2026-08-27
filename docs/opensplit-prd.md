@@ -22,7 +22,7 @@ OpenSplit is a free, open-source, local-first expense splitting app for Android 
 | G2 | Every read is instant | No spinner on any screen after first sync |
 | G3 | Works fully offline | Full CRUD with no network; trips abroad are the primary use case |
 | G4 | Costs stay near zero regardless of scale | < €25/mo at 100k users |
-| G5 | Self-hosting is real, not aspirational | `docker compose up` → working instance, < 15 min |
+| G5 | Self-hosting is real, not aspirational | A pinned Supabase CLI stack applies and passes the complete database and adapter suites in CI |
 | G6 | The app survives project abandonment | Data on device; app functions read-only if server disappears |
 
 ## 3. Non-goals for v1
@@ -65,7 +65,7 @@ These are commitments, published in the repository as `PRINCIPLES.md`.
 
 ```
 Tap link → web or app opens at /join/:token
-         → anonymous session created silently
+         → welcome offers Google, email, or an explicit guest account
          → claim placeholder member
          → land inside the group, balances visible
 ```
@@ -192,7 +192,13 @@ supported *pair* — only a currency that has a rate on a date, or does not.
 
 Sign in with Apple is **not** required in v1 — Apple's guideline 4.8 binds only on iOS, which is v2 scope.
 
-**Anonymous is the default entry path.** `signInAnonymously()` creates a real `auth.users` row with an `is_anonymous` JWT claim. `linkIdentity()` / `updateUser(email:)` upgrades it later, preserving the same user ID, so no data migration on upgrade.
+**Anonymous is an explicit entry path.** Choosing “Continue as guest” calls
+`signInAnonymously()` and creates a real `auth.users` row with an
+`is_anonymous` JWT claim. Guest data synchronizes normally, but the creating
+device holds the only recovery credential until `linkIdentity()` /
+`updateUser(email:)` upgrades the same user ID. The app never manufactures a
+guest session before the person chooses one, because doing so can consume an
+invite under the wrong identity.
 
 **Google:** native `google_sign_in` feeding `signInWithIdToken()` — not the OAuth web redirect. One tap, no browser bounce.
 

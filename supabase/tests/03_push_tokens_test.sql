@@ -2,7 +2,7 @@
 -- change.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(21);
+select plan(25);
 
 insert into auth.users (id, instance_id, aud, role, email, raw_user_meta_data,
                         created_at, updated_at)
@@ -53,10 +53,13 @@ set local role authenticated;
 set local "request.jwt.claims" to
   '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated"}';
 
-select is((select count(*)::int from device_tokens), 1,
-  'you see only your own device tokens');
-select is((select token from device_tokens), 'token-ravi',
-  'and it is yours');
+select throws_ok(
+  $$select token from device_tokens$$,
+  '42501', null,
+  'device tokens are not directly readable through the Data API');
+select ok(
+  not has_table_privilege('authenticated', 'public.device_tokens', 'SELECT'),
+  'authenticated has no token-table read privilege');
 
 select throws_ok(
   $$insert into device_tokens (token, profile_id, platform)
@@ -64,11 +67,11 @@ select throws_ok(
   '42501', null,
   'you cannot register a token against someone else');
 
-select is(
-  (select count(*)::int from device_tokens
-    where profile_id = '22222222-2222-4222-8222-222222222222'),
-  0,
-  'a group member still cannot read another member tokens');
+select throws_ok(
+  $$select token from device_tokens
+     where profile_id = '22222222-2222-4222-8222-222222222222'$$,
+  '42501', null,
+  'a group member cannot enumerate another member tokens');
 
 -- ---------------------------------------------------------------------------
 -- Fan-out
@@ -132,10 +135,14 @@ select lives_ok(
   $$select register_device_token('token-priya', 'android')$$,
   'a token held by somebody else can be claimed by the device holding it');
 
+reset role;
 select is(
   (select profile_id from device_tokens where token = 'token-priya'),
   '11111111-1111-4111-8111-111111111111'::uuid,
   'and it now belongs to whoever claimed it');
+set local role authenticated;
+set local "request.jwt.claims" to
+  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated"}';
 
 select throws_ok(
   $$select register_device_token('token-ravi', 'symbian')$$,
@@ -144,11 +151,31 @@ select throws_ok(
 
 -- Reading is still nobody else's business: claiming a token you physically
 -- hold is not the same as being able to enumerate anyone's.
+select throws_ok(
+  $$select token from device_tokens$$,
+  '42501', null,
+  'claiming one grants no visibility into the token table');
+
+select lives_ok(
+  $$select unregister_device_token('token-ravi')$$,
+  'the owner can unregister a device token');
+reset role;
 select is(
-  (select count(*)::int from device_tokens
-    where profile_id = '22222222-2222-4222-8222-222222222222'),
+  (select count(*)::int from device_tokens where token = 'token-ravi'),
   0,
-  'claiming one grants no visibility of anybody else');
+  'and the token is removed');
+
+set local role authenticated;
+set local "request.jwt.claims" to
+  '{"sub":"22222222-2222-4222-8222-222222222222","role":"authenticated"}';
+select lives_ok(
+  $$select unregister_device_token('token-priya')$$,
+  'unregistering a token owned by someone else reveals nothing');
+reset role;
+select is(
+  (select count(*)::int from device_tokens where token = 'token-priya'),
+  1,
+  'and it does not remove the other account''s token');
 
 -- ---------------------------------------------------------------------------
 -- The fan-out is a trigger in this migration, not a row in a dashboard
@@ -159,6 +186,8 @@ select is(
 -- keeps the whole chain reproducible on a plain Postgres with pg_net.
 -- ---------------------------------------------------------------------------
 set local role postgres;
+set local "request.jwt.claims" to
+  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated"}';
 
 select has_trigger('public', 'entry_events', 'trg_entry_events_notify',
   'the record of a change carries its own notify trigger, so a deployment '

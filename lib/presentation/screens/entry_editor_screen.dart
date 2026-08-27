@@ -64,6 +64,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
 
   bool _multiplePayers = false;
   bool _loaded = false;
+  Entry? _editingSnapshot;
   bool _saving = false;
   String? _error;
 
@@ -129,6 +130,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
 
   void _load(GroupLedger ledger, Entry? existing, Map<String, Currency> cx) {
     _loaded = true;
+    _editingSnapshot = existing;
 
     _currencyCode = existing?.currency ?? ledger.group.defaultCurrency;
 
@@ -293,7 +295,12 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
       if (widget.isEditing) {
         // Who is editing, which need not be who created it — that difference is
         // most of what makes a feed line worth reading.
-        await repository.update(widget.entryId!, draft, actorId: ledger.me?.id);
+        await repository.update(
+          widget.entryId!,
+          draft,
+          actorId: ledger.me?.id,
+          expected: _editingSnapshot,
+        );
       } else {
         await repository.create(
           draft,
@@ -306,6 +313,8 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
       // The domain refused it, so nothing was written. Its messages are written
       // for people, so they are shown as-is.
       if (mounted) setState(() => _error = e.message);
+    } catch (error) {
+      if (mounted) setState(() => _error = '$error');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -358,13 +367,18 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
     );
     if (!(confirmed ?? false)) return;
 
-    await ref
-        .read(entryRepositoryProvider)
-        .delete(
-          widget.entryId!,
-          actorId: ref.read(groupLedgerProvider(widget.groupId))?.me?.id,
-        );
-    if (mounted) goBack(context, '/g/${widget.groupId}');
+    try {
+      await ref
+          .read(entryRepositoryProvider)
+          .delete(
+            widget.entryId!,
+            actorId: ref.read(groupLedgerProvider(widget.groupId))?.me?.id,
+            expected: _editingSnapshot,
+          );
+      if (mounted) goBack(context, '/g/${widget.groupId}');
+    } catch (error) {
+      if (mounted) setState(() => _error = '$error');
+    }
   }
 
   @override

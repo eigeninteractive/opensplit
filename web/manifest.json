@@ -2,11 +2,11 @@
     "name": "OpenSplit — split expenses with friends",
     "short_name": "OpenSplit",
     "start_url": ".",
+    "scope": "/app/",
     "display": "standalone",
     "background_color": "#FCF8FF",
     "theme_color": "#FCF8FF",
     "description": "Split expenses with friends. Free forever, no ads, works offline, open source.",
-    "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "categories": [
         "finance",
@@ -14,23 +14,23 @@
     ],
     "icons": [
         {
-            "src": "icons/Icon-192.png",
+            "src": "/icons/Icon-192.png",
             "sizes": "192x192",
             "type": "image/png"
         },
         {
-            "src": "icons/Icon-512.png",
+            "src": "/icons/Icon-512.png",
             "sizes": "512x512",
             "type": "image/png"
         },
         {
-            "src": "icons/Icon-maskable-192.png",
+            "src": "/icons/Icon-maskable-192.png",
             "sizes": "192x192",
             "type": "image/png",
             "purpose": "maskable"
         },
         {
-            "src": "icons/Icon-maskable-512.png",
+            "src": "/icons/Icon-maskable-512.png",
             "sizes": "512x512",
             "type": "image/png",
             "purpose": "maskable"

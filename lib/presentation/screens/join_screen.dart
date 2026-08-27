@@ -246,9 +246,9 @@ class _Claim extends ConsumerWidget {
       return IdentityChoices(
         onSignedIn: onJoin,
         guestNote:
-            'You will be in the group straight away. It stays on this device '
-            'and cannot be recovered if you lose it — you can add an account '
-            'later without leaving the group.',
+            'You will join straight away and the group will synchronize. This '
+            'device is the only way back into the guest account until you add '
+            'an email address or Google account.',
       );
     }
 

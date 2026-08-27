@@ -61,11 +61,11 @@ export function sanitise(
   wanted: string[],
 ): Record<string, number> {
   const out: Record<string, number> = {};
-  if (typeof raw !== 'object' || raw === null) return out;
+  if (typeof raw !== "object" || raw === null) return out;
   const map = raw as Record<string, unknown>;
   for (const code of wanted) {
     const value = map[code];
-    if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    if (typeof value === "number" && Number.isFinite(value) && value > 0) {
       out[code] = value;
     }
   }

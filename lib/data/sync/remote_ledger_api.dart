@@ -64,8 +64,13 @@ abstract interface class RemoteLedgerApi {
   /// typo would cost more than it saves.
   Future<Entry> upsertEntry(Entry entry, {DateTime? baseUpdatedAt});
 
-  /// Soft-deletes an entry, returning it with the server's new `updatedAt`.
-  Future<Entry> deleteEntry(String entryId);
+  /// Soft-deletes an entry composed against [baseUpdatedAt].
+  ///
+  /// Deletion changes every live balance contributed by the entry, so a stale
+  /// delete is a conflict even when an edit with the same stale base would have
+  /// changed prose only. A retry is idempotent when the server already holds a
+  /// tombstone.
+  Future<Entry> deleteEntry(String entryId, {required DateTime baseUpdatedAt});
 
   /// This group's expenses, changed strictly after [since].
   ///

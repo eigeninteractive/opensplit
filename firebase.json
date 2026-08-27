@@ -1,18 +1,91 @@
 {
   "hosting": {
+    "target": "main-site",
     "public": "build/web",
     "ignore": [
       "firebase.json",
       "**/node_modules/**",
-      "**/.last_build_id"
+      "**/.last_build_id",
+      "**/*.map"
+    ],
+    "redirects": [
+      {
+        "source": "/g/:rest*",
+        "destination": "/app/g/:rest*",
+        "type": 301
+      },
+      {
+        "source": "/join/:token",
+        "destination": "/app/join/:token",
+        "type": 301
+      },
+      {
+        "source": "/welcome",
+        "destination": "/app/welcome",
+        "type": 301
+      },
+      {
+        "source": "/archived",
+        "destination": "/app/archived",
+        "type": 301
+      },
+      {
+        "source": "/account",
+        "destination": "/app/account",
+        "type": 301
+      },
+      {
+        "source": "/settings",
+        "destination": "/app/settings",
+        "type": 301
+      }
     ],
     "rewrites": [
       {
-        "source": "**",
-        "destination": "/index.html"
+        "source": "/app/**",
+        "destination": "/app/index.html"
       }
     ],
     "headers": [
+      {
+        "source": "**",
+        "headers": [
+          {
+            "key": "X-Content-Type-Options",
+            "value": "nosniff"
+          },
+          {
+            "key": "Referrer-Policy",
+            "value": "strict-origin-when-cross-origin"
+          },
+          {
+            "key": "Permissions-Policy",
+            "value": "camera=(), microphone=(), geolocation=()"
+          }
+        ]
+      },
+      {
+        "source": "/app/**",
+        "headers": [
+          {
+            "key": "Cross-Origin-Opener-Policy",
+            "value": "same-origin"
+          },
+          {
+            "key": "Cross-Origin-Embedder-Policy",
+            "value": "credentialless"
+          }
+        ]
+      },
+      {
+        "source": "/",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, max-age=0"
+          }
+        ]
+      },
       {
         "source": "/index.html",
         "headers": [
@@ -23,7 +96,7 @@
         ]
       },
       {
-        "source": "/flutter_bootstrap.js",
+        "source": "/app",
         "headers": [
           {
             "key": "Cache-Control",
@@ -32,7 +105,52 @@
         ]
       },
       {
-        "source": "/sw.js",
+        "source": "/app/",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, max-age=0"
+          }
+        ]
+      },
+      {
+        "source": "/app/index.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, max-age=0"
+          }
+        ]
+      },
+      {
+        "source": "/app/flutter_bootstrap.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, max-age=0"
+          }
+        ]
+      },
+      {
+        "source": "/app/sw.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, max-age=0"
+          }
+        ]
+      },
+      {
+        "source": "/app/firebase-messaging-sw.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, max-age=0"
+          }
+        ]
+      },
+      {
+        "source": "/app/manifest.json",
         "headers": [
           {
             "key": "Cache-Control",

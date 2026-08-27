@@ -203,7 +203,15 @@ final class SupabaseAuthService implements AuthService {
   }
 
   @override
-  Future<void> signOut() => _client.auth.signOut();
+  Future<void> signOut() async {
+    try {
+      await _client.auth.signOut().timeout(const Duration(seconds: 15));
+    } catch (_) {
+      // GoTrue clears local auth before revoking its remote session. Losing
+      // connectivity after that must not report a local sign-out as failed.
+      if (_client.auth.currentUser != null) rethrow;
+    }
+  }
 
   @override
   Future<void> deleteAccount() async {

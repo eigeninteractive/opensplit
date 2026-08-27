@@ -1,4 +1,5 @@
 import 'database.dart';
+import '../sync/sync_session.dart';
 
 /// Clears everything this device holds *about people and money*, leaving
 /// reference data alone.
@@ -17,8 +18,21 @@ import 'database.dart';
 /// Currencies, categories and exchange rates survive. They are reference data,
 /// identical for every account, and re-fetching them would only mean a slower
 /// first launch on the far side of a sign-in.
-Future<void> forgetLocalLedger(AppDatabase db) async {
+Future<void> forgetLocalLedger(
+  AppDatabase db, {
+  bool requireSynced = false,
+}) async {
   await db.transaction(() async {
+    if (requireSynced) {
+      final queued = await (db.select(db.outbox)..limit(1)).get();
+      final conflicts = await (db.select(db.entryConflicts)..limit(1)).get();
+      if (queued.isNotEmpty || conflicts.isNotEmpty) {
+        throw StateError(
+          'Sync or resolve the changes on this device before signing out.',
+        );
+      }
+    }
+    await suspendSyncSession(db);
     // Children first. Foreign keys are on (see the beforeOpen PRAGMA), and
     // entry_payers/entry_shares reference members, which the cascade from
     // groups would otherwise trip over.
@@ -31,6 +45,7 @@ Future<void> forgetLocalLedger(AppDatabase db) async {
     // this list is belt as well as braces — but the list is the part a reader
     // can check against the schema.
     await db.delete(db.entrySnapshots).go();
+    await db.delete(db.entryConflicts).go();
     await db.delete(db.entryPayers).go();
     await db.delete(db.entryShares).go();
     await db.delete(db.entries).go();

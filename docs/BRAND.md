@@ -46,7 +46,7 @@ The cut is a *knockout*, so on a coloured surface it shows that surface through.
 | `assets/brand/mark-on-primary-container.svg` | pre-stroked `#E3DFFF` |
 | `assets/brand/lockup-horizontal.svg` | app bar, README, web header |
 | `assets/brand/lockup-vertical.svg` | onboarding, about screen, store listing |
-| `web/favicon.svg` | browser tab |
+| `site/favicon.svg` | browser tab |
 
 Lockup SVGs reference Instrument Sans by name. Convert the `<text>` to outlines before
 shipping anywhere the font isn't loaded (store listings, GitHub social preview).
@@ -88,7 +88,7 @@ Android 12+ crops it. The "free & open source" line belongs on the first in-app 
 
 - `web/manifest.json` — name, theme colour, 192/512 + maskable 192/512.
 - `web/index-head-snippet.html` — paste into `<head>`; includes light/dark `theme-color`.
-- `web/favicon.svg` + `web/favicon.png`.
+- `site/favicon.svg` + `site/favicon.png`.
 
 ## pubspec
 

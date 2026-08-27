@@ -10,6 +10,7 @@ import '../../domain/models/profile.dart';
 import '../local/database.dart';
 import '../local/entry_writer.dart';
 import 'change_feed.dart';
+import 'outbox_queue.dart';
 import 'remote_ledger_api.dart';
 import 'sync_cursor.dart';
 import 'wire.dart' show memberAmountsToJson;
@@ -34,6 +35,14 @@ bool remoteWins(DateTime? local, DateTime? remote) {
   return local.isBefore(remote);
 }
 
+/// Dirty rows are protected by intent, never by comparing device clocks.
+Future<Set<String>> _dirtyIds(AppDatabase db, OutboxTarget target) async {
+  final rows = await (db.select(
+    db.outbox,
+  )..where((t) => t.operation.equals(target.name))).get();
+  return {for (final row in rows) row.targetId};
+}
+
 /// One group's own row.
 ///
 /// A page of at most one row. See [RemoteLedgerApi.pullGroup] for why that
@@ -53,9 +62,11 @@ class GroupFeed implements ChangeFeed<Group> {
       _api.pullGroup(groupId: groupId, since: since, limit: limit);
 
   @override
-  Future<int> apply(List<Group> rows) async {
+  Future<int> apply(List<Group> rows) => _db.transaction(() async {
+    final dirty = await _dirtyIds(_db, OutboxTarget.group);
     var applied = 0;
     for (final group in rows) {
+      if (dirty.contains(group.id)) continue;
       final local = await (_db.select(
         _db.groups,
       )..where((t) => t.id.equals(group.id))).getSingleOrNull();
@@ -86,7 +97,7 @@ class GroupFeed implements ChangeFeed<Group> {
       applied++;
     }
     return applied;
-  }
+  });
 }
 
 /// One group's members, including those who have left.
@@ -108,7 +119,8 @@ class MemberFeed implements ChangeFeed<Member> {
       _api.pullMembers(groupId: groupId, since: since, limit: limit);
 
   @override
-  Future<int> apply(List<Member> rows) async {
+  Future<int> apply(List<Member> rows) => _db.transaction(() async {
+    final dirty = await _dirtyIds(_db, OutboxTarget.member);
     // The local copies in one query rather than one per row. This used to be a
     // SELECT per member inside the loop, which a group of twenty paid on every
     // sync — and there are far more syncs now that writes trigger them.
@@ -120,7 +132,9 @@ class MemberFeed implements ChangeFeed<Member> {
 
     final winners = [
       for (final member in rows)
-        if (remoteWins(byId[member.id]?.updatedAt, member.updatedAt)) member,
+        if (!dirty.contains(member.id) &&
+            remoteWins(byId[member.id]?.updatedAt, member.updatedAt))
+          member,
     ];
     if (winners.isEmpty) return 0;
 
@@ -146,7 +160,7 @@ class MemberFeed implements ChangeFeed<Member> {
       }
     });
     return winners.length;
-  }
+  });
 }
 
 /// One group's expenses, with their payers and shares.
@@ -173,7 +187,9 @@ class EntryFeed implements ChangeFeed<Entry> {
     // Drift nests the inner transactions as savepoints, so this changes the
     // number of fsyncs, not the semantics.
     await _db.transaction(() async {
+      final dirty = await _dirtyIds(_db, OutboxTarget.entry);
       for (final remote in rows) {
+        if (dirty.contains(remote.id)) continue;
         final local = await (_db.select(
           _db.entries,
         )..where((t) => t.id.equals(remote.id))).getSingleOrNull();
@@ -260,6 +276,7 @@ class SnapshotFeed implements ChangeFeed<EntrySnapshot> {
       // expense whose push was refused outright stays exactly where it is --
       // which is the one case where it is the only record there is.
       final touched = {for (final snapshot in rows) snapshot.entryId};
+      touched.removeAll(await _dirtyIds(_db, OutboxTarget.entry));
       await (_db.delete(
         _db.entrySnapshots,
       )..where((t) => t.entryId.isIn(touched) & t.isProvisional)).go();
@@ -287,7 +304,8 @@ class ProfileFeed implements ChangeFeed<Profile> {
       _api.pullProfiles(since: since, limit: limit);
 
   @override
-  Future<int> apply(List<Profile> rows) async {
+  Future<int> apply(List<Profile> rows) => _db.transaction(() async {
+    final dirty = await _dirtyIds(_db, OutboxTarget.profile);
     final ids = [for (final profile in rows) profile.id];
     final locals = await (_db.select(
       _db.profiles,
@@ -299,7 +317,9 @@ class ProfileFeed implements ChangeFeed<Profile> {
     // hand back the name you had just changed.
     final winners = [
       for (final profile in rows)
-        if (remoteWins(byId[profile.id]?.updatedAt, profile.updatedAt)) profile,
+        if (!dirty.contains(profile.id) &&
+            remoteWins(byId[profile.id]?.updatedAt, profile.updatedAt))
+          profile,
     ];
     if (winners.isEmpty) return 0;
 
@@ -316,5 +336,5 @@ class ProfileFeed implements ChangeFeed<Profile> {
       }
     });
     return winners.length;
-  }
+  });
 }

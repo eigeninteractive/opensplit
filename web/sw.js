@@ -1,103 +1,58 @@
 'use strict';
 
-// The offline shell.
-//
-// OpenSplit keeps every expense in SQLite on the device and renders every
-// screen from it, so the app has nothing to ask a server for in order to work.
-// On the web that promise is only as good as whether the *code* is there: with
-// no service worker, a reload with no connection is a blank page, and the whole
-// thing is a website that happens to store data locally.
-//
-// Two strategies, chosen by what the request is for.
-//
-//   Navigations are network-first. index.html is the one file that names all
-//   the others, so a stale copy is how an app gets stuck on an old build
-//   forever. Online it is always fresh; offline it comes from the cache.
-//
-//   Everything else same-origin is stale-while-revalidate: answer from the
-//   cache immediately — which is what makes a warm start feel instant rather
-//   than like a download — and refresh the entry in the background for next
-//   time.
-//
-// Nothing cross-origin is touched. Supabase carries the user's data and their
-// session; caching any of it would mean serving one person's ledger from
-// another person's cache after a sign-in change.
+// One registration owns /app/: Firebase must not replace the offline worker.
+// Push initialization is optional; an unavailable SDK must not break offline.
+try {
+  importScripts('firebase-messaging-sw.js');
+} catch (error) {
+  console.warn('Push initialization unavailable.', error);
+}
 
-const CACHE = 'opensplit-shell-v1';
-
-// Fetched on install so that a first visit which never goes offline still has
-// enough cached to start. Everything else arrives through the fetch handler as
-// the app asks for it.
-const CORE = [
-  '.',
-  'index.html',
-  'flutter_bootstrap.js',
-  'manifest.json',
-  'favicon.png',
-];
+const CACHE_PREFIX = 'opensplit-shell-';
+const CACHE = CACHE_PREFIX + '__OPEN_SPLIT_BUILD_ID__';
+const RESOURCES = __OPEN_SPLIT_RESOURCES__;
+const URLS = new Set(
+  RESOURCES.map((path) => new URL(path, self.registration.scope).href),
+);
+const INDEX = new URL('index.html', self.registration.scope).href;
 
 self.addEventListener('install', (event) => {
+  // All-or-nothing: a partial shell is not an offline-capable release.
   event.waitUntil(
-    caches
-      .open(CACHE)
-      // Individually, so one 404 does not abort the whole install.
-      .then((cache) => Promise.all(CORE.map((url) => cache.add(url).catch(() => {}))))
-      .then(() => self.skipWaiting()),
+    caches.open(CACHE).then((cache) =>
+      cache.addAll([...URLS].map((url) => new Request(url, { cache: 'reload' }))),
+    ),
   );
+  // Do not skipWaiting: an open editor must keep its entire current release.
+  // The next release activates after all existing app tabs have closed.
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches
-      .keys()
-      .then((keys) =>
-        Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))),
-      )
-      .then(() => self.clients.claim()),
+    caches.keys().then((keys) =>
+      Promise.all(
+        keys
+          .filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE)
+          .map((key) => caches.delete(key)),
+      ),
+    ).then(() => self.clients.claim()),
   );
 });
 
 self.addEventListener('fetch', (event) => {
   const request = event.request;
-
-  // Only GET is cacheable, and only our own origin is ours to cache.
-  if (request.method !== 'GET') return;
+  if (request.method !== 'GET' || request.headers.has('range')) return;
   if (new URL(request.url).origin !== self.location.origin) return;
 
-  // A range request served from a full cached body is a corrupt response; let
-  // the network answer those.
-  if (request.headers.has('range')) return;
-
-  if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE).then((cache) => cache.put('index.html', copy));
-          return response;
-        })
-        .catch(() =>
-          caches
-            .match('index.html')
-            .then((cached) => cached || Response.error()),
-        ),
-    );
-    return;
-  }
+  const navigation = request.mode === 'navigate' &&
+    request.url.startsWith(self.registration.scope);
+  const key = navigation ? INDEX : request.url;
+  // Never cache API responses, landing/legal pages, or another app's resources.
+  if (!navigation && !URLS.has(key)) return;
 
   event.respondWith(
-    caches.match(request).then((cached) => {
-      const network = fetch(request)
-        .then((response) => {
-          if (response && response.ok && response.type === 'basic') {
-            const copy = response.clone();
-            caches.open(CACHE).then((cache) => cache.put(request, copy));
-          }
-          return response;
-        })
-        .catch(() => cached);
-
-      return cached || network;
-    }),
+    caches.open(CACHE).then(async (cache) =>
+      (await cache.match(key)) || fetch(request),
+    ),
   );
 });

@@ -2,6 +2,7 @@
 // google-services.json.
 //
 //   dart run tool/verify_config.dart
+//   dart run tool/verify_config.dart --config=env/ci.example.json
 //   dart run tool/verify_config.dart ~/Downloads/google-services.json
 //
 // This exists because a placeholder can look like a real value. The template
@@ -13,22 +14,39 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:args/args.dart';
+
 void main(List<String> args) {
-  final file = File('env/app.json');
+  final parser = ArgParser()..addOption('config', defaultsTo: 'env/app.json');
+  late ArgResults options;
+  try {
+    options = parser.parse(args);
+    if (options.rest.length > 1) {
+      throw const FormatException(
+        'Expected at most one google-services.json import.',
+      );
+    }
+  } on FormatException catch (error) {
+    stderr.writeln(error.message);
+    stderr.writeln(parser.usage);
+    exitCode = 64;
+    return;
+  }
+  final configPath = options.option('config')!;
+  final importArguments = options.rest;
+  final file = File(configPath);
   if (!file.existsSync()) {
-    stderr.writeln(
-      'env/app.json not found. cp env/app.example.json env/app.json',
-    );
+    stderr.writeln('$configPath not found.');
     exit(1);
   }
   final config = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
 
-  if (args.isNotEmpty) {
-    _importGoogleServices(args.first, config);
+  if (importArguments.isNotEmpty) {
+    _importGoogleServices(importArguments.first, config);
     file.writeAsStringSync(
       '${const JsonEncoder.withIndent('  ').convert(config)}\n',
     );
-    stdout.writeln('Imported into env/app.json from ${args.first}\n');
+    stdout.writeln('Imported into $configPath from ${importArguments.first}\n');
   }
 
   final problems = _check(config);
@@ -104,21 +122,10 @@ int _check(Map<String, dynamic> config) {
     return null;
   }
 
-  report(
-    'SUPABASE_URL',
-    matches(
-      'SUPABASE_URL',
-      RegExp(r'^https://[a-z0-9]+\.supabase\.co$'),
-      'https://<ref>.supabase.co',
-    ),
-  );
+  report('SUPABASE_URL', validateBackendUrl('${config['SUPABASE_URL'] ?? ''}'));
   report(
     'SUPABASE_PUBLISHABLE_KEY',
-    matches(
-      'SUPABASE_PUBLISHABLE_KEY',
-      RegExp(r'^sb_publishable_'),
-      'sb_publishable_…',
-    ),
+    validatePublishableKey('${config['SUPABASE_PUBLISHABLE_KEY'] ?? ''}'),
   );
   report(
     'LINK_HOST',
@@ -184,13 +191,43 @@ int _check(Map<String, dynamic> config) {
   // are tightened.
   if (config['ANDROID_FCM_API_KEY'] == config['WEB_FCM_API_KEY'] &&
       '${config['WEB_FCM_API_KEY']}'.startsWith('AIza')) {
-    problems++;
     stdout.writeln(
-      '  FIX   ANDROID/WEB_FCM_API_KEY  are identical; Firebase '
-      'issues a separate key per platform',
+      '  WARN  ANDROID/WEB_FCM_API_KEY are identical. Verify that their '
+      'application restrictions allow both platforms.',
     );
   }
 
   stdout.writeln(problems == 0 ? '\nAll good.' : '\n$problems to fix.');
   return problems;
+}
+
+/// Accepts hosted and self-hosted HTTPS endpoints without embedded credentials.
+String? validateBackendUrl(String value) {
+  final uri = Uri.tryParse(value);
+  if (uri == null ||
+      uri.scheme != 'https' ||
+      uri.host.isEmpty ||
+      uri.userInfo.isNotEmpty ||
+      uri.hasQuery ||
+      uri.hasFragment) {
+    return 'expected an HTTPS backend URL without credentials, query or fragment';
+  }
+  return null;
+}
+
+/// Rejects privileged server keys while supporting self-hosted anon JWTs.
+String? validatePublishableKey(String value) {
+  if (RegExp(r'^sb_publishable_[A-Za-z0-9_-]+$').hasMatch(value)) return null;
+  try {
+    final parts = value.split('.');
+    if (parts.length == 3) {
+      final payload = jsonDecode(
+        utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
+      );
+      if (payload is Map && payload['role'] == 'anon') return null;
+    }
+  } catch (_) {
+    // Invalid encodings are configuration errors, not application crashes.
+  }
+  return 'expected a publishable key or anon-role JWT, never a service-role key';
 }

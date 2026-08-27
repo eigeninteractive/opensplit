@@ -64,7 +64,7 @@ android {
             // Play App Signing means the upload key is not the key users end up
             // trusting — Play re-signs with the app signing key — so
             // assetlinks.json has to list BOTH fingerprints. See
-            // web/.well-known/README.md.
+            // site/.well-known/README.md.
             signingConfig = if (hasUploadKey) {
                 signingConfigs.getByName("upload")
             } else {

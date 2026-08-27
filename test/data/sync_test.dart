@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:opensplit/data/local/database.dart';
+import 'package:opensplit/data/local/local_reset.dart';
 import 'package:opensplit/data/repositories/drift_activity_repository.dart';
 import 'package:opensplit/data/repositories/drift_conflict_repository.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
@@ -113,6 +116,189 @@ void main() {
   }
 
   group('two devices converge', () {
+    test(
+      'a hung upload times out without dropping the pending write',
+      () async {
+        final g = await seedGroup();
+        await a.entries.create(
+          EntryDraft(
+            groupId: g.groupId,
+            currency: 'INR',
+            amountMinor: 100,
+            description: 'Dinner',
+            split: EqualSplit([g.ravi]),
+            payerAmounts: {g.ravi: 100},
+          ),
+          createdBy: g.ravi,
+        );
+        final release = Completer<void>();
+        server.beforeUpsertEntry = (_) => release.future;
+        final engine = SyncEngine(
+          db: a.db,
+          api: server,
+          outbox: a.outbox,
+          requestTimeout: const Duration(milliseconds: 20),
+        );
+
+        final report = await engine.syncEverything();
+
+        expect(report.failed, 1);
+        expect(await a.outbox.pendingCount(), 1);
+        release.complete();
+      },
+    );
+
+    test(
+      'sign-out fences responses already in flight and future background sync',
+      () async {
+        await seedGroup();
+        await a.sync.syncEverything();
+        final entered = Completer<void>();
+        final release = Completer<void>();
+        server.beforePullMyGroupIds = (_) async {
+          entered.complete();
+          await release.future;
+        };
+        final pending = a.sync.syncEverything();
+        await entered.future;
+        await forgetLocalLedger(a.db);
+        release.complete();
+        await pending;
+
+        expect(await a.db.select(a.db.groups).get(), isEmpty);
+        expect(await a.db.select(a.db.syncCursors).get(), isEmpty);
+        final background = SyncEngine(db: a.db, api: server, outbox: a.outbox);
+        expect((await background.syncEverything()).isClean, isFalse);
+        expect(await a.db.select(a.db.groups).get(), isEmpty);
+      },
+    );
+
+    test(
+      'an edit during upload survives acknowledgement of the older edit',
+      () async {
+        final g = await seedGroup();
+        EntryDraft draft(int amount) => EntryDraft(
+          groupId: g.groupId,
+          currency: 'INR',
+          amountMinor: amount,
+          description: 'Dinner',
+          split: EqualSplit([g.ravi, g.priya]),
+          payerAmounts: {g.ravi: amount},
+        );
+        final entry = await a.entries.create(draft(1000), createdBy: g.ravi);
+        var edited = false;
+        server.beforeUpsertEntry = (_) async {
+          if (edited) return;
+          edited = true;
+          await a.entries.update(entry.id, draft(2500), actorId: g.ravi);
+        };
+
+        final report = await a.sync.syncGroup(g.groupId);
+        await b.sync.syncGroup(g.groupId);
+
+        expect(report.isClean, isTrue, reason: '$report');
+        expect(server.upsertCalls, 2);
+        expect((await a.entries.getEntry(entry.id))!.amountMinor, 2500);
+        expect((await b.entries.getEntry(entry.id))!.amountMinor, 2500);
+        expect(await a.outbox.pendingCount(), 0);
+      },
+    );
+
+    test(
+      'pending edits survive pulls even with a clock behind the server',
+      () async {
+        final g = await seedGroup();
+        final entry = await a.entries.create(
+          EntryDraft(
+            groupId: g.groupId,
+            currency: 'INR',
+            amountMinor: 1000,
+            description: 'Dinner',
+            split: EqualSplit([g.ravi, g.priya]),
+            payerAmounts: {g.ravi: 1000},
+          ),
+          createdBy: g.ravi,
+        );
+        await a.sync.syncGroup(g.groupId);
+        final oldClock = DateTime.utc(2000);
+        final localEntries = DriftEntryRepository(
+          a.db,
+          outbox: a.outbox,
+          clock: () => oldClock,
+        );
+        await localEntries.update(
+          entry.id,
+          EntryDraft(
+            groupId: g.groupId,
+            currency: 'INR',
+            amountMinor: 3500,
+            description: 'Edited offline',
+            split: EqualSplit([g.ravi, g.priya]),
+            payerAmounts: {g.ravi: 3500},
+          ),
+          actorId: g.ravi,
+        );
+        // Replay a page, as after a reconnect or a reset cursor.
+        await a.db.delete(a.db.syncCursors).go();
+        await a.sync.pull(g.groupId);
+
+        expect((await a.entries.getEntry(entry.id))!.amountMinor, 3500);
+        expect(await a.outbox.pendingCount(), 1);
+      },
+    );
+
+    test('old failures cannot back off or remove a fresh edit', () async {
+      await a.outbox.enqueue(OutboxTarget.group, 'queued-group');
+      final old = (await a.outbox.due()).single;
+      await a.outbox.enqueue(OutboxTarget.group, 'queued-group');
+
+      await a.outbox.fail(
+        old.id,
+        'refused',
+        permanent: true,
+        revision: old.revision,
+      );
+      await a.outbox.complete(old.id, revision: old.revision);
+
+      final current = (await a.outbox.due()).single;
+      expect(current.revision, isNot(old.revision));
+      expect(current.attempts, 0);
+      expect(current.deadLetteredAt, isNull);
+    });
+
+    test(
+      'separate engine instances serialize through the database lease',
+      () async {
+        await seedGroup();
+        await a.sync.syncEverything();
+
+        final entered = Completer<void>();
+        final release = Completer<void>();
+        server.pullMyGroupIdsCalls = 0;
+        server.beforePullMyGroupIds = (call) async {
+          if (call != 1) return;
+          entered.complete();
+          await release.future;
+        };
+
+        final otherEngine = SyncEngine(db: a.db, api: server, outbox: a.outbox);
+        final first = a.sync.syncEverything();
+        await entered.future;
+        final second = otherEngine.syncEverything();
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+
+        expect(
+          server.pullMyGroupIdsCalls,
+          1,
+          reason: 'the second engine must not enter while the first owns lease',
+        );
+
+        release.complete();
+        await Future.wait([first, second]);
+        expect(server.pullMyGroupIdsCalls, 2);
+      },
+    );
+
     test('an expense added on A reaches B with identical balances', () async {
       final g = await seedGroup();
 
@@ -241,6 +427,49 @@ void main() {
         isEmpty,
         reason: 'a deletion is a delta; it cannot be filtered out of the feed',
       );
+    });
+
+    test('a stale delete is parked instead of erasing a newer edit', () async {
+      final g = await seedGroup();
+      final entry = await a.entries.create(
+        EntryDraft(
+          groupId: g.groupId,
+          currency: 'INR',
+          amountMinor: 100000,
+          description: 'Original',
+          split: EqualSplit([g.ravi, g.priya]),
+          payerAmounts: {g.ravi: 100000},
+        ),
+        createdBy: g.ravi,
+      );
+      await a.sync.syncGroup(g.groupId);
+      await b.sync.syncGroup(g.groupId);
+
+      await a.entries.update(
+        entry.id,
+        actorId: g.ravi,
+        EntryDraft(
+          groupId: g.groupId,
+          currency: 'INR',
+          amountMinor: 200000,
+          description: 'Corrected',
+          split: EqualSplit([g.ravi, g.priya]),
+          payerAmounts: {g.ravi: 200000},
+        ),
+      );
+      await a.sync.syncGroup(g.groupId);
+
+      await b.entries.delete(entry.id, actorId: g.priya);
+      await b.sync.syncGroup(g.groupId);
+
+      final current = (await b.ledger(g.groupId)).single;
+      expect(current.isDeleted, isFalse);
+      expect(current.amountMinor, 200000);
+
+      final conflicts = await DriftConflictRepository(b.db).watchAll().first;
+      expect(conflicts, hasLength(1));
+      expect(conflicts.single.attempted.isDeleted, isTrue);
+      expect(conflicts.single.current?.amountMinor, 200000);
     });
 
     test('the last write wins, judged by the server clock', () async {

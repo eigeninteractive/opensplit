@@ -43,10 +43,7 @@ void main() {
     await db
         .into(db.profiles)
         .insert(
-          ProfilesCompanion.insert(
-            id: 'p1',
-            displayName: const Value('Ravi'),
-          ),
+          ProfilesCompanion.insert(id: 'p1', displayName: const Value('Ravi')),
         );
     await db
         .into(db.members)

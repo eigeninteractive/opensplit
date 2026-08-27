@@ -52,7 +52,6 @@ class _InviteSheetState extends ConsumerState<_InviteSheet> {
     }
 
     try {
-      await ref.read(sessionControllerProvider.future);
       // The member has to exist server-side before a link can point at it.
       await ref
           .read(syncControllerProvider.notifier)

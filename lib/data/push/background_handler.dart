@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../application/entry_notification.dart';
 import '../../config.dart';
+import '../auth/session_storage.dart';
 import '../local/database.dart';
 import '../repositories/drift_activity_repository.dart';
 import '../repositories/drift_currency_repository.dart';
@@ -14,6 +15,7 @@ import '../repositories/drift_group_repository.dart';
 import '../sync/outbox_queue.dart';
 import '../sync/supabase_ledger_api.dart';
 import '../sync/sync_engine.dart';
+import '../sync/sync_session.dart';
 import 'notification_channel.dart';
 
 /// Handles a wake-up that arrives while the app is backgrounded or not running.
@@ -41,7 +43,7 @@ import 'notification_channel.dart';
 /// `Supabase.initialize` throw when called a second time. Without this the
 /// first expense of a burst notifies and the rest fail silently, which is a
 /// hard thing to notice and a harder one to reproduce.
-bool _isolateReady = false;
+bool _firebaseReady = false;
 
 @pragma('vm:entry-point')
 Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
@@ -55,8 +57,10 @@ Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
   WidgetsFlutterBinding.ensureInitialized();
 
   AppDatabase? db;
+  SupabaseClient? client;
+  OutboxQueue? outbox;
   try {
-    if (!_isolateReady) {
+    if (!_firebaseReady) {
       await Firebase.initializeApp(
         options: FirebaseOptions(
           apiKey: fcmApiKey,
@@ -66,17 +70,11 @@ Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
         ),
       );
 
-      // A second Supabase client, reading the session the app persisted.
-      // Without it every request is anonymous and row-level security refuses
-      // the pull.
-      await Supabase.initialize(
-        url: supabaseUrl,
-        publishableKey: supabasePublishableKey,
-      );
-      _isolateReady = true;
+      _firebaseReady = true;
     }
 
-    final client = Supabase.instance.client;
+    client = await openBackgroundClient();
+    if (client == null) return;
     final profileId = client.auth.currentUser?.id;
     if (profileId == null) return;
 
@@ -85,9 +83,11 @@ Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
     // from the same stored session. SQLite is built for this: the database is
     // in WAL mode with a busy timeout, set in AppDatabase, and the app is by
     // definition idle while this runs.
-    db = AppDatabase.forAccount(profileId);
+    db = AppDatabase.forAccount(profileId, resumeSession: false);
+    final session = await readSyncSession(db);
+    if (!session.enabled) return;
 
-    final outbox = OutboxQueue(db);
+    outbox = OutboxQueue(db);
     final engine = SyncEngine(
       db: db,
       api: SupabaseLedgerApi(client),
@@ -96,7 +96,8 @@ Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
 
     // Sync first. The notification describes what is now on the device, not
     // what a server guessed the recipient's share would be.
-    await engine.syncGroup(groupId);
+    final report = await engine.syncGroup(groupId);
+    if (!report.isClean) return;
 
     final text = await composeEntryNotification(
       entries: DriftEntryRepository(db, outbox: outbox),
@@ -108,6 +109,8 @@ Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
       entryId: entryId,
     );
     if (text == null) return;
+    final after = await readSyncSession(db);
+    if (!after.enabled || after.epoch != session.epoch) return;
 
     final local = FlutterLocalNotificationsPlugin();
     await local.initialize(
@@ -140,6 +143,8 @@ Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
   } catch (_) {
     // Nothing to report to and nobody to report it to.
   } finally {
+    await outbox?.dispose();
     await db?.close();
+    await client?.dispose();
   }
 }

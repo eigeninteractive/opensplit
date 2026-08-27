@@ -56,19 +56,23 @@ natively.
 
 ## Hosting
 
-The host must also serve an SPA fallback: every unmatched path returns
-`index.html`, so `/g/<id>` and `/join/<token>` work on a cold load rather than
-404ing. `firebase.json` does this on Firebase Hosting; `web/_redirects` does the
-same on Cloudflare Pages and Netlify.
+The host must serve an SPA fallback under `/app`: an unmatched path there
+returns the app shell, so `/app/g/<id>` and `/app/join/<token>` work on a cold
+load rather than 404ing. `firebase.json` does this.
 
-`.well-known` must be excluded from that fallback, or Android fetches the HTML
-shell instead of the JSON and verification fails.
+This file lives at the host root, outside `/app`, which is also where the
+landing page and the policy pages are. That is what keeps it clear of the
+fallback: the rewrite is scoped to `/app/**` and cannot reach it. It used to be
+a catch-all, and then `.well-known` had to be excluded by hand.
 
 **Firebase Hosting's default `ignore` list is `["firebase.json", "**/.*",
 "**/node_modules/**"]`, and `**/.*` matches `.well-known`.** Accept that default
-and the directory is never uploaded at all: the URL 404s, or worse falls through
-the SPA rewrite and returns HTML, and App Links quietly stop working with
-nothing to explain it. `firebase.json` here deliberately does not use it. On Firebase Hosting a real
-file wins over a rewrite, so the copy in `build/web/.well-known/` is served as
-itself — but only because `flutter build web` copies the directory verbatim.
-Check it is there before believing a deploy.
+and the directory is never uploaded at all: the URL 404s and App Links quietly
+stop working with nothing to explain it. `firebase.json` here deliberately does
+not use it. The copy in `build/web/.well-known/` is put there by
+`tool/build_web.dart`, which copies `site/` — dotfiles included — over the
+built app. Check it is there before believing a deploy:
+
+```bash
+curl -sI https://opensplit.web.app/.well-known/assetlinks.json
+```

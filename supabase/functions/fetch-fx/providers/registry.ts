@@ -1,6 +1,6 @@
-import { exchangerateV6 } from './exchangerate_v6.ts';
-import { frankfurter } from './frankfurter.ts';
-import { FxProvider } from './types.ts';
+import { exchangerateV6 } from "./exchangerate_v6.ts";
+import { frankfurter } from "./frankfurter.ts";
+import { FxProvider } from "./types.ts";
 
 /// Every adapter the function knows how to run, keyed by fx_providers.kind.
 ///

@@ -17,11 +17,11 @@
 // Then add a database webhook on entries (INSERT) pointing at this function,
 // with the header `x-webhook-secret` set to the same value.
 
-import { importPKCS8, SignJWT } from 'npm:jose@6';
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { importPKCS8, SignJWT } from "npm:jose@6";
+import { createClient } from "jsr:@supabase/supabase-js@2";
 
 interface WebhookPayload {
-  type: 'INSERT' | 'UPDATE' | 'DELETE';
+  type: "INSERT" | "UPDATE" | "DELETE";
   table: string;
   // `id` is the ENTRY's id, not the event's: what the recipient's device has
   // to fetch and open is the expense. `actor_id` is a member id, and is null
@@ -29,12 +29,13 @@ interface WebhookPayload {
   record: { id: string; group_id: string; actor_id: string | null } | null;
 }
 
-const projectId = Deno.env.get('FCM_PROJECT_ID') ?? '';
-const serviceAccountJson = Deno.env.get('FCM_SERVICE_ACCOUNT') ?? '';
-const webhookSecret = Deno.env.get('NOTIFY_WEBHOOK_SECRET') ?? '';
+const projectId = Deno.env.get("FCM_PROJECT_ID") ?? "";
+const serviceAccountJson = Deno.env.get("FCM_SERVICE_ACCOUNT") ?? "";
+const webhookSecret = Deno.env.get("NOTIFY_WEBHOOK_SECRET") ?? "";
 
-const FCM_SCOPE = 'https://www.googleapis.com/auth/firebase.messaging';
-const TOKEN_URL = 'https://oauth2.googleapis.com/token';
+const FCM_SCOPE = "https://www.googleapis.com/auth/firebase.messaging";
+const TOKEN_URL = "https://oauth2.googleapis.com/token";
+const HTTP_TIMEOUT = 10_000;
 
 /// Cached across invocations: Edge Function isolates are reused, and the token
 /// is valid for an hour. Minting one per webhook added a round trip to Google
@@ -53,10 +54,10 @@ async function accessToken(): Promise<string> {
   if (cachedToken && cachedToken.expiresAt > now + 60) return cachedToken.value;
 
   const account = JSON.parse(serviceAccountJson);
-  const key = await importPKCS8(account.private_key, 'RS256');
+  const key = await importPKCS8(account.private_key, "RS256");
 
   const assertion = await new SignJWT({ scope: FCM_SCOPE })
-    .setProtectedHeader({ alg: 'RS256', typ: 'JWT' })
+    .setProtectedHeader({ alg: "RS256", typ: "JWT" })
     .setIssuer(account.client_email)
     .setAudience(TOKEN_URL)
     .setIssuedAt(now)
@@ -64,10 +65,11 @@ async function accessToken(): Promise<string> {
     .sign(key);
 
   const response = await fetch(TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    signal: AbortSignal.timeout(HTTP_TIMEOUT),
     body: new URLSearchParams({
-      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
       assertion,
     }),
   });
@@ -82,13 +84,14 @@ async function accessToken(): Promise<string> {
     );
   }
   const body = await response.json();
-  if (typeof body.access_token !== 'string') {
-    throw new Error('FCM token response carried no access_token');
+  if (typeof body.access_token !== "string") {
+    throw new Error("FCM token response carried no access_token");
   }
 
   cachedToken = {
     value: body.access_token,
-    expiresAt: now + (typeof body.expires_in === 'number' ? body.expires_in : 3600),
+    expiresAt: now +
+      (typeof body.expires_in === "number" ? body.expires_in : 3600),
   };
   return cachedToken.value;
 }
@@ -112,9 +115,9 @@ function isDeadToken(status: number, body: unknown): boolean {
   // Only the FcmError detail describes the registration itself.
   return details.some(
     (detail) =>
-      (detail as { '@type'?: string })?.['@type'] ===
-        'type.googleapis.com/google.firebase.fcm.v1.FcmError' &&
-      (detail as { errorCode?: string })?.errorCode === 'INVALID_ARGUMENT',
+      (detail as { "@type"?: string })?.["@type"] ===
+        "type.googleapis.com/google.firebase.fcm.v1.FcmError" &&
+      (detail as { errorCode?: string })?.errorCode === "INVALID_ARGUMENT",
   );
 }
 
@@ -133,13 +136,13 @@ Deno.serve(async (request) => {
   // The webhook is the only legitimate caller. Without this, anyone holding the
   // publishable key — which is public by design — could drive the fan-out.
   if (!webhookSecret) {
-    console.error('NOTIFY_WEBHOOK_SECRET is not set; refusing to run');
-    return new Response('misconfigured', { status: 500 });
+    console.error("NOTIFY_WEBHOOK_SECRET is not set; refusing to run");
+    return new Response("misconfigured", { status: 500 });
   }
   if (
-    !secretMatches(request.headers.get('x-webhook-secret') ?? '', webhookSecret)
+    !secretMatches(request.headers.get("x-webhook-secret") ?? "", webhookSecret)
   ) {
-    return new Response('forbidden', { status: 403 });
+    return new Response("forbidden", { status: 403 });
   }
 
   const payload: WebhookPayload = await request.json();
@@ -148,44 +151,44 @@ Deno.serve(async (request) => {
   // `entries` sent a notification per payer and share row, and only ever for
   // creations.
   if (
-    payload.type !== 'INSERT' || payload.table !== 'entry_events' ||
+    payload.type !== "INSERT" || payload.table !== "entry_events" ||
     !payload.record
   ) {
-    return new Response('ignored', { status: 200 });
+    return new Response("ignored", { status: 200 });
   }
   const record = payload.record;
 
   // Service role: tokens_for_entry reads other people's tokens, which no
   // user-facing policy permits.
   const supabase = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
   // The actor is excluded rather than the author. On an edit they are usually
   // different people, and the author is precisely who needs to hear that
   // somebody changed their expense.
-  const { data: targets, error } = await supabase.rpc('tokens_for_entry', {
+  const { data: targets, error } = await supabase.rpc("tokens_for_entry", {
     p_entry_id: record.id,
     p_actor_id: record.actor_id ?? null,
   });
   if (error) {
-    console.error('tokens_for_entry failed', error);
-    return new Response('error', { status: 500 });
+    console.error("tokens_for_entry failed", error);
+    return new Response("error", { status: 500 });
   }
-  if (!targets?.length) return new Response('nobody to wake', { status: 200 });
+  if (!targets?.length) return new Response("nobody to wake", { status: 200 });
 
   if (!projectId || !serviceAccountJson) {
-    console.warn('FCM is not configured; skipping fan-out');
-    return new Response('unconfigured', { status: 200 });
+    console.warn("FCM is not configured; skipping fan-out");
+    return new Response("unconfigured", { status: 200 });
   }
 
   let token: string;
   try {
     token = await accessToken();
   } catch (cause) {
-    console.error('could not mint an FCM access token', cause);
-    return new Response('error', { status: 500 });
+    console.error("could not mint an FCM access token", cause);
+    return new Response("error", { status: 500 });
   }
 
   const stale: string[] = [];
@@ -197,11 +200,12 @@ Deno.serve(async (request) => {
       const response = await fetch(
         `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
         {
-          method: 'POST',
+          method: "POST",
           headers: {
             Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
           },
+          signal: AbortSignal.timeout(HTTP_TIMEOUT),
           body: JSON.stringify({
             message: {
               token: target.token,
@@ -209,12 +213,12 @@ Deno.serve(async (request) => {
               // own banner from server-formatted text, which is the thing this
               // design exists to avoid.
               data: {
-                kind: 'entry',
+                kind: "entry",
                 entry_id: record.id,
                 group_id: record.group_id,
               },
-              android: { priority: 'high' },
-              webpush: { headers: { Urgency: 'high' } },
+              android: { priority: "high" },
+              webpush: { headers: { Urgency: "high" } },
             },
           }),
         },
@@ -226,14 +230,14 @@ Deno.serve(async (request) => {
       if (isDeadToken(response.status, body)) {
         stale.push(target.token);
       } else {
-        console.error('FCM send failed', response.status, JSON.stringify(body));
+        console.error("FCM send failed", response.status, JSON.stringify(body));
       }
     }),
   );
 
   if (stale.length) {
-    await supabase.from('device_tokens').delete().in('token', stale);
+    await supabase.from("device_tokens").delete().in("token", stale);
   }
 
-  return new Response('ok', { status: 200 });
+  return new Response("ok", { status: 200 });
 });

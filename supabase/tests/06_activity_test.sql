@@ -261,7 +261,11 @@ set local "request.jwt.claims" to
   '{"sub":"22222222-2222-4222-8222-222222222222","role":"authenticated"}';
 
 select throws_ok(
-  $$select delete_entry('cccccccc-cccc-4ccc-8ccc-cccccccccccc')$$,
+  format(
+    $$select delete_entry(%L::uuid, %L::timestamptz)$$,
+    'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    (select updated_at from entries
+      where id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc')),
   'P0002', null,
   'and cannot be deleted from outside its group: delete_entry carried no '
   'membership test of its own while RLS sat underneath it, and as SECURITY '

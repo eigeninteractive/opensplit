@@ -4,6 +4,16 @@ import '../split/splitter.dart';
 
 part 'entry.freezed.dart';
 
+/// An editor tried to replace an entry that changed after the form opened.
+class StaleEntryException implements Exception {
+  const StaleEntryException();
+
+  @override
+  String toString() =>
+      'This entry changed while you were editing. Your draft '
+      'has not been saved. Reopen the entry to review its latest version.';
+}
+
 /// What kind of fact an entry records.
 ///
 /// A settlement is one payer and one share, in the same table as expenses,

@@ -18,14 +18,14 @@ void main() {
       // mark, because iOS and legacy Android icons cannot carry alpha. Resized
       // into a tab it becomes a pale lilac square, brightest thing on the row
       // in a dark theme.
-      final favicon = decodePng(File('web/favicon.png').readAsBytesSync());
-      expect(favicon, isNotNull, reason: 'web/favicon.png is not a PNG');
+      final favicon = decodePng(File('site/favicon.png').readAsBytesSync());
+      expect(favicon, isNotNull, reason: 'site/favicon.png is not a PNG');
 
       expect(
         favicon!.numChannels,
         4,
         reason:
-            'web/favicon.png has no alpha channel, so it carries a '
+            'site/favicon.png has no alpha channel, so it carries a '
             'background — run `dart run tool/brand_icons.dart`',
       );
 
@@ -34,7 +34,7 @@ void main() {
         corner.a,
         0,
         reason:
-            'web/favicon.png has an opaque corner, so the mark is sitting '
+            'site/favicon.png has an opaque corner, so the mark is sitting '
             'on a tile — run `dart run tool/brand_icons.dart`',
       );
     });

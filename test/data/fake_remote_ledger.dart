@@ -39,6 +39,13 @@ class FakeRemoteLedger implements RemoteLedgerApi {
   DateTime? _frozenAt;
 
   int upsertCalls = 0;
+  int pullMyGroupIdsCalls = 0;
+
+  /// Test hook for proving that two sync engines never overlap discovery.
+  Future<void> Function(int call)? beforePullMyGroupIds;
+
+  /// Pauses an upload after the client captured its local revision.
+  Future<void> Function(Entry entry)? beforeUpsertEntry;
 
   /// Runs [body] with every write sharing a single timestamp, the way one
   /// Postgres transaction would.
@@ -126,6 +133,7 @@ class FakeRemoteLedger implements RemoteLedgerApi {
   @override
   Future<Entry> upsertEntry(Entry entry, {DateTime? baseUpdatedAt}) async {
     upsertCalls++;
+    await beforeUpsertEntry?.call(entry);
     _assertGroupKnown(entry.groupId, 'An expense');
     _assertBalanced(entry);
     _assertNotStale(entry, baseUpdatedAt);
@@ -144,7 +152,10 @@ class FakeRemoteLedger implements RemoteLedgerApi {
   }
 
   @override
-  Future<Entry> deleteEntry(String entryId) async {
+  Future<Entry> deleteEntry(
+    String entryId, {
+    required DateTime baseUpdatedAt,
+  }) async {
     final json = _entries[entryId];
     if (json == null) {
       throw const RemoteRejected(
@@ -152,6 +163,15 @@ class FakeRemoteLedger implements RemoteLedgerApi {
         kind: RejectionKind.permanent,
       );
     }
+    final current = entryFromJson(json);
+    if (current.isDeleted) return current;
+    if (current.updatedAt != baseUpdatedAt) {
+      throw RemoteRejected(
+        'Entry $entryId changed since this deletion was composed',
+        kind: RejectionKind.stale,
+      );
+    }
+
     final at = _stamp();
     json['deleted_at'] = at.toUtc().toIso8601String();
     json['updated_at'] = at.toUtc().toIso8601String();
@@ -257,6 +277,8 @@ class FakeRemoteLedger implements RemoteLedgerApi {
 
   @override
   Future<List<String>> pullMyGroupIds() async {
+    pullMyGroupIdsCalls++;
+    await beforePullMyGroupIds?.call(pullMyGroupIdsCalls);
     final uid = signedInProfileId;
     if (uid == null) return const [];
     return {

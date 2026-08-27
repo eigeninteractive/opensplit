@@ -1,8 +1,0 @@
-# Every route is client-side, so an unmatched path must return the app shell.
-# Without this, opening https://opensplit.eigeninteractive.com/join/<token> directly —
-# which is the entire point of an invite link — 404s.
-#
-# .well-known is excluded first: Android fetches assetlinks.json to verify App
-# Links, and serving it the HTML shell instead fails verification silently.
-/.well-known/*  /.well-known/:splat  200
-/*              /index.html          200

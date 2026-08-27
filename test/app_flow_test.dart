@@ -154,7 +154,8 @@ void main() {
     expect(
       find.textContaining('you owe'),
       findsNothing,
-      reason: 'nobody owes anything at this point, least of all the person '
+      reason:
+          'nobody owes anything at this point, least of all the person '
           'who was just paid',
     );
 

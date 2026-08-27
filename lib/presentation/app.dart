@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:in_app_update/in_app_update.dart';
 
 import '../application/providers.dart';
+import '../data/web/boot_hint.dart';
+import '../l10n/app_localizations.dart';
 import 'dynamic_colors.dart';
 import 'theme.dart';
 import 'theme_mode.dart';
@@ -27,30 +29,49 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
 
   DateTime? _lastChecked;
   bool _busy = false;
+  bool _listeningForSession = false;
 
   @override
   void initState() {
     super.initState();
     _lifecycle = AppLifecycleListener(onResume: _onResume);
 
-    // Sync at launch, which nothing used to do. Opening a group screen was the
-    // only automatic trigger, so a cold start landed on a group list showing
-    // whatever it last knew -- and on a second device or after a reinstall,
-    // showing nothing at all -- until somebody pulled down.
-    //
-    // Safe to fire before the first frame: it touches no widget, and every
-    // screen renders from the local database rather than waiting on it.
-    ref.read(syncSchedulerProvider).start();
-
-    // Not in initState directly: the first frame has not been built, so there
-    // is no messenger to show anything on yet.
+    // Not in initState directly: Riverpod's scope is inherited state, which is
+    // first safe to depend on from didChangeDependencies.
     WidgetsBinding.instance.addPostFrameCallback((_) => _offerUpdate());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_listeningForSession) return;
+    _listeningForSession = true;
+
+    // The ledger and everything that observes it belong to a session. Starting
+    // the scheduler before a restored or newly-created session would construct
+    // repositories before there is an account-scoped database to open. Tying
+    // its lifetime to this provider also guarantees that signing out cancels
+    // every timer and subscription before another account can arrive.
+    ref.listenManual(signedInProvider, (_, signedIn) {
+      if (signedIn) {
+        ref.read(syncSchedulerProvider).start();
+      } else {
+        ref.invalidate(syncSchedulerProvider);
+      }
+
+      // Leaves a note for the next cold start, so the web loader draws the
+      // layout this session will actually land on. See [recordSignedIn] — it
+      // does nothing on Android, which has a platform splash instead.
+      recordSignedIn(signedIn);
+    }, fireImmediately: true);
   }
 
   /// Coming back to the foreground asks both questions worth asking: what has
   /// the group been doing, and is there a new version of the app.
   void _onResume() {
-    ref.read(syncSchedulerProvider).resumed();
+    if (ref.read(signedInProvider)) {
+      ref.read(syncSchedulerProvider).resumed();
+    }
     _offerUpdate();
   }
 
@@ -78,14 +99,21 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
     try {
       if (!await service.isUpdateAvailable()) return;
       if (await service.download() != AppUpdateResult.success) return;
+      if (!mounted) return;
 
-      _messengerKey.currentState?.showSnackBar(
+      final messenger = _messengerKey.currentState;
+      if (messenger == null) return;
+      final l10n = AppLocalizations.of(messenger.context);
+      messenger.showSnackBar(
         SnackBar(
-          content: const Text('An update is ready to install.'),
+          content: Text(l10n.updateReady),
           // Until it is acted on or dismissed. A four-second toast for
           // something that needs a decision is a toast nobody reads.
           duration: const Duration(days: 1),
-          action: SnackBarAction(label: 'Restart', onPressed: service.install),
+          action: SnackBarAction(
+            label: l10n.restart,
+            onPressed: service.install,
+          ),
         ),
       );
     } catch (_) {
@@ -109,8 +137,10 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
     final wallpaper = ref.watch(activeWallpaperSchemesProvider);
 
     return MaterialApp.router(
-      title: 'OpenSplit',
+      onGenerateTitle: (context) => AppLocalizations.of(context).appTitle,
       debugShowCheckedModeBanner: false,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       scaffoldMessengerKey: _messengerKey,
       theme: buildTheme(Brightness.light, wallpaper?.light),
       darkTheme: buildTheme(Brightness.dark, wallpaper?.dark),

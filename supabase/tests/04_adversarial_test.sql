@@ -6,7 +6,7 @@
 -- could attempt against a real deployment with a valid session.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(40);
+select plan(46);
 
 -- ---------------------------------------------------------------------------
 -- Two groups that share nothing. Ravi owns Goa; Zara owns Manali.
@@ -58,6 +58,27 @@ set constraints all deferred;
 set local role authenticated;
 set local "request.jwt.claims" to
   '{"sub":"99999999-9999-4999-8999-999999999999","role":"authenticated"}';
+
+select ok(
+  not has_table_privilege('authenticated', 'public.entries', 'INSERT'),
+  'authenticated has no direct ledger INSERT privilege');
+select ok(
+  not has_table_privilege('authenticated', 'public.entries', 'UPDATE'),
+  'authenticated has no direct ledger UPDATE privilege');
+select ok(
+  not has_table_privilege('authenticated', 'public.entry_payers', 'INSERT'),
+  'authenticated has no direct payer write privilege');
+select ok(
+  not has_table_privilege('authenticated', 'public.entry_shares', 'UPDATE'),
+  'authenticated has no direct share write privilege');
+select ok(
+  not has_function_privilege(
+    'anon', 'public.request_fx_backfill(date,character)', 'EXECUTE'),
+  'anon cannot execute the FX backfill endpoint');
+select ok(
+  not has_function_privilege(
+    'anon', 'public.snapshot_entry(uuid)', 'EXECUTE'),
+  'anon cannot execute internal snapshot machinery');
 
 select is(
   (select count(*)::int from entries

@@ -458,7 +458,8 @@ void main() {
       expect(invite.memberId, priya.id);
       expect(
         invite.urlFor('opensplit.alturing.dev'),
-        'https://opensplit.alturing.dev/join/${invite.token}',
+        'https://opensplit.alturing.dev/app/join/${invite.token}',
+        reason: 'the client is served under /app/; the host root is static',
       );
 
       // ---- Priya's device, which has never seen this group ---------------

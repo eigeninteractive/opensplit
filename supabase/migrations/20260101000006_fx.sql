@@ -311,6 +311,14 @@ as $$
 declare
   v_recent int;
 begin
+  -- SECURITY DEFINER bypasses RLS. Authentication is therefore established in
+  -- the body as well as by the EXECUTE grant, so an accidental future grant
+  -- cannot turn this into an unauthenticated outbound-request endpoint.
+  if auth.uid() is null then
+    raise exception 'Authentication required'
+      using errcode = 'insufficient_privilege';
+  end if;
+
   -- A date in the future has no published rate anywhere, and one from a decade
   -- ago is not an expense anybody is splitting.
   if p_as_of > current_date or p_as_of < current_date - interval '5 years' then

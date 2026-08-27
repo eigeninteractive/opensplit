@@ -19,7 +19,8 @@ no real mobile app.
 - **Multi-currency is core.** Balances are always per currency, never silently
   netted across one.
 - **Self-hostable for real.** The server stores rows and enforces one
-  invariant. It computes nothing.
+  invariant. It computes nothing. The same local stack and migrations used by
+  CI are the supported self-host path; see [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md).
 
 ## Architecture in one paragraph
 
@@ -108,6 +109,9 @@ this is the only run that proves it.
 
 ## Building
 
+See [release readiness and remaining gates](docs/RELEASE_READINESS.md) before
+publishing. Local build success is not production approval.
+
 Configuration is injected at build time, from a file rather than a dozen
 `--dart-define` flags on one command line — which is how a release ends up
 built against the wrong backend.
@@ -119,8 +123,9 @@ cp android/key.properties.example android/key.properties   # gitignored too
 # Android
 flutter build appbundle --release --dart-define-from-file=env/app.json
 
-# Web, WasmGC with an automatic JS fallback for older browsers.
-flutter build web --wasm --release --dart-define-from-file=env/app.json
+# Web, WasmGC with an automatic JS fallback for older browsers. This also
+# injects Firebase's public web identifiers and versions the offline cache.
+dart run tool/build_web.dart
 ```
 
 `android/key.properties` points at the upload keystore and carries its
@@ -158,6 +163,14 @@ can be run with the wrong one, and the unused branch never reaches the bundle.
 `web/sqlite3.wasm` and `web/drift_worker.js` are committed: Drift needs both at
 runtime to use OPFS, and a build without them falls back to a database that does
 not survive a reload.
+
+The source service workers intentionally contain unresolved placeholders. Only
+`tool/build_web.dart` may produce a deployable web directory: it verifies the
+configuration, injects Firebase's public identifiers, and keys the offline cache
+to the commit being built. CI uses structurally valid inert identifiers to prove
+the release build; the manual **Release candidate** workflow requires the real
+production variables and Android upload-key secrets, reruns every gate, and
+uploads artifacts without deploying either one.
 
 Every integration is off unless configured, and hidden rather than shown broken:
 
@@ -387,10 +400,10 @@ push configured still records expenses normally.
 otherwise anyone holding the publishable key — which is public by design —
 could drive the fan-out.
 
-For web push, copy `WEB_FCM_API_KEY`, `WEB_FCM_APP_ID`, `FCM_SENDER_ID` and
-`FCM_PROJECT_ID` from `env/app.json` into `web/firebase-messaging-sw.js`. That file is loaded by
-the browser before any Dart runs, so it cannot read a define file; the
-duplication is unavoidable.
+For web push, `dart run tool/build_web.dart` injects the public Firebase values
+from the same configuration file as Flutter. Do not edit the worker by hand.
+One worker owns `/app/` and handles both offline assets and push, so enabling
+notifications cannot replace the offline worker.
 
 **Permission is never requested at launch.** Android 13+ shows the system
 dialog once or twice and then treats further asks as permanently denied, with
@@ -407,7 +420,11 @@ one case a notification is not for. `lib/data/push/background_handler.dart`
 runs in a background isolate with its own Firebase, its own Supabase client and
 a second connection to the SQLite file (which is why the database is opened in
 WAL mode with a busy timeout). It syncs, then formats with the same Dart the
-screens use.
+screens use. It reloads the stored session for every message, honors the
+notification preference, and cannot resume an account cleared by sign-out.
+Token refresh and persistence belong only to the foreground SDK; background
+work with an expired session waits for the next app resume. Push is best-effort,
+not a delivery guarantee or the source of ledger correctness.
 
 On the web there is no equivalent — a service worker cannot run Dart — so
 `web/firebase-messaging-sw.js` deliberately draws nothing and web push only
@@ -494,16 +511,33 @@ anyone holding the publishable key.
 
 ## Deploying
 
-The web build is static. Any host works, provided it serves an SPA fallback —
-`/join/<token>` must return the app shell rather than a 404, since that is the
-entire point of an invite link.
+The deployed tree is two things, and the split is the point:
 
-`firebase.json` configures Firebase Hosting; `web/_redirects` does the same job
-on Cloudflare Pages and Netlify.
+```
+/            static HTML from site/   landing page, privacy, terms, delete-account
+/app/        the Flutter client       every route go_router knows about
+```
+
+`site/` needs no engine, no session and no JavaScript, so a crawler, a Play
+reviewer and a Google OAuth reviewer can all read what the app is. The client
+used to sit at the root, which meant the public face of the product was a
+sign-in screen — the router sends anyone without a session to `/welcome` — and
+OAuth branding verification failed on exactly that.
+
+Nothing in Dart knows about the prefix. `--base-href=/app/` puts it below the
+path URL strategy, so go_router still sees `/g/123` while the browser shows
+`/app/g/123`. Two places do encode it, and `test/deep_link_host_test.dart`
+holds them together: the invite URL in `lib/domain/repositories/invite_api.dart`
+and the App Links `pathPrefix` in `AndroidManifest.xml`.
+
+Any host works, provided it serves an SPA fallback under `/app` —
+`/app/join/<token>` must return the app shell rather than a 404, since that is
+the entire point of an invite link — and serves `site/` as real files at the
+root. `firebase.json` does both.
 
 ```bash
 firebase use --add                 # writes .firebaserc, which is gitignored
-flutter build web --wasm --release --dart-define-from-file=env/app.json
+dart run tool/build_web.dart       # builds /app/, then copies site/ over the root
 firebase deploy --only hosting
 ```
 
@@ -535,7 +569,7 @@ It must return `200` and `content-type: application/json`. HTML means the SPA
 rewrite swallowed it, and App Links will not verify.
 
 **Before the first Play Store release**, read
-[`web/.well-known/README.md`](web/.well-known/README.md). `assetlinks.json`
+[`site/.well-known/README.md`](site/.well-known/README.md). `assetlinks.json`
 now lists the Google Play App Signing key, which is the certificate every
 install from the Store actually carries — Play re-signs each upload with it, so
 it and not the upload key is what Android checks.

@@ -1,5 +1,6 @@
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 // `group` here is the Riverpod provider function, which collides with the
 // test framework's group().
@@ -77,6 +78,42 @@ void main() {
   // is the only thing the width decides — there is never both, and never
   // neither.
   group('the navigation surface', () {
+    testWidgets('stays usable on a small screen at 200% text scale', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1.0;
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      await _pumpApp(tester, db);
+
+      expect(tester.takeException(), isNull);
+      expect(find.byTooltip('Open navigation menu'), findsOneWidget);
+      await _unmount(tester);
+    });
+
+    testWidgets('desktop navigation enters the keyboard focus order', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await _pumpApp(tester, db);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+
+      expect(FocusManager.instance.primaryFocus, isNotNull);
+      expect(
+        FocusManager.instance.primaryFocus!.context,
+        isNotNull,
+        reason: 'a browser user must be able to enter the app with Tab',
+      );
+      await _unmount(tester);
+    });
+
     testWidgets('is a drawer behind a menu button on a phone', (tester) async {
       tester.view.physicalSize = const Size(600, 1800);
       tester.view.devicePixelRatio = 1.0;

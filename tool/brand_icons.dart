@@ -36,8 +36,8 @@ void _favicon() {
   // favicon, so padding would only make a mark that is already a few pixels
   // across smaller still.
   final icon = _fill(_read('assets/icon/icon-foreground.png'), 0.88, 32);
-  File('web/favicon.png').writeAsBytesSync(encodePng(icon));
-  stdout.writeln('brand_icons: web/favicon.png at 32px');
+  File('site/favicon.png').writeAsBytesSync(encodePng(icon));
+  stdout.writeln('brand_icons: site/favicon.png at 32px');
 }
 
 /// The status bar icon for a notification.

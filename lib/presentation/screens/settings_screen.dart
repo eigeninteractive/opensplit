@@ -114,15 +114,15 @@ class _AccountRow extends ConsumerWidget {
           color: anonymous ? scheme.onSecondaryContainer : null,
         ),
         title: Text(
-          anonymous ? 'Guest — nothing is backed up' : 'Account saved',
+          anonymous ? 'Guest — access is device-bound' : 'Account saved',
           style: TextStyle(
             color: anonymous ? scheme.onSecondaryContainer : null,
           ),
         ),
         subtitle: Text(
           anonymous
-              ? 'Add an email or use Google, so this survives losing the '
-                    'device.'
+              ? 'Groups sync, but add an email or Google account so you can '
+                    'recover access after losing this device.'
               : account.email ?? 'You can sign in on another device.',
           style: TextStyle(
             color: anonymous ? scheme.onSecondaryContainer : null,

@@ -146,12 +146,11 @@ final class DriftGroupRepository {
               updatedAt: Value(now),
             ),
           );
+      // Both rows have to reach the server, and the group has to land first:
+      // members and entries reference it by foreign key.
+      await outbox?.enqueue(OutboxTarget.group, group.id);
+      await outbox?.enqueue(OutboxTarget.member, creator.id);
     });
-
-    // Both rows have to reach the server, and the group has to land first:
-    // members and entries reference it by foreign key.
-    await outbox?.enqueue(OutboxTarget.group, group.id);
-    await outbox?.enqueue(OutboxTarget.member, creator.id);
 
     // `group` already carries creatorProfileId, so there is nothing left to
     // correct here. This used to overwrite it with the creator's *member* id —
@@ -174,18 +173,20 @@ final class DriftGroupRepository {
       throw ArgumentError.value(group.name, 'name', 'A group needs a name.');
     }
 
-    await (_db.update(_db.groups)..where((t) => t.id.equals(group.id))).write(
-      GroupsCompanion(
-        name: Value(trimmed),
-        simplifyDebts: Value(group.simplifyDebts),
-        archivedAt: Value(group.archivedAt),
-        // Bumped on every local write. Without this a rename made offline
-        // keeps its old version, and the next pull sees the server as newer
-        // and discards the edit before the outbox has had a chance to send it.
-        updatedAt: Value(_clock()),
-      ),
-    );
-    await outbox?.enqueue(OutboxTarget.group, group.id);
+    await _db.transaction(() async {
+      await (_db.update(_db.groups)..where((t) => t.id.equals(group.id))).write(
+        GroupsCompanion(
+          name: Value(trimmed),
+          simplifyDebts: Value(group.simplifyDebts),
+          archivedAt: Value(group.archivedAt),
+          // Bumped on every local write. Without this a rename made offline
+          // keeps its old version, and the next pull sees the server as newer
+          // and discards the edit before the outbox has had a chance to send it.
+          updatedAt: Value(_clock()),
+        ),
+      );
+      await outbox?.enqueue(OutboxTarget.group, group.id);
+    });
   }
 
   /// Leaves a group: marks your own member row as having left, and archives the
@@ -213,9 +214,8 @@ final class DriftGroupRepository {
       await (_db.update(_db.groups)..where((t) => t.id.equals(groupId))).write(
         GroupsCompanion(archivedAt: Value(now), updatedAt: Value(now)),
       );
+      await outbox?.enqueue(OutboxTarget.member, memberId);
     });
-
-    await outbox?.enqueue(OutboxTarget.member, memberId);
   }
 
   /// Adds a member. A null [profileId] creates a placeholder — someone who is
@@ -245,19 +245,21 @@ final class DriftGroupRepository {
       joinedAt: _clock(),
     );
 
-    await _db
-        .into(_db.members)
-        .insert(
-          MembersCompanion.insert(
-            id: member.id,
-            groupId: member.groupId,
-            profileId: Value(member.profileId),
-            displayName: member.displayName,
-            joinedAt: member.joinedAt,
-            updatedAt: Value(member.joinedAt),
-          ),
-        );
-    await outbox?.enqueue(OutboxTarget.member, member.id);
+    await _db.transaction(() async {
+      await _db
+          .into(_db.members)
+          .insert(
+            MembersCompanion.insert(
+              id: member.id,
+              groupId: member.groupId,
+              profileId: Value(member.profileId),
+              displayName: member.displayName,
+              joinedAt: member.joinedAt,
+              updatedAt: Value(member.joinedAt),
+            ),
+          );
+      await outbox?.enqueue(OutboxTarget.member, member.id);
+    });
     return member;
   }
 
@@ -270,10 +272,17 @@ final class DriftGroupRepository {
         'A member needs a name.',
       );
     }
-    await (_db.update(_db.members)..where((t) => t.id.equals(memberId))).write(
-      MembersCompanion(displayName: Value(trimmed), updatedAt: Value(_clock())),
-    );
-    await outbox?.enqueue(OutboxTarget.member, memberId);
+    await _db.transaction(() async {
+      await (_db.update(
+        _db.members,
+      )..where((t) => t.id.equals(memberId))).write(
+        MembersCompanion(
+          displayName: Value(trimmed),
+          updatedAt: Value(_clock()),
+        ),
+      );
+      await outbox?.enqueue(OutboxTarget.member, memberId);
+    });
   }
 
   /// Marks a member as having left. Never deletes: their past entries have to
@@ -286,10 +295,14 @@ final class DriftGroupRepository {
   Future<void> removeMember(String memberId) async {
     // Marked as left, never deleted. Their name still has to render on every
     // expense they were part of, and their balance still has to be settleable.
-    await (_db.update(_db.members)..where((t) => t.id.equals(memberId))).write(
-      MembersCompanion(leftAt: Value(_clock()), updatedAt: Value(_clock())),
-    );
-    await outbox?.enqueue(OutboxTarget.member, memberId);
+    await _db.transaction(() async {
+      await (_db.update(
+        _db.members,
+      )..where((t) => t.id.equals(memberId))).write(
+        MembersCompanion(leftAt: Value(_clock()), updatedAt: Value(_clock())),
+      );
+      await outbox?.enqueue(OutboxTarget.member, memberId);
+    });
   }
 
   /// Records a UPI handle against a member of a group.
@@ -301,13 +314,17 @@ final class DriftGroupRepository {
     if (trimmed != null && trimmed.isNotEmpty && !isValidUpiVpa(trimmed)) {
       throw ArgumentError.value(vpa, 'vpa', 'Not a UPI ID.');
     }
-    await (_db.update(_db.members)..where((t) => t.id.equals(memberId))).write(
-      MembersCompanion(
-        upiVpa: Value(trimmed == null || trimmed.isEmpty ? null : trimmed),
-        updatedAt: Value(_clock()),
-      ),
-    );
-    await outbox?.enqueue(OutboxTarget.member, memberId);
+    await _db.transaction(() async {
+      await (_db.update(
+        _db.members,
+      )..where((t) => t.id.equals(memberId))).write(
+        MembersCompanion(
+          upiVpa: Value(trimmed == null || trimmed.isEmpty ? null : trimmed),
+          updatedAt: Value(_clock()),
+        ),
+      );
+      await outbox?.enqueue(OutboxTarget.member, memberId);
+    });
   }
 
   /// How this account's groups would fare if the account were deleted.

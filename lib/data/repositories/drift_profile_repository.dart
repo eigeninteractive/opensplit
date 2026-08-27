@@ -2,11 +2,13 @@ import 'package:drift/drift.dart';
 
 import '../../domain/models/profile.dart';
 import '../local/database.dart';
+import '../sync/outbox_queue.dart';
 
 final class DriftProfileRepository {
-  DriftProfileRepository(this._db);
+  DriftProfileRepository(this._db, {this.outbox});
 
   final AppDatabase _db;
+  final OutboxQueue? outbox;
 
   Future<Profile?> byId(String profileId) async {
     final row = await (_db.select(
@@ -30,7 +32,7 @@ final class DriftProfileRepository {
       .watch()
       .map((rows) => {for (final row in rows) row.id: _toDomain(row)});
 
-  Future<void> upsert(Profile profile) async {
+  Future<void> upsert(Profile profile) => _db.transaction(() async {
     await _db
         .into(_db.profiles)
         .insertOnConflictUpdate(
@@ -42,7 +44,8 @@ final class DriftProfileRepository {
             updatedAt: Value(profile.updatedAt),
           ),
         );
-  }
+    await outbox?.enqueue(OutboxTarget.profile, profile.id);
+  });
 
   Profile _toDomain(ProfileRow row) => Profile(
     id: row.id,

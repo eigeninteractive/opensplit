@@ -20,7 +20,13 @@ class InviteLink {
 
   /// The URL to share. The same address is a web route and an Android App Link,
   /// so someone without the app opens the web build and it simply works.
-  String urlFor(String host) => 'https://$host/join/$token';
+  ///
+  /// Under `/app/` because that is where the client is served: the site root is
+  /// static marketing pages, and the App Links filter claims `/app` alone so a
+  /// tap on the privacy policy opens a browser rather than the installed app.
+  /// go_router never sees this prefix — `<base href="/app/">` absorbs it — so
+  /// the route is still `/join/:token` on the Dart side.
+  String urlFor(String host) => 'https://$host/app/join/$token';
 }
 
 /// What a link is for, read without spending it.

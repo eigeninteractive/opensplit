@@ -1,0 +1,14 @@
+{
+  "_": "Syntactically valid public test identifiers for CI builds only.",
+  "SUPABASE_URL": "https://abcdefghijklmnopqrst.supabase.co",
+  "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_ci_only_not_a_real_credential",
+  "LINK_HOST": "ci.example.com",
+  "GOOGLE_WEB_CLIENT_ID": "123456789012-ci.apps.googleusercontent.com",
+  "FCM_PROJECT_ID": "opensplit-ci",
+  "FCM_SENDER_ID": "123456789012",
+  "FCM_VAPID_KEY": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "ANDROID_FCM_API_KEY": "AIza00000000000000000000000000000000000",
+  "ANDROID_FCM_APP_ID": "1:123456789012:android:0123456789abcdef",
+  "WEB_FCM_API_KEY": "AIza11111111111111111111111111111111111",
+  "WEB_FCM_APP_ID": "1:123456789012:web:fedcba9876543210"
+}

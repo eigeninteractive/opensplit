@@ -71,7 +71,7 @@ final class DriftEntryRepository {
     required Entry after,
     required String? actorId,
     required DateTime at,
-  }) async {
+  }) => _db.transaction(() async {
     final snapshot = snapshotOf(
       after,
       id: _uuid.v4(),
@@ -102,7 +102,7 @@ final class DriftEntryRepository {
     )..where((t) => t.entryId.equals(after.id))).go();
 
     await _enqueue(after.id);
-  }
+  });
 
   /// The most recent thing recorded about an entry, from either source.
   Future<EntrySnapshot?> _latestSnapshot(String entryId) async {
@@ -264,9 +264,10 @@ final class DriftEntryRepository {
       now: at,
     );
 
-    await _unarchive(entry.groupId);
-    // The author is whoever recorded it, which is exactly what createdBy is.
-    await _writeWithSnapshot(after: entry, actorId: createdBy, at: at);
+    await _db.transaction(() async {
+      await _unarchive(entry.groupId);
+      await _writeWithSnapshot(after: entry, actorId: createdBy, at: at);
+    });
     return entry;
   }
 
@@ -295,11 +296,13 @@ final class DriftEntryRepository {
     EntryDraft draft, {
     required String? actorId,
     DateTime? now,
-  }) async {
+    Entry? expected,
+  }) => _db.transaction(() async {
     final existing = await getEntry(entryId);
     if (existing == null) {
       throw StateError('Entry $entryId does not exist');
     }
+    _checkExpected(existing, expected);
 
     final at = now ?? _clock();
     // Recomposed rather than patched, so an edit goes through exactly the same
@@ -315,7 +318,7 @@ final class DriftEntryRepository {
 
     await _writeWithSnapshot(after: recomposed, actorId: actorId, at: at);
     return recomposed;
-  }
+  });
 
   /// Soft delete. The row stays so that a balance which changed can always be
   /// explained, and so the deletion itself can be synced to other devices.
@@ -323,9 +326,11 @@ final class DriftEntryRepository {
     String entryId, {
     required String? actorId,
     DateTime? now,
-  }) async {
+    Entry? expected,
+  }) => _db.transaction(() async {
     final existing = await getEntry(entryId);
     if (existing == null) return;
+    _checkExpected(existing, expected);
 
     final at = now ?? _clock();
     // Soft delete, and `updatedAt` moves so the deletion is itself a delta that
@@ -336,5 +341,14 @@ final class DriftEntryRepository {
       actorId: actorId,
       at: at,
     );
+  });
+
+  void _checkExpected(Entry current, Entry? expected) {
+    // An acknowledgement only changes updatedAt. It must not invalidate an
+    // open form, but an actual local or remote edit must not be overwritten.
+    if (expected != null &&
+        expected.copyWith(updatedAt: current.updatedAt) != current) {
+      throw const StaleEntryException();
+    }
   }
 }

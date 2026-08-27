@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../navigation.dart';
 import '../widgets/identity_choices.dart';
 import '../widgets/page_body.dart';
 
@@ -22,6 +23,9 @@ class WelcomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final destination = safeReturnLocation(
+      GoRouterState.of(context).uri.queryParameters['from'],
+    );
 
     return Scaffold(
       body: PageBody(
@@ -52,7 +56,7 @@ class WelcomeScreen extends ConsumerWidget {
 
                   IdentityChoices(
                     onSignedIn: () async {
-                      if (context.mounted) context.go('/');
+                      if (context.mounted) context.go(destination);
                     },
                   ),
                 ],

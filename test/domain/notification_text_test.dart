@@ -169,7 +169,8 @@ void main() {
     expect(
       text.body,
       isNot(contains('Your share')),
-      reason: 'quoting what you owed for an expense that is gone reads as a '
+      reason:
+          'quoting what you owed for an expense that is gone reads as a '
           'charge',
     );
   });

@@ -3,7 +3,7 @@
 -- Run with: supabase test db
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(38);
+select plan(39);
 
 -- ---------------------------------------------------------------------------
 -- Reference data
@@ -316,9 +316,19 @@ $$, '40001', null,
   'and so is a re-split that leaves the total alone: the money is the shares, '
   'not just the amount');
 
--- Soft delete only.
-select lives_ok(
-  $$select delete_entry('88888888-8888-4888-8888-888888888888')$$,
+-- Soft delete only, and only against the version this device observed.
+select throws_ok(
+  $$select delete_entry(
+      '88888888-8888-4888-8888-888888888888',
+      '2020-01-01T00:00:00Z')$$,
+  '40001', null,
+  'a stale deletion is refused because deleting always moves money');
+
+select lives_ok(format(
+  $$select delete_entry(%L::uuid, %L::timestamptz)$$,
+  '88888888-8888-4888-8888-888888888888',
+  (select updated_at from entries
+    where id = '88888888-8888-4888-8888-888888888888')),
   'delete_entry soft-deletes and returns the row');
 
 select isnt(

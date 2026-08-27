@@ -13,6 +13,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Delete your account · OpenSplit</title>
 <meta name="description" content="How to delete your OpenSplit account and what it removes.">
+<!-- Absolute rather than relative, so one pair of files serves the whole origin.
+     These pages sit at different depths and carry no <base>, and the app shell
+     under /app/ points at the same two. A page that declares no icon at all
+     falls back to /favicon.ico, which does not exist here — that is what left
+     the tab showing a default glyph on every one of these pages. -->
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
+<link rel="apple-touch-icon" href="/icons/Icon-192.png">
 <style>
     :root {
       --surface: #fcf8ff;
@@ -78,7 +86,7 @@
 <header><svg viewBox="0 0 48 48" aria-hidden="true"><mask id="slash"><rect width="48" height="48" fill="#fff"></rect><rect x="20.75" y="-4" width="6.5" height="56" fill="#000" transform="rotate(24 24 24)"></rect></mask><circle cx="24" cy="24" r="17" fill="none" stroke="currentColor" stroke-width="6.5" mask="url(#slash)"></circle></svg><a href="/">OpenSplit</a></header>
 
 <h1>Delete your account</h1>
-<p class="updated">Last updated 26 August 2026</p>
+<p class="updated">Last updated 27 August 2026</p>
 
 
 <h2>In the app</h2>
@@ -95,10 +103,12 @@ account is gone when the confirmation completes.</p>
 <h2>If you have already uninstalled the app</h2>
 <p>Write to <a href="mailto:hello@eigeninteractive.com">hello@eigeninteractive.com</a> from the email address on the account
 and ask for it to be deleted. We will confirm and delete it within 30 days.</p>
-<p>If you used OpenSplit as a <strong>guest</strong>, there is nothing for us to
-delete: a guest account exists only on the device that created it and has no
-email attached, so uninstalling the app — or clearing your browser data on the
-web — removes it entirely.</p>
+<p>If you used OpenSplit as a <strong>guest</strong>, delete the account in the
+app before uninstalling or clearing browser data. Guest data is synchronized,
+but the device session is the only proof that the account is yours. If that
+session has already been lost, email us with the group and profile details you
+know. We will investigate without disclosing group data; deletion may not be
+possible when ownership cannot be verified.</p>
 
 <h2>What deletion removes</h2>
 <ul>

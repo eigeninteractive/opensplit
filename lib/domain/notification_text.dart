@@ -43,11 +43,13 @@ import 'money_format.dart';
       title: groupName,
       body: switch (kind) {
         EntryEventKind.created => '$actorName recorded paying $total.',
-        EntryEventKind.edited => '$actorName changed a settlement — '
-            'now $total.',
+        EntryEventKind.edited =>
+          '$actorName changed a settlement — '
+              'now $total.',
         EntryEventKind.deleted => '$actorName deleted a settlement of $total.',
-        EntryEventKind.restored => '$actorName restored a settlement of '
-            '$total.',
+        EntryEventKind.restored =>
+          '$actorName restored a settlement of '
+              '$total.',
       },
     );
   }

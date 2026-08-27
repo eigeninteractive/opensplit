@@ -324,13 +324,10 @@ create policy categories_read on categories
 create policy entries_read on entries
   for select to authenticated using (is_group_member(group_id));
 
-create policy entries_insert on entries
-  for insert to authenticated with check (is_group_member(group_id));
-
-create policy entries_update on entries
-  for update to authenticated
-  using (is_group_member(group_id))
-  with check (is_group_member(group_id));
+-- No INSERT, UPDATE or DELETE policies. The only mutation surface is the
+-- version-aware RPC in 09_write_path.sql. Keeping permissive policies behind a
+-- missing grant is not defence in depth: a hosting default or future grant can
+-- reopen the bypass without changing this file.
 
 -- ----------------------------------------------------------------------------
 -- The record of what happened.
@@ -357,22 +354,18 @@ create policy entries_update on entries
 create policy entry_events_read on entry_events
   for select to authenticated using (is_group_member(group_id));
 
--- Payers and shares inherit access from the parent entry.
-create policy entry_payers_all on entry_payers
-  for all to authenticated
+-- Payers and shares inherit read access from the parent entry. They have no
+-- write policy for the same reason entries has none: a split is one atomic,
+-- versioned ledger mutation, never independent table DML.
+create policy entry_payers_read on entry_payers
+  for select to authenticated
   using (exists (
-    select 1 from entries e
-     where e.id = entry_payers.entry_id and is_group_member(e.group_id)))
-  with check (exists (
     select 1 from entries e
      where e.id = entry_payers.entry_id and is_group_member(e.group_id)));
 
-create policy entry_shares_all on entry_shares
-  for all to authenticated
+create policy entry_shares_read on entry_shares
+  for select to authenticated
   using (exists (
-    select 1 from entries e
-     where e.id = entry_shares.entry_id and is_group_member(e.group_id)))
-  with check (exists (
     select 1 from entries e
      where e.id = entry_shares.entry_id and is_group_member(e.group_id)));
 

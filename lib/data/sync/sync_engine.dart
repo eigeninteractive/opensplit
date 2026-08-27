@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../domain/models/entry.dart';
 import '../local/database.dart';
@@ -10,6 +12,7 @@ import 'feeds.dart';
 import 'outbox_queue.dart';
 import 'remote_ledger_api.dart';
 import 'sync_cursor.dart';
+import 'sync_session.dart';
 import 'wire.dart' show entryToJson;
 
 /// What one sync run did.
@@ -52,6 +55,7 @@ class SyncEngine {
     required this.outbox,
     DateTime Function()? clock,
     this.pageSize = 200,
+    this.requestTimeout = const Duration(seconds: 20),
   }) : _clock = clock ?? DateTime.now;
 
   final AppDatabase db;
@@ -59,6 +63,40 @@ class SyncEngine {
   final OutboxQueue outbox;
   final DateTime Function() _clock;
   final int pageSize;
+
+  /// Maximum wait per network operation before preserving the write for retry.
+  final Duration requestTimeout;
+
+  static const _leaseName = 'ledger';
+  static const _leaseLifetime = Duration(minutes: 2);
+  static const _leaseRenewal = Duration(seconds: 30);
+  static const _leaseWait = Duration(seconds: 15);
+
+  final String _leaseOwner = const Uuid().v4();
+  Future<void> _tail = Future<void>.value();
+  String? _activeEpoch;
+  bool _disposed = false;
+
+  /// Stops queued and future runs when the account-scoped provider is disposed.
+  void dispose() => _disposed = true;
+
+  Future<void> _assertActive() async {
+    final session = await readSyncSession(db);
+    if (_disposed ||
+        !session.enabled ||
+        (_activeEpoch != null && session.epoch != _activeEpoch)) {
+      throw StateError('This account synchronization has ended.');
+    }
+    if (_activeEpoch != null) {
+      final lease = await (db.select(
+        db.syncLeases,
+      )..where((t) => t.name.equals(_leaseName))).getSingleOrNull();
+      if (lease?.owner != _leaseOwner ||
+          !lease!.expiresAt.isAfter(_clock().toUtc())) {
+        throw StateError('The account synchronization lease expired.');
+      }
+    }
+  }
 
   /// Every group the server says this account belongs to, including ones this
   /// device has never seen.
@@ -76,14 +114,17 @@ class SyncEngine {
     final ids = <String>{for (final row in local) row.id};
 
     try {
-      ids.addAll(await api.pullMyGroupIds());
+      ids.addAll(await api.pullMyGroupIds().timeout(requestTimeout));
     } catch (_) {
       // Offline, or the account has no session yet. Local is a safe answer.
     }
     return ids.toList()..sort();
   }
 
-  Future<SyncReport> syncGroup(String groupId) async {
+  Future<SyncReport> syncGroup(String groupId) =>
+      _serialized(() => _syncGroup(groupId));
+
+  Future<SyncReport> _syncGroup(String groupId) async {
     final pushed = await push();
     try {
       await pullShared();
@@ -114,7 +155,9 @@ class SyncEngine {
   /// One report for the run, not the last group's. Failures pushing are counted
   /// once; a group that cannot be pulled ends the sweep, since the likely cause
   /// is the connection rather than that group.
-  Future<SyncReport> syncEverything() async {
+  Future<SyncReport> syncEverything() => _serialized(_syncEverything);
+
+  Future<SyncReport> _syncEverything() async {
     final pushed = await push();
     var pulled = 0;
     try {
@@ -134,6 +177,131 @@ class SyncEngine {
         failed: pushed.failed,
         error: error,
       );
+    }
+  }
+
+  /// Queues every run in this isolate and holds the account database's lease
+  /// while it executes.
+  ///
+  /// The queue prevents two foreground triggers from racing. The lease closes
+  /// the remaining hole: Firebase can open the same database from a background
+  /// isolate, where no Dart mutex is shared. Claim and renewal are short SQL
+  /// statements; network requests never run inside a SQLite transaction.
+  Future<SyncReport> _serialized(Future<SyncReport> Function() operation) {
+    final previous = _tail;
+    final released = Completer<void>();
+    _tail = released.future;
+
+    return () async {
+      await previous;
+      Timer? renewal;
+      try {
+        if (_disposed) throw StateError('This sync engine is disposed.');
+        if (!await _waitForLease()) {
+          return SyncReport(
+            pushed: 0,
+            pulled: 0,
+            failed: 0,
+            error: TimeoutException(
+              'Another isolate is still synchronizing this account.',
+            ),
+          );
+        }
+
+        _activeEpoch = (await readSyncSession(db)).epoch;
+        await _assertActive();
+
+        renewal = Timer.periodic(
+          _leaseRenewal,
+          (_) => unawaited(_renewLease()),
+        );
+        return await operation();
+      } catch (error) {
+        return SyncReport(pushed: 0, pulled: 0, failed: 0, error: error);
+      } finally {
+        renewal?.cancel();
+        await _releaseLease();
+        _activeEpoch = null;
+        released.complete();
+      }
+    }();
+  }
+
+  Future<bool> _waitForLease() async {
+    final elapsed = Stopwatch()..start();
+    do {
+      try {
+        if (await _claimLease()) return true;
+      } catch (_) {
+        // The other isolate can briefly hold SQLite's write lock while it
+        // renews or releases. Treat that exactly like seeing an active lease.
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    } while (!_disposed && elapsed.elapsed < _leaseWait);
+    return false;
+  }
+
+  Future<bool> _claimLease() async {
+    final now = _clock().toUtc();
+    final expiresAt = now.add(_leaseLifetime);
+    final changed = await db.customUpdate(
+      '''
+      INSERT INTO sync_leases (name, owner, expires_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(name) DO UPDATE SET
+        owner = excluded.owner,
+        expires_at = excluded.expires_at
+      WHERE sync_leases.expires_at <= ?
+         OR sync_leases.owner = excluded.owner
+      ''',
+      variables: [
+        Variable.withString(_leaseName),
+        Variable.withString(_leaseOwner),
+        Variable.withString(expiresAt.toIso8601String()),
+        Variable.withString(now.toIso8601String()),
+      ],
+      updates: {db.syncLeases},
+    );
+    return changed == 1;
+  }
+
+  Future<void> _renewLease() async {
+    try {
+      final expiresAt = _clock().toUtc().add(_leaseLifetime);
+      final changed = await db.customUpdate(
+        '''
+      UPDATE sync_leases
+         SET expires_at = ?
+       WHERE name = ? AND owner = ?
+      ''',
+        variables: [
+          Variable.withString(expiresAt.toIso8601String()),
+          Variable.withString(_leaseName),
+          Variable.withString(_leaseOwner),
+        ],
+        updates: {db.syncLeases},
+      );
+      if (changed != 1) _disposed = true;
+    } catch (_) {
+      // Fail closed if the lease cannot be renewed. Never let an unobserved
+      // timer exception escape after the database has closed.
+      _disposed = true;
+    }
+  }
+
+  Future<void> _releaseLease() async {
+    try {
+      await db.customUpdate(
+        'DELETE FROM sync_leases WHERE name = ? AND owner = ?',
+        variables: [
+          Variable.withString(_leaseName),
+          Variable.withString(_leaseOwner),
+        ],
+        updates: {db.syncLeases},
+      );
+    } catch (_) {
+      // A crashed connection leaves only an expiring lease. Never replace the
+      // operation's useful result with a cleanup error.
     }
   }
 
@@ -170,15 +338,21 @@ class SyncEngine {
     var applied = 0;
 
     while (true) {
-      final page = await feed.fetch(since: cursor, limit: pageSize);
+      await _assertActive();
+      final page = await feed
+          .fetch(since: cursor, limit: pageSize)
+          .timeout(requestTimeout);
       if (page.rows.isEmpty) break;
 
-      applied += await feed.apply(page.rows);
-
       final next = page.cursor;
+      applied += await db.transaction(() async {
+        await _assertActive();
+        final count = await feed.apply(page.rows);
+        if (next != null) await _writeCursor(feed.key, next);
+        return count;
+      });
       if (next == null) break;
       cursor = next;
-      await _writeCursor(feed.key, next);
 
       if (!page.hasMore) break;
     }
@@ -211,13 +385,14 @@ class SyncEngine {
     var failed = 0;
 
     for (var round = 0; round < _maxPushRounds; round++) {
+      await _assertActive();
       final due = await outbox.due();
       if (due.isEmpty) break;
 
       for (final item in due) {
         try {
           await _pushOne(item);
-          await outbox.complete(item.id);
+          await outbox.complete(item.id, revision: item.revision);
           sent++;
         } on RemoteRejected catch (e) {
           switch (e.kind) {
@@ -230,14 +405,23 @@ class SyncEngine {
             // everything queued behind it, so it is dropped and recorded
             // instead.
             case RejectionKind.permanent:
-              await outbox.fail(item.id, e.message, permanent: true);
+              await outbox.fail(
+                item.id,
+                e.message,
+                permanent: true,
+                revision: item.revision,
+              );
             case RejectionKind.transient:
-              await outbox.fail(item.id, e.message);
+              await outbox.fail(item.id, e.message, revision: item.revision);
+              return (sent: sent, failed: failed + 1);
           }
           failed++;
         } catch (e) {
-          await outbox.fail(item.id, '$e');
+          await outbox.fail(item.id, '$e', revision: item.revision);
           failed++;
+          // A connection failure affects the entire batch. Do not spend one
+          // timeout per queued row while an offline device keeps editing.
+          return (sent: sent, failed: failed);
         }
       }
     }
@@ -263,11 +447,12 @@ class SyncEngine {
   /// balances disagreeing with everybody else's for as long as nobody noticed,
   /// which is the failure this whole design exists to make impossible.
   Future<void> _parkConflict(OutboxRow item) async {
-    final loaded = await _loadEntry(item.targetId);
-    if (loaded == null) return;
-    final (entry, base) = loaded;
-
     await db.transaction(() async {
+      if (!await outbox.isCurrent(item)) return;
+      final loaded = await _loadEntry(item.targetId);
+      if (loaded == null) return;
+      final (entry, base) = loaded;
+
       await db
           .into(db.entryConflicts)
           .insertOnConflictUpdate(
@@ -283,9 +468,8 @@ class SyncEngine {
         await (db.update(db.entries)..where((t) => t.id.equals(entry.id)))
             .write(EntriesCompanion(updatedAt: Value(base)));
       }
+      await outbox.complete(item.id, revision: item.revision);
     });
-
-    await outbox.complete(item.id);
   }
 
   Future<void> _pushOne(OutboxRow item) async {
@@ -295,60 +479,112 @@ class SyncEngine {
       case OutboxTarget.entry:
         // Read the row now rather than trusting a payload captured at queue
         // time: the entry may have been edited several times since.
-        final loaded = await _loadEntry(item.targetId);
+        final loaded = await _snapshot(item, () => _loadEntry(item.targetId));
         if (loaded == null) return;
         final (entry, base) = loaded;
 
-        final stored = entry.isDeleted
-            ? await api.deleteEntry(entry.id)
-            // The base goes with it, so the server can tell an ordinary edit
-            // from one composed against a version somebody has since changed.
-            : await api.upsertEntry(entry, baseUpdatedAt: base);
+        // A row created and deleted before its first successful push has no
+        // remote fact to delete. Completing its outbox item is the whole sync.
+        if (entry.isDeleted && base == null) return;
+
+        final stored =
+            await (entry.isDeleted
+                    ? api.deleteEntry(entry.id, baseUpdatedAt: base!)
+                    // The base goes with it, so the server can tell an ordinary edit
+                    // from one composed against a version somebody has since changed.
+                    : api.upsertEntry(entry, baseUpdatedAt: base))
+                .timeout(requestTimeout);
 
         // Adopt the server's timestamp so the next pull does not treat our own
         // write as a change to apply -- and move the base with it, since this
         // row is now derived from exactly what the server just stored.
-        await _stampUpdatedAt(stored.id, stored.updatedAt);
+        await db.transaction(() async {
+          await _assertActive();
+          final current = await outbox.isCurrent(item);
+          // A later local edit is based on this acknowledged write too, but
+          // remains dirty and keeps its own display timestamp until sent.
+          await (db.update(
+            db.entries,
+          )..where((t) => t.id.equals(stored.id))).write(
+            EntriesCompanion(
+              updatedAt: current
+                  ? Value(stored.updatedAt)
+                  : const Value.absent(),
+              baseUpdatedAt: Value(stored.updatedAt),
+            ),
+          );
+        });
 
       case OutboxTarget.group:
-        final row = await (db.select(
-          db.groups,
-        )..where((t) => t.id.equals(item.targetId))).getSingleOrNull();
+        final row = await _snapshot(
+          item,
+          () => (db.select(
+            db.groups,
+          )..where((t) => t.id.equals(item.targetId))).getSingleOrNull(),
+        );
         if (row == null) return;
-        final storedGroup = await api.pushGroup(row.toDomain());
+        final storedGroup = await api
+            .pushGroup(row.toDomain())
+            .timeout(requestTimeout);
         // Adopt the server's version, exactly as the entry path does. Leaving
         // a device clock here would make the next pull compare a local clock
         // against a server one, which is the comparison this column exists to
         // avoid.
         if (storedGroup.updatedAt != null) {
-          await (db.update(db.groups)..where((t) => t.id.equals(row.id))).write(
-            GroupsCompanion(updatedAt: Value(storedGroup.updatedAt!)),
-          );
+          await db.transaction(() async {
+            if (!await outbox.isCurrent(item)) return;
+            await (db.update(
+              db.groups,
+            )..where((t) => t.id.equals(row.id))).write(
+              GroupsCompanion(updatedAt: Value(storedGroup.updatedAt!)),
+            );
+          });
         }
 
       case OutboxTarget.member:
-        final row = await (db.select(
-          db.members,
-        )..where((t) => t.id.equals(item.targetId))).getSingleOrNull();
-        if (row == null) return;
-        final storedMember = await api.pushMember(row.toDomain());
-        if (storedMember.updatedAt != null) {
-          await (db.update(
+        final row = await _snapshot(
+          item,
+          () => (db.select(
             db.members,
-          )..where((t) => t.id.equals(row.id))).write(
-            MembersCompanion(updatedAt: Value(storedMember.updatedAt!)),
-          );
+          )..where((t) => t.id.equals(item.targetId))).getSingleOrNull(),
+        );
+        if (row == null) return;
+        final storedMember = await api
+            .pushMember(row.toDomain())
+            .timeout(requestTimeout);
+        if (storedMember.updatedAt != null) {
+          await db.transaction(() async {
+            if (!await outbox.isCurrent(item)) return;
+            await (db.update(
+              db.members,
+            )..where((t) => t.id.equals(row.id))).write(
+              MembersCompanion(updatedAt: Value(storedMember.updatedAt!)),
+            );
+          });
         }
 
       case OutboxTarget.profile:
         // Your own name and payment handle. Only ever your own row: the server
         // policy allows an update where `id = auth.uid()` and nothing else, so
         // there is no queued write here that could touch anybody else's.
-        final row = await (db.select(
-          db.profiles,
-        )..where((t) => t.id.equals(item.targetId))).getSingleOrNull();
+        final row = await _snapshot(
+          item,
+          () => (db.select(
+            db.profiles,
+          )..where((t) => t.id.equals(item.targetId))).getSingleOrNull(),
+        );
         if (row == null) return;
-        await api.pushProfile(row.toDomain());
+        final storedProfile = await api
+            .pushProfile(row.toDomain())
+            .timeout(requestTimeout);
+        await db.transaction(() async {
+          if (!await outbox.isCurrent(item)) return;
+          await (db.update(
+            db.profiles,
+          )..where((t) => t.id.equals(row.id))).write(
+            ProfilesCompanion(updatedAt: Value(storedProfile.updatedAt)),
+          );
+        });
     }
   }
 
@@ -391,22 +627,25 @@ class SyncEngine {
       final newest = await _newestRateDate();
       final since = newest ?? _isoDay(_clock().toUtc().subtract(_rateWindow));
 
-      final rates = await api.pullFxRates(since: since);
+      final rates = await api.pullFxRates(since: since).timeout(requestTimeout);
       if (rates.isEmpty) return 0;
 
-      await db.batch((batch) {
-        for (final rate in rates) {
-          batch.insert(
-            db.fxRates,
-            FxRatesCompanion.insert(
-              asOf: rate.asOf,
-              currency: rate.currency,
-              rate: rate.rate,
-              source: rate.source,
-            ),
-            mode: InsertMode.insertOrReplace,
-          );
-        }
+      await db.transaction(() async {
+        await _assertActive();
+        await db.batch((batch) {
+          for (final rate in rates) {
+            batch.insert(
+              db.fxRates,
+              FxRatesCompanion.insert(
+                asOf: rate.asOf,
+                currency: rate.currency,
+                rate: rate.rate,
+                source: rate.source,
+              ),
+              mode: InsertMode.insertOrReplace,
+            );
+          }
+        });
       });
       return rates.length;
     } catch (_) {
@@ -448,14 +687,14 @@ class SyncEngine {
     return (row.toDomain(payers: payers, shares: shares), row.baseUpdatedAt);
   }
 
-  Future<void> _stampUpdatedAt(String entryId, DateTime updatedAt) async {
-    await (db.update(db.entries)..where((t) => t.id.equals(entryId))).write(
-      EntriesCompanion(
-        updatedAt: Value(updatedAt),
-        baseUpdatedAt: Value(updatedAt),
-      ),
-    );
-  }
+  /// Captures a consistent row and queue revision without holding a database
+  /// transaction open during the network request.
+  Future<T?> _snapshot<T>(OutboxRow item, Future<T?> Function() read) =>
+      db.transaction(() async {
+        await _assertActive();
+        if (!await outbox.isCurrent(item)) return null;
+        return read();
+      });
 
   Future<SyncCursor?> _readCursor(String feed) async {
     final row = await (db.select(

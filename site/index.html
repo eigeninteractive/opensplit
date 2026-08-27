@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<!--
+  The front door, and a real static file.
+
+  "/" used to be the Flutter app, which meant the public face of the product was
+  a sign-in screen: the router sends anyone without a session to /welcome, and
+  the app paints its text into a canvas that no crawler or reviewer can read.
+  Google's OAuth review found exactly that and could not confirm the app's name
+  or purpose from it.
+
+  The app now lives under /app/. Everything at this level is plain HTML that
+  needs no engine, no session and no JavaScript to say what OpenSplit is.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenSplit — split expenses with friends</title>
+<meta name="description" content="OpenSplit is a free, offline-first expense splitter for Android and the web. Track who paid what, see who owes whom, and settle up.">
+<!-- Google Search Console. Verifies ownership of the domain, which the OAuth
+     consent screen needs before it will show the app name rather than the raw
+     Firebase project id. It has to sit on the page served at "/" — it moved
+     here from web/index.html when the app moved to /app/. -->
+<meta name="google-site-verification" content="V8-KlfJsiOA_o2iDiaz0fDFYswSP1rm4F7X66q8WwnM">
+<!-- Absolute rather than relative, so one pair of files serves the whole origin.
+     These pages sit at different depths and carry no <base>, and the app shell
+     under /app/ points at the same two. A page that declares no icon at all
+     falls back to /favicon.ico, which does not exist here — that is what left
+     the tab showing a default glyph on every one of these pages. -->
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
+<link rel="apple-touch-icon" href="/icons/Icon-192.png">
+<style>
+    :root {
+      --surface: #fcf8ff;
+      --on-surface: #1c1b21;
+      --on-surface-variant: #47464f;
+      --outline-variant: #c8c5d0;
+      --primary: #5b5891;
+      --on-primary: #ffffff;
+      --surface-container: #f0ecf4;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --surface: #131318;
+        --on-surface: #e5e1e9;
+        --on-surface-variant: #c8c5d0;
+        --outline-variant: #47464f;
+        --primary: #c4c0ff;
+        --on-primary: #2b2a5e;
+        --surface-container: #201f25;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0 auto;
+      padding: 48px 24px 96px;
+      max-width: 720px;
+      background: var(--surface);
+      color: var(--on-surface);
+      font: 400 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    header { display: flex; align-items: center; gap: 10px; margin-bottom: 40px; }
+    header svg { width: 32px; height: 32px; color: var(--primary); flex: none; }
+    header a { color: inherit; text-decoration: none; font-size: 20px; font-weight: 600; }
+    h1 { font-size: 32px; line-height: 1.2; margin: 0 0 8px; }
+    h2 { font-size: 20px; line-height: 1.3; margin: 40px 0 12px; }
+    .lede { font-size: 18px; color: var(--on-surface-variant); margin: 0 0 32px; }
+    p, li { color: var(--on-surface); }
+    ul { padding-left: 20px; }
+    li { margin-bottom: 8px; }
+    a { color: var(--primary); }
+    strong { font-weight: 600; }
+    .cta {
+      display: inline-block; margin: 8px 0 0;
+      background: var(--primary); color: var(--on-primary);
+      text-decoration: none; font-weight: 600;
+      padding: 12px 24px; border-radius: 100px;
+    }
+    .note {
+      background: var(--surface-container);
+      border-left: 3px solid var(--primary);
+      padding: 16px 20px; border-radius: 0 8px 8px 0; margin: 24px 0;
+    }
+    .note p:first-child { margin-top: 0; }
+    .note p:last-child { margin-bottom: 0; }
+    footer {
+      margin-top: 64px; padding-top: 24px;
+      border-top: 1px solid var(--outline-variant);
+      color: var(--on-surface-variant); font-size: 14px;
+    }
+    footer a { margin-right: 16px; }
+</style>
+</head>
+<body>
+<header><svg viewBox="0 0 48 48" aria-hidden="true"><mask id="slash"><rect width="48" height="48" fill="#fff"></rect><rect x="20.75" y="-4" width="6.5" height="56" fill="#000" transform="rotate(24 24 24)"></rect></mask><circle cx="24" cy="24" r="17" fill="none" stroke="currentColor" stroke-width="6.5" mask="url(#slash)"></circle></svg><a href="/">OpenSplit</a></header>
+
+<h1>OpenSplit</h1>
+<p class="lede">Split expenses with the people you actually spend money with.
+Free forever, no ads, works offline.</p>
+
+<p><a class="cta" href="/app">Open the app</a></p>
+
+<h2>What OpenSplit is for</h2>
+
+<p>You take a trip, share a flat, or just split a dinner. People pay for things
+at different times, in different amounts, and sometimes in different
+currencies. Remembering who covered what stops being possible after about the
+third day.</p>
+
+<p>OpenSplit keeps that record. You log each expense — who paid, how much, and
+how it should be divided — and it works out who owes whom, and the smallest set
+of payments that settles everybody up.</p>
+
+<ul>
+<li>Make a group for a trip, a flat, or a single evening out.</li>
+<li>Add an expense and split it evenly, by exact amounts, by shares, or by
+percentage.</li>
+<li>See balances per currency — never silently netted across one, because an
+exchange rate nobody agreed to is not a balance.</li>
+<li>Invite people with a link. People who do not have the app can still be in a
+group, so nobody has to install anything to be included in the maths.</li>
+<li>Settle up, and see how each figure came to be what it is.</li>
+</ul>
+
+<p>Everything works with no connection at all — the full record lives on your
+device, so travelling abroad is the main use case rather than an edge case.
+Your groups sync between your own devices and the people you share a group
+with once you are back online.</p>
+
+<h2>Why OpenSplit asks you to sign in with Google</h2>
+
+<p>Signing in is what lets your groups exist on more than one device, and lets
+the people in a group see the same figures you do.</p>
+
+<p>Google sign-in is one of three ways in, alongside an email address or
+continuing as a guest. If you choose it, OpenSplit asks Google for the basic
+sign-in scopes only — <strong>your name and email address</strong>. That is
+used to identify your account when you sign in again or on another device, and
+to show your name to the people in your groups.</p>
+
+<div class="note">
+<p>OpenSplit never receives your Google password. It does not request, and
+cannot read, your Gmail, Drive, Calendar, Contacts, photos or any other Google
+data.</p>
+</div>
+
+<h2>What OpenSplit does not do</h2>
+
+<ul>
+<li><strong>No ads and no tracking.</strong> There is no analytics SDK in the
+app, no advertising identifier, and no location or contacts access.</li>
+<li><strong>Nothing is sold.</strong> Not your data, not your expenses, not
+your address.</li>
+<li><strong>No money changes hands here.</strong> OpenSplit records who owes
+whom. It never handles, holds, moves or processes money, and is not a payment
+service. If you add a UPI ID, it is so somebody can open their own payment app
+to pay you.</li>
+<li><strong>Logging an expense is never gated.</strong> No caps, no limits, no
+upsell at the moment you are trying to record a bill.</li>
+</ul>
+
+<h2>Where to get it</h2>
+
+<p>OpenSplit runs in any modern browser at
+<a href="/app">opensplit.web.app/app</a>, and as an Android app.</p>
+
+<p>It is open source — the whole client and server live at
+<a href="https://github.com/eigeninteractive/opensplit">github.com/eigeninteractive/opensplit</a>
+— and the server side is genuinely self-hostable: it stores rows and enforces
+one arithmetic invariant, and computes nothing about your money on its own.</p>
+
+<p>OpenSplit is in active development ahead of its first public release.</p>
+
+<h2>Contact</h2>
+<p><a href="mailto:hello@eigeninteractive.com">hello@eigeninteractive.com</a></p>
+
+<footer><a href="/app">Open the app</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/delete-account">Delete your account</a></footer>
+</body>
+</html>

@@ -38,6 +38,8 @@ part 'database.g.dart';
     FxRates,
     Outbox,
     SyncCursors,
+    SyncLeases,
+    SyncSessions,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -45,10 +47,12 @@ class AppDatabase extends _$AppDatabase {
   ///
   /// The executor is injectable so tests can use an in-memory database, and so
   /// the push background isolate can open the same file the app uses.
-  AppDatabase.forAccount(String accountId)
+  AppDatabase.forAccount(String accountId, {this._resumeSession = true})
     : super(openAccountDatabase(accountId));
 
-  AppDatabase(super.executor);
+  AppDatabase(super.executor) : _resumeSession = false;
+
+  final bool _resumeSession;
 
   @override
   int get schemaVersion => 1;
@@ -94,6 +98,10 @@ class AppDatabase extends _$AppDatabase {
       );
     },
     beforeOpen: (details) async {
+      if (_resumeSession) {
+        await (update(syncSessions)..where((t) => t.id.equals('account')))
+            .write(const SyncSessionsCompanion(enabled: Value(true)));
+      }
       // SQLite disables foreign keys per connection by default, so the
       // `references` declarations in tables.dart would be documentation only.
       // They are what stops an entry_share pointing at a member who is not in

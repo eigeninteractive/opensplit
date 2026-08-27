@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:opensplit/config.dart';
+import 'package:opensplit/domain/repositories/invite_api.dart';
 
 /// The one host this app claims.
 ///
@@ -50,16 +51,59 @@ void main() {
     // makes the app one option in a chooser rather than the handler.
     expect(manifest, contains('android:autoVerify="true"'));
   });
+
+  test('claims the path invite links are actually minted under', () {
+    // The host is no longer all app: the root is static marketing pages and
+    // the client is served from /app/. Two places encode that split and
+    // neither reads the other — urlFor here, pathPrefix in the manifest. Let
+    // them drift and every invite link opens in a browser instead of the
+    // installed app, silently, on other people's phones.
+    final prefixes = RegExp(
+      r'android:pathPrefix="([^"]+)"',
+    ).allMatches(manifest).map((m) => m.group(1)!).toList();
+
+    final invite = InviteLink(
+      token: 'tok',
+      groupId: 'g',
+      memberId: 'm',
+      expiresAt: DateTime.utc(2030),
+    ).urlFor(linkHost);
+
+    expect(prefixes, hasLength(1), reason: 'one prefix, matching one split');
+    expect(
+      Uri.parse(invite).path,
+      startsWith(prefixes.single),
+      reason:
+          'invite links are minted at \$invite, which the App Links filter '
+          'does not claim — Android would hand them to a browser',
+    );
+  });
+
+  test('does not claim the pages that must open in a browser', () {
+    final prefix = RegExp(
+      r'android:pathPrefix="([^"]+)"',
+    ).firstMatch(manifest)!.group(1)!;
+
+    // The other half of the same decision. A privacy policy that opens inside
+    // the app it describes is no use to a reviewer checking it exists, or to
+    // somebody who has already uninstalled.
+    for (final url in [privacyPolicyUrl, termsUrl, deleteAccountUrl]) {
+      expect(
+        Uri.parse(url).path,
+        isNot(startsWith(prefix)),
+        reason: '\$url would be swallowed by the App Links filter',
+      );
+    }
+  });
 }
 
 /// The pages the store listing points at, and the app links out to.
 ///
 /// Three things have to agree and none of them reads the others: the URL
 /// submitted to Play Console, the getter the Settings screen launches, and a
-/// file that actually exists in `web/`. A rename breaks the middle one
-/// silently — the link opens, the SPA's catch-all rewrite serves the app
-/// shell, and a Play reviewer sees a loading spinner where a privacy policy
-/// should be.
+/// file that actually exists in `site/`. A rename breaks the middle one
+/// silently — and a Play reviewer sees a 404 where a privacy policy should
+/// be.
 void _legalPages() {
   for (final (name, url) in [
     ('privacy', privacyPolicyUrl),
@@ -72,12 +116,11 @@ void _legalPages() {
 
     test('$name is a real file, not a route', () {
       expect(
-        File('web/$name/index.html').existsSync(),
+        File('site/$name/index.html').existsSync(),
         isTrue,
         reason:
-            'web/$name/index.html must exist: flutter build web copies web/ '
-            'verbatim, and Firebase Hosting serves a real file before it '
-            'applies the single-page-app rewrite',
+            'site/$name/index.html must exist: tool/build_web.sh copies site/ '
+            'to the host root, where the /app/** rewrite cannot reach it',
       );
     });
   }
@@ -88,22 +131,22 @@ void _legalPages() {
     // to write to nobody, which is not something a reviewer or a user would
     // notice on our behalf.
     for (final name in ['privacy', 'terms', 'delete-account']) {
-      final page = File('web/$name/index.html').readAsStringSync();
+      final page = File('site/$name/index.html').readAsStringSync();
       expect(
         page,
         isNot(contains('[contact email]')),
-        reason: 'web/$name/index.html still has an unfilled contact address',
+        reason: 'site/$name/index.html still has an unfilled contact address',
       );
       expect(
         page,
         isNot(contains('[jurisdiction]')),
-        reason: 'web/$name/index.html still has an unfilled jurisdiction',
+        reason: 'site/$name/index.html still has an unfilled jurisdiction',
       );
       expect(
         page,
         contains('hello@eigeninteractive.com'),
         reason:
-            'web/$name/index.html has no contact address, which Play requires '
+            'site/$name/index.html has no contact address, which Play requires '
             'a privacy policy to carry',
       );
     }

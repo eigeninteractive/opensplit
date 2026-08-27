@@ -172,9 +172,8 @@ class _IncoherentLedgerCard extends StatelessWidget {
                         alignment: Alignment.centerLeft,
                         foregroundColor: scheme.onErrorContainer,
                       ),
-                      onPressed: () => context.push(
-                        '/g/${ledger.group.id}/e/${entry.id}',
-                      ),
+                      onPressed: () =>
+                          context.push('/g/${ledger.group.id}/e/${entry.id}'),
                       child: Text(
                         entry.description.isEmpty
                             ? 'Untitled expense'

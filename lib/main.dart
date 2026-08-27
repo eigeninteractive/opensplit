@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'application/providers.dart';
 import 'config.dart';
+import 'data/auth/session_storage.dart';
 import 'presentation/app.dart';
 
 Future<void> main() async {
@@ -33,6 +34,11 @@ Future<void> main() async {
       await Supabase.initialize(
         url: supabaseUrl,
         publishableKey: supabasePublishableKey,
+        authOptions: FlutterAuthClientOptions(
+          localStorage: SharedPreferencesLocalStorage(
+            persistSessionKey: sessionStorageKey,
+          ),
+        ),
       );
     } catch (error, stackTrace) {
       // Startup must not depend on reaching a server. Every screen is rendered

@@ -231,9 +231,9 @@ class _IdentityChoicesState extends ConsumerState<IdentityChoices> {
           const SizedBox(height: 8),
           Text(
             widget.guestNote ??
-                'Everything works, and it stays on this device. There is no '
-                    'way to get it back if you lose the device, and you can '
-                    'add an account later.',
+                'Everything works and shared groups are synchronized. This '
+                    'device is the only way back into the guest account until '
+                    'you add an email address or Google account.',
             textAlign: TextAlign.center,
             style: Theme.of(
               context,

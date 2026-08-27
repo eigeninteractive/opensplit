@@ -113,8 +113,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         content: const Text(
           'This device keeps nothing: the groups and expenses stored here are '
           'removed, so whoever uses it next cannot read them.\n\n'
-          'Everything is on the server under your account, and signing back '
-          'in brings it all down again.',
+          'Synced changes return when you sign back in. Any pending or '
+          'conflicting edits must be synced or resolved before signing out.',
         ),
         actions: [
           TextButton(
@@ -129,7 +129,14 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       ),
     );
     if (!(confirmed ?? false)) return;
-    await ref.read(sessionControllerProvider.notifier).signOut();
+    try {
+      await ref.read(sessionControllerProvider.notifier).signOut();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('$error')));
+    }
   }
 
   /// Deletes the account, after saying precisely what that costs.
@@ -274,25 +281,20 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
 
             if (account != null) ...[
               const Divider(height: 48),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.logout, color: theme.colorScheme.error),
-                title: Text(
-                  'Sign out',
-                  style: TextStyle(color: theme.colorScheme.error),
+              if (!account.isAnonymous)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.logout, color: theme.colorScheme.error),
+                  title: Text(
+                    'Sign out',
+                    style: TextStyle(color: theme.colorScheme.error),
+                  ),
+                  subtitle: Text(
+                    'Removes this device\'s copy. Sign back in to get it again.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  onTap: _signOut,
                 ),
-                subtitle: Text(
-                  account.isAnonymous
-                      ? 'You are a guest, so there is nothing to sign back in '
-                            'with. Signing out deletes everything on this '
-                            'device permanently.'
-                      : 'Removes this device\'s copy. Sign back in to get it '
-                            'again.',
-                  style: theme.textTheme.bodySmall,
-                ),
-                isThreeLine: account.isAnonymous,
-                onTap: _signOut,
-              ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(

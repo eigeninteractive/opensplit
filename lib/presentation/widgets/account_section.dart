@@ -258,9 +258,9 @@ class _AccountSectionState extends ConsumerState<AccountSection> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Right now your expenses exist only on this device and cannot be '
-          'recovered. Adding an email address lets you get back in, and lets '
-          'you use OpenSplit on more than one device.',
+          'Your groups are synchronized, but this device is the only way back '
+          'into this guest account. Adding an email address lets you recover '
+          'it and use OpenSplit on more than one device.',
           style: Theme.of(
             context,
           ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),

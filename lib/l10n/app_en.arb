@@ -1,0 +1,27 @@
+{
+  "@@locale": "en",
+  "appTitle": "OpenSplit",
+  "@appTitle": {
+    "description": "The product name shown by the operating system."
+  },
+  "navigationGroups": "Groups",
+  "@navigationGroups": {
+    "description": "Label for the groups top-level destination."
+  },
+  "navigationAccount": "Account",
+  "@navigationAccount": {
+    "description": "Label for the account top-level destination."
+  },
+  "navigationSettings": "Settings",
+  "@navigationSettings": {
+    "description": "Label for the settings top-level destination."
+  },
+  "updateReady": "An update is ready to install.",
+  "@updateReady": {
+    "description": "Message shown after an in-app update has downloaded."
+  },
+  "restart": "Restart",
+  "@restart": {
+    "description": "Action that restarts the app to install an update."
+  }
+}

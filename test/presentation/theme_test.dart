@@ -117,21 +117,33 @@ void main() {
       expect(css, contains('font-weight: ${label.fontWeight!.value}'));
     });
 
-    test('agrees with the app on the boot-hint key', () {
-      // The loader decides whether to draw group cards by reading a key the
-      // Dart side writes. They are in different languages, in different files,
-      // and nothing connects them but this string — so a rename on either side
-      // silently returns the loader to guessing.
-      final key = RegExp(
-        r"localStorage\.getItem\('([^']+)'\)",
-      ).firstMatch(File('web/index.html').readAsStringSync())?.group(1);
+    test('agrees with the app on every boot-hint key', () {
+      // The loader decides which shape to draw, and whether to fill it, by
+      // reading keys the Dart side writes. They are in different languages, in
+      // different files, and nothing connects them but these strings — so a
+      // rename on either side silently returns the loader to guessing.
+      //
+      // Every key, not the first one: there are two now, and checking only the
+      // one that happens to appear first is how the second goes unnoticed.
+      final keys = RegExp(r"localStorage\.getItem\('([^']+)'\)")
+          .allMatches(File('web/index.html').readAsStringSync())
+          .map((match) => match.group(1)!)
+          .toSet();
 
-      expect(key, isNotNull, reason: 'the loader reads no boot hint at all');
       expect(
-        File('lib/data/web/boot_hint_web.dart').readAsStringSync(),
-        contains("'$key'"),
-        reason: 'boot_hint_web.dart must write the key index.html reads',
+        keys,
+        hasLength(2),
+        reason: 'the loader reads a session hint and a groups hint',
       );
+
+      final dart = File('lib/data/web/boot_hint_web.dart').readAsStringSync();
+      for (final key in keys) {
+        expect(
+          dart,
+          contains("'$key'"),
+          reason: 'boot_hint_web.dart must write $key, which index.html reads',
+        );
+      }
     });
 
     test('puts its navigation rail where the app puts one', () {

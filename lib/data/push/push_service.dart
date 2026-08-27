@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -31,6 +32,7 @@ class PushService {
     required this.describe,
     required this.onTokenChanged,
     required this.onOpenRoute,
+    required this.isEnabled,
   });
 
   /// Pull the delta for a group. Runs before anything is shown.
@@ -54,8 +56,12 @@ class PushService {
   /// several screens away.
   final void Function(String route) onOpenRoute;
 
+  /// Whether the current account still wants notifications on this device.
+  final bool Function() isEnabled;
+
   final _local = FlutterLocalNotificationsPlugin();
   bool _ready = false;
+  Future<void>? _initializing;
   StreamSubscription<String>? _refresh;
   StreamSubscription<RemoteMessage>? _messages;
   StreamSubscription<RemoteMessage>? _opened;
@@ -65,9 +71,14 @@ class PushService {
   /// Returning quietly matters: a build without FCM credentials is a perfectly
   /// good build of this app — sync still works, it simply waits for the next
   /// time a screen is opened.
-  Future<void> initialize() async {
-    if (!hasPush || _ready) return;
+  Future<void> initialize() {
+    if (!hasPush || _ready) return Future.value();
+    return _initializing ??= _initialize().whenComplete(
+      () => _initializing = null,
+    );
+  }
 
+  Future<void> _initialize() async {
     await Firebase.initializeApp(
       options: FirebaseOptions(
         apiKey: fcmApiKey,
@@ -77,23 +88,37 @@ class PushService {
       ),
     );
 
-    await _local.initialize(
-      settings: const InitializationSettings(
-        android: AndroidInitializationSettings(statusBarIcon),
-      ),
-      // Tapping a notification this app posted, while it is running.
-      onDidReceiveNotificationResponse: (response) {
-        final route = response.payload;
-        if (route != null && route.isNotEmpty) onOpenRoute(route);
-      },
-    );
-    await _local
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >()
-        ?.createNotificationChannel(activityChannel);
+    if (!kIsWeb) {
+      await _local.initialize(
+        settings: const InitializationSettings(
+          android: AndroidInitializationSettings(statusBarIcon),
+        ),
+        // Tapping a notification this app posted, while it is running.
+        onDidReceiveNotificationResponse: (response) {
+          final route = response.payload;
+          if (route != null && route.isNotEmpty) onOpenRoute(route);
+        },
+      );
+      await _local
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >()
+          ?.createNotificationChannel(activityChannel);
+    }
 
-    _messages ??= FirebaseMessaging.onMessage.listen(_handle);
+    _messages ??= FirebaseMessaging.onMessage.listen((message) async {
+      try {
+        await _handle(message);
+      } catch (error, stackTrace) {
+        developer.log(
+          'Could not process a push wake',
+          name: 'opensplit.push',
+          error: error,
+          stackTrace: stackTrace,
+          level: 900,
+        );
+      }
+    });
 
     // Not supported on the web, where a service worker handles background
     // delivery and cannot run Dart. See web/firebase-messaging-sw.js.
@@ -112,7 +137,9 @@ class PushService {
 
     // And the case that produced the notification in the first place: one this
     // app posted from the background isolate, tapped while the app was dead.
-    final launch = await _local.getNotificationAppLaunchDetails();
+    final launch = kIsWeb
+        ? null
+        : await _local.getNotificationAppLaunchDetails();
     final payload = launch?.notificationResponse?.payload;
     if ((launch?.didNotificationLaunchApp ?? false) &&
         payload != null &&
@@ -128,6 +155,7 @@ class PushService {
     _refresh ??= FirebaseMessaging.instance.onTokenRefresh.listen((
       token,
     ) async {
+      if (!isEnabled()) return;
       try {
         await onTokenChanged(token);
       } catch (_) {
@@ -166,6 +194,9 @@ class PushService {
     if (!hasPush || !_ready) return null;
     return FirebaseMessaging.instance.getToken(
       vapidKey: kIsWeb && fcmVapidKey.isNotEmpty ? fcmVapidKey : null,
+      // The app has one worker. Registering a second script with the default
+      // /app/ scope would replace the offline worker as soon as push is enabled.
+      serviceWorkerScriptPath: kIsWeb ? 'sw.js' : null,
     );
   }
 
@@ -182,6 +213,7 @@ class PushService {
 
   /// A message that arrived while somebody was looking at the app.
   Future<void> _handle(RemoteMessage message) async {
+    if (!isEnabled()) return;
     final groupId = message.data['group_id'];
     final entryId = message.data['entry_id'];
     if (groupId is! String || entryId is! String) return;
@@ -190,8 +222,11 @@ class PushService {
     // what a server guessed the recipient's share would be.
     await onWake(groupId);
 
+    // Web messages wake the tab. Local notifications are Android-only.
+    if (kIsWeb || !isEnabled()) return;
+
     final text = await describe(groupId, entryId);
-    if (text == null) return;
+    if (text == null || !isEnabled()) return;
 
     await _local.show(
       id: entryId.hashCode,

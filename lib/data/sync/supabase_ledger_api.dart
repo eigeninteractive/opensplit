@@ -10,7 +10,7 @@ import 'remote_ledger_api.dart';
 import 'sync_cursor.dart';
 import 'wire.dart';
 
-/// The one file in this codebase that knows Supabase exists.
+/// The Supabase implementation of the remote ledger contract.
 ///
 /// Everything above `data/` speaks [RemoteLedgerApi]. Swapping this for a
 /// self-hosted Postgres, or for a different provider entirely, is a matter of
@@ -160,11 +160,17 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
   }
 
   @override
-  Future<Entry> deleteEntry(String entryId) async {
+  Future<Entry> deleteEntry(
+    String entryId, {
+    required DateTime baseUpdatedAt,
+  }) async {
     try {
       final row = await _client.rpc<Map<String, dynamic>>(
         'delete_entry',
-        params: {'p_entry_id': entryId},
+        params: {
+          'p_entry_id': entryId,
+          'p_base_updated_at': baseUpdatedAt.toUtc().toIso8601String(),
+        },
       );
       return entryFromJson(row);
     } on PostgrestException catch (e) {

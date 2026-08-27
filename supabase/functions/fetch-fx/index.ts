@@ -18,9 +18,9 @@
 // Backfill a range, most recent first:
 //   curl -H "x-fx-secret: $SECRET" -d '{"backfill_days":90}' <function-url>
 
-import { createClient, SupabaseClient } from 'jsr:@supabase/supabase-js@2';
-import { registry } from './providers/registry.ts';
-import { FxSnapshot } from './providers/types.ts';
+import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import { registry } from "./providers/registry.ts";
+import { FxSnapshot } from "./providers/types.ts";
 
 interface ProviderRow {
   id: number;
@@ -32,7 +32,7 @@ interface ProviderRow {
   config: Record<string, unknown>;
 }
 
-const secret = Deno.env.get('FX_FETCH_SECRET') ?? '';
+const secret = Deno.env.get("FX_FETCH_SECRET") ?? "";
 
 /// Constant-time comparison, so the secret cannot be recovered by timing.
 function secretMatches(provided: string, expected: string): boolean {
@@ -84,7 +84,7 @@ async function runWaterfall(
         currencies: [...outstanding],
         config: row.config ?? {},
       });
-      if (snapshot === null) failure = 'no usable response';
+      if (snapshot === null) failure = "no usable response";
     } catch (cause) {
       failure = String(cause);
     }
@@ -101,8 +101,8 @@ async function runWaterfall(
 
       if (rows.length > 0) {
         const { error } = await supabase
-          .from('fx_rates')
-          .upsert(rows, { onConflict: 'as_of,currency' });
+          .from("fx_rates")
+          .upsert(rows, { onConflict: "as_of,currency" });
         if (error) {
           failure = `store failed: ${error.message}`;
         } else {
@@ -113,14 +113,14 @@ async function runWaterfall(
     }
 
     await supabase
-      .from('fx_providers')
+      .from("fx_providers")
       .update({
         last_attempt_at: attemptedAt,
         ...(failure === null
           ? { last_success_at: attemptedAt, last_error: null }
           : { last_error: failure }),
       })
-      .eq('id', row.id);
+      .eq("id", row.id);
   }
 
   return {
@@ -132,43 +132,45 @@ async function runWaterfall(
 
 Deno.serve(async (request) => {
   if (!secret) {
-    console.error('FX_FETCH_SECRET is not set; refusing to run');
-    return new Response('misconfigured', { status: 500 });
+    console.error("FX_FETCH_SECRET is not set; refusing to run");
+    return new Response("misconfigured", { status: 500 });
   }
-  if (!secretMatches(request.headers.get('x-fx-secret') ?? '', secret)) {
-    return new Response('forbidden', { status: 403 });
+  if (!secretMatches(request.headers.get("x-fx-secret") ?? "", secret)) {
+    return new Response("forbidden", { status: 403 });
   }
 
   const body = await request.json().catch(() => ({}));
-  const asOf: string | null = typeof body.as_of === 'string' ? body.as_of : null;
+  const asOf: string | null = typeof body.as_of === "string"
+    ? body.as_of
+    : null;
   const backfillDays: number = Number.isInteger(body.backfill_days)
     ? Math.min(body.backfill_days, 400)
     : 0;
 
   const supabase = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
   // Only currencies the app can actually format. This is what makes "supported"
   // one question rather than one per provider.
   const { data: currencyRows, error: currencyError } = await supabase
-    .from('currencies')
-    .select('code');
+    .from("currencies")
+    .select("code");
   if (currencyError || !currencyRows?.length) {
-    console.error('could not read currencies', currencyError);
-    return new Response('error', { status: 500 });
+    console.error("could not read currencies", currencyError);
+    return new Response("error", { status: 500 });
   }
   const currencies = currencyRows.map((r: { code: string }) => r.code.trim());
 
   const { data: providerRows, error: providerError } = await supabase
-    .from('fx_providers')
-    .select('*')
-    .eq('enabled', true)
-    .order('priority', { ascending: true });
+    .from("fx_providers")
+    .select("*")
+    .eq("enabled", true)
+    .order("priority", { ascending: true });
   if (providerError) {
-    console.error('could not read providers', providerError);
-    return new Response('error', { status: 500 });
+    console.error("could not read providers", providerError);
+    return new Response("error", { status: 500 });
   }
   const providers = (providerRows ?? []) as ProviderRow[];
 
@@ -191,7 +193,7 @@ Deno.serve(async (request) => {
     if (wanted.length === 0) continue;
 
     const result = await runWaterfall(supabase, providers, target, wanted);
-    report.push({ as_of: target ?? 'latest', ...result });
+    report.push({ as_of: target ?? "latest", ...result });
   }
 
   return Response.json({ ok: true, runs: report });
@@ -215,14 +217,14 @@ async function missingFor(
   currencies: string[],
   asOf: string,
 ): Promise<string[]> {
-  const { data, error } = await supabase.rpc('fx_currencies_covered', {
+  const { data, error } = await supabase.rpc("fx_currencies_covered", {
     p_as_of: asOf,
   });
   if (error) {
     // Better to fetch a day we already hold than to skip one we do not: the
     // waterfall is idempotent, and an upsert of an identical rate costs a row
     // write. Treating the whole day as missing is the safe direction.
-    console.error('fx_currencies_covered failed', error);
+    console.error("fx_currencies_covered failed", error);
     return currencies;
   }
 

@@ -12,6 +12,23 @@
 -- policies be consulted.
 -- ============================================================================
 
+-- Supabase projects historically auto-granted Data API roles access to new
+-- objects in public. Start from a known-empty capability set so this schema is
+-- identical on old hosted projects, new opt-in projects and local Postgres.
+revoke all privileges on all tables in schema public
+  from public, anon, authenticated, service_role;
+revoke all privileges on all sequences in schema public
+  from public, anon, authenticated, service_role;
+revoke all privileges on all functions in schema public
+  from public, anon, authenticated, service_role;
+
+alter default privileges in schema public
+  revoke all on tables from public, anon, authenticated, service_role;
+alter default privileges in schema public
+  revoke all on sequences from public, anon, authenticated, service_role;
+alter default privileges in schema public
+  revoke execute on functions from public, anon, authenticated, service_role;
+
 grant usage on schema public to anon, authenticated, service_role;
 
 -- ----------------------------------------------------------------------------
@@ -63,10 +80,9 @@ grant select on entries      to authenticated;
 grant select on entry_payers to authenticated;
 grant select on entry_shares to authenticated;
 
--- assert_balanced() keeps its default PUBLIC execute grant, and has to: the
+-- assert_balanced() is called by the deferred invoker trigger, so the
 -- three constraint triggers that enforce the balance invariant are SECURITY
--- INVOKER, so each of them calls it as whoever made the write. Revoking it
--- would make every entry write fail at COMMIT.
+-- INVOKER and authenticated needs this one narrow helper grant.
 --
 -- Harmless as API surface. It returns nothing, and it reads entries,
 -- entry_payers and entry_shares as the caller — so an entry the caller cannot
@@ -103,7 +119,7 @@ grant select on entry_events to authenticated;
 
 grant select on v_member_balances to authenticated;
 
-grant select, insert, update, delete on device_tokens to authenticated;
+grant execute on function assert_balanced(uuid) to authenticated;
 
 -- ----------------------------------------------------------------------------
 -- Functions callable by users.
@@ -112,7 +128,7 @@ grant execute on function upsert_entry(
   uuid, uuid, char(3), bigint, jsonb, jsonb, text, entry_kind, split_kind,
   date, uuid, text, numeric, text, uuid, timestamptz
 ) to authenticated;
-grant execute on function delete_entry(uuid) to authenticated;
+grant execute on function delete_entry(uuid, timestamptz) to authenticated;
 grant execute on function create_invite(uuid, interval) to authenticated;
 
 -- Anyone holding a token may attempt redemption; the function does the rest.
@@ -130,6 +146,7 @@ grant execute on function request_fx_backfill(date, char(3)) to authenticated;
 -- Registering a device, including taking a token over from whoever held it
 -- before. See the note on the function: it can only ever write auth.uid().
 grant execute on function register_device_token(text, text) to authenticated;
+grant execute on function unregister_device_token(text) to authenticated;
 
 -- Helpers used inside policies.
 grant execute on function is_group_member(uuid)  to authenticated;
