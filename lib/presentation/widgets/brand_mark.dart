@@ -51,7 +51,7 @@ class BrandMark extends StatelessWidget {
 /// The mark and the app's name, side by side.
 ///
 /// Composed here rather than taken from `lockup-horizontal.svg`, even though
-/// that file exists and is the one docs/BRAND.md points at for an app bar. The
+/// that file exists and is the one the brand kit offers for an app bar. The
 /// lockup sets the word as SVG `<text>` in Instrument Sans, which would mean
 /// text that does not scale with the platform's font setting, cannot be
 /// selected, and renders in whatever the SVG renderer decides if the family is

@@ -84,7 +84,7 @@ env/*.json
 
 # The brand kit exactly as the designer delivered it. Everything the app
 # actually uses has been moved into the tree — assets/brand/, assets/icon/,
-# assets/splash/, web/favicon.*, web/icons/, docs/BRAND.md, and the two
+# assets/splash/, site/favicon.*, site/icons/, and the two
 # generator configs at the root — so this is a duplicate copy plus the
 # preview HTML its authoring tool wrote. Kept out of the repo rather than
 # deleted, so re-running the generators against the originals stays possible.

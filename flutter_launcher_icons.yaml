@@ -1,8 +1,8 @@
 # Regenerate with: dart run flutter_launcher_icons
 #
 # Inputs live in assets/icon/ and are not bundled with the app — nothing reads
-# them at runtime. See docs/BRAND.md for what each layer is and why the mark is
-# sized the way it is.
+# them at runtime. The layers, and the size the mark is set at within them, come
+# from the designer's brand kit.
 flutter_launcher_icons:
   image_path: "assets/icon/icon.png"
 
@@ -33,8 +33,8 @@ flutter_launcher_icons:
   # This also rewrites web/manifest.json in place, keeping the fields it does not
   # own. background_color and theme_color are both ColorScheme.surface: the
   # browser paints theme_color immediately above the app bar, which sits on the
-  # surface, so the primary that docs/BRAND.md suggests would draw a violet band
-  # against a near-white bar. A test holds both against the running theme.
+  # surface, so the brand primary would draw a violet band against a near-white
+  # bar. A test holds both against the running theme.
   web:
     generate: true
     image_path: "assets/icon/icon.png"

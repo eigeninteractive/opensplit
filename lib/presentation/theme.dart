@@ -10,7 +10,7 @@ import 'package:google_fonts/google_fonts.dart';
 ///
 /// The seed is the brand, and it is the only colour anyone should ever type.
 /// Everything else in the app is a role read off the [ColorScheme] this
-/// generates — see docs/BRAND.md, which is the source this value comes from.
+/// generates. The value itself is the designer's, not a choice made here.
 const _seed = Color(0xFF5B5891);
 
 /// Source colour for "owed to you", before harmonisation.

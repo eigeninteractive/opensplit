@@ -10,7 +10,7 @@ analyzer:
     - vendor/**
     # The designer's brand kit, kept as delivered. Its lib/theme/*.dart are
     # reference implementations, not app code — what this project uses from
-    # them now lives in lib/presentation/theme.dart. See docs/BRAND.md.
+    # them now lives in lib/presentation/theme.dart.
     - brand/**
 
   # riverpod_lint ships as a custom_lint plugin rather than as analyzer rules,

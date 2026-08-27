@@ -105,7 +105,7 @@ flutter:
   # them by filename, and these names are the ones it builds out of its own font
   # descriptors. Instrument Sans carries 400 and 500 for Material 3's type scale
   # plus 600, the one weight this app asks for by hand; JetBrains Mono carries
-  # only the 500 that money amounts are set in. See docs/BRAND.md, and
+  # only the 500 that money amounts are set in. See
   # assets/google_fonts/LICENSE for provenance.
   assets:
     - assets/google_fonts/

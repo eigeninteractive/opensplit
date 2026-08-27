@@ -5,8 +5,9 @@
 # the same way, by a test.
 #
 # #FCF8FF is ColorScheme.surface in the light scheme, #131318 in the dark.
-# docs/BRAND.md quotes the light one as #FBF8FF; this is what
-# ColorScheme.fromSeed actually produces, which that same document says wins.
+# The brand kit quotes the light one as #FBF8FF; this is what
+# ColorScheme.fromSeed actually produces, and the generated value is the one
+# the app is built against.
 flutter_native_splash:
   color: "#FCF8FF"
   color_dark: "#131318"

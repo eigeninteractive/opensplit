@@ -181,7 +181,7 @@ enable_signup = true
 # It is also unauthenticated row creation, held in check by two things rather
 # than a CAPTCHA: the anonymous_users rate limit under [auth.rate_limit] (30 an
 # hour per IP), and cleanup_abandoned_anonymous_users(), which deletes anon
-# accounts that never joined a group. See docs/opensplit-prd.md §9.
+# accounts that never joined a group.
 enable_anonymous_sign_ins = true
 # Required, not optional. Attaching Google to an anonymous session goes through
 # linkIdentityWithIdToken, which is refused outright when this is off — and the

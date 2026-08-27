@@ -20,7 +20,7 @@ no real mobile app.
   netted across one.
 - **Self-hostable for real.** The server stores rows and enforces one
   invariant. It computes nothing. The same local stack and migrations used by
-  CI are the supported self-host path; see [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md).
+  CI are the supported self-host path.
 
 ## Architecture in one paragraph
 
@@ -109,8 +109,7 @@ this is the only run that proves it.
 
 ## Building
 
-See [release readiness and remaining gates](docs/RELEASE_READINESS.md) before
-publishing. Local build success is not production approval.
+Local build success is not production approval.
 
 Configuration is injected at build time, from a file rather than a dozen
 `--dart-define` flags on one command line — which is how a release ends up
@@ -172,8 +171,7 @@ the release build. After every CI gate passes, pushes to `main` build with real
 production variables, deploy Firebase Hosting, and distribute a signed AAB to
 Play internal testing. Release reruns the same CI checks before publishing.
 A manual **Release** run with **deploy unchecked** creates
-artifacts only, for first-upload bootstrap. See [CI/CD setup](docs/CI_CD.md) for
-keyless Google authentication, GitHub secrets, signing, and release controls.
+artifacts only, for first-upload bootstrap.
 
 Every integration is off unless configured, and hidden rather than shown broken:
 
@@ -608,7 +606,6 @@ supabase/           migrations, organised by subject rather than by date:
 drift_schemas/      a snapshot of every shipped local schema, so a future
                     migration can be tested against a real old database
                     rather than a guess at one.
-docs/               the product requirements document.
 ```
 
 The migrations are edited in place rather than appended to while the app is
