@@ -95,15 +95,23 @@ List<Transfer> _simplifyOneCurrency(
     if (debits[debtor] == 0) debits.remove(debtor);
   }
 
-  // Anything left means the balances did not sum to zero, which the fold
-  // guarantees they do. Reaching here is a bug in the caller's data, not a
-  // recoverable state, so fail loudly rather than silently dropping money.
-  assert(
-    credits.isEmpty && debits.isEmpty,
-    'Balances for $currency do not sum to zero: '
-    'unmatched credits $credits, unmatched debits $debits',
-  );
-
+  // Anything left means the balances did not sum to zero. That cannot happen
+  // for a sound journal — every entry contributes its amount once as credit and
+  // once as debit — so reaching here means the entries this was folded from are
+  // themselves inconsistent.
+  //
+  // This used to be an `assert`, which is exactly the wrong instrument. Asserts
+  // are stripped from a release build, so the one build where nobody is
+  // watching a console was the one that said nothing: a one-sided set of
+  // balances left this loop immediately, and the group's settlement plan simply
+  // did not render. Correct-looking totals with no way to settle them, and no
+  // error anywhere.
+  //
+  // A pure function is also the wrong place to decide what the user is told.
+  // So this stays total and returns the payments it could match, and detecting
+  // the condition belongs to whoever is about to put it on a screen — see
+  // [unbalancedEntries], which finds the actual culprit rather than inferring
+  // it from a residue.
   return transfers;
 }
 

@@ -142,6 +142,22 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Record this payment'));
     await _settle(tester);
 
+    // ---- A settlement is described as a payment, not as a debt -----------
+    //
+    // Ravi was the one owed, so being paid moves his position down — the same
+    // arithmetic an expense would produce, and the reason this row used to read
+    // "you owe ₹1,200.00" about money that had just arrived in his hand.
+    await tester.tap(find.text('Expenses'));
+    await _settle(tester);
+
+    expect(find.textContaining('you received ₹1,200.00'), findsOneWidget);
+    expect(
+      find.textContaining('you owe'),
+      findsNothing,
+      reason: 'nobody owes anything at this point, least of all the person '
+          'who was just paid',
+    );
+
     // ---- Everyone is square ---------------------------------------------
     await tester.tap(find.text('Balances'));
     await _settle(tester);

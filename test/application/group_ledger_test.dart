@@ -179,4 +179,48 @@ void main() {
 
     expect((await ledger()).isSettledUp('m-ravi'), isTrue);
   });
+
+  test('an ordinary journal is coherent', () async {
+    await seed();
+    final fold = await ledger();
+
+    expect(fold.isCoherent, isTrue);
+    expect(fold.brokenEntries, isEmpty);
+    expect(
+      fold.transfers,
+      hasLength(1),
+      reason: 'Priya owes Ravi \u20b9200, and one payment squares it',
+    );
+  });
+
+  test('one that does not is reported, not left as a missing plan', () async {
+    await seed();
+    // Reach past the writer and delete half the split — the one thing the app
+    // itself cannot do, and the shape any cause of it leaves behind: a torn
+    // sync, a bad migration, a hand-edited database.
+    await (db.delete(db.entryShares)
+          ..where((t) => t.entryId.equals('e1'))
+          ..where((t) => t.memberId.equals('m-priya')))
+        .go();
+
+    final fold = await ledger();
+
+    // The symptom, first. Every member's position still renders, and the
+    // settlement plan is silently empty — because matching debtors against
+    // creditors has nothing to match when the two sides do not sum to zero.
+    expect(fold.balances, isNotEmpty);
+    expect(
+      fold.transfers,
+      isEmpty,
+      reason:
+          'this is what a release build showed: correct-looking totals '
+          'and no way at all to settle them',
+    );
+
+    // And the reason it is no longer silent. The check used to be an `assert`
+    // inside simplifyDebts, which is stripped from exactly the build where
+    // nobody is watching a console.
+    expect(fold.isCoherent, isFalse);
+    expect(fold.brokenEntries.single.id, 'e1');
+  });
 }

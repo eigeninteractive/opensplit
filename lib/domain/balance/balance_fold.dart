@@ -55,6 +55,24 @@ List<MemberBalance> foldBalances(Iterable<Entry> entries) {
   ];
 }
 
+/// The entries whose payers and shares do not agree with their own total.
+///
+/// Always empty for a journal this app wrote: `composeEntry` cannot build an
+/// unbalanced entry and `writeEntryLocally` refuses to store one. It is checked
+/// on the way out anyway because the consequence of being wrong is silent —
+/// [foldBalances] over an unbalanced entry produces balances that do not sum to
+/// zero, and a set of balances that does not sum to zero has no settlement plan
+/// at all. The group would show everyone's position correctly and simply offer
+/// no way to square it.
+///
+/// So this is the read-side twin of the write-side check: cheap, total, and it
+/// names the entry rather than leaving a screen to guess why its numbers will
+/// not reconcile.
+List<Entry> unbalancedEntries(Iterable<Entry> entries) => [
+  for (final entry in entries)
+    if (!entry.isDeleted && !entry.isBalanced) entry,
+];
+
 /// Groups balances by currency, preserving the per-currency separation that
 /// every downstream calculation depends on.
 Map<String, List<MemberBalance>> balancesByCurrency(

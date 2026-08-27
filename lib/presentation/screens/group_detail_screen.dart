@@ -202,6 +202,21 @@ class _EntryTile extends StatelessWidget {
       }
     }
 
+    // The same arithmetic, described in the two different things it can mean.
+    //
+    // A settlement moves your position exactly as an expense does, which is
+    // why it folds through the identical path — but "you owe ₹500" is a lie
+    // about money that has already changed hands. Being paid *reduces* what
+    // you are owed, so it is a negative delta, and reading that back as a debt
+    // is precisely backwards.
+    final myDeltaWords = isSettlement
+        ? (myDelta > 0
+              ? 'you paid ${formatMoneyAbs(currency, myDelta)}'
+              : 'you received ${formatMoneyAbs(currency, myDelta)}')
+        : (myDelta > 0
+              ? 'you lent ${formatMoneyAbs(currency, myDelta)}'
+              : 'you owe ${formatMoneyAbs(currency, myDelta)}');
+
     final payerNames = entry.payers
         .map((p) => ledger.nameOf(p.memberId))
         .join(', ');
@@ -253,12 +268,8 @@ class _EntryTile extends StatelessWidget {
           if (me != null && myDelta != 0)
             BalanceAmount(
               balanceMinor: myDelta,
-              text: myDelta > 0
-                  ? 'you lent ${formatMoneyAbs(currency, myDelta)}'
-                  : 'you owe ${formatMoneyAbs(currency, myDelta)}',
-              semanticsLabel: myDelta > 0
-                  ? 'you lent ${formatMoneyAbs(currency, myDelta)}'
-                  : 'you owe ${formatMoneyAbs(currency, myDelta)}',
+              text: myDeltaWords,
+              semanticsLabel: myDeltaWords,
               style: Theme.of(
                 context,
               ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),

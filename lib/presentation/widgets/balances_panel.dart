@@ -25,7 +25,7 @@ class BalancesPanel extends ConsumerWidget {
     final currencies = ref.watch(currenciesProvider).value ?? const {};
     final scheme = Theme.of(context).colorScheme;
 
-    if (ledger.isSettled) {
+    if (ledger.isSettled && ledger.isCoherent) {
       return PullToSync.group(
         ledger.group.id,
         child: FillsViewport(
@@ -66,6 +66,8 @@ class BalancesPanel extends ConsumerWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
         children: [
+          // Above the numbers, because it is about whether to believe them.
+          if (!ledger.isCoherent) _IncoherentLedgerCard(ledger: ledger),
           // The estimate leads, the exact per-currency figures follow directly
           // beneath it. That is the "breakdown one tap away" requirement met
           // without a tap: the authoritative numbers are never hidden behind the
@@ -102,6 +104,88 @@ class BalancesPanel extends ConsumerWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// Says plainly that these numbers do not add up.
+///
+/// Reachable only if an entry on this device has payers or shares that disagree
+/// with its own total, which nothing in the app can write — `composeEntry`
+/// cannot build one and `writeEntryLocally` refuses to store one.
+///
+/// It exists because of what the alternative looked like. The settlement plan
+/// is derived by matching debtors against creditors, so a journal that does not
+/// sum to zero yields a short plan or none at all — and the group rendered
+/// every member's position perfectly while simply offering no way to settle
+/// them, with nothing on screen or in a release log to say why. A number that
+/// is wrong is recoverable; a number that is wrong and says nothing is not.
+class _IncoherentLedgerCard extends StatelessWidget {
+  const _IncoherentLedgerCard({required this.ledger});
+
+  final GroupLedger ledger;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final count = ledger.brokenEntries.length;
+
+    return Card.outlined(
+      margin: const EdgeInsets.only(bottom: 24),
+      color: scheme.errorContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.warning_amber_rounded, color: scheme.onErrorContainer),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'These balances do not add up',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: scheme.onErrorContainer,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '$count ${count == 1 ? 'expense does' : 'expenses do'} not '
+                    'match what was paid and what is owed, so the figures '
+                    'below are incomplete and settling will not square the '
+                    'group. Opening the expense and saving it again rebuilds '
+                    'the split.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: scheme.onErrorContainer,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  for (final entry in ledger.brokenEntries.take(5))
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 32),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        alignment: Alignment.centerLeft,
+                        foregroundColor: scheme.onErrorContainer,
+                      ),
+                      onPressed: () => context.push(
+                        '/g/${ledger.group.id}/e/${entry.id}',
+                      ),
+                      child: Text(
+                        entry.description.isEmpty
+                            ? 'Untitled expense'
+                            : entry.description,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -288,6 +288,7 @@ class GroupLedger {
     required this.transfers,
     required this.me,
     required this.profiles,
+    required this.brokenEntries,
   });
 
   final Group group;
@@ -315,6 +316,18 @@ class GroupLedger {
 
   /// Accounts belonging to the members of this group, keyed by profile id.
   final Map<String, Profile> profiles;
+
+  /// Entries whose payers and shares do not add up to their own total.
+  ///
+  /// Empty in every ordinary case — nothing in this app can write one. It is
+  /// carried on the ledger rather than checked where it is displayed because
+  /// the consequence is otherwise invisible: [balances] would still render, and
+  /// [transfers] would quietly come back short or empty, so the group would
+  /// show what everyone owes and offer no way to settle it.
+  final List<Entry> brokenEntries;
+
+  /// Whether the balances on this ledger can be trusted to add up.
+  bool get isCoherent => brokenEntries.isEmpty;
 
   /// What to call [member], and where to pay them.
   ///
@@ -397,6 +410,7 @@ GroupLedger? groupLedger(Ref ref, String groupId) {
   final accountId = ref.watch(currentAccountIdProvider);
   final profiles = ref.watch(profilesByIdProvider).value ?? const {};
   final balances = foldBalances(entryList);
+  final broken = unbalancedEntries(entryList);
 
   return GroupLedger(
     group: group,
@@ -410,6 +424,7 @@ GroupLedger? groupLedger(Ref ref, String groupId) {
     transfers: group.simplifyDebts ? simplifyDebts(balances) : const [],
     me: memberList.where((m) => m.profileId == accountId).firstOrNull,
     profiles: profiles,
+    brokenEntries: broken,
   );
 }
 
