@@ -13,6 +13,7 @@ import 'package:opensplit/data/repositories/drift_activity_repository.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';
 import 'package:opensplit/data/sync/outbox_queue.dart';
+import 'package:opensplit/data/sync/remote_ledger_api.dart';
 import 'package:opensplit/data/sync/supabase_invite_api.dart';
 import 'package:opensplit/data/sync/supabase_ledger_api.dart';
 import 'package:opensplit/data/sync/sync_engine.dart';
@@ -205,7 +206,8 @@ void main() {
       expect(
         report.pushed,
         4,
-        reason: 'the group, its owner, the added member and the entry. The '
+        reason:
+            'the group, its owner, the added member and the entry. The '
             'activity row is not among them: the server writes it from the '
             'expense it commits, and grants no client the right to',
       );
@@ -298,6 +300,82 @@ void main() {
         ),
         reason: 'the deferred trigger is the backstop for every client bug',
       );
+    });
+
+    test('a stale edit that would move money is refused', () async {
+      if (!available) return;
+
+      final user = (await client.auth.signInAnonymously()).user!;
+      final created = await groups.createGroup(
+        name: 'Stale ${DateTime.now().microsecondsSinceEpoch}',
+        defaultCurrency: 'INR',
+        creatorDisplayName: 'Ravi',
+        creatorProfileId: user.id,
+      );
+      final entry = await entries.create(
+        EntryDraft(
+          groupId: created.group.id,
+          currency: 'INR',
+          amountMinor: 100000,
+          split: EqualSplit([created.creator.id]),
+          payerAmounts: {created.creator.id: 100000},
+        ),
+        createdBy: created.creator.id,
+      );
+      await sync.syncGroup(created.group.id);
+
+      final base = (await api.pullEntries(
+        groupId: created.group.id,
+        limit: 10,
+      )).rows.single.updatedAt;
+
+      // Somebody else's edit lands, moving the amount and the share with it.
+      final theirs = await api.upsertEntry(
+        entry.copyWith(
+          amountMinor: 150000,
+          payers: [entry.payers.first.copyWith(amountMinor: 150000)],
+          shares: [entry.shares.first.copyWith(amountMinor: 150000)],
+        ),
+        baseUpdatedAt: base,
+      );
+      expect(theirs.amountMinor, 150000);
+
+      // And now the edit composed against the version they replaced. Only this
+      // test proves the adapter actually sends p_base_updated_at and maps
+      // 40001 to its own kind -- pgTAP proves the SQL, and the fake proves the
+      // algorithm, but neither goes near the wire.
+      await expectLater(
+        api.upsertEntry(
+          entry.copyWith(
+            amountMinor: 200000,
+            payers: [entry.payers.first.copyWith(amountMinor: 200000)],
+            shares: [entry.shares.first.copyWith(amountMinor: 200000)],
+          ),
+          baseUpdatedAt: base,
+        ),
+        throwsA(
+          isA<RemoteRejected>().having(
+            (e) => e.kind,
+            'kind',
+            RejectionKind.stale,
+          ),
+        ),
+      );
+
+      // An edit against the same stale base that leaves the money exactly
+      // where the server has it is not refused: arbitrating a typo would cost
+      // two people a decision for nothing.
+      final prose = await api.upsertEntry(
+        entry.copyWith(
+          description: 'Renamed',
+          amountMinor: 150000,
+          payers: [entry.payers.first.copyWith(amountMinor: 150000)],
+          shares: [entry.shares.first.copyWith(amountMinor: 150000)],
+        ),
+        baseUpdatedAt: base,
+      );
+      expect(prose.description, 'Renamed');
+      expect(prose.amountMinor, 150000);
     });
 
     test(
