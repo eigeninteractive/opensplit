@@ -49,7 +49,11 @@ void main() {
     expect(app, contains(containsPair('key', 'Cross-Origin-Opener-Policy')));
     expect(app, contains(containsPair('key', 'Cross-Origin-Embedder-Policy')));
 
-    for (final source in ['/app/sw.js', '/app/firebase-messaging-sw.js']) {
+    for (final source in [
+      '/sw.js',
+      '/app/sw.js',
+      '/app/firebase-messaging-sw.js',
+    ]) {
       final workerHeaders = (headerFor(source)['headers'] as List).cast<Map>();
       expect(
         workerHeaders,
@@ -61,6 +65,23 @@ void main() {
         ),
       );
     }
+  });
+
+  test('the worker that used to own the root still has something to fetch', () {
+    // Before the split, the offline worker was registered at scope `/`, and a
+    // registration outlives the script that made it. Serving nothing here is
+    // not neutral: the update fetch 404s, the update fails, and the old worker
+    // keeps answering every navigation on the origin out of a cache of the
+    // Flutter shell — the landing page and the legal pages included.
+    final tombstone = File('site/sw.js');
+    expect(
+      tombstone.existsSync(),
+      isTrue,
+      reason:
+          'deleting site/sw.js strands every browser that saw the old '
+          'layout on a cached copy of it',
+    );
+    expect(tombstone.readAsStringSync(), contains('registration.unregister()'));
   });
 
   test('the single-page rewrite cannot swallow the static site', () {

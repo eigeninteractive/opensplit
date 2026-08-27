@@ -281,6 +281,11 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
 
             if (account != null) ...[
               const Divider(height: 48),
+              // Offered only to an account somebody can get back into. Signing
+              // out of a guest account is not the reversible thing the word
+              // promises: nothing but this device identifies it, so leaving is
+              // leaving for good — which is what Delete account below does,
+              // properly and with the warning it deserves.
               if (!account.isAnonymous)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
@@ -294,6 +299,32 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                     style: theme.textTheme.bodySmall,
                   ),
                   onTap: _signOut,
+                )
+              // Said out loud rather than left as a gap. Somebody looking for
+              // sign out and finding only Delete account cannot tell whether
+              // the control is missing or the app is broken, and the answer —
+              // that there is nowhere to sign back in from — is also the
+              // reason to attach an address, which is the next thing they
+              // should do.
+              else
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    Icons.no_accounts_outlined,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  title: Text(
+                    'Signing out would end this account',
+                    style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+                  ),
+                  subtitle: Text(
+                    'Nothing but this device identifies a guest, so there '
+                    'would be no signing back in. Add an email address above '
+                    'to make this account recoverable — or use the same field '
+                    'to sign in as an account you already have.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  isThreeLine: true,
                 ),
               ListTile(
                 contentPadding: EdgeInsets.zero,

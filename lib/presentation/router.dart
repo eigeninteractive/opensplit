@@ -75,6 +75,8 @@ enum _DestinationKind { groups, account, settings }
 ///    between them swaps an [IndexedStack] child, so it is instant, keeps each
 ///    branch's scroll position, and is never a push — there is no back arrow
 ///    to Groups from Settings, because Settings is not on top of anything.
+///    Arriving at them is instant too: the shell is a [NoTransitionPage], for
+///    the reason given where it is built.
 ///  * Everything else — a group, an expense, an invite — is an ordinary route
 ///    above the shell. Those are pushed, so they animate with the platform's
 ///    own page transition (predictive back on Android), and grow a back button
@@ -116,9 +118,15 @@ GoRouter buildRouter({
     ShellRoute(
       builder: (context, state, child) => SelectionArea(child: child),
       routes: [
+        // No transition, in both directions. Signing in is not a journey
+        // through the app, it is the app finding out who you are, and the
+        // platform's page transition says the opposite: on the web that is
+        // Cupertino's horizontal slide, so the welcome screen left by sliding
+        // off to the left like a screen you had just backed out of.
         GoRoute(
           path: '/welcome',
-          builder: (context, state) => const WelcomeScreen(),
+          pageBuilder: (context, state) =>
+              const NoTransitionPage(child: WelcomeScreen()),
         ),
         // The link a friend sends. Deliberately free of any guard: this route
         // has to work for someone who has never opened the app before, and
@@ -186,8 +194,18 @@ GoRouter buildRouter({
             ),
           ],
         ),
+        // The other half of that, and the half that actually does the work: an
+        // outgoing page is only removed once the *incoming* one has finished
+        // arriving, so silencing the welcome screen alone changed nothing
+        // while the destinations still animated in over it.
+        //
+        // Correct on its own terms as well. A destination is never pushed onto
+        // anything — it is where the app already is — so there is nothing for
+        // it to animate in from. Routes above the shell keep the platform's
+        // transition, which is where it belongs.
         StatefulShellRoute.indexedStack(
-          builder: (context, state, shell) => AdaptiveNavigation(shell: shell),
+          pageBuilder: (context, state, shell) =>
+              NoTransitionPage(child: AdaptiveNavigation(shell: shell)),
           branches: [
             StatefulShellBranch(
               routes: [

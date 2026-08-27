@@ -23,8 +23,39 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
 
-  <title>OpenSplit — split expenses with friends</title>
+  <!-- Exactly what Flutter sets through MaterialApp.onGenerateTitle once it
+       boots, and pinned to it by a test. Anything else here is a tab title
+       that visibly rewrites itself a second into every cold start. -->
+  <title>OpenSplit</title>
   <link rel="manifest" href="manifest.json">
+
+  <!-- Not a page, and not a search result. Everything under /app returns this
+       one shell, so left to itself it would offer the index an unbounded set
+       of URLs that are all the same document and all competing with the
+       landing page. noindex rather than a robots.txt Disallow on purpose:
+       a disallowed URL is never fetched, so the rule that would keep it out
+       of the index is never read, and a page linked from the landing page can
+       still be listed with no snippet at all. This is read, and obeyed. -->
+  <meta name="robots" content="noindex">
+
+  <!-- The app's own link is shared as often as the landing page's, and had
+       nothing to unfurl with. Same card as the landing page, deliberately:
+       whichever of the two somebody pastes, it is the same product. -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="OpenSplit">
+  <meta property="og:title" content="OpenSplit — Free, Open Source Expense Splitting">
+  <meta property="og:description" content="Track shared expenses, fairly. No subscriptions, no ads, no hidden fees — and the code is public.">
+  <meta property="og:url" content="https://opensplit.web.app/">
+  <meta property="og:image" content="https://opensplit.web.app/store/og-card.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="OpenSplit — open source, no fees, no ads — shown beside a phone listing group balances">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="OpenSplit — Free, Open Source Expense Splitting">
+  <meta name="twitter:description" content="Track shared expenses, fairly. No subscriptions, no ads, no hidden fees.">
+  <meta name="twitter:image" content="https://opensplit.web.app/store/og-card.png">
+  <meta name="twitter:image:alt" content="OpenSplit — open source, no fees, no ads — shown beside a phone listing group balances">
 
   <style>
     /* A real skeleton, not a spinner.

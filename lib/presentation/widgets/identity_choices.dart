@@ -17,10 +17,16 @@ import '../../domain/repositories/auth_service.dart';
 /// is one tap with no warning attached, and folding the two together would mean
 /// a widget whose behaviour is half flags.
 class IdentityChoices extends ConsumerStatefulWidget {
-  const IdentityChoices({super.key, required this.onSignedIn, this.guestNote});
+  const IdentityChoices({super.key, this.onSignedIn, this.guestNote});
 
-  /// Called once a session exists, whichever route produced it.
-  final Future<void> Function() onSignedIn;
+  /// Work that only makes sense once a session exists, whichever route
+  /// produced it.
+  ///
+  /// Optional, and usually absent: nothing has to be done to *move* somebody
+  /// on, because the router's guard already reconsiders where a signed-in
+  /// visitor belongs the moment the session appears. The invite screen passes
+  /// one because it has a token to spend.
+  final Future<void> Function()? onSignedIn;
 
   /// What being a guest means *here*, if the caller wants to say something
   /// more specific than the general warning.
@@ -94,7 +100,7 @@ class _IdentityChoicesState extends ConsumerState<IdentityChoices> {
           // sendEmailCode can only have started a sign-in.
           flow: EmailFlow.signInPending,
         );
-    await widget.onSignedIn();
+    await widget.onSignedIn?.call();
   });
 
   Future<void> _google() => _run(() async {
@@ -118,12 +124,12 @@ class _IdentityChoicesState extends ConsumerState<IdentityChoices> {
           accessToken: credential.accessToken,
           allowSignIn: true,
         );
-    await widget.onSignedIn();
+    await widget.onSignedIn?.call();
   }
 
   Future<void> _guest() => _run(() async {
     await ref.read(sessionControllerProvider.notifier).continueAsGuest();
-    await widget.onSignedIn();
+    await widget.onSignedIn?.call();
   });
 
   @override

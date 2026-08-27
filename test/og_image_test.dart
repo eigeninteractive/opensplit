@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -81,13 +82,57 @@ void main() {
     }
   });
 
-  test('crawlers are kept out of the single-page app', () {
+  test('crawlers are kept out of the single-page app, and can read why', () {
     // /app/** all resolves to one shell with a 200, so without this a crawler
     // can mint unbounded URLs that are the same document — each one competing
     // with the landing page under the same title.
+    final shell = File('web/index.html').readAsStringSync();
+    expect(
+      shell,
+      contains('<meta name="robots" content="noindex">'),
+      reason: 'the app shell must exclude itself from the index',
+    );
+
+    // And the exclusion has to be reachable. A Disallow would stop the fetch
+    // that reads the line above, which leaves the landing page's two links to
+    // /app pointing at something Google may still list without a snippet.
     expect(
       File('site/robots.txt').readAsStringSync(),
-      contains('Disallow: /app'),
+      isNot(contains(RegExp(r'^Disallow: /app', multiLine: true))),
+      reason: 'a blocked page cannot be told not to index itself',
+    );
+  });
+
+  test('the app shell unfurls as the same product as the landing page', () {
+    final shell = File('web/index.html').readAsStringSync();
+    final landing = File('site/index.html').readAsStringSync();
+
+    for (final property in ['og:image', 'og:title', 'og:description']) {
+      final pattern = RegExp('property="$property" content="([^"]+)"');
+      expect(
+        pattern.firstMatch(shell)?.group(1),
+        pattern.firstMatch(landing)?.group(1),
+        reason: 'the two pages disagree about $property',
+      );
+    }
+    expect(
+      shell,
+      contains('name="twitter:card" content="summary_large_image"'),
+    );
+  });
+
+  test('the tab title does not rewrite itself once Flutter boots', () {
+    // MaterialApp.onGenerateTitle sets document.title from this string, so a
+    // shell that says anything else is a title the user watches change.
+    final arb = jsonDecode(File('lib/l10n/app_en.arb').readAsStringSync());
+    final title = (arb as Map<String, dynamic>)['appTitle'] as String;
+
+    expect(
+      RegExp(
+        r'<title>([^<]*)</title>',
+      ).firstMatch(File('web/index.html').readAsStringSync())?.group(1),
+      title,
+      reason: 'web/index.html must open with the title Flutter will set',
     );
   });
 
