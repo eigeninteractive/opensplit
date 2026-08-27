@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../application/entry_notification.dart';
 import '../../config.dart';
 import '../local/database.dart';
+import '../repositories/drift_activity_repository.dart';
 import '../repositories/drift_currency_repository.dart';
 import '../repositories/drift_entry_repository.dart';
 import '../repositories/drift_group_repository.dart';
@@ -101,6 +102,7 @@ Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
       entries: DriftEntryRepository(db, outbox: outbox),
       groups: DriftGroupRepository(db, outbox: outbox),
       currencies: DriftCurrencyRepository(db),
+      activity: DriftActivityRepository(db),
       myProfileId: profileId,
       groupId: groupId,
       entryId: entryId,

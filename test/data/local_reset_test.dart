@@ -94,15 +94,21 @@ void main() {
           ),
         );
     await db
-        .into(db.entryEvents)
+        .into(db.entrySnapshots)
         .insert(
-          EntryEventsCompanion.insert(
+          EntrySnapshotsCompanion.insert(
             id: 'ev1',
             entryId: 'e1',
             groupId: 'g1',
-            actorId: 'm1',
-            kind: 'created',
+            actorId: const Value('m1'),
             createdAt: now,
+            description: 'Dinner',
+            currency: 'INR',
+            amountMinor: 40000,
+            entryDate: now,
+            splitKind: SplitKind.equal,
+            payers: '[{"member_id":"m1","amount_minor":40000}]',
+            shares: '[{"member_id":"m1","amount_minor":40000}]',
           ),
         );
     await db
@@ -123,7 +129,7 @@ void main() {
     expect(await db.select(db.entryPayers).get(), isEmpty);
     expect(await db.select(db.entryShares).get(), isEmpty);
     expect(
-      await db.select(db.entryEvents).get(),
+      await db.select(db.entrySnapshots).get(),
       isEmpty,
       reason: 'an activity feed is somebody\'s spending, described',
     );

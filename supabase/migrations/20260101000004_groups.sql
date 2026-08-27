@@ -115,6 +115,13 @@ insert into categories (id, name, icon) values
 -- Maintained by the database rather than by callers. A client that sets it from
 -- its own clock would reintroduce exactly the cross-device clock race that
 -- server timestamps exist to prevent.
+--
+-- On INSERT as well as UPDATE, and that is not belt-and-braces. A column
+-- default applies only when the statement omits the column, and nothing
+-- obliges a client to omit it. Left to the default alone, a first write could
+-- name any timestamp it liked -- including one far enough ahead that every
+-- other device's cursor lands there and the table stops syncing for the whole
+-- group. The trigger is what makes the column genuinely unwritable.
 -- ----------------------------------------------------------------------------
 create or replace function touch_updated_at()
 returns trigger
@@ -127,11 +134,11 @@ end;
 $$;
 
 create trigger trg_groups_touch
-  before update on groups
+  before insert or update on groups
   for each row execute function touch_updated_at();
 
 create trigger trg_members_touch
-  before update on members
+  before insert or update on members
   for each row execute function touch_updated_at();
 
 

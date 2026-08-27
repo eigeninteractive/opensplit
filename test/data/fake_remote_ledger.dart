@@ -3,7 +3,8 @@ import 'package:opensplit/data/sync/sync_cursor.dart';
 import 'package:opensplit/data/sync/wire.dart';
 import 'package:opensplit/domain/models/entry.dart';
 import 'package:opensplit/domain/models/group.dart';
-import 'package:opensplit/domain/models/entry_event.dart';
+import 'package:opensplit/domain/activity/snapshot_diff.dart';
+import 'package:opensplit/domain/models/entry_snapshot.dart';
 import 'package:opensplit/domain/models/member.dart';
 import 'package:opensplit/domain/models/profile.dart';
 
@@ -100,6 +101,7 @@ class FakeRemoteLedger implements RemoteLedgerApi {
 
     final stored = entry.copyWith(id: id, updatedAt: _stamp());
     _entries[id] = entryToJson(stored);
+    _recordSnapshot(stored);
     return entryFromJson(_entries[id]!);
   }
 
@@ -112,7 +114,9 @@ class FakeRemoteLedger implements RemoteLedgerApi {
     final at = _stamp();
     json['deleted_at'] = at.toUtc().toIso8601String();
     json['updated_at'] = at.toUtc().toIso8601String();
-    return entryFromJson(json);
+    final stored = entryFromJson(json);
+    _recordSnapshot(stored);
+    return stored;
   }
 
   @override
@@ -257,54 +261,98 @@ class FakeRemoteLedger implements RemoteLedgerApi {
     return profileFromJson(json);
   }
 
-  /// The activity feed, appended to by whichever device made the change.
-  final List<EntryEvent> _events = [];
+  /// The activity log, written here and nowhere else.
+  ///
+  /// The real table has no insert, update or delete grant for any client; a
+  /// deferred constraint trigger is its only writer. So the fake writes these
+  /// rows itself, from the expense it just committed, and offers no way at all
+  /// to hand one in. A fake that accepted a client-authored line would let a
+  /// test pass against the exact thing the redesign removed.
+  final List<EntrySnapshot> _snapshots = [];
+
+  var _snapshotSeq = 0;
+
+  /// Who the fake takes the current request to be from.
+  ///
+  /// Stands in for `auth.uid()`, which is what `snapshot_entry` resolves the
+  /// actor through. Authorship is therefore decided here, from the session, and
+  /// is not something a caller can supply -- which is the property being
+  /// modelled.
+  String? actingProfileId;
+
+  /// Records what an expense now looks like, exactly as `snapshot_entry` does.
+  void _recordSnapshot(Entry entry) {
+    final actor = _members.values
+        .where(
+          (m) =>
+              m['group_id'] == entry.groupId &&
+              m['profile_id'] == actingProfileId &&
+              m['left_at'] == null,
+        )
+        .map((m) => m['id'] as String)
+        .firstOrNull;
+
+    final taken = EntrySnapshot(
+      id: 'snapshot-${_snapshotSeq++}',
+      entryId: entry.id,
+      groupId: entry.groupId,
+      actorId: actor,
+      createdAt: _stamp(),
+      description: entry.description,
+      currency: entry.currency,
+      amountMinor: entry.amountMinor,
+      entryDate: entry.entryDate,
+      splitKind: entry.splitKind,
+      categoryId: entry.categoryId,
+      notes: entry.notes,
+      deletedAt: entry.deletedAt,
+      payers: [
+        for (final payer in entry.payers)
+          MemberAmount(
+            memberId: payer.memberId,
+            amountMinor: payer.amountMinor,
+          ),
+      ]..sort((a, b) => a.memberId.compareTo(b.memberId)),
+      shares: [
+        for (final share in entry.shares)
+          MemberAmount(
+            memberId: share.memberId,
+            amountMinor: share.amountMinor,
+          ),
+      ]..sort((a, b) => a.memberId.compareTo(b.memberId)),
+    );
+
+    // The same dedup the trigger applies: a re-saved editor and a retried sync
+    // record nothing, so one edit is one line however many times it arrives.
+    final latest = _snapshots
+        .where((snapshot) => snapshot.entryId == entry.id)
+        .lastOrNull;
+    if (latest != null && recordsSameShape(latest, taken)) return;
+
+    _snapshots.add(taken);
+  }
 
   /// Sorted, because the real feed is ordered by `created_at` and the pull
   /// cursor takes the last row it is given as the new high-water mark. A fake
   /// that answered in insertion order would let a test pass against an
   /// ordering the server never produces.
   @override
-  Future<List<EntryEvent>> pullEntryEvents({
+  Future<List<EntrySnapshot>> pullEntrySnapshots({
     required String groupId,
     DateTime? since,
   }) async =>
       [
-        for (final event in _events)
-          if (event.groupId == groupId &&
-              (since == null || event.createdAt.isAfter(since)))
-            event,
+        for (final snapshot in _snapshots)
+          if (snapshot.groupId == groupId &&
+              (since == null || snapshot.createdAt.isAfter(since)))
+            snapshot,
       ]..sort((a, b) {
         final byTime = a.createdAt.compareTo(b.createdAt);
         return byTime != 0 ? byTime : a.id.compareTo(b.id);
       });
 
-  @override
-  Future<EntryEvent> pushEntryEvent(EntryEvent event) async {
-    _assertGroupKnown(event.groupId, 'an activity event');
-    if (!_entries.containsKey(event.entryId)) {
-      throw RemoteRejected(
-        'entry_events references an entry the server does not have',
-        permanent: true,
-      );
-    }
-    // Append-only and idempotent on the id, exactly as the real table is: the
-    // client chooses the id, so a retry is provably the same row rather than a
-    // second copy of it.
-    final existing = _events.where((e) => e.id == event.id).firstOrNull;
-    if (existing != null) return existing;
-
-    // The clock is the server's, like `clock_timestamp()` on the real table.
-    // Stamping it here rather than trusting the one that arrived is what the
-    // activity cursor depends on, so the fake has to do it too or a test would
-    // pass against a guarantee the server is the only thing actually making.
-    final stored = event.copyWith(createdAt: _stamp());
-    _events.add(stored);
-    return stored;
-  }
-
-  /// Records an event that arrived from somebody else's device.
-  void seedEvent(EntryEvent event) => _events.add(event);
+  /// Records history that arrived from somebody else's device.
+  void seedSnapshot(EntrySnapshot snapshot) => _snapshots.add(snapshot);
 
   /// Puts a profile on the server without going through a push, for arranging
   /// "somebody else renamed themselves" in a test.

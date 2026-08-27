@@ -73,6 +73,46 @@ void main() {
       );
       expect(line, 'the amount, from 40000 to 30000');
     });
+
+    // The lines the whole redesign exists to make possible. A bill re-split
+    // without its total moving changes no number a reader would think to
+    // check, so this sentence is the only place the money shows up.
+    test('names whose share moved, and by how much', () {
+      final line = describeChange(
+        const FieldChange(field: 'share:m1', from: '20000', to: '30000'),
+        currency: rupee,
+        memberNames: const {'m1': 'Ravi'},
+      );
+      expect(line, "Ravi's share, from ₹200.00 to ₹300.00");
+    });
+
+    test('reads somebody joining a split as a share being set', () {
+      final line = describeChange(
+        const FieldChange(field: 'share:m2', from: null, to: '20000'),
+        currency: rupee,
+        memberNames: const {'m2': 'Priya'},
+      );
+      expect(line, "Priya's share, set to ₹200.00");
+    });
+
+    test('says who put the money down when that changes', () {
+      final line = describeChange(
+        const FieldChange(field: 'paid:m1', from: '40000', to: null),
+        currency: rupee,
+        memberNames: const {'m1': 'Ravi'},
+      );
+      expect(line, 'what Ravi paid, cleared');
+    });
+
+    test('still says something useful with no names to hand', () {
+      // Never silently absent: these are the lines that say who gained and
+      // who lost, so a missing name costs elegance and not the record.
+      final line = describeChange(
+        const FieldChange(field: 'share:m1', from: '20000', to: '30000'),
+        currency: rupee,
+      );
+      expect(line, "someone's share, from ₹200.00 to ₹300.00");
+    });
   });
 
   group('describeKind', () {

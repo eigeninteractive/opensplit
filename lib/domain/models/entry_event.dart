@@ -18,10 +18,15 @@ abstract class FieldChange with _$FieldChange {
 
 /// A line in a group's activity feed.
 ///
-/// Authored by the device that made the change, in the same transaction as the
-/// change itself, and pushed like any other row. See `describeEntryWrite` for
-/// why that replaced a server-side trigger, and what the server still
-/// guarantees instead.
+/// Derived, never stored and never sent. What is stored is a chain of
+/// [EntrySnapshot]s, each recording what an expense looked like after a change;
+/// this is the difference between two of them, computed on read by
+/// `describeSnapshot`.
+///
+/// Keeping it as its own type is what let the storage change underneath the
+/// feed without the screens noticing: nothing that renders activity knows
+/// whether the line it is showing came from the server's record or from this
+/// device's provisional one.
 @freezed
 abstract class EntryEvent with _$EntryEvent {
   const factory EntryEvent({
@@ -31,11 +36,21 @@ abstract class EntryEvent with _$EntryEvent {
 
     /// The member who did it, not the account: a placeholder's edits survive
     /// them claiming an account later.
-    required String actorId,
+    ///
+    /// Null when the change came from something with no member row. Rendered
+    /// as "someone" rather than hidden -- an unattributable change still
+    /// belongs on the record.
+    required String? actorId,
     required EntryEventKind kind,
     required DateTime createdAt,
 
     /// Empty for anything but an edit.
     @Default(<FieldChange>[]) List<FieldChange> changes,
+
+    /// This device's own account of a change it has not yet managed to push.
+    ///
+    /// Replaced by the server's the moment one arrives. Worth surfacing: until
+    /// then the line describes something no one else in the group can see.
+    @Default(false) bool isProvisional,
   }) = _EntryEvent;
 }

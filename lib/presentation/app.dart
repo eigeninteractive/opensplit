@@ -31,10 +31,27 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
   @override
   void initState() {
     super.initState();
-    _lifecycle = AppLifecycleListener(onResume: _offerUpdate);
+    _lifecycle = AppLifecycleListener(onResume: _onResume);
+
+    // Sync at launch, which nothing used to do. Opening a group screen was the
+    // only automatic trigger, so a cold start landed on a group list showing
+    // whatever it last knew -- and on a second device or after a reinstall,
+    // showing nothing at all -- until somebody pulled down.
+    //
+    // Safe to fire before the first frame: it touches no widget, and every
+    // screen renders from the local database rather than waiting on it.
+    ref.read(syncSchedulerProvider).start();
+
     // Not in initState directly: the first frame has not been built, so there
     // is no messenger to show anything on yet.
     WidgetsBinding.instance.addPostFrameCallback((_) => _offerUpdate());
+  }
+
+  /// Coming back to the foreground asks both questions worth asking: what has
+  /// the group been doing, and is there a new version of the app.
+  void _onResume() {
+    ref.read(syncSchedulerProvider).resumed();
+    _offerUpdate();
   }
 
   @override

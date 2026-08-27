@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../../domain/models/entry.dart';
-import '../../domain/models/entry_event.dart';
+import '../../domain/models/entry_snapshot.dart';
+import '../sync/wire.dart' show memberAmountsToJson;
 import 'database.dart';
 
 /// Writes an entry and its children atomically.
@@ -17,16 +18,24 @@ import 'database.dart';
 /// and it mirrors what the server's `upsert_entry` does, so the two cannot
 /// disagree about what an edit means.
 ///
-/// [event] is the feed line describing this write, when there is one to record.
-/// It goes in the same transaction as the entry, deliberately: the record of a
-/// change and the change itself are one fact, and committing them separately
+/// [snapshot] is this device's provisional record of the write, when there is
+/// one to make. It goes in the same transaction as the entry, deliberately: a
+/// change and the record of it are one fact, and committing them separately
 /// would allow either an expense with no history or history for an expense that
-/// was never stored. Null on the sync path, where events arrive on their own
-/// feed rather than being inferred from rows another device already described.
+/// was never stored.
+///
+/// Provisional because the authoritative record is the server's, taken from the
+/// row it actually committed. This one exists so the feed is not empty offline,
+/// or for a guest with no reachable backend -- which is what it was before the
+/// device wrote anything at all. It is never pushed, and it is dropped as soon
+/// as the server's account of the same expense arrives.
+///
+/// Null on the sync path, where snapshots arrive on their own feed already
+/// written by the server.
 Future<void> writeEntryLocally(
   AppDatabase db,
   Entry entry, {
-  EntryEvent? event,
+  EntrySnapshot? snapshot,
 }) async {
   // A real check, not an assert. Asserts are stripped from a release build,
   // which left the one invariant this app is actually about — that what was
@@ -101,38 +110,37 @@ Future<void> writeEntryLocally(
       ]);
     });
 
-    if (event != null) await _writeEvent(db, event);
+    if (snapshot != null) await _writeSnapshot(db, snapshot);
   });
 }
 
-/// Appends one feed line.
+/// Records what the expense now looks like, as this device sees it.
 ///
-/// insertOrIgnore because the same event can arrive twice: once written here
-/// and once pulled back from the server, under the id this device chose. An
-/// event is never revised, so a row already present is the same row.
-Future<void> _writeEvent(AppDatabase db, EntryEvent event) async {
+/// insertOrIgnore because the same id can be offered twice -- a retried write,
+/// or a re-entrant path -- and a snapshot is never revised, so a row already
+/// present is the same row.
+Future<void> _writeSnapshot(AppDatabase db, EntrySnapshot snapshot) async {
   await db
-      .into(db.entryEvents)
+      .into(db.entrySnapshots)
       .insert(
-        EntryEventsCompanion.insert(
-          id: event.id,
-          entryId: event.entryId,
-          groupId: event.groupId,
-          actorId: event.actorId,
-          kind: event.kind.name,
-          changes: Value(
-            event.changes.isEmpty
-                ? null
-                : jsonEncode(encodeChanges(event.changes)),
-          ),
-          createdAt: event.createdAt,
+        EntrySnapshotsCompanion.insert(
+          id: snapshot.id,
+          entryId: snapshot.entryId,
+          groupId: snapshot.groupId,
+          actorId: Value(snapshot.actorId),
+          createdAt: snapshot.createdAt,
+          description: snapshot.description,
+          currency: snapshot.currency,
+          amountMinor: snapshot.amountMinor,
+          entryDate: snapshot.entryDate,
+          splitKind: snapshot.splitKind,
+          categoryId: Value(snapshot.categoryId),
+          notes: Value(snapshot.notes),
+          deletedAt: Value(snapshot.deletedAt),
+          payers: jsonEncode(memberAmountsToJson(snapshot.payers)),
+          shares: jsonEncode(memberAmountsToJson(snapshot.shares)),
+          isProvisional: Value(snapshot.isProvisional),
         ),
         mode: InsertMode.insertOrIgnore,
       );
 }
-
-/// The diff, in the shape the wire and the local `changes` column both hold.
-Map<String, dynamic> encodeChanges(List<FieldChange> changes) => {
-  for (final change in changes)
-    change.field: {'from': change.from, 'to': change.to},
-};

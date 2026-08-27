@@ -1,5 +1,5 @@
 import '../../domain/models/entry.dart';
-import '../../domain/models/entry_event.dart';
+import '../../domain/models/entry_snapshot.dart';
 import '../../domain/models/group.dart';
 import '../../domain/models/member.dart';
 import '../../domain/models/profile.dart';
@@ -181,70 +181,60 @@ Profile profileFromJson(Map<String, dynamic> json) => Profile(
 // Activity
 // ---------------------------------------------------------------------------
 
-/// One-way: the server writes these, the client only reads them.
+/// One way, and only one way: the server writes these, the client reads them.
 ///
-/// There is deliberately no `entryEventToJson`. The table has no insert policy
-/// and no INSERT grant, so a client that tried would be refused twice over —
-/// and a serialiser sitting here would suggest otherwise to whoever read this
-/// file next.
-EntryEvent entryEventFromJson(Map<String, dynamic> json) => EntryEvent(
+/// There is deliberately no `entrySnapshotToJson`, and its absence is the whole
+/// security property rather than an omission. The table has no INSERT, UPDATE
+/// or DELETE grant and no policy for any of them; `snapshot_entry` is the only
+/// writer there is. A serialiser sitting here would suggest otherwise to
+/// whoever read this file next.
+///
+/// What that buys: while the client composed these rows it could describe its
+/// own edit however it liked -- a Rs.400 to Rs.4,000 rewrite filed as a
+/// ten-rupee correction, with nothing on the server comparing the claim against
+/// the expense -- and could re-split a bill so somebody else owed more while
+/// writing no history at all. Neither is expressible now. There is no claim on
+/// the wire, only the expense's own shape as the server committed it.
+EntrySnapshot entrySnapshotFromJson(Map<String, dynamic> json) => EntrySnapshot(
   id: json['id'] as String,
   entryId: json['entry_id'] as String,
   groupId: json['group_id'] as String,
-  actorId: json['actor_id'] as String,
-  kind: EntryEventKind.values.byName(json['kind'] as String),
+  actorId: json['actor_id'] as String?,
   createdAt: DateTime.parse(json['created_at'] as String),
-  changes: changesFromJson(json['changes']),
+  description: json['description'] as String? ?? '',
+  currency: json['currency'] as String,
+  amountMinor: (json['amount_minor'] as num).toInt(),
+  entryDate: DateTime.parse(json['entry_date'] as String),
+  splitKind: SplitKind.values.byName(json['split_kind'] as String),
+  categoryId: json['category_id'] as String?,
+  notes: json['notes'] as String?,
+  deletedAt: json['deleted_at'] == null
+      ? null
+      : DateTime.parse(json['deleted_at'] as String),
+  payers: memberAmountsFromJson(json['payers']),
+  shares: memberAmountsFromJson(json['shares']),
 );
 
-/// One activity event, as the server's columns.
+/// `[{"member_id": "...", "amount_minor": 40000}, ...]`, in both directions.
 ///
-/// The id is the client's and the clock is the server's, and the split is
-/// deliberate — it is the same one `entries` uses.
-///
-/// The id has to come from here: this device wrote the row locally before it
-/// had any way to ask, and a server-assigned id would make every push produce a
-/// second copy of an event already on screen. Choosing it here makes a retry
-/// provably the same row.
-///
-/// `created_at` must not. The activity pull is cursored on it, so a device
-/// whose clock runs fast would stamp an event in the future, and every other
-/// device would advance its cursor past it and silently skip everything
-/// recorded in between — by anyone. Left out, the column takes the server's
-/// `clock_timestamp()`, and the push adopts that value back onto the local row
-/// so the two agree and every member reads the feed in one order.
-Map<String, dynamic> entryEventToJson(EntryEvent event) => {
-  'id': event.id,
-  'entry_id': event.entryId,
-  'group_id': event.groupId,
-  'actor_id': event.actorId,
-  'kind': event.kind.name,
-  'changes': event.changes.isEmpty
-      ? null
-      : {
-          for (final change in event.changes)
-            change.field: {'from': change.from, 'to': change.to},
-        },
-};
-
-/// Turns the stored diff object into a flat list.
-///
-/// Shaped `{"amount_minor": {"from": 40000, "to": 30000}}` on the wire, which
-/// is convenient for Postgres to build and awkward to render. Unknown keys are
-/// carried through rather than dropped: a column added to the diff later should
-/// appear in the feed as an unfamiliar row, not vanish.
-List<FieldChange> changesFromJson(Object? raw) {
-  if (raw is! Map) return const [];
-  final changes = <FieldChange>[
-    for (final entry in raw.entries)
-      if (entry.value is Map)
-        FieldChange(
-          field: entry.key as String,
-          from: (entry.value as Map)['from']?.toString(),
-          to: (entry.value as Map)['to']?.toString(),
+/// Sorted on the way in as well as on the way out. The server orders by member
+/// id when it builds the array so two snapshots of an unchanged split compare
+/// equal there; sorting here too means a locally written provisional row and
+/// the server's account of the same change diff identically.
+List<MemberAmount> memberAmountsFromJson(Object? raw) {
+  if (raw is! List) return const [];
+  return [
+    for (final row in raw)
+      if (row is Map)
+        MemberAmount(
+          memberId: row['member_id'] as String,
+          amountMinor: (row['amount_minor'] as num).toInt(),
         ),
-  ];
-  // Stable order, so the same edit reads the same way on every device.
-  changes.sort((a, b) => a.field.compareTo(b.field));
-  return changes;
+  ]..sort((a, b) => a.memberId.compareTo(b.memberId));
 }
+
+/// The same shape, for the local column.
+List<Map<String, Object?>> memberAmountsToJson(List<MemberAmount> rows) => [
+  for (final row in rows)
+    {'member_id': row.memberId, 'amount_minor': row.amountMinor},
+];

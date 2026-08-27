@@ -31,13 +31,37 @@ grant select on fx_rates   to authenticated;
 grant select, insert, update         on profiles to authenticated;
 grant select, insert, update         on groups   to authenticated;
 grant select, insert, update         on members  to authenticated;
-grant select, insert, update         on entries  to authenticated;
-grant select, insert, update, delete on invites    to authenticated;
+grant select, insert, update, delete on invites  to authenticated;
 
--- upsert_entry replaces children wholesale, so the caller genuinely needs
--- DELETE on these two.
-grant select, insert, update, delete on entry_payers to authenticated;
-grant select, insert, update, delete on entry_shares to authenticated;
+-- ----------------------------------------------------------------------------
+-- The ledger: readable directly, writable only through the two RPCs.
+--
+-- SELECT and nothing more on all three. upsert_entry and delete_entry are
+-- SECURITY DEFINER, so they carry their own privileges and need none of these;
+-- the client has never issued a direct write to any of the three, so this
+-- removes reachable surface and no functionality.
+--
+-- What it removes is not theoretical. With UPDATE granted, a member could:
+--
+--   * rewrite an expense without going through upsert_entry, which is where
+--     every check about who may change what lives;
+--   * set `updated_at` -- the column the delta pull cursors on -- backwards, so
+--     a change committed on the server reached no other device at all, or
+--     forwards, so every member's cursor pinned there and the group stopped
+--     receiving expenses permanently;
+--   * rewrite entry_shares alone, moving money between members while the total
+--     stayed put and the balance invariant stayed satisfied.
+--
+-- The triggers now catch all three on any path. This is the second lock: it
+-- means there is no path.
+--
+-- assert_balanced() still runs as the caller -- the deferred constraint
+-- triggers are SECURITY INVOKER and fire at COMMIT, outside the DEFINER
+-- function's body -- and reads all three tables. SELECT is all it needs.
+-- ----------------------------------------------------------------------------
+grant select on entries      to authenticated;
+grant select on entry_payers to authenticated;
+grant select on entry_shares to authenticated;
 
 -- assert_balanced() keeps its default PUBLIC execute grant, and has to: the
 -- three constraint triggers that enforce the balance invariant are SECURITY
@@ -49,16 +73,23 @@ grant select, insert, update, delete on entry_shares to authenticated;
 -- see reads as absent and the function returns silently, exactly as it does
 -- for one deleted in the same transaction.
 
--- The activity log: readable by the group, appended to in your own name.
+-- The record of what happened: readable by the group, written by nobody.
 --
--- SELECT and INSERT, and nothing else. The device that made a change is what
--- describes it — see entry_events_insert, which pins the actor to the caller's
--- own member row — so appending has to be reachable through PostgREST.
+-- SELECT and nothing else -- no INSERT, no UPDATE, no DELETE, at either level.
+-- `snapshot_entry` is SECURITY DEFINER and is the only writer there is, so the
+-- absence of every other grant costs no functionality and closes the table to
+-- clients completely.
 --
--- No UPDATE or DELETE anywhere, at either level, and that half is unchanged: an
--- audit trail somebody can quietly rewrite is not one. Two independent locks on
--- that door, since there is no policy for either verb.
-grant select, insert on entry_events to authenticated;
+-- INSERT used to be granted, paired with a policy pinning the actor to the
+-- caller. Two things escaped through it. A client could describe its own edit
+-- however it liked, since nothing compared the diff against the expense. And
+-- because the grant was table-wide it could set `created_at` -- the column the
+-- activity cursor advances on -- so one row stamped in the year 3000 pinned
+-- every member's cursor there and the group's feed stopped, permanently.
+--
+-- Neither is reachable now: there is no client-writable column here because
+-- there is no client-writable table here.
+grant select on entry_events to authenticated;
 
 -- Deliberately no DELETE on entries, members or groups. None of the three has
 -- an RLS delete policy either; this is the second lock on the same door.
@@ -139,8 +170,8 @@ grant select, delete on device_tokens to service_role;
 
 -- tokens_for_entry deliberately reads other people's tokens, which no
 -- user-facing policy allows. It is therefore service-role only.
-revoke execute on function tokens_for_entry(uuid) from public, anon, authenticated;
-grant  execute on function tokens_for_entry(uuid) to service_role;
+revoke execute on function tokens_for_entry(uuid, uuid) from public, anon, authenticated;
+grant  execute on function tokens_for_entry(uuid, uuid) to service_role;
 
 -- Operator-only: these drive outbound requests and delete accounts.
 revoke execute on function trigger_fx_fetch(jsonb) from public, anon, authenticated;

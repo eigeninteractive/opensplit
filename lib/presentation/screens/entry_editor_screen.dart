@@ -935,6 +935,10 @@ class _History extends ConsumerWidget {
         .watch(currenciesProvider)
         .value?[ledger.group.defaultCurrency];
 
+    // See the note in ActivityScreen: a build with nowhere to sync to must not
+    // mark every line as unsynced.
+    final syncs = ref.watch(syncEngineProvider) != null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -947,13 +951,15 @@ class _History extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${ledger.nameOf(event.actorId)} '
-                  '${describeKind(event.kind)}',
+                  '${ledger.nameOfActor(event.actorId)} '
+                  '${describeKind(event.kind)}'
+                  '${syncs && event.isProvisional ? ' — not synced yet' : ''}',
                   style: theme.textTheme.bodyMedium,
                 ),
                 for (final change in event.changes)
                   Text(
-                    '· ${describeChange(change, currency: currency)}',
+                    '· '
+                    '${describeChange(change, currency: currency, memberNames: ledger.memberNames)}',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),

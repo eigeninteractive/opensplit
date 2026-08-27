@@ -273,6 +273,26 @@ create trigger trg_entries_guard
   for each row execute function guard_entry_write();
 
 -- ----------------------------------------------------------------------------
+-- The sync clock belongs to the server.
+--
+-- `updated_at` is not a fact about the expense; it is the delta pull's own
+-- bookkeeping, and the pull treats it as authoritative. A client able to write
+-- it can do two things nobody should be able to do:
+--
+--   * backdate a change behind everyone's cursor, so an edit is committed on
+--     the server and never reaches a single other device;
+--   * stamp one in the far future, which pins every member's cursor there and
+--     stops the group receiving expenses at all, permanently.
+--
+-- Both were reachable. `entries` was the one versioned table with no touch
+-- trigger -- it had only a column default, which a client can simply override
+-- by naming the column.
+-- ----------------------------------------------------------------------------
+create trigger trg_entries_touch
+  before insert or update on entries
+  for each row execute function touch_updated_at();
+
+-- ----------------------------------------------------------------------------
 -- Members on an entry must belong to that entry's group.
 --
 -- The foreign key alone only proves the member exists somewhere. Without this,
@@ -350,84 +370,308 @@ having sum(delta) <> 0;
 -- Per group per currency, these always sum to exactly zero.
 
 
--- ----------------------------------------------------------------------------
--- The activity log.
+-- ============================================================================
+-- The record of what happened.
 --
--- Editing an expense in place is the right model — the entry row stays the one
--- source of truth, so the balance fold never has to know that history exists —
+-- Editing an expense in place is the right model -- the entry row stays the one
+-- source of truth, so the balance fold never has to know that history exists --
 -- but on its own it is silently destructive. Someone who agreed a bill was
--- ₹400 and settled on it would watch their balance become ₹300 with nothing
--- anywhere to say why, or who did it. That is a trust problem, not a data
--- problem, and it is what this table answers.
+-- Rs.400 and settled on it would watch their balance move with nothing anywhere
+-- to say why, or who did it. That is a trust problem rather than a data one,
+-- and it is what this table answers.
 --
--- Append-only and deliberately NOT event sourcing. Nothing is ever rebuilt from
--- these rows; they are a record laid alongside the truth, not the truth itself.
--- Rebuilding state from events would mean every read path, the balance fold and
--- sync all had to learn about revisions, for a feature whose entire job is to
--- be readable.
--- ----------------------------------------------------------------------------
+-- Every committed change to an expense appends one row here, written by the
+-- server, holding what the expense looked like AFTER the change. The feed
+-- people read is the difference between consecutive rows, computed on the
+-- client from two snapshots it did not author.
+--
+-- WHY SNAPSHOTS RATHER THAN DIFFS
+--
+-- A diff needs the before-image of the whole expense, and one logical change
+-- spans several statements across three tables -- `upsert_entry` replaces
+-- payers and shares wholesale. So:
+--
+--   * a row-level trigger on `entries` has OLD, but knows nothing about the
+--     children that carry who owes what;
+--   * a statement-level trigger with transition tables sees both images of ONE
+--     statement, and delete-then-insert of the shares is two;
+--   * a deferred constraint trigger runs once at COMMIT with the whole shape
+--     finally coherent, which is the only useful moment -- and by then the
+--     before-image is gone.
+--
+-- SQL offers no "start of a logical change" hook to hang a capture on, so the
+-- after-image is the only thing observable at the only moment worth observing.
+-- Snapshots are what that constraint leaves, not a preference.
+--
+-- WHY NO CLIENT MAY WRITE IT
+--
+-- There is no insert, update or delete grant on this table and no policy for
+-- any of them. It is written exclusively by the trigger below.
+--
+-- That is a stronger guarantee than the append-only-in-your-own-name policy it
+-- replaces, and the difference is the whole point. A client that authors its
+-- own history can describe a Rs.400 -> Rs.4,000 edit as a ten-rupee correction,
+-- and nothing on the server can tell. Worse, it could edit only the SHARES --
+-- moving a hundred rupees from itself to a flatmate while the total stays put,
+-- which the balance invariant happily accepts -- and write no history at all.
+-- Deriving the record here removes the claim from the wire altogether: the
+-- client no longer asserts what changed, it renders what the server observed.
+--
+-- STILL NOT EVENT SOURCING
+--
+-- Nothing is ever rebuilt from these rows. Balances read `entries` and only
+-- `entries`, so a bug anywhere in this machinery can make the feed wrong and
+-- can never make a balance wrong.
+--
+-- The newest snapshot for an expense is, by construction, identical to that
+-- expense's current row. That redundancy is deliberate: it is what makes a
+-- mismatch -- should one ever appear -- a tamper alarm rather than a merge
+-- problem, and it is what lets the history be read without joining against the
+-- mutable table it exists to audit.
+-- ============================================================================
 create table entry_events (
   id         uuid primary key default gen_random_uuid(),
   entry_id   uuid not null references entries(id) on delete cascade,
 
   -- Denormalised from the entry so the group feed is one indexed read rather
-  -- than a join, and so an event survives being read after its entry is gone.
+  -- than a join.
   group_id   uuid not null references groups(id) on delete cascade,
 
-  -- A member id, like entries.created_by: authorship is group-scoped, so a
-  -- placeholder's edits survive them claiming an account.
-  actor_id   uuid not null references members(id) on delete restrict,
-
-  kind       entry_event_kind not null,
-
-  -- {"amount_minor": {"from": 40000, "to": 30000}, ...}. Only what actually
-  -- changed, so an edit that touched one field reads as one line.
+  -- Who was holding the pen, as a member id -- group-scoped like
+  -- `entries.created_by`, so a placeholder's edits survive them claiming an
+  -- account.
   --
-  -- Null for a create: "everything" is not a diff, and the entry itself is
-  -- already the record of what it started as.
-  changes    jsonb,
+  -- Nullable, and that is not laxness. A change made by something with no
+  -- member row -- a future job, an operator at a psql prompt -- must still be
+  -- recorded. "Something changed and we cannot say who" is a far better audit
+  -- line than silence, and silence is what a NOT NULL here would buy.
+  actor_id   uuid references members(id) on delete restrict,
 
   -- clock_timestamp(), not now(). now() is transaction time and is identical
-  -- for every statement in a transaction, so two events written together would
-  -- tie and the feed would order them by a random uuid — showing an edit above
-  -- the creation it followed. This is a log; it needs the wall clock.
-  created_at timestamptz not null default clock_timestamp()
+  -- for every statement in a transaction, so two snapshots written together
+  -- would tie and the feed would order them by a random uuid. This is a log; it
+  -- needs the wall clock.
+  created_at timestamptz not null default clock_timestamp(),
+
+  -- --------------------------------------------------------------------------
+  -- The snapshot: everything about the expense a reader would call a change.
+  --
+  -- `fx_rate` and friends are absent on purpose -- they move whenever the
+  -- currency does and would double every currency edit. `updated_at` is absent
+  -- because it moves on every write by definition, which would make a save that
+  -- altered nothing read as an edit.
+  -- --------------------------------------------------------------------------
+  description  text        not null,
+  currency     char(3)     not null,
+  amount_minor bigint      not null,
+  entry_date   date        not null,
+  split_kind   split_kind  not null,
+
+  -- Plain uuid, deliberately not a foreign key: a snapshot records the category
+  -- an expense had at the time, and deleting a category must not rewrite what
+  -- happened.
+  category_id  uuid,
+  notes        text,
+
+  -- Set once the expense is soft-deleted. What makes "deleted" and "restored"
+  -- readable off the chain rather than needing a column to assert them.
+  deleted_at   timestamptz,
+
+  -- [{"member_id": "...", "amount_minor": 40000}, ...], ordered by member id so
+  -- that two snapshots of an unchanged split compare equal with `=`.
+  --
+  -- This is the half that used to be missing entirely. Who owes what is where
+  -- the money actually lives, and a history that recorded only the total could
+  -- not see a split being quietly rewritten underneath it.
+  payers       jsonb not null,
+  shares       jsonb not null
 );
 
--- The feed is "this group, newest first"; the entry history is "this entry, in
--- order". Same trailing id as the entries cursor, and for the same reason: a
--- batch written in one transaction shares a timestamp.
+-- The feed is "this group, newest first"; an expense's history is "this entry,
+-- in order". Same trailing id as the entries cursor, and for the same reason: a
+-- batch written in one transaction can share a timestamp.
 create index idx_entry_events_group on entry_events (group_id, created_at desc, id);
 create index idx_entry_events_entry on entry_events (entry_id, created_at);
 
 alter table entry_events enable row level security;
 
 -- ----------------------------------------------------------------------------
--- Recording what happened.
+-- Taking the snapshot.
 --
--- There is no trigger here any more, and that is the point.
---
--- This used to be a SECURITY DEFINER function on `entries`, so that the one
--- path able to append history was the server's own and nothing reachable from a
--- client could fabricate a line of it. The argument was sound in isolation and
--- wrong for this app: the client is local-first, so an expense is written to
--- the device and answered immediately, and only later pushed. History written
--- by a trigger therefore existed only after a round trip — which meant that
--- offline, or as a guest with no reachable backend, an app full of expenses had
--- an activity feed that was permanently empty.
---
--- Nor did the trigger buy what it appeared to. A device that wanted to lie
--- about who spent what would write the expense that way; the server takes the
--- entry itself on trust, bounded by RLS, so protecting only the description of
--- the write was a guarantee about the smaller half.
---
--- So the client authors the event, in the same local transaction as the entry,
--- and pushes it like any other row. What the server still guarantees is every
--- part of that guarantee worth having, and it is now stated as policy rather
--- than buried in a function: you may append an event only in your own name, for
--- an entry in a group you belong to, and no policy anywhere permits an update
--- or a delete. See `entry_events_insert` in the security migration.
+-- SECURITY DEFINER because no caller has -- or should have -- insert on
+-- entry_events. This function is the only writer, which is exactly what makes
+-- the record worth reading.
 -- ----------------------------------------------------------------------------
+create or replace function snapshot_entry(p_entry uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_entry  entries;
+  v_payers jsonb;
+  v_shares jsonb;
+  v_actor  uuid;
+  v_last   entry_events;
+begin
+  select * into v_entry from entries where id = p_entry;
+
+  -- Gone in this same transaction, which only a cascade from the group can do.
+  -- The history goes with it; there is nothing left to describe.
+  if v_entry.id is null then
+    return;
+  end if;
+
+  select coalesce(
+           jsonb_agg(jsonb_build_object(
+             'member_id', member_id, 'amount_minor', amount_minor)
+             order by member_id),
+           '[]'::jsonb)
+    into v_payers
+    from entry_payers where entry_id = p_entry;
+
+  select coalesce(
+           jsonb_agg(jsonb_build_object(
+             'member_id', member_id, 'amount_minor', amount_minor)
+             order by member_id),
+           '[]'::jsonb)
+    into v_shares
+    from entry_shares where entry_id = p_entry;
+
+  select * into v_last
+    from entry_events
+   where entry_id = p_entry
+   order by created_at desc, id desc
+   limit 1;
+
+  -- Nothing this table records has moved.
+  --
+  -- Load-bearing, not an optimisation. One edit fires this function once per
+  -- affected row across three tables -- replacing four shares fires it five
+  -- times -- so without this a single save would read as five separate events.
+  -- It is also what makes a re-saved editor and a retried sync produce nothing,
+  -- which is the behaviour a feed full of "Ravi edited nothing" needs.
+  if v_last.id is not null
+     and v_last.description  is not distinct from v_entry.description
+     and v_last.currency     is not distinct from v_entry.currency
+     and v_last.amount_minor is not distinct from v_entry.amount_minor
+     and v_last.entry_date   is not distinct from v_entry.entry_date
+     and v_last.split_kind   is not distinct from v_entry.split_kind
+     and v_last.category_id  is not distinct from v_entry.category_id
+     and v_last.notes        is not distinct from v_entry.notes
+     and v_last.deleted_at   is not distinct from v_entry.deleted_at
+     and v_last.payers       = v_payers
+     and v_last.shares       = v_shares
+  then
+    return;
+  end if;
+
+  -- The caller's own member row, resolved here rather than accepted as an
+  -- argument. There is no parameter for it precisely so that no write path can
+  -- attribute a change to somebody else.
+  select id into v_actor
+    from members
+   where group_id = v_entry.group_id
+     and profile_id = auth.uid()
+     and left_at is null;
+
+  insert into entry_events (
+    entry_id, group_id, actor_id,
+    description, currency, amount_minor, entry_date, split_kind,
+    category_id, notes, deleted_at, payers, shares)
+  values (
+    v_entry.id, v_entry.group_id, v_actor,
+    v_entry.description, v_entry.currency, v_entry.amount_minor,
+    v_entry.entry_date, v_entry.split_kind, v_entry.category_id,
+    v_entry.notes, v_entry.deleted_at, v_payers, v_shares);
+end;
+$$;
+
+comment on function snapshot_entry is
+  'Appends what an expense now looks like to entry_events, unless that is '
+  'already what the newest row there says. The only writer of that table.';
+
+create or replace function snapshot_from_entry()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform snapshot_entry(new.id);
+  return null;
+end;
+$$;
+
+create or replace function snapshot_from_child()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform snapshot_entry(coalesce(new.entry_id, old.entry_id));
+  return null;
+end;
+$$;
+
+-- DEFERRED, and hung off all three tables, for precisely the reasons the
+-- balance invariant above is: an expense and its children are written in
+-- several statements in any order, and the only moment the shape is coherent
+-- enough to photograph is COMMIT.
+--
+-- The children matter most. A change that touches only entry_shares -- moving
+-- what one member owes while the total stays put -- is invisible to a trigger
+-- on `entries` alone, and it is the single most valuable thing to have on the
+-- record, because it is the one edit that moves money without moving any
+-- number a casual reader would check.
+create constraint trigger trg_entries_snapshot
+  after insert or update on entries
+  deferrable initially deferred
+  for each row execute function snapshot_from_entry();
+
+create constraint trigger trg_payers_snapshot
+  after insert or update or delete on entry_payers
+  deferrable initially deferred
+  for each row execute function snapshot_from_child();
+
+create constraint trigger trg_shares_snapshot
+  after insert or update or delete on entry_shares
+  deferrable initially deferred
+  for each row execute function snapshot_from_child();
+
+-- ----------------------------------------------------------------------------
+-- A child moving is the entry moving.
+--
+-- `updated_at` is what the delta pull cursors on, so a change the column does
+-- not reflect is a change no other device ever receives. Rewriting a share
+-- without this leaves the server holding one split and every phone in the group
+-- holding another, indefinitely and undetectably -- until somebody reinstalls
+-- and silently gets the other answer.
+--
+-- SECURITY DEFINER so it survives the caller losing direct UPDATE on entries.
+-- ----------------------------------------------------------------------------
+create or replace function touch_parent_entry()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update entries set updated_at = now()
+   where id = coalesce(new.entry_id, old.entry_id);
+  return null;
+end;
+$$;
+
+create trigger trg_payers_touch_parent
+  after insert or update or delete on entry_payers
+  for each row execute function touch_parent_entry();
+
+create trigger trg_shares_touch_parent
+  after insert or update or delete on entry_shares
+  for each row execute function touch_parent_entry();
 
 alter table entries      enable row level security;
 alter table entry_payers enable row level security;

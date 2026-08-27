@@ -30,7 +30,7 @@ Future<void> forgetLocalLedger(AppDatabase db) async {
     // a device had synced any activity at all. The references cascade now, so
     // this list is belt as well as braces — but the list is the part a reader
     // can check against the schema.
-    await db.delete(db.entryEvents).go();
+    await db.delete(db.entrySnapshots).go();
     await db.delete(db.entryPayers).go();
     await db.delete(db.entryShares).go();
     await db.delete(db.entries).go();

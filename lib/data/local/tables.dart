@@ -45,23 +45,32 @@ class Profiles extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-/// What happened to an expense.
+/// What an expense looked like at one moment, and who had just changed it.
 ///
-/// Written here first and pushed like everything else, which is the whole point
-/// of the redesign: the rows used to come only from a trigger on the server, so
-/// the one screen whose job was to say what had happened was also the one
-/// screen that could not answer without a network.
+/// A mirror of the server's table, plus one local-only column. The server
+/// writes a row for every committed change to an expense -- and is the only
+/// thing that can, since no client holds a grant on it. The feed is the
+/// difference between consecutive rows, worked out on read.
 ///
-/// Still append-only. Nothing revises a row once written, on either side.
+/// This replaced a table of client-authored diffs. The device composed the line
+/// saying what it had changed, which meant it could describe a Rs.400 to
+/// Rs.4,000 rewrite as a ten-rupee correction, or re-split a bill so somebody
+/// else owed more and write no history at all. Neither is reachable now: there
+/// is no diff on the wire to falsify, only the expense's own shape.
+///
+/// Nothing is ever rebuilt from these rows. Balances read entries, and only
+/// entries -- so a bug here can make the feed wrong and can never make a
+/// balance wrong.
+///
 /// Every reference cascades, which is where this deliberately differs from the
-/// server. There, `actor_id` is ON DELETE RESTRICT so that a member with
-/// history can never be deleted out from under the record — but the record it
-/// protects is the server's, and this table is a mirror of it. Locally there is
-/// nothing to protect and something to break: with no action declared, an
-/// entry_events row refuses the delete of the very entry it describes, and
-/// clearing the ledger on sign-out failed on a foreign key.
-@DataClassName('EntryEventRow')
-class EntryEvents extends Table {
+/// server. There, `actor_id` is ON DELETE RESTRICT so a member with history can
+/// never be deleted out from under the record -- but the record it protects is
+/// the server's, and this is a mirror. Locally there is nothing to protect and
+/// something to break: with no action declared, a snapshot refuses the delete
+/// of the very entry it describes, and clearing the ledger on sign-out failed
+/// on a foreign key.
+@DataClassName('EntrySnapshotRow')
+class EntrySnapshots extends Table {
   TextColumn get id => text()();
   TextColumn get entryId =>
       text().references(Entries, #id, onDelete: KeyAction.cascade)();
@@ -70,17 +79,43 @@ class EntryEvents extends Table {
 
   /// The member who did it, not the account: authorship is group-scoped, so a
   /// placeholder's edits survive them claiming an account.
+  ///
+  /// Nullable, matching the server: a change made by something with no member
+  /// row still belongs on the record.
   TextColumn get actorId =>
-      text().references(Members, #id, onDelete: KeyAction.cascade)();
-
-  /// created, edited, deleted, restored.
-  TextColumn get kind => text()();
-
-  /// The diff, as JSON, for an edit. Null for everything else — "everything
-  /// changed" is not a diff, and the entry itself records what it started as.
-  TextColumn get changes => text().nullable()();
+      text().nullable().references(Members, #id, onDelete: KeyAction.cascade)();
 
   DateTimeColumn get createdAt => dateTime()();
+
+  /// The snapshot itself.
+  TextColumn get description => text()();
+  TextColumn get currency => text()();
+  IntColumn get amountMinor => integer()();
+  DateTimeColumn get entryDate => dateTime()();
+  TextColumn get splitKind => textEnum<SplitKind>()();
+  TextColumn get categoryId => text().nullable()();
+  TextColumn get notes => text().nullable()();
+
+  /// Set once the expense is soft-deleted, which is what makes "deleted" and
+  /// "restored" readable off the chain rather than asserted by a column.
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  /// `[{"member_id": "...", "amount_minor": 40000}, ...]`, ordered by member so
+  /// that two snapshots of an unchanged split compare equal.
+  ///
+  /// Who owes what is where the money actually lives, and its absence here is
+  /// what let a re-split go entirely unrecorded.
+  TextColumn get payers => text()();
+  TextColumn get shares => text()();
+
+  /// Written by this device, describing a change the server has not confirmed.
+  ///
+  /// The whole reason the feed works offline and as a guest. Dropped the moment
+  /// the server's account of the same expense arrives, so it is a placeholder
+  /// for a record rather than a second opinion about one. Local only -- there
+  /// is no such column on the server, and this row is never pushed.
+  BoolColumn get isProvisional =>
+      boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column> get primaryKey => {id};

@@ -1,11 +1,15 @@
+import 'dart:convert';
+
 import '../../domain/balance/member_balance.dart';
 import '../../domain/models/category.dart';
 import '../../domain/models/currency.dart';
 import '../../domain/models/entry.dart';
+import '../../domain/models/entry_snapshot.dart';
 import '../../domain/models/group.dart';
 import '../../domain/models/member.dart';
 import '../../domain/models/profile.dart';
 import '../local/database.dart';
+import '../sync/wire.dart' show memberAmountsFromJson;
 
 /// Translations between Drift row classes and domain models.
 ///
@@ -111,4 +115,25 @@ extension MemberBalanceLookup on List<MemberBalance> {
     }
     return 0;
   }
+}
+
+extension EntrySnapshotRowMapper on EntrySnapshotRow {
+  EntrySnapshot toDomain() => EntrySnapshot(
+    id: id,
+    entryId: entryId,
+    groupId: groupId,
+    actorId: actorId,
+    createdAt: createdAt,
+    description: description,
+    currency: currency,
+    amountMinor: amountMinor,
+    entryDate: entryDate,
+    splitKind: splitKind,
+    categoryId: categoryId,
+    notes: notes,
+    deletedAt: deletedAt,
+    payers: memberAmountsFromJson(jsonDecode(payers)),
+    shares: memberAmountsFromJson(jsonDecode(shares)),
+    isProvisional: isProvisional,
+  );
 }

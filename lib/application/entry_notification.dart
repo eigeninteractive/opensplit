@@ -1,3 +1,4 @@
+import '../data/repositories/drift_activity_repository.dart';
 import '../data/repositories/drift_currency_repository.dart';
 import '../data/repositories/drift_entry_repository.dart';
 import '../data/repositories/drift_group_repository.dart';
@@ -16,16 +17,30 @@ import '../domain/notification_text.dart';
 /// Returns null when the entry is not on the device, which happens when a wake
 /// arrives for a group this account has since left, or when the sync that was
 /// meant to fetch it could not reach the server.
+///
+/// Also null when the device holds the expense but no record of anything having
+/// happened to it. That is not a state worth guessing about: the wake is sent
+/// by the trigger that writes the record, so the two arrive together or the
+/// sync did not complete, and a banner assembled from half a pull would be
+/// describing something it cannot see.
 Future<({String title, String body})?> composeEntryNotification({
   required DriftEntryRepository entries,
   required DriftGroupRepository groups,
   required DriftCurrencyRepository currencies,
+  required DriftActivityRepository activity,
   required String? myProfileId,
   required String groupId,
   required String entryId,
 }) async {
   final entry = await entries.getEntry(entryId);
   if (entry == null) return null;
+
+  // What happened, and who did it -- read off the record rather than inferred
+  // from the entry. `created_by` is who first typed the expense, which on an
+  // edit is usually the person being told about it rather than the person who
+  // caused the message.
+  final change = await activity.latestFor(entryId);
+  if (change == null) return null;
 
   final group = await groups.getGroup(groupId);
   final members = await groups.getMembers(groupId);
@@ -57,7 +72,8 @@ Future<({String title, String body})?> composeEntryNotification({
   return describeEntry(
     entry: entry,
     groupName: group?.name ?? 'OpenSplit',
-    authorName: nameOf(entry.createdBy),
+    actorName: change.actorId == null ? 'Someone' : nameOf(change.actorId!),
+    kind: change.kind,
     currency: currency,
     shareMinor: myShare,
     // The screens' formatter, so a banner and the app can never quote

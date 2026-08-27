@@ -13,6 +13,24 @@
 -- updated_at. Without it the device keeps a local clock in the column that
 -- decides conflicts, and last-write-wins ends up comparing a phone against a
 -- server instead of two server timestamps.
+--
+-- THE ONLY DOOR.
+--
+-- Both are SECURITY DEFINER, and `authenticated` has no INSERT, UPDATE or
+-- DELETE on entries, entry_payers or entry_shares. Every write to the ledger
+-- comes through here or does not happen.
+--
+-- That is a change of kind, not degree. While direct DML was reachable, any
+-- guarantee these functions offered was advisory -- a client could simply issue
+-- the UPDATE itself and meet none of them. Closing the second door is what
+-- makes "the server records every change" a fact about the schema rather than a
+-- description of the happy path.
+--
+-- SECURITY DEFINER means RLS no longer runs underneath these bodies, so what
+-- RLS used to catch has to be stated here instead. Both functions therefore
+-- open by establishing that the caller may touch what they have named, and
+-- neither takes an actor as a parameter -- authorship is read from auth.uid(),
+-- so there is nothing to point at somebody else.
 -- ============================================================================
 
 create or replace function upsert_entry(
@@ -34,7 +52,7 @@ create or replace function upsert_entry(
 )
 returns entries
 language plpgsql
-security invoker
+security definer
 set search_path = public
 as $$
 declare
@@ -43,6 +61,21 @@ declare
 begin
   if not is_group_member(p_group_id) then
     raise exception 'Not a member of group %', p_group_id
+      using errcode = 'insufficient_privilege';
+  end if;
+
+  -- An id that already belongs to a DIFFERENT group.
+  --
+  -- Under SECURITY INVOKER this was caught for free: the UPDATE half of the
+  -- upsert matched no rows the caller could see, and RLS refused it. There is
+  -- no RLS underneath any more, and ON CONFLICT deliberately does not rewrite
+  -- group_id -- so without this line a member of one group could name an
+  -- expense in a group they have never been in and rewrite its amount, its
+  -- description and every share on it, in place.
+  if exists (
+    select 1 from entries where id = p_id and group_id <> p_group_id
+  ) then
+    raise exception 'Entry % belongs to another group', p_id
       using errcode = 'insufficient_privilege';
   end if;
 
@@ -83,7 +116,9 @@ begin
     fx_at        = excluded.fx_at,
     notes        = excluded.notes,
     -- Server time, never the client's. Two devices with skewed clocks must not
-    -- be able to decide a conflict between themselves.
+    -- be able to decide a conflict between themselves. Restated by
+    -- trg_entries_touch either way, which is what makes it true of every write
+    -- rather than only of this one.
     updated_at   = now()
   returning * into v_row;
 
@@ -114,16 +149,28 @@ $$;
 create or replace function delete_entry(p_entry_id uuid)
 returns entries
 language plpgsql
-security invoker
+security definer
 set search_path = public
 as $$
 declare
   v_row entries;
 begin
-  update entries set deleted_at = now(), updated_at = now()
+  -- `is_group_member` in the WHERE, and it is doing real work.
+  --
+  -- This function used to carry no membership test at all. It did not need
+  -- one: as SECURITY INVOKER the UPDATE was filtered by the entries_update
+  -- policy, so naming somebody else's expense matched zero rows and fell
+  -- through to the "no such entry" below. Made SECURITY DEFINER with that
+  -- accident left in place, it would have deleted any expense in the database
+  -- from its id alone.
+  update entries set deleted_at = now()
    where id = p_entry_id
+     and is_group_member(group_id)
   returning * into v_row;
 
+  -- Deliberately the same message whether the expense does not exist or simply
+  -- is not the caller's to touch. Distinguishing them would answer "does this
+  -- id exist?" for anybody willing to ask.
   if v_row.id is null then
     raise exception 'No such entry %', p_entry_id
       using errcode = 'no_data_found';

@@ -1,21 +1,30 @@
-/// Turns a stored diff into something a person can read.
+/// Turns a computed diff into something a person can read.
 ///
 /// Kept in the domain, away from widgets, because the awkward part is not
-/// layout: it is that the server stores what changed in the columns' own terms
-/// — `amount_minor`, `split_kind`, minor units, enum names — and a feed has to
-/// say it the way the people in the group would.
+/// layout: the snapshots hold everything in the columns' own terms —
+/// `amount_minor`, `split_kind`, minor units, enum names, member ids — and a
+/// feed has to say it the way the people in the group would.
 ///
 /// Unknown fields are rendered rather than dropped. A column added to the
-/// trigger's diff later should show up as a plain, slightly clumsy line
-/// instead of silently disappearing from the record.
+/// snapshot later should show up as a plain, slightly clumsy line instead of
+/// silently disappearing from the record.
 library;
 
+import '../activity/snapshot_diff.dart';
 import '../models/currency.dart';
 import '../models/entry_event.dart';
 
 /// One rendered line, e.g. "the amount, from ₹400.00 to ₹300.00".
-String describeChange(FieldChange change, {Currency? currency}) {
-  final label = _labels[change.field] ?? change.field.replaceAll('_', ' ');
+///
+/// [memberNames] resolves the per-member share and payment lines. Without it
+/// they still render, naming a raw id — clumsy, but never silently absent,
+/// since those are the lines that say who gained and who lost.
+String describeChange(
+  FieldChange change, {
+  Currency? currency,
+  Map<String, String>? memberNames,
+}) {
+  final label = _label(change.field, memberNames);
   final from = _value(change.field, change.from, currency);
   final to = _value(change.field, change.to, currency);
 
@@ -23,6 +32,29 @@ String describeChange(FieldChange change, {Currency? currency}) {
   if (from == null) return '$label, set to $to';
   if (to == null) return '$label, cleared';
   return '$label, from $from to $to';
+}
+
+/// The human name for a field, including the per-member ones.
+///
+/// A share line is the most important thing this file renders. An edit that
+/// re-splits a bill without touching its total moves money between people and
+/// changes no number anybody would think to check, so "Ravi's share, from
+/// ₹200.00 to ₹300.00" is the whole point of the feed rather than a detail in
+/// it.
+String _label(String field, Map<String, String>? memberNames) {
+  final separator = field.indexOf(':');
+  if (separator < 0) return _labels[field] ?? field.replaceAll('_', ' ');
+
+  final prefix = field.substring(0, separator);
+  final memberId = field.substring(separator + 1);
+  final who = memberNames?[memberId];
+  final name = (who == null || who.trim().isEmpty) ? 'someone' : who.trim();
+
+  return switch (prefix) {
+    shareFieldPrefix => "$name's share",
+    paidFieldPrefix => 'what $name paid',
+    _ => '$name, $prefix',
+  };
 }
 
 /// What the event itself was, without the detail.
@@ -58,8 +90,10 @@ const _splitKinds = {
 String? _value(String field, String? raw, Currency? currency) {
   if (raw == null || raw.isEmpty) return null;
 
-  switch (field) {
+  switch (field.split(':').first) {
     case 'amount_minor':
+    case shareFieldPrefix:
+    case paidFieldPrefix:
       final minor = int.tryParse(raw);
       if (minor == null || currency == null) return raw;
       final divisor = _pow10(currency.exponent);

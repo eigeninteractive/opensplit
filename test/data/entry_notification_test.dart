@@ -1,6 +1,7 @@
 import 'package:drift/native.dart';
 import 'package:opensplit/application/entry_notification.dart';
 import 'package:opensplit/data/local/database.dart';
+import 'package:opensplit/data/repositories/drift_activity_repository.dart';
 import 'package:opensplit/data/repositories/drift_currency_repository.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';
@@ -20,12 +21,14 @@ void main() {
   late DriftGroupRepository groups;
   late DriftEntryRepository entries;
   late DriftCurrencyRepository currencies;
+  late DriftActivityRepository activity;
 
   setUp(() {
     db = AppDatabase(NativeDatabase.memory());
     groups = DriftGroupRepository(db);
     entries = DriftEntryRepository(db);
     currencies = DriftCurrencyRepository(db);
+    activity = DriftActivityRepository(db);
   });
 
   tearDown(() => db.close());
@@ -76,6 +79,7 @@ void main() {
       entries: entries,
       groups: groups,
       currencies: currencies,
+      activity: activity,
       myProfileId: 'profile-priya',
       groupId: g.groupId,
       entryId: entryId,
@@ -98,6 +102,7 @@ void main() {
       entries: entries,
       groups: groups,
       currencies: currencies,
+      activity: activity,
       myProfileId: 'profile-ravi',
       groupId: g.groupId,
       entryId: entryId,
@@ -106,6 +111,7 @@ void main() {
       entries: entries,
       groups: groups,
       currencies: currencies,
+      activity: activity,
       myProfileId: 'profile-priya',
       groupId: g.groupId,
       entryId: entryId,
@@ -125,6 +131,7 @@ void main() {
       entries: entries,
       groups: groups,
       currencies: currencies,
+      activity: activity,
       // Nobody this device knows: a member of the group who is not on the
       // expense, or a profile that has not been reconciled yet.
       myProfileId: 'profile-nobody',
@@ -147,6 +154,7 @@ void main() {
       entries: entries,
       groups: groups,
       currencies: currencies,
+      activity: activity,
       myProfileId: 'profile-priya',
       groupId: g.groupId,
       entryId: 'an-id-this-device-has-never-seen',

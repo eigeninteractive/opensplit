@@ -1,7 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../domain/models/entry.dart';
-import '../../domain/models/entry_event.dart';
+import '../../domain/models/entry_snapshot.dart';
 import '../../domain/models/group.dart';
 import '../../domain/models/member.dart';
 import '../../domain/models/profile.dart';
@@ -269,16 +269,16 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
   }
 
   @override
-  Future<List<EntryEvent>> pullEntryEvents({
+  Future<List<EntrySnapshot>> pullEntrySnapshots({
     required String groupId,
     DateTime? since,
   }) async {
-    final events = <EntryEvent>[];
+    final snapshots = <EntrySnapshot>[];
 
     // Paged, and it matters most here: a device seeing an active group for the
     // first time asks for its entire history at once. Truncated at max_rows,
     // the high-water mark would advance only as far as the page reached and the
-    // feed would fill in a thousand events per sync.
+    // feed would fill in a thousand rows per sync.
     for (var offset = 0; ; offset += _pageSize) {
       var query = _client.from('entry_events').select().eq('group_id', groupId);
       if (since != null) {
@@ -290,43 +290,11 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
           .order('id', ascending: true)
           .range(offset, offset + _pageSize - 1);
 
-      events.addAll([for (final row in rows) entryEventFromJson(row)]);
+      snapshots.addAll([for (final row in rows) entrySnapshotFromJson(row)]);
       if (rows.length < _pageSize) break;
     }
 
-    return events;
-  }
-
-  @override
-  Future<EntryEvent> pushEntryEvent(EntryEvent event) async {
-    try {
-      // insert, not upsert. The table takes appends and nothing else — there is
-      // no update or delete policy on it — so an upsert would be asking for a
-      // permission the server is right to withhold. A retry of an event already
-      // stored conflicts on the primary key, which is exactly the idempotency
-      // wanted: the id is this device's, chosen once when the event was
-      // written, so the second attempt is provably the same row.
-      final row = await _client
-          .from('entry_events')
-          .insert(entryEventToJson(event))
-          .select()
-          .single();
-      return entryEventFromJson(row);
-    } on PostgrestException catch (e) {
-      // 23505 is unique_violation: this event is already on the server, which
-      // means the previous attempt succeeded and only its acknowledgement was
-      // lost. Read back what is there rather than reporting a failure — the
-      // caller needs the server's clock off it either way.
-      if (e.code == '23505') {
-        final row = await _client
-            .from('entry_events')
-            .select()
-            .eq('id', event.id)
-            .single();
-        return entryEventFromJson(row);
-      }
-      throw _translate(e);
-    }
+    return snapshots;
   }
 
   @override

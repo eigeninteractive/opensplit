@@ -841,7 +841,7 @@
       ],
       "type": "table",
       "data": {
-        "name": "entry_events",
+        "name": "entry_snapshots",
         "was_declared_in_moor": false,
         "columns": [
           {
@@ -910,7 +910,7 @@
             "name": "actor_id",
             "getter_name": "actorId",
             "moor_type": "string",
-            "nullable": false,
+            "nullable": true,
             "customConstraints": null,
             "defaultConstraints": "REFERENCES members (id) ON DELETE CASCADE",
             "dialectAwareDefaultConstraints": {
@@ -933,8 +933,18 @@
             ]
           },
           {
-            "name": "kind",
-            "getter_name": "kind",
+            "name": "created_at",
+            "getter_name": "createdAt",
+            "moor_type": "dateTime",
+            "nullable": false,
+            "customConstraints": null,
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": []
+          },
+          {
+            "name": "description",
+            "getter_name": "description",
             "moor_type": "string",
             "nullable": false,
             "customConstraints": null,
@@ -943,8 +953,52 @@
             "dsl_features": []
           },
           {
-            "name": "changes",
-            "getter_name": "changes",
+            "name": "currency",
+            "getter_name": "currency",
+            "moor_type": "string",
+            "nullable": false,
+            "customConstraints": null,
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": []
+          },
+          {
+            "name": "amount_minor",
+            "getter_name": "amountMinor",
+            "moor_type": "int",
+            "nullable": false,
+            "customConstraints": null,
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": []
+          },
+          {
+            "name": "entry_date",
+            "getter_name": "entryDate",
+            "moor_type": "dateTime",
+            "nullable": false,
+            "customConstraints": null,
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": []
+          },
+          {
+            "name": "split_kind",
+            "getter_name": "splitKind",
+            "moor_type": "string",
+            "nullable": false,
+            "customConstraints": null,
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": [],
+            "type_converter": {
+              "dart_expr": "const EnumNameConverter<SplitKind>(SplitKind.values)",
+              "dart_type_name": "SplitKind"
+            }
+          },
+          {
+            "name": "category_id",
+            "getter_name": "categoryId",
             "moor_type": "string",
             "nullable": true,
             "customConstraints": null,
@@ -953,12 +1007,56 @@
             "dsl_features": []
           },
           {
-            "name": "created_at",
-            "getter_name": "createdAt",
+            "name": "notes",
+            "getter_name": "notes",
+            "moor_type": "string",
+            "nullable": true,
+            "customConstraints": null,
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": []
+          },
+          {
+            "name": "deleted_at",
+            "getter_name": "deletedAt",
             "moor_type": "dateTime",
+            "nullable": true,
+            "customConstraints": null,
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": []
+          },
+          {
+            "name": "payers",
+            "getter_name": "payers",
+            "moor_type": "string",
             "nullable": false,
             "customConstraints": null,
             "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": []
+          },
+          {
+            "name": "shares",
+            "getter_name": "shares",
+            "moor_type": "string",
+            "nullable": false,
+            "customConstraints": null,
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": []
+          },
+          {
+            "name": "is_provisional",
+            "getter_name": "isProvisional",
+            "moor_type": "bool",
+            "nullable": false,
+            "customConstraints": null,
+            "defaultConstraints": "CHECK (\"is_provisional\" IN (0, 1))",
+            "dialectAwareDefaultConstraints": {
+              "sqlite": "CHECK (\"is_provisional\" IN (0, 1))"
+            },
+            "default_dart": "const CustomExpression('0')",
             "default_client_dart": null,
             "dsl_features": []
           }
@@ -1268,11 +1366,11 @@
       ]
     },
     {
-      "name": "entry_events",
+      "name": "entry_snapshots",
       "sql": [
         {
           "dialect": "sqlite",
-          "sql": "CREATE TABLE IF NOT EXISTS \"entry_events\" (\"id\" TEXT NOT NULL, \"entry_id\" TEXT NOT NULL REFERENCES entries (id) ON DELETE CASCADE, \"group_id\" TEXT NOT NULL REFERENCES \"groups\" (id) ON DELETE CASCADE, \"actor_id\" TEXT NOT NULL REFERENCES members (id) ON DELETE CASCADE, \"kind\" TEXT NOT NULL, \"changes\" TEXT NULL, \"created_at\" INTEGER NOT NULL, PRIMARY KEY (\"id\"));"
+          "sql": "CREATE TABLE IF NOT EXISTS \"entry_snapshots\" (\"id\" TEXT NOT NULL, \"entry_id\" TEXT NOT NULL REFERENCES entries (id) ON DELETE CASCADE, \"group_id\" TEXT NOT NULL REFERENCES \"groups\" (id) ON DELETE CASCADE, \"actor_id\" TEXT NULL REFERENCES members (id) ON DELETE CASCADE, \"created_at\" INTEGER NOT NULL, \"description\" TEXT NOT NULL, \"currency\" TEXT NOT NULL, \"amount_minor\" INTEGER NOT NULL, \"entry_date\" INTEGER NOT NULL, \"split_kind\" TEXT NOT NULL, \"category_id\" TEXT NULL, \"notes\" TEXT NULL, \"deleted_at\" INTEGER NULL, \"payers\" TEXT NOT NULL, \"shares\" TEXT NOT NULL, \"is_provisional\" INTEGER NOT NULL DEFAULT 0 CHECK (\"is_provisional\" IN (0, 1)), PRIMARY KEY (\"id\"));"
         }
       ]
     },

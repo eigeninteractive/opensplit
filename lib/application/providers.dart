@@ -16,6 +16,7 @@ import '../data/repositories/drift_activity_repository.dart';
 import '../data/repositories/drift_profile_repository.dart';
 import '../data/auth/supabase_auth_service.dart';
 import '../data/local/local_reset.dart';
+import '../data/network/network_signal.dart';
 import '../data/platform/app_update_service.dart';
 import '../data/platform/review_prompt.dart';
 import '../data/push/push_service.dart';
@@ -25,6 +26,7 @@ import '../data/sync/supabase_invite_api.dart';
 import '../data/sync/supabase_ledger_api.dart';
 import '../data/sync/sync_engine.dart';
 import '../domain/balance/balance_fold.dart';
+import 'sync_scheduler.dart';
 import '../domain/fx/estimated_total.dart';
 import '../domain/fx/fx_quote.dart';
 import '../domain/balance/member_balance.dart';
@@ -372,6 +374,24 @@ class GroupLedger {
     return member == null ? '—' : nameOfMember(member);
   }
 
+  /// What to print against a change in the activity feed.
+  ///
+  /// [memberId] is null when the change reached the server from something with
+  /// no member row at all. That is recorded rather than dropped -- a change
+  /// nobody can be attributed to still belongs on the record -- so it needs a
+  /// word here, and "someone" is the honest one.
+  String nameOfActor(String? memberId) =>
+      memberId == null ? 'Someone' : nameOf(memberId);
+
+  /// Every member's name, for rendering the per-member lines of a diff.
+  ///
+  /// Past members included: an edit that changed what somebody owed is worth
+  /// reading long after they have left the group.
+  Map<String, String> get memberNames => {
+    for (final member in [...members, ...pastMembers])
+      member.id: nameOfMember(member),
+  };
+
   /// Currencies this group actually holds money in, in a stable order.
   List<String> get activeCurrencies {
     final codes = {for (final balance in balances) balance.currency};
@@ -666,6 +686,26 @@ class SyncController extends _$SyncController {
   }
 }
 
+/// Whether the device has a network, as it changes. See [NetworkSignal].
+@Riverpod(keepAlive: true)
+NetworkSignal networkSignal(Ref ref) => const NetworkSignal();
+
+/// The thing that decides when a background sync is worth running.
+///
+/// keepAlive because it outlives every screen: it is started once by the app
+/// shell and listens for the rest of the process. See [SyncScheduler] for what
+/// the triggers are and why pull-to-refresh and push wakes deliberately do not
+/// go through it.
+@Riverpod(keepAlive: true)
+SyncScheduler syncScheduler(Ref ref) {
+  final scheduler = SyncScheduler(
+    sync: () => ref.read(syncControllerProvider.notifier).syncAll(),
+    online: ref.watch(networkSignalProvider).changes,
+  );
+  ref.onDispose(scheduler.dispose);
+  return scheduler;
+}
+
 /// Attaching a real account to this device, and the sign-in it sometimes turns
 /// out to be instead.
 ///
@@ -881,6 +921,7 @@ PushService pushService(Ref ref) {
       entries: ref.read(entryRepositoryProvider),
       groups: ref.read(groupRepositoryProvider),
       currencies: ref.read(currencyRepositoryProvider),
+      activity: ref.read(activityRepositoryProvider),
       myProfileId: ref.read(currentAccountIdProvider),
       groupId: groupId,
       entryId: entryId,

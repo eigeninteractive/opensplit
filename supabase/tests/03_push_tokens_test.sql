@@ -1,7 +1,8 @@
--- Device tokens: strictly private, and the fan-out skips the author.
+-- Device tokens: strictly private, and the fan-out skips whoever made the
+-- change.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(16);
+select plan(21);
 
 insert into auth.users (id, instance_id, aud, role, email, raw_user_meta_data,
                         created_at, updated_at)
@@ -73,15 +74,39 @@ select is(
 -- Fan-out
 -- ---------------------------------------------------------------------------
 select throws_ok(
-  $$select * from tokens_for_entry('88888888-8888-4888-8888-888888888888')$$,
+  $$select * from tokens_for_entry(
+      '88888888-8888-4888-8888-888888888888',
+      '44444444-4444-4444-8444-444444444444')$$,
   '42501', null,
   'ordinary users cannot enumerate tokens — only the service role can');
 
 set local role service_role;
 select results_eq(
-  $$select token from tokens_for_entry('88888888-8888-4888-8888-888888888888')$$,
+  $$select token from tokens_for_entry(
+      '88888888-8888-4888-8888-888888888888',
+      '44444444-4444-4444-8444-444444444444')$$,
   $$values ('token-priya')$$,
-  'only the other members are woken: never the person who just typed it');
+  'only the other members are woken: never the person who just did it');
+
+-- The whole reason the actor is a parameter rather than `entries.created_by`.
+--
+-- Priya edits Ravi's expense. Ravi is the one who needs to hear about it, and
+-- keying the exclusion off the author would have silenced exactly him while
+-- notifying the person who made the change.
+select results_eq(
+  $$select token from tokens_for_entry(
+      '88888888-8888-4888-8888-888888888888',
+      '55555555-5555-4555-8555-555555555555')$$,
+  $$values ('token-ravi')$$,
+  'and on an edit that is the editor, not the author');
+
+select results_eq(
+  $$select token from tokens_for_entry(
+      '88888888-8888-4888-8888-888888888888', null)
+     order by token$$,
+  $$values ('token-priya'), ('token-ravi')$$,
+  'a change nobody can be attributed to wakes everybody, which is better '
+  'than waking nobody');
 
 -- ---------------------------------------------------------------------------
 -- Registering, including taking a token over
@@ -135,8 +160,9 @@ select is(
 -- ---------------------------------------------------------------------------
 set local role postgres;
 
-select has_trigger('public', 'entries', 'trg_entries_notify',
-  'entries carries its own notify trigger, so a deployment fans out without '
+select has_trigger('public', 'entry_events', 'trg_entry_events_notify',
+  'the record of a change carries its own notify trigger, so a deployment '
+  'fans out without '
   'anybody clicking anything');
 
 -- Every test above ran unconfigured, and so did the expense at the top of this
@@ -184,11 +210,59 @@ select is(
      from net.http_request_queue
     where url = 'http://example.test/functions/v1/notify-entry'),
   jsonb_build_object(
-    'id',         '99999999-9999-4999-8999-999999999999',
-    'group_id',   '33333333-3333-4333-8333-333333333333',
-    'created_by', '44444444-4444-4444-8444-444444444444'
+    'id',       '99999999-9999-4999-8999-999999999999',
+    'group_id', '33333333-3333-4333-8333-333333333333',
+    'actor_id', '44444444-4444-4444-8444-444444444444'
   ),
-  'and three ids, not the row');
+  'and three ids, not the row -- including who to leave out, resolved by the '
+  'server from the session rather than read off the expense');
+
+-- ---------------------------------------------------------------------------
+-- Editing and deleting wake people too
+--
+-- The trigger hangs off entry_events rather than entries, which is what makes
+-- this possible at all. On `entries` it could not: touch_parent_entry restamps
+-- the parent on every payer and share write, so one save is several UPDATEs and
+-- an `after update` trigger there would have sent a notification per child row.
+-- ---------------------------------------------------------------------------
+update entries set amount_minor = 60000
+ where id = '99999999-9999-4999-8999-999999999999';
+update entry_payers set amount_minor = 60000
+ where entry_id = '99999999-9999-4999-8999-999999999999';
+update entry_shares set amount_minor = 60000
+ where entry_id = '99999999-9999-4999-8999-999999999999';
+set constraints all immediate;
+set constraints all deferred;
+
+select is(
+  (select count(*)::int from net.http_request_queue
+    where url = 'http://example.test/functions/v1/notify-entry'),
+  2,
+  'an edit queues one request — one, not one per row it touched');
+
+update entries set deleted_at = now()
+ where id = '99999999-9999-4999-8999-999999999999';
+set constraints all immediate;
+set constraints all deferred;
+
+select is(
+  (select count(*)::int from net.http_request_queue
+    where url = 'http://example.test/functions/v1/notify-entry'),
+  3,
+  'and so does a deletion, which used to pass in silence and move '
+  'everybody''s balance');
+
+-- Saving something identical records nothing, so it wakes nobody: the dedup in
+-- snapshot_entry is what keeps a retried sync from buzzing the whole group.
+update entries set amount_minor = 60000
+ where id = '99999999-9999-4999-8999-999999999999';
+set constraints all immediate;
+
+select is(
+  (select count(*)::int from net.http_request_queue
+    where url = 'http://example.test/functions/v1/notify-entry'),
+  3,
+  'a write that changes nothing wakes nobody');
 
 select * from finish();
 

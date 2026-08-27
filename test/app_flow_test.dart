@@ -167,10 +167,14 @@ void main() {
 
     // ---- The record of all of it, with no server anywhere ---------------
     //
-    // The point of the whole exercise. These lines used to be written by a
-    // trigger on the server and arrive by sync, so this screen — in a test
-    // where no backend exists at all — was empty however much had happened,
-    // and so was the real app for anybody offline or running as a guest.
+    // The point of the whole exercise. The authoritative record is the
+    // server's — written by a trigger from the expense it commits, which is
+    // what makes it something a reader can trust rather than something the
+    // editing device said about itself. But it arrives only after a round
+    // trip, and this screen must not be the one screen in a local-first app
+    // that needs a network. So the device also records what it just did, and
+    // that provisional line is what this test sees: no backend exists here at
+    // all, and the feed is still complete.
     await tester.tap(find.byIcon(Icons.history));
     await _settle(tester);
 

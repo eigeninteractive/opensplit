@@ -204,9 +204,10 @@ void main() {
       expect(report.isClean, isTrue, reason: '$report');
       expect(
         report.pushed,
-        5,
-        reason: 'the group, its owner, the added member, the entry, and the '
-            'activity event recording that the entry was added',
+        4,
+        reason: 'the group, its owner, the added member and the entry. The '
+            'activity row is not among them: the server writes it from the '
+            'expense it commits, and grants no client the right to',
       );
 
       // Read it back through a second, empty device.
@@ -237,16 +238,21 @@ void main() {
         120000,
       ]);
 
-      // The feed reaches the second device too, which is the half of the
-      // activity redesign only a live server can prove: the event was written
-      // on the first device, appended through `entry_events_insert` rather than
-      // by a trigger, and read back under the policy that scopes it to members
-      // of the group.
+      // The feed reaches the second device too, and this is the half only a
+      // live server can prove: nothing pushed this row. Postgres wrote it in
+      // the same transaction as the expense, from the expense, resolved the
+      // actor from the session rather than from anything sent, and handed it
+      // back under the policy that scopes it to members of the group.
       final feed = await DriftActivityRepository(
         other,
       ).watchGroup(created.group.id).first;
       expect(feed, hasLength(1));
       expect(feed.single.kind, EntryEventKind.created);
+      expect(
+        feed.single.isProvisional,
+        isFalse,
+        reason: 'this device wrote nothing; it only read',
+      );
       expect(
         feed.single.actorId,
         created.creator.id,

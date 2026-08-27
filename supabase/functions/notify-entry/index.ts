@@ -23,7 +23,10 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 interface WebhookPayload {
   type: 'INSERT' | 'UPDATE' | 'DELETE';
   table: string;
-  record: { id: string; group_id: string; created_by: string } | null;
+  // `id` is the ENTRY's id, not the event's: what the recipient's device has
+  // to fetch and open is the expense. `actor_id` is a member id, and is null
+  // for a change no member can be attributed with.
+  record: { id: string; group_id: string; actor_id: string | null } | null;
 }
 
 const projectId = Deno.env.get('FCM_PROJECT_ID') ?? '';
@@ -140,7 +143,14 @@ Deno.serve(async (request) => {
   }
 
   const payload: WebhookPayload = await request.json();
-  if (payload.type !== 'INSERT' || payload.table !== 'entries' || !payload.record) {
+  // entry_events, not entries: one row per change that actually changed
+  // something, already deduped and already carrying who made it. Watching
+  // `entries` sent a notification per payer and share row, and only ever for
+  // creations.
+  if (
+    payload.type !== 'INSERT' || payload.table !== 'entry_events' ||
+    !payload.record
+  ) {
     return new Response('ignored', { status: 200 });
   }
   const record = payload.record;
@@ -152,8 +162,12 @@ Deno.serve(async (request) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   );
 
+  // The actor is excluded rather than the author. On an edit they are usually
+  // different people, and the author is precisely who needs to hear that
+  // somebody changed their expense.
   const { data: targets, error } = await supabase.rpc('tokens_for_entry', {
     p_entry_id: record.id,
+    p_actor_id: record.actor_id ?? null,
   });
   if (error) {
     console.error('tokens_for_entry failed', error);

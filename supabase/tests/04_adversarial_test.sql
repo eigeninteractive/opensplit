@@ -6,7 +6,7 @@
 -- could attempt against a real deployment with a valid session.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(36);
+select plan(40);
 
 -- ---------------------------------------------------------------------------
 -- Two groups that share nothing. Ravi owns Goa; Zara owns Manali.
@@ -71,7 +71,9 @@ select throws_ok(
             '44444444-4444-4444-8444-444444444444')$$,
   '42501',
   null,
-  'a non-member cannot write an entry into another group');
+  'a non-member cannot write an entry into another group -- and since the '
+  'grants went, neither can a member: the ledger takes no direct writes at '
+  'all');
 
 -- The interesting one: reuse a known entry id but claim it belongs to a group
 -- the attacker really is in, so that is_group_member() passes. The upsert then
@@ -97,37 +99,50 @@ select is(
   'and the victim entry is untouched');
 
 -- ===========================================================================
--- A real member, doing things the UI would never ask for
+-- A real member, talking to PostgREST instead of calling the RPC
+--
+-- This used to be the interesting section. `authenticated` held INSERT, UPDATE
+-- and DELETE on entries, entry_payers and entry_shares -- upsert_entry was
+-- SECURITY INVOKER and could not work without them -- so every attack below
+-- was one plain HTTP call away and the schema had to catch each on its own.
+--
+-- It holds none of them now. Both RPCs are SECURITY DEFINER and carry their
+-- own privileges, so the ledger has exactly one door. This section tests that
+-- the wall is a wall; the next tests the guarantees behind it, which still
+-- have to hold because the RPC is now a privileged writer.
 -- ===========================================================================
 select throws_ok(
   $$insert into entry_shares (entry_id, member_id, amount_minor)
     values ('88888888-8888-4888-8888-888888888888',
             'a4444444-4444-4444-8444-444444444444', 0)$$,
-  '23503',
-  null,
-  'a share cannot name a member of a different group');
+  '42501', null,
+  'a share cannot be written directly at all, whoever it names');
 
 select throws_ok(
   $$insert into entry_payers (entry_id, member_id, amount_minor)
     values ('88888888-8888-4888-8888-888888888888',
             'a4444444-4444-4444-8444-444444444444', 1)$$,
-  '23503',
-  null,
-  'a payer cannot name a member of a different group');
+  '42501', null,
+  'nor a payer');
 
 select throws_ok(
-  $$insert into entry_shares (entry_id, member_id, amount_minor)
-    values ('88888888-8888-4888-8888-888888888888',
-            '55555555-5555-4555-8555-555555555555', -500)$$,
-  '23514',
-  null,
-  'a negative share cannot manufacture a debt');
+  $$update entry_shares set amount_minor = 1
+     where entry_id = '88888888-8888-4888-8888-888888888888'$$,
+  '42501', null,
+  'nor can an existing split be rewritten -- the edit that moves money '
+  'between members while the total stays put, which the balance invariant '
+  'accepts and no client-authored history ever mentioned');
+
+select throws_ok(
+  $$update entries set amount_minor = 999999999
+     where id = '88888888-8888-4888-8888-888888888888'$$,
+  '42501', null,
+  'nor an amount, around the one function that records that it changed');
 
 select throws_ok(
   $$delete from entries where id = '88888888-8888-4888-8888-888888888888'$$,
-  '42501',
-  null,
-  'not even a group owner can hard-delete an entry');
+  '42501', null,
+  'and an expense can no more be hard-deleted than it ever could');
 
 -- created_by is taken from auth.uid(), never from the caller's arguments:
 -- there is no parameter for it at all.
@@ -141,36 +156,64 @@ select is(
   '44444444-4444-4444-8444-444444444444'::uuid,
   'authorship is the caller''s own member row, not anything they can supply');
 
--- ---------------------------------------------------------------------------
--- Writing to entries directly, without going through upsert_entry.
+-- ===========================================================================
+-- The guarantees behind the wall
 --
--- `authenticated` holds INSERT and UPDATE on entries because upsert_entry is
--- SECURITY INVOKER and needs them, so none of this needs anything more than a
--- client that talks to PostgREST instead of calling the RPC. All five of these
--- committed before guard_entry_write and trg_entries_balanced existed.
--- ---------------------------------------------------------------------------
+-- Run with the owner's privileges but the caller's claims still set, which is
+-- the only way to reach these now: the grants stop an `authenticated` session
+-- before any of them, and guard_entry_write returns early when auth.uid() is
+-- null, so an unauthenticated owner would skip the very checks under test.
+--
+-- Worth reaching. upsert_entry is a privileged writer today, so "no client can
+-- get here" is not an answer -- these are what stand between a bug in the one
+-- remaining write path and a ledger that does not add up.
+-- ===========================================================================
+reset role;
+set constraints all deferred;
+
+select throws_ok(
+  $$insert into entry_shares (entry_id, member_id, amount_minor)
+    values ('88888888-8888-4888-8888-888888888888',
+            'a4444444-4444-4444-8444-444444444444', 0)$$,
+  '23503', null,
+  'a share still cannot name a member of a different group');
+
+select throws_ok(
+  $$insert into entry_payers (entry_id, member_id, amount_minor)
+    values ('88888888-8888-4888-8888-888888888888',
+            'a4444444-4444-4444-8444-444444444444', 1)$$,
+  '23503', null,
+  'nor can a payer');
+
+select throws_ok(
+  $$insert into entry_shares (entry_id, member_id, amount_minor)
+    values ('88888888-8888-4888-8888-888888888888',
+            '55555555-5555-4555-8555-555555555555', -500)$$,
+  '23514', null,
+  'and a negative share still cannot manufacture a debt');
+
 select throws_ok(
   $$update entries set created_by = '55555555-5555-4555-8555-555555555555'
      where id = '88888888-8888-4888-8888-888888888888'$$,
   '42501', null,
-  'authorship cannot be reassigned by writing to the column directly');
+  'authorship cannot be reassigned by writing to the column');
 
 select throws_ok(
   $$update entries set group_id = '66666666-6666-4666-8666-666666666666'
      where id = '88888888-8888-4888-8888-888888888888'$$,
   '42501', null,
-  'an expense cannot be moved into another group, stranding its own '
-  'payers and shares in the one it left');
+  'an expense cannot be moved into another group, stranding its own payers '
+  'and shares in the one it left');
 
 select throws_ok(
   $$insert into entries (group_id, currency, amount_minor, created_by)
     values ('33333333-3333-4333-8333-333333333333', 'INR', 100,
             '55555555-5555-4555-8555-555555555555')$$,
   '42501', null,
-  'an expense cannot be recorded under another member''s name');
+  'and an expense cannot be recorded under another member''s name');
 
 -- Both of the next two are the balance invariant, reached without touching a
--- payer or a share — which is exactly why hanging it off the children alone
+-- payer or a share -- which is exactly why hanging it off the children alone
 -- was not enough.
 savepoint restated;
 update entries set amount_minor = 999999999
@@ -192,6 +235,8 @@ select throws_ok(
   '23514', null,
   'an expense with no payers or shares at all does not balance either');
 rollback to savepoint childless;
+
+set local role authenticated;
 set constraints all deferred;
 
 -- The legitimate path is untouched by all of the above.
@@ -206,6 +251,11 @@ select lives_ok(
   'and upsert_entry still records an expense normally');
 
 -- The invariant, checked at COMMIT.
+--
+-- As the owner, like the other table guarantees above: `authenticated` cannot
+-- write these rows at all any more, and this has to hold for the privileged
+-- writer that can.
+reset role;
 savepoint unbalanced;
 insert into entries (id, group_id, currency, amount_minor, created_by)
 values ('cccccccc-cccc-4ccc-8ccc-cccccccccccc',
@@ -233,6 +283,10 @@ set constraints all deferred;
 -- fx_rate is display-only and never folds into a balance, so a poisoned value
 -- cannot move money. It can still make another member's converted estimate
 -- nonsense, which is worth refusing on its own.
+--
+-- Still as the owner, and for the same reason: these are CHECK constraints on
+-- the table, and what has to be proved is that the column cannot hold nonsense
+-- however it is written.
 -- ===========================================================================
 select throws_ok(
   $$insert into entries (id, group_id, currency, amount_minor, created_by,
@@ -253,6 +307,8 @@ select throws_ok(
   '23514',
   null,
   'a zero exchange rate is refused');
+
+set local role authenticated;
 
 -- ===========================================================================
 -- Inside the group: what one member can do to another

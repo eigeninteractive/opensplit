@@ -1,4 +1,5 @@
 import 'models/currency.dart';
+import 'models/entry_event.dart';
 import 'models/entry.dart';
 import 'money_format.dart';
 
@@ -13,10 +14,21 @@ import 'money_format.dart';
 ///
 /// [shareMinor] is read straight off the recipient's `entry_shares` row — a
 /// column lookup, not a recomputation.
+///
+/// [kind] is what happened, not what the expense is. Notifications used to fire
+/// only for creations and so could hardcode "added"; they now fire for every
+/// recorded change, and a banner that says somebody added an expense they
+/// actually deleted is worse than no banner.
+///
+/// [actorName] is who made THIS change, which on an edit is usually not whoever
+/// created the expense. That distinction is the reason the notification is
+/// worth sending at all: "Priya edited your Groceries" is the message, and
+/// naming the author instead would tell Ravi that Ravi had done it.
 ({String title, String body}) describeEntry({
   required Entry entry,
   required String groupName,
-  required String authorName,
+  required String actorName,
+  required EntryEventKind kind,
   required Currency? currency,
   required int shareMinor,
   String Function(int minor)? format,
@@ -24,13 +36,19 @@ import 'money_format.dart';
   String money(int minor) =>
       format != null ? format(minor) : formatMoney(currency, minor);
 
+  final total = money(entry.amountMinor);
+
   if (entry.kind == EntryKind.settlement) {
-    final payee = entry.shares.isEmpty ? null : entry.shares.first.memberId;
     return (
       title: groupName,
-      body: payee == null
-          ? '$authorName recorded a settlement of ${money(entry.amountMinor)}.'
-          : '$authorName recorded paying ${money(entry.amountMinor)}.',
+      body: switch (kind) {
+        EntryEventKind.created => '$actorName recorded paying $total.',
+        EntryEventKind.edited => '$actorName changed a settlement — '
+            'now $total.',
+        EntryEventKind.deleted => '$actorName deleted a settlement of $total.',
+        EntryEventKind.restored => '$actorName restored a settlement of '
+            '$total.',
+      },
     );
   }
 
@@ -38,13 +56,19 @@ import 'money_format.dart';
       ? 'an expense'
       : entry.description.trim();
 
+  // Being told about an expense you are not part of is still worth knowing,
+  // but claiming a share of zero reads as a bug.
+  final yours = shareMinor > 0 ? ' Your share: ${money(shareMinor)}.' : '';
+
   return (
     title: groupName,
-    body: shareMinor > 0
-        ? '$authorName added $what — ${money(entry.amountMinor)}. '
-              'Your share: ${money(shareMinor)}.'
-        // Being told about an expense you are not part of is still worth
-        // knowing, but claiming a share of zero reads as a bug.
-        : '$authorName added $what — ${money(entry.amountMinor)}.',
+    body: switch (kind) {
+      EntryEventKind.created => '$actorName added $what — $total.$yours',
+      EntryEventKind.edited => '$actorName edited $what — now $total.$yours',
+      // No share on a deletion: what somebody owes for an expense that is gone
+      // is nothing, and quoting the old figure invites reading it as a charge.
+      EntryEventKind.deleted => '$actorName deleted $what — $total.',
+      EntryEventKind.restored => '$actorName restored $what — $total.$yours',
+    },
   );
 }

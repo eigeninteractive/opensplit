@@ -15,16 +15,18 @@ import '../widgets/page_body.dart';
 /// to say why or who — which is a trust problem rather than a data one, and the
 /// kind that surfaces as an argument rather than a bug report.
 ///
-/// Rendered from the local database like every other screen, which it did not
-/// used to be. The rows were written by a trigger on the server and arrived by
-/// sync, so an expense added offline — or by a guest whose backend was
-/// unreachable — produced no line here at all, and the feed stayed empty
-/// however much had happened. The device now writes the line as it writes the
-/// expense; see `describeEntryWrite`.
+/// Rendered from the local database like every other screen, from snapshots the
+/// server wrote: each records what an expense looked like after a change, and
+/// the lines below are the difference between consecutive ones.
 ///
-/// Still append-only, and not merely by convention: no client may revise or
-/// remove a line, because no update or delete policy exists on the table and no
-/// such grant is given.
+/// Two properties matter here and they pull in opposite directions. The record
+/// has to be trustworthy, so no client writes it — the table has no insert,
+/// update or delete grant, and a trigger is its only writer. And the feed has
+/// to work with no network, because the one screen whose job is to say what
+/// happened must not be the one screen that needs a server to do it. So the
+/// device also writes a provisional snapshot as it saves, marked as such on
+/// screen and discarded the moment the server's account of the same expense
+/// arrives.
 class ActivityScreen extends ConsumerWidget {
   const ActivityScreen({super.key, required this.groupId});
 
@@ -34,6 +36,12 @@ class ActivityScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final events = ref.watch(groupActivityProvider(groupId)).value;
     final ledger = ref.watch(groupLedgerProvider(groupId));
+
+    // Only worth saying when there is somewhere for a line to be going. A
+    // build with no backend at all -- a guest, a local-only install -- never
+    // syncs anything, so marking every line "not synced yet" would be noise
+    // that never resolves rather than information.
+    final syncs = ref.watch(syncEngineProvider) != null;
 
     return Scaffold(
       appBar: AppBar(
@@ -52,7 +60,9 @@ class ActivityScreen extends ConsumerWidget {
               final event = events[index];
               return _Line(
                 event: event,
-                actor: ledger?.nameOf(event.actorId) ?? 'Someone',
+                actor: ledger?.nameOfActor(event.actorId) ?? 'Someone',
+                memberNames: ledger?.memberNames ?? const {},
+                pending: syncs && event.isProvisional,
                 description: ledger?.entries
                     .where((e) => e.id == event.entryId)
                     .firstOrNull
@@ -75,12 +85,18 @@ class _Line extends StatelessWidget {
   const _Line({
     required this.event,
     required this.actor,
+    required this.memberNames,
+    required this.pending,
     required this.description,
     required this.currency,
   });
 
   final EntryEvent event;
   final String actor;
+  final Map<String, String> memberNames;
+
+  /// This device's own account of a change the server has not confirmed.
+  final bool pending;
   final String? description;
   final Currency? currency;
 
@@ -93,13 +109,20 @@ class _Line extends StatelessWidget {
 
     return ListTile(
       leading: Icon(_icon(event.kind), color: theme.colorScheme.primary),
-      title: Text('$actor ${describeKind(event.kind)} $what'),
+      title: Text(
+        '$actor ${describeKind(event.kind)} $what'
+        '${pending ? ' — not synced yet' : ''}',
+      ),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           for (final change in event.changes)
             Text(
-              describeChange(change, currency: currency),
+              describeChange(
+                change,
+                currency: currency,
+                memberNames: memberNames,
+              ),
               style: theme.textTheme.bodySmall,
             ),
           Text(

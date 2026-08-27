@@ -76,15 +76,23 @@ comment on function register_device_token is
   'from a previous owner if it has one. profile_id is always auth.uid().';
 
 -- ---------------------------------------------------------------------------
--- Who should be woken for an entry.
+-- Who should be woken for a change to an entry.
 --
 -- SECURITY DEFINER and callable only by the service role: it deliberately reads
 -- tokens belonging to other people, which no user-facing policy allows.
 --
--- The author is excluded — waking someone for something they just typed is the
+-- [p_actor_id] is excluded — waking someone for something they just did is the
 -- fastest way to get notifications turned off.
+--
+-- The actor is a parameter rather than `entries.created_by`, and that is the
+-- whole difference between notifying about creations and notifying about every
+-- change. On an edit those two are usually different people: when Priya
+-- corrects Ravi's expense, Ravi is precisely who needs to know, and excluding
+-- the creator would silence the one person the change is about while telling
+-- the person who made it. Null excludes nobody, which is right for a change
+-- that cannot be attributed to a member at all.
 -- ---------------------------------------------------------------------------
-create or replace function tokens_for_entry(p_entry_id uuid)
+create or replace function tokens_for_entry(p_entry_id uuid, p_actor_id uuid)
 returns table (token text, platform text)
 language sql
 security definer
@@ -97,7 +105,7 @@ as $$
     join device_tokens dt on dt.profile_id = m.profile_id
    where e.id = p_entry_id
      and m.profile_id is not null
-     and m.id <> e.created_by;
+     and m.id is distinct from p_actor_id;
 $$;
 
 -- ---------------------------------------------------------------------------
@@ -121,10 +129,19 @@ $$;
 --     the difference between a self-hosted port being a weekend and being a
 --     rewrite, which is a promise the README makes.
 --
--- It is a trigger rather than a call inside upsert_entry for the same reason
--- the balance check hangs off the table rather than the RPC: upsert_entry is
--- the only writer today, and a fan-out that only fires for the one path that
--- remembered to call it is not a fan-out.
+-- It hangs off `entry_events` rather than `entries`, and that is what makes it
+-- fire for edits and deletions as well as for creations.
+--
+-- On `entries` it could not. `touch_parent_entry` restamps the parent row every
+-- time a payer or share moves, so one saved expense is several UPDATEs on
+-- `entries` — an `after update` trigger there would send a notification per
+-- child row. `entry_events` already has exactly the property wanted: the
+-- snapshot trigger dedups, so there is precisely one row per change that
+-- actually changed something, and it already carries who did it.
+--
+-- A trigger rather than a call inside upsert_entry for the same reason the
+-- balance check hangs off the table rather than the RPC: a fan-out that only
+-- fires for the one path that remembered to call it is not a fan-out.
 --
 -- The payload is built by hand, and deliberately carries three ids and nothing
 -- else. `supabase_functions.http_request` sends `to_jsonb(new)` — the whole
@@ -137,7 +154,7 @@ $$;
 -- The queue insert is transactional, so an entry that rolls back takes its
 -- notification with it.
 -- ---------------------------------------------------------------------------
-create or replace function notify_entry_created()
+create or replace function notify_entry_change()
 returns trigger
 language plpgsql
 security definer
@@ -169,16 +186,20 @@ begin
       'Content-Type',     'application/json',
       'x-webhook-secret', v_secret
     ),
-    -- Shaped like the webhook payload the function already parses, so the
-    -- Edge Function is unchanged and its `type`/`table` guard still means
-    -- something if this is ever pointed at another table.
+    -- Ids and nothing else, exactly as the note at the top of this file
+    -- requires. Which expense, which group, and who to leave out of the
+    -- fan-out. What the notification actually SAYS is composed on each
+    -- recipient's device, after it has synced, from the same formatter the
+    -- screens use -- including whether this was an addition, an edit or a
+    -- deletion, which the device reads off the snapshot chain it has just
+    -- pulled. Nothing about the change travels in this payload.
     body    := jsonb_build_object(
       'type',  'INSERT',
       'table', tg_table_name,
       'record', jsonb_build_object(
-        'id',         new.id,
-        'group_id',   new.group_id,
-        'created_by', new.created_by
+        'id',       new.entry_id,
+        'group_id', new.group_id,
+        'actor_id', new.actor_id
       )
     )
   );
@@ -187,11 +208,13 @@ begin
 end;
 $$;
 
-comment on function notify_entry_created is
-  'Posts an entry''s ids to the notify-entry Edge Function so the other '
-  'members'' devices wake and sync. No-ops until notify_function_url and '
-  'notify_webhook_secret are set in app_settings.';
+comment on function notify_entry_change is
+  'Posts the ids of a changed expense to the notify-entry Edge Function so '
+  'the other members'' devices wake and sync. Fires for every recorded change '
+  '-- added, edited, deleted or restored -- because entry_events holds one '
+  'row per change and no rows for a write that changed nothing. No-ops until '
+  'notify_function_url and notify_webhook_secret are set in app_settings.';
 
-create trigger trg_entries_notify
-  after insert on entries
-  for each row execute function notify_entry_created();
+create trigger trg_entry_events_notify
+  after insert on entry_events
+  for each row execute function notify_entry_change();

@@ -81,6 +81,21 @@ class _SettleUpScreenState extends ConsumerState<SettleUpScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Revalidate on the way in, and this is the one screen where it is not
+    // merely tidiness.
+    //
+    // Everywhere else, stale-while-revalidate is exactly right: a slightly old
+    // group name or member name costs nothing, and the whole app is built on
+    // rendering what the device knows and refreshing behind it. A payment
+    // handle is different. Handing off to a UPI app with a VPA somebody changed
+    // last week sends real money to an address they no longer hold, and the
+    // person paying has no way to know the prefilled value is out of date.
+    //
+    // Failures are swallowed inside the provider, so this cannot block or
+    // error-surface the screen -- offline, it simply shows what it has, which
+    // is the same thing it did before.
+    ref.watch(groupSyncProvider(widget.groupId));
+
     final ledger = ref.watch(groupLedgerProvider(widget.groupId));
     final currencies = ref.watch(currenciesProvider).value ?? const {};
 

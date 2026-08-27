@@ -333,50 +333,29 @@ create policy entries_update on entries
   with check (is_group_member(group_id));
 
 -- ----------------------------------------------------------------------------
--- The activity log.
+-- The record of what happened.
 --
--- Readable by the group, appendable in your own name, revisable by nobody.
+-- Readable by the group. Writable by nobody, at all, by any verb.
 --
--- The insert policy replaced a SECURITY DEFINER trigger on `entries` — see the
--- long note where that trigger used to be. The short version: the device is
--- what authors an expense in this app, so it is also what describes the change;
--- writing history only on the server meant a device with no connection had none
--- at all, which is the one screen that must work offline if any does.
+-- SELECT is the only policy here because SELECT is the only thing a client ever
+-- does to this table. `snapshot_entry` is the sole writer and it is SECURITY
+-- DEFINER, so it does not consult these policies -- which is the design, not a
+-- loophole in it.
 --
--- Three conditions, and together they are what the trigger actually enforced:
+-- This replaced an insert policy that let a device append lines in its own
+-- name. That policy was careful and still bought less than it looked: it could
+-- pin WHO wrote a line, but not whether the line was true. A client that edited
+-- an expense from Rs.400 to Rs.4,000 could describe it as a ten-rupee
+-- correction and be within the policy. Worse, it could rewrite only the shares
+-- -- moving money between members while the total stayed put -- and append
+-- nothing whatsoever, because a diff the client composes is a diff the client
+-- can decline to compose.
 --
---   * `actor_id` must be the caller's own live member row in this group, so an
---     event cannot be attributed to somebody else — not to a co-member, and not
---     to a placeholder;
---   * `group_id` must be a group the caller belongs to, which `is_group_member`
---     on the actor lookup already establishes;
---   * the entry must genuinely live in that group, so a feed line cannot be
---     filed against a group its expense is not in and be read by people with no
---     access to it.
---
--- No update or delete policy, and that is unchanged and is the point of an
--- audit trail: appending a correction is history, quietly rewriting the record
--- of an edit is not. Nothing here lets a client take a line back.
+-- Deriving the record on the server removes the claim from the wire. There is
+-- nothing left for a client to assert, so there is nothing left to check.
 -- ----------------------------------------------------------------------------
 create policy entry_events_read on entry_events
   for select to authenticated using (is_group_member(group_id));
-
-create policy entry_events_insert on entry_events
-  for insert to authenticated
-  with check (
-    exists (
-      select 1 from members m
-       where m.id = entry_events.actor_id
-         and m.group_id = entry_events.group_id
-         and m.profile_id = auth.uid()
-         and m.left_at is null
-    )
-    and exists (
-      select 1 from entries e
-       where e.id = entry_events.entry_id
-         and e.group_id = entry_events.group_id
-    )
-  );
 
 -- Payers and shares inherit access from the parent entry.
 create policy entry_payers_all on entry_payers

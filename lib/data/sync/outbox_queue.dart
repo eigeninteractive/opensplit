@@ -5,7 +5,7 @@ import 'package:drift/drift.dart';
 import '../local/database.dart';
 
 /// The kind of row an outbox item refers to.
-enum OutboxTarget { entry, group, member, profile, event }
+enum OutboxTarget { entry, group, member, profile }
 
 /// A write the server refused outright, named the way its author would name it.
 class FailedWrite {
@@ -132,19 +132,20 @@ class OutboxQueue {
   /// Where a kind of row sits in the dependency graph.
   ///
   /// A total order over the levels the schema actually has, which is what makes
-  /// sorting by it a valid topological sort: activity events reference entries,
-  /// entries reference members, members reference groups, and profiles
-  /// reference nothing group-scoped at all. There is no edge pointing back up,
-  /// so no item ever needs to precede one of a lower rank.
+  /// sorting by it a valid topological sort: entries reference members, members
+  /// reference groups, and profiles reference nothing group-scoped at all.
+  /// There is no edge pointing back up, so no item ever needs to precede one of
+  /// a lower rank.
   ///
-  /// Events are last on their own rank rather than sharing the entry's. An
-  /// event names the entry it describes with a real foreign key, so pushing the
-  /// two together would let a feed line reach the server ahead of the expense
-  /// it is about and be refused for a row that was moments from existing.
+  /// Activity used to occupy a fourth rank below entries, because a feed line
+  /// named the expense it described with a real foreign key and could otherwise
+  /// reach the server ahead of it. Nothing queues activity any more -- the
+  /// server writes it -- so that ordering constraint, and the class of failure
+  /// where a refused expense dragged its own history into the dead letters, are
+  /// both simply gone.
   static int _pushOrder(String operation) => switch (operation) {
     'group' => 0,
     'member' => 1,
-    'event' => 3,
     _ => 2,
   };
 
@@ -173,36 +174,14 @@ class OutboxQueue {
       ..where((t) => t.deadLetteredAt.isNotNull())
       ..orderBy([(t) => OrderingTerm.desc(t.deadLetteredAt)]);
 
-    return query.watch().asyncMap((rows) async {
-      final refusedEntries = {
-        for (final row in rows)
-          if (row.operation == OutboxTarget.entry.name) row.targetId,
-      };
-      return Future.wait(
-        [
-          for (final row in rows)
-            if (!await _isEchoOf(row, refusedEntries)) row,
-        ].map(_describe),
-      );
-    });
-  }
-
-  /// Whether this failure is a consequence of another one already listed.
-  ///
-  /// One user action can queue two rows: the expense, and the feed line saying
-  /// it was recorded. When the server refuses the expense, the feed line is
-  /// refused straight after it for naming an entry the server does not have —
-  /// so a single refused save produced two entries in a list whose whole job is
-  /// to tell somebody, once, that something they recorded did not travel.
-  ///
-  /// The expense is the one worth reporting. Retrying still retries both, since
-  /// the queue itself keeps them; this only decides what is worth saying.
-  Future<bool> _isEchoOf(OutboxRow row, Set<String> refusedEntries) async {
-    if (row.operation != OutboxTarget.event.name) return false;
-    final event = await (_db.select(
-      _db.entryEvents,
-    )..where((t) => t.id.equals(row.targetId))).getSingleOrNull();
-    return event != null && refusedEntries.contains(event.entryId);
+    // One refused write, one line. This used to need filtering: a save queued
+    // both the expense and the feed line describing it, so a refusal produced
+    // two dead letters for one user action -- the second of them about a row
+    // nobody had ever heard of. The server writes the history now, so there is
+    // only ever the expense to report.
+    return query.watch().asyncMap(
+      (rows) => Future.wait(rows.map(_describe)),
+    );
   }
 
   Future<FailedWrite> _describe(OutboxRow row) async {
@@ -238,21 +217,6 @@ class OutboxQueue {
         return row?.displayName ?? 'A member';
       case OutboxTarget.profile:
         return 'Your name and payment details';
-      case OutboxTarget.event:
-        // Named after the expense rather than the event, because that is the
-        // only half of it anybody recognises. "A line in the activity feed"
-        // tells the reader nothing about which of their expenses is affected.
-        final row = await (_db.select(
-          _db.entryEvents,
-        )..where((t) => t.id.equals(id))).getSingleOrNull();
-        if (row == null) return 'An activity entry';
-        final entry = await (_db.select(
-          _db.entries,
-        )..where((t) => t.id.equals(row.entryId))).getSingleOrNull();
-        final description = entry?.description.trim() ?? '';
-        return description.isEmpty
-            ? 'The history of an expense'
-            : 'The history of $description';
     }
   }
 

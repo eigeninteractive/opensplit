@@ -1,9 +1,10 @@
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../domain/activity/entry_events.dart';
+import '../../domain/activity/snapshot_diff.dart';
 import '../../domain/entry_draft.dart';
 import '../../domain/models/entry.dart';
+import '../../domain/models/entry_snapshot.dart';
 import '../local/database.dart';
 import '../local/entry_writer.dart';
 import '../sync/outbox_queue.dart';
@@ -44,38 +45,69 @@ final class DriftEntryRepository {
   Future<void> _enqueue(String entryId) async =>
       outbox?.enqueue(OutboxTarget.entry, entryId);
 
-  /// Writes an entry, its feed line and both queue items as one operation.
+  /// Writes an entry, this device's record of the write, and the queue item,
+  /// as one operation.
   ///
-  /// Every local write of an entry goes through here, which is the point: the
-  /// activity feed used to be written by a trigger on the server, so an expense
-  /// added offline — or by a guest whose backend was unreachable — produced no
-  /// history at all, and the one screen that could not answer from the local
-  /// database was the one whose entire job was to say what had happened.
+  /// Every local write of an entry goes through here, which is the point: a
+  /// change and the record of it are one fact, and committing them separately
+  /// would allow either an expense with no history or history for an expense
+  /// that was never stored.
+  ///
+  /// The snapshot written here is PROVISIONAL and is never pushed. The
+  /// authoritative record is the server's, taken by a trigger from the row it
+  /// actually committed -- which is what makes the feed something a reader can
+  /// trust rather than something the editing device asserted about itself. This
+  /// one exists because the server's arrives only after a round trip, and the
+  /// one screen whose whole job is to say what happened must not be the one
+  /// screen that needs a network to do it. It is dropped the moment the
+  /// server's account of the same expense is pulled.
   ///
   /// [actorId] is a member id, not an account id. Authorship is group-scoped
   /// for the same reason `entries.created_by` is: a placeholder's edits have to
   /// survive them claiming an account later. Null when this device has no
-  /// member row in the group, in which case there is nobody to attribute the
-  /// write to and no event is recorded — the same case the trigger declined.
-  Future<void> _writeWithEvent({
-    required Entry? before,
+  /// member row in the group -- recorded anyway, with nobody named, because a
+  /// change nobody can be attributed to still belongs on the record.
+  Future<void> _writeWithSnapshot({
     required Entry after,
     required String? actorId,
     required DateTime at,
   }) async {
-    final event = describeEntryWrite(
-      before: before,
-      after: after,
-      actorId: actorId,
+    final snapshot = snapshotOf(
+      after,
       id: _uuid.v4(),
+      actorId: actorId,
       at: at,
     );
 
-    await writeEntryLocally(_db, after, event: event);
+    // The same dedup the server applies, so a re-saved editor produces no line
+    // here either -- rather than one that appears and then disappears when the
+    // server's deduped account of the write arrives.
+    final latest = await _latestSnapshot(after.id);
+    final worthRecording =
+        latest == null || !recordsSameShape(latest, snapshot);
+
+    await writeEntryLocally(
+      _db,
+      after,
+      snapshot: worthRecording ? snapshot : null,
+    );
     await _enqueue(after.id);
-    if (event != null) {
-      await outbox?.enqueue(OutboxTarget.event, event.id);
-    }
+  }
+
+  /// The most recent thing recorded about an entry, from either source.
+  Future<EntrySnapshot?> _latestSnapshot(String entryId) async {
+    final row =
+        await (_db.select(_db.entrySnapshots)
+              ..where((t) => t.entryId.equals(entryId))
+              ..orderBy([
+                (t) => OrderingTerm(
+                  expression: t.createdAt,
+                  mode: OrderingMode.desc,
+                ),
+              ])
+              ..limit(1))
+            .getSingleOrNull();
+    return row?.toDomain();
   }
 
   /// How many live entries this device holds, across every group.
@@ -224,12 +256,7 @@ final class DriftEntryRepository {
 
     await _unarchive(entry.groupId);
     // The author is whoever recorded it, which is exactly what createdBy is.
-    await _writeWithEvent(
-      before: null,
-      after: entry,
-      actorId: createdBy,
-      at: at,
-    );
+    await _writeWithSnapshot(after: entry, actorId: createdBy, at: at);
     return entry;
   }
 
@@ -276,12 +303,7 @@ final class DriftEntryRepository {
       clientKey: existing.clientKey,
     ).copyWith(createdAt: existing.createdAt);
 
-    await _writeWithEvent(
-      before: existing,
-      after: recomposed,
-      actorId: actorId,
-      at: at,
-    );
+    await _writeWithSnapshot(after: recomposed, actorId: actorId, at: at);
     return recomposed;
   }
 
@@ -299,8 +321,7 @@ final class DriftEntryRepository {
     // Soft delete, and `updatedAt` moves so the deletion is itself a delta that
     // other devices will pull. A hard delete would simply vanish from their
     // cursor sweep and live on forever on every device that already had it.
-    await _writeWithEvent(
-      before: existing,
+    await _writeWithSnapshot(
       after: existing.copyWith(deletedAt: at, updatedAt: at),
       actorId: actorId,
       at: at,

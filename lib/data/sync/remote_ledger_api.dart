@@ -1,5 +1,5 @@
 import '../../domain/models/entry.dart';
-import '../../domain/models/entry_event.dart';
+import '../../domain/models/entry_snapshot.dart';
 import '../../domain/models/group.dart';
 import '../../domain/models/member.dart';
 import '../../domain/models/profile.dart';
@@ -100,29 +100,23 @@ abstract interface class RemoteLedgerApi {
   Future<Profile> pushProfile(Profile profile);
 
   /// What has happened to this group's expenses since [since].
-  Future<List<EntryEvent>> pullEntryEvents({
+  ///
+  /// Read-only, and there is deliberately no push counterpart. The server
+  /// writes these rows itself, from the expense it actually committed, and no
+  /// client holds an insert grant on the table -- which is what makes a feed
+  /// line something a reader can trust rather than something the editing device
+  /// asserted about itself.
+  ///
+  /// This replaced a push. While the client authored these rows it could
+  /// describe its own edit however it liked, and could re-split a bill so
+  /// somebody else owed more while recording nothing at all. Both are
+  /// unexpressible now: there is no diff on the wire, only the expense's own
+  /// shape at each moment, and the difference between consecutive shapes is
+  /// worked out on the device that reads them.
+  Future<List<EntrySnapshot>> pullEntrySnapshots({
     required String groupId,
     DateTime? since,
   });
-
-  /// Appends one line to a group's activity feed.
-  ///
-  /// The device that made the change is the one that describes it, exactly as
-  /// it is the device that authors the expense itself. The server's job is to
-  /// refuse an event attributed to somebody else, or to a group the caller is
-  /// not in, and to make sure no event is ever revised or removed afterwards —
-  /// which `entry_events_insert` and the absence of any update or delete policy
-  /// together do.
-  ///
-  /// This replaced a SECURITY DEFINER trigger. The trigger could only fire for
-  /// a write that reached the server, so on a device that was offline — or a
-  /// guest whose backend was unreachable — the feed stayed empty no matter how
-  /// many expenses were added, which is the one screen in the app that did not
-  /// work from the local database.
-  /// Returns the row as stored, whose `created_at` is the server's and which
-  /// the caller adopts — see [entryEventToJson] for why the clock cannot be
-  /// this device's.
-  Future<EntryEvent> pushEntryEvent(EntryEvent event);
 
   /// Exchange rates published on or after [since] (`yyyy-MM-dd`).
   ///

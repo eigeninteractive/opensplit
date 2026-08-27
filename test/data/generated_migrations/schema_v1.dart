@@ -740,11 +740,11 @@ class EntryShares extends Table with TableInfo {
   bool get dontWriteConstraints => true;
 }
 
-class EntryEvents extends Table with TableInfo {
+class EntrySnapshots extends Table with TableInfo {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
-  EntryEvents(this.attachedDatabase, [this._alias]);
+  EntrySnapshots(this.attachedDatabase, [this._alias]);
   late final GeneratedColumn<String> id = GeneratedColumn<String>(
     'id',
     aliasedName,
@@ -772,26 +772,10 @@ class EntryEvents extends Table with TableInfo {
   late final GeneratedColumn<String> actorId = GeneratedColumn<String>(
     'actor_id',
     aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL REFERENCES members(id)ON DELETE CASCADE',
-  );
-  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
-    'kind',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> changes = GeneratedColumn<String>(
-    'changes',
-    aliasedName,
     true,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
-    $customConstraints: 'NULL',
+    $customConstraints: 'NULL REFERENCES members(id)ON DELETE CASCADE',
   );
   late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
     'created_at',
@@ -801,21 +785,119 @@ class EntryEvents extends Table with TableInfo {
     requiredDuringInsert: true,
     $customConstraints: 'NOT NULL',
   );
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> currency = GeneratedColumn<String>(
+    'currency',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> amountMinor = GeneratedColumn<int>(
+    'amount_minor',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> entryDate = GeneratedColumn<int>(
+    'entry_date',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> splitKind = GeneratedColumn<String>(
+    'split_kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> categoryId = GeneratedColumn<String>(
+    'category_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
+    'notes',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<int> deletedAt = GeneratedColumn<int>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> payers = GeneratedColumn<String>(
+    'payers',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> shares = GeneratedColumn<String>(
+    'shares',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> isProvisional = GeneratedColumn<int>(
+    'is_provisional',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT 0 CHECK (is_provisional IN (0, 1))',
+    defaultValue: const CustomExpression('0'),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
     entryId,
     groupId,
     actorId,
-    kind,
-    changes,
     createdAt,
+    description,
+    currency,
+    amountMinor,
+    entryDate,
+    splitKind,
+    categoryId,
+    notes,
+    deletedAt,
+    payers,
+    shares,
+    isProvisional,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
-  static const String $name = 'entry_events';
+  static const String $name = 'entry_snapshots';
   @override
   Set<GeneratedColumn> get $primaryKey => {id};
   @override
@@ -824,8 +906,8 @@ class EntryEvents extends Table with TableInfo {
   }
 
   @override
-  EntryEvents createAlias(String alias) {
-    return EntryEvents(attachedDatabase, alias);
+  EntrySnapshots createAlias(String alias) {
+    return EntrySnapshots(attachedDatabase, alias);
   }
 
   @override
@@ -1087,7 +1169,7 @@ class DatabaseAtV1 extends GeneratedDatabase {
   late final Entries entries = Entries(this);
   late final EntryPayers entryPayers = EntryPayers(this);
   late final EntryShares entryShares = EntryShares(this);
-  late final EntryEvents entryEvents = EntryEvents(this);
+  late final EntrySnapshots entrySnapshots = EntrySnapshots(this);
   late final FxRates fxRates = FxRates(this);
   late final Outbox outbox = Outbox(this);
   late final SyncCursors syncCursors = SyncCursors(this);
@@ -1104,7 +1186,7 @@ class DatabaseAtV1 extends GeneratedDatabase {
     entries,
     entryPayers,
     entryShares,
-    entryEvents,
+    entrySnapshots,
     fxRates,
     outbox,
     syncCursors,
@@ -1144,21 +1226,21 @@ class DatabaseAtV1 extends GeneratedDatabase {
         'entries',
         limitUpdateKind: UpdateKind.delete,
       ),
-      result: [TableUpdate('entry_events', kind: UpdateKind.delete)],
+      result: [TableUpdate('entry_snapshots', kind: UpdateKind.delete)],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
         'groups',
         limitUpdateKind: UpdateKind.delete,
       ),
-      result: [TableUpdate('entry_events', kind: UpdateKind.delete)],
+      result: [TableUpdate('entry_snapshots', kind: UpdateKind.delete)],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
         'members',
         limitUpdateKind: UpdateKind.delete,
       ),
-      result: [TableUpdate('entry_events', kind: UpdateKind.delete)],
+      result: [TableUpdate('entry_snapshots', kind: UpdateKind.delete)],
     ),
   ]);
   @override

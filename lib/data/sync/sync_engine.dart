@@ -2,14 +2,13 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../../domain/models/entry.dart';
-import '../../domain/models/entry_event.dart';
 import '../local/database.dart';
 import '../local/entry_writer.dart';
 import '../repositories/mappers.dart';
 import 'outbox_queue.dart';
 import 'remote_ledger_api.dart';
 import 'sync_cursor.dart';
-import 'wire.dart' show changesFromJson;
+import 'wire.dart' show memberAmountsToJson;
 
 /// What one sync run did.
 class SyncReport {
@@ -255,40 +254,8 @@ class SyncEngine {
         )..where((t) => t.id.equals(item.targetId))).getSingleOrNull();
         if (row == null) return;
         await api.pushProfile(row.toDomain());
-
-      case OutboxTarget.event:
-        final row = await (db.select(
-          db.entryEvents,
-        )..where((t) => t.id.equals(item.targetId))).getSingleOrNull();
-        if (row == null) return;
-        final storedEvent = await api.pushEntryEvent(_eventToDomain(row));
-
-        // Adopt the server's clock, exactly as the entry and group paths adopt
-        // theirs. The local row was stamped with this device's clock so the
-        // feed could render the moment the expense was saved; from here on both
-        // copies agree, which is what lets every member read the group's
-        // history in one order and what keeps the activity cursor — which
-        // advances on this column — from ever being pushed into the future by
-        // a device whose clock is wrong.
-        await (db.update(
-          db.entryEvents,
-        )..where((t) => t.id.equals(row.id))).write(
-          EntryEventsCompanion(createdAt: Value(storedEvent.createdAt)),
-        );
     }
   }
-
-  static EntryEvent _eventToDomain(EntryEventRow row) => EntryEvent(
-    id: row.id,
-    entryId: row.entryId,
-    groupId: row.groupId,
-    actorId: row.actorId,
-    kind: EntryEventKind.values.asNameMap()[row.kind] ?? EntryEventKind.edited,
-    createdAt: row.createdAt,
-    changes: row.changes == null
-        ? const []
-        : changesFromJson(jsonDecode(row.changes!)),
-  );
 
   /// Applies every change made since the stored cursor.
   /// The name and payment handle of everybody you share a group with.
@@ -349,69 +316,92 @@ class SyncEngine {
     }
   }
 
-  /// Where a group's activity feed has been pulled up to.
+  /// Where a group's activity has been pulled up to.
   ///
   /// Its own cursor row, rather than `max(created_at)` over the local table.
-  /// That worked only while every event came from the server; now that this
-  /// device writes its own the moment an expense is saved, the newest local
-  /// event is usually one of ours — often stamped a little ahead of the
-  /// server's clock — and asking for everything after it would skip whatever a
-  /// co-member recorded in between, permanently.
+  /// The local table also holds this device's provisional snapshots, stamped
+  /// with a device clock -- often a little ahead of the server's -- so asking
+  /// for everything after the newest local row would skip whatever a co-member
+  /// recorded in between, permanently.
   ///
   /// Keyed off the group id so it cannot collide with the entries cursor, which
   /// uses the bare id, or with the profiles one.
-  static String eventsCursorKey(String groupId) => 'events:$groupId';
+  static String snapshotsCursorKey(String groupId) => 'events:$groupId';
 
-  /// The group's activity feed.
+  /// The group's activity: what each expense looked like after each change.
   ///
   /// Cursored on `created_at` alone rather than the `(updated_at, id)` pair the
   /// entries feed uses, and it can be: these rows are append-only and never
-  /// revised, so there is no second write to order against the first.
-  Future<void> _pullEntryEvents(String groupId) async {
-    final key = eventsCursorKey(groupId);
+  /// revised, so there is no second write to order against the first. The
+  /// server owns that column outright -- no client holds a grant on the table
+  /// at all -- so nothing can stamp a row in the future and pin every member's
+  /// cursor there.
+  Future<void> _pullEntrySnapshots(String groupId) async {
+    final key = snapshotsCursorKey(groupId);
     final row = await (db.select(
       db.syncCursors,
     )..where((t) => t.groupId.equals(key))).getSingleOrNull();
 
-    final events = await api.pullEntryEvents(
+    final snapshots = await api.pullEntrySnapshots(
       groupId: groupId,
       since: row?.cursor,
     );
-    if (events.isEmpty) return;
+    if (snapshots.isEmpty) return;
 
-    await db.batch((batch) {
-      for (final event in events) {
-        batch.insert(
-          db.entryEvents,
-          EntryEventsCompanion.insert(
-            id: event.id,
-            entryId: event.entryId,
-            groupId: event.groupId,
-            actorId: event.actorId,
-            kind: event.kind.name,
-            changes: Value(
-              event.changes.isEmpty
-                  ? null
-                  : jsonEncode(encodeChanges(event.changes)),
+    await db.transaction(() async {
+      await db.batch((batch) {
+        for (final snapshot in snapshots) {
+          batch.insert(
+            db.entrySnapshots,
+            EntrySnapshotsCompanion.insert(
+              id: snapshot.id,
+              entryId: snapshot.entryId,
+              groupId: snapshot.groupId,
+              actorId: Value(snapshot.actorId),
+              createdAt: snapshot.createdAt,
+              description: snapshot.description,
+              currency: snapshot.currency,
+              amountMinor: snapshot.amountMinor,
+              entryDate: snapshot.entryDate,
+              splitKind: snapshot.splitKind,
+              categoryId: Value(snapshot.categoryId),
+              notes: Value(snapshot.notes),
+              deletedAt: Value(snapshot.deletedAt),
+              payers: jsonEncode(memberAmountsToJson(snapshot.payers)),
+              shares: jsonEncode(memberAmountsToJson(snapshot.shares)),
             ),
-            createdAt: event.createdAt,
-          ),
-          // An event never changes, so a row already here is the same row —
-          // including one this device wrote itself and has just been handed
-          // back, which is the ordinary case now rather than an odd one.
-          mode: InsertMode.insertOrIgnore,
-        );
-      }
+            // A snapshot is never revised, so a row already here is the same
+            // row arriving twice.
+            mode: InsertMode.insertOrIgnore,
+          );
+        }
+      });
+
+      // The server's account of these expenses has arrived, so this device's
+      // guesses about them are spent.
+      //
+      // Superseded rather than merged, and per entry rather than per row: five
+      // edits made offline are five provisional lines here and one snapshot on
+      // the server, which deduped them. Keeping ours alongside would show the
+      // same edit twice, in two voices, one of which nobody else can see.
+      //
+      // Scoped to the entries actually pulled, so a provisional line for an
+      // expense whose push was refused outright stays exactly where it is --
+      // which is the one case where it is the only record there is.
+      final touched = {for (final snapshot in snapshots) snapshot.entryId};
+      await (db.delete(db.entrySnapshots)
+            ..where((t) => t.entryId.isIn(touched) & t.isProvisional))
+          .go();
     });
 
     // The server orders by created_at ascending, so the last row is the newest
-    // the server has. Stored as the server reported it, never as a local clock.
+    // it has. Stored as the server reported it, never as a local clock.
     await db
         .into(db.syncCursors)
         .insertOnConflictUpdate(
           SyncCursorsCompanion.insert(
             groupId: key,
-            cursor: Value(events.last.createdAt),
+            cursor: Value(snapshots.last.createdAt),
             lastSyncedAt: Value(_clock()),
           ),
         );
@@ -460,7 +450,7 @@ class SyncEngine {
     // before the entries it talks about fails the constraint and takes the
     // whole sync down with it. On a device seeing the group for the first
     // time, that is every event there is.
-    await _pullEntryEvents(groupId);
+    await _pullEntrySnapshots(groupId);
 
     return applied;
   }
