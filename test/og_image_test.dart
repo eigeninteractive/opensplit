@@ -93,10 +93,9 @@ void main() {
 
   test('the sitemap lists exactly the pages that exist', () {
     final sitemap = File('site/sitemap.xml').readAsStringSync();
-    final listed = RegExp(r'<loc>https://opensplit\.web\.app/([^<]*)</loc>')
-        .allMatches(sitemap)
-        .map((match) => match.group(1)!)
-        .toSet();
+    final listed = RegExp(
+      r'<loc>https://opensplit\.web\.app/([^<]*)</loc>',
+    ).allMatches(sitemap).map((match) => match.group(1)!).toSet();
 
     expect(listed, {'', 'privacy', 'terms', 'delete-account'});
     for (final page in listed.where((page) => page.isNotEmpty)) {
