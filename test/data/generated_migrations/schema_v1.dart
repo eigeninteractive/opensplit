@@ -1097,8 +1097,8 @@ class SyncCursors extends Table with TableInfo {
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
   SyncCursors(this.attachedDatabase, [this._alias]);
-  late final GeneratedColumn<String> groupId = GeneratedColumn<String>(
-    'group_id',
+  late final GeneratedColumn<String> feed = GeneratedColumn<String>(
+    'feed',
     aliasedName,
     false,
     type: DriftSqlType.string,
@@ -1130,19 +1130,14 @@ class SyncCursors extends Table with TableInfo {
     $customConstraints: 'NULL',
   );
   @override
-  List<GeneratedColumn> get $columns => [
-    groupId,
-    cursor,
-    cursorId,
-    lastSyncedAt,
-  ];
+  List<GeneratedColumn> get $columns => [feed, cursor, cursorId, lastSyncedAt];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
   static const String $name = 'sync_cursors';
   @override
-  Set<GeneratedColumn> get $primaryKey => {groupId};
+  Set<GeneratedColumn> get $primaryKey => {feed};
   @override
   Never map(Map<String, dynamic> data, {String? tablePrefix}) {
     throw UnsupportedError('TableInfo.map in schema verification code');
@@ -1154,7 +1149,7 @@ class SyncCursors extends Table with TableInfo {
   }
 
   @override
-  List<String> get customConstraints => const ['PRIMARY KEY(group_id)'];
+  List<String> get customConstraints => const ['PRIMARY KEY(feed)'];
   @override
   bool get dontWriteConstraints => true;
 }

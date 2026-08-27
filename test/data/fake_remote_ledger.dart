@@ -1,3 +1,4 @@
+import 'package:opensplit/data/sync/change_feed.dart';
 import 'package:opensplit/data/sync/remote_ledger_api.dart';
 import 'package:opensplit/data/sync/sync_cursor.dart';
 import 'package:opensplit/data/sync/wire.dart';
@@ -120,48 +121,80 @@ class FakeRemoteLedger implements RemoteLedgerApi {
   }
 
   @override
-  Future<EntryDelta> pullEntries({
+  Future<ChangePage<Entry>> pullEntries({
     required String groupId,
-    SyncCursor? cursor,
-    int limit = 200,
-  }) async {
-    final all =
-        _entries.values
-            .where((json) => json['group_id'] == groupId)
-            .map(entryFromJson)
+    SyncCursor? since,
+    required int limit,
+  }) async => _page(
+    rows: [
+      for (final json in _entries.values)
+        if (json['group_id'] == groupId)
+          (cursor: _cursorOf(json, 'updated_at'), row: entryFromJson(json)),
+    ],
+    since: since,
+    limit: limit,
+  );
+
+  /// One keyset page, exactly as the real adapter answers.
+  ///
+  /// Faithful about paging rather than returning everything at once, because
+  /// [SyncEngine.drain]'s loop is the thing under test: a fake that always
+  /// answered in full would never once exercise the cursor advancing across a
+  /// page boundary, which is where every paging bug this project has had lived.
+  ChangePage<T> _page<T>({
+    required Iterable<({SyncCursor cursor, T row})> rows,
+    required SyncCursor? since,
+    required int limit,
+  }) {
+    final matching =
+        rows
+            .where((row) => since == null || since.isBefore(row.cursor))
             .toList()
-          ..sort((a, b) {
-            final byTime = a.updatedAt.compareTo(b.updatedAt);
-            return byTime != 0 ? byTime : a.id.compareTo(b.id);
-          });
+          ..sort((a, b) => a.cursor.compareTo(b.cursor));
 
-    final after = cursor == null
-        ? all
-        : all
-              .where((e) => cursor.isBefore(SyncCursor(e.updatedAt, e.id)))
-              .toList();
-
-    final page = after.take(limit).toList();
-    return EntryDelta(
-      entries: page,
-      nextCursor: page.isEmpty
-          ? cursor
-          : SyncCursor(page.last.updatedAt, page.last.id),
-      hasMore: after.length > page.length,
+    final page = matching.take(limit).toList();
+    return ChangePage(
+      rows: [for (final row in page) row.row],
+      cursor: page.isEmpty ? null : page.last.cursor,
+      hasMore: matching.length > limit,
     );
   }
 
-  @override
-  Future<Group?> pullGroup(String groupId) async {
-    final json = _groups[groupId];
-    return json == null ? null : groupFromJson(json);
-  }
+  static SyncCursor _cursorOf(Map<String, dynamic> json, String timeColumn) =>
+      SyncCursor(
+        DateTime.parse(json[timeColumn] as String),
+        json['id'] as String,
+      );
 
   @override
-  Future<List<Member>> pullMembers(String groupId) async => [
-    for (final json in _members.values)
-      if (json['group_id'] == groupId) memberFromJson(json),
-  ];
+  Future<ChangePage<Group>> pullGroup({
+    required String groupId,
+    SyncCursor? since,
+    required int limit,
+  }) async => _page(
+    rows: [
+      for (final json in _groups.values)
+        if (json['id'] == groupId)
+          (cursor: _cursorOf(json, 'updated_at'), row: groupFromJson(json)),
+    ],
+    since: since,
+    limit: limit,
+  );
+
+  @override
+  Future<ChangePage<Member>> pullMembers({
+    required String groupId,
+    SyncCursor? since,
+    required int limit,
+  }) async => _page(
+    rows: [
+      for (final json in _members.values)
+        if (json['group_id'] == groupId)
+          (cursor: _cursorOf(json, 'updated_at'), row: memberFromJson(json)),
+    ],
+    since: since,
+    limit: limit,
+  );
 
   /// Who the fake believes is holding the session.
   ///
@@ -229,25 +262,22 @@ class FakeRemoteLedger implements RemoteLedgerApi {
 
   /// What the last profiles pull asked for, so a test can check the cursor is
   /// carried rather than every profile being refetched on every sync.
-  DateTime? lastProfilesSince;
+  SyncCursor? lastProfilesSince;
 
   @override
-  Future<List<Profile>> pullProfiles({DateTime? since}) async {
+  Future<ChangePage<Profile>> pullProfiles({
+    SyncCursor? since,
+    required int limit,
+  }) async {
     lastProfilesSince = since;
-    final rows =
-        _profiles.values
-            .where(
-              (json) =>
-                  since == null ||
-                  DateTime.parse(json['updated_at'] as String).isAfter(since),
-            )
-            .toList()
-          ..sort(
-            (a, b) => (a['updated_at'] as String).compareTo(
-              b['updated_at'] as String,
-            ),
-          );
-    return [for (final row in rows) profileFromJson(row)];
+    return _page(
+      rows: [
+        for (final json in _profiles.values)
+          (cursor: _cursorOf(json, 'updated_at'), row: profileFromJson(json)),
+      ],
+      since: since,
+      limit: limit,
+    );
   }
 
   @override
@@ -332,24 +362,20 @@ class FakeRemoteLedger implements RemoteLedgerApi {
     _snapshots.add(taken);
   }
 
-  /// Sorted, because the real feed is ordered by `created_at` and the pull
-  /// cursor takes the last row it is given as the new high-water mark. A fake
-  /// that answered in insertion order would let a test pass against an
-  /// ordering the server never produces.
   @override
-  Future<List<EntrySnapshot>> pullEntrySnapshots({
+  Future<ChangePage<EntrySnapshot>> pullEntrySnapshots({
     required String groupId,
-    DateTime? since,
-  }) async =>
-      [
-        for (final snapshot in _snapshots)
-          if (snapshot.groupId == groupId &&
-              (since == null || snapshot.createdAt.isAfter(since)))
-            snapshot,
-      ]..sort((a, b) {
-        final byTime = a.createdAt.compareTo(b.createdAt);
-        return byTime != 0 ? byTime : a.id.compareTo(b.id);
-      });
+    SyncCursor? since,
+    required int limit,
+  }) async => _page(
+    rows: [
+      for (final snapshot in _snapshots)
+        if (snapshot.groupId == groupId)
+          (cursor: SyncCursor(snapshot.createdAt, snapshot.id), row: snapshot),
+    ],
+    since: since,
+    limit: limit,
+  );
 
   /// Records history that arrived from somebody else's device.
   void seedSnapshot(EntrySnapshot snapshot) => _snapshots.add(snapshot);

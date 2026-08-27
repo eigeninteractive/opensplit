@@ -1,7 +1,7 @@
 -- The activity log, and the dormancy jobs that eventually clear a group away.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(26);
+select plan(28);
 
 insert into auth.users (id, instance_id, aud, role, email, raw_user_meta_data,
                         created_at, updated_at)
@@ -295,6 +295,39 @@ select ok(
     where id = '88888888-8888-4888-8888-888888888888'),
   'and so is a backdated one, which otherwise committed a change on the '
   'server that no other device ever received');
+
+-- Profiles carry a cursor too, and it was the one table whose touch trigger
+-- fired on UPDATE alone. `authenticated` holds an INSERT grant here and
+-- profiles_insert admits your own id, so the insert path is a client-reachable
+-- way to set the column the profiles feed cursors on.
+insert into auth.users (id, instance_id, aud, role, email, raw_user_meta_data,
+                        created_at, updated_at)
+values ('99999999-9999-4999-8999-999999999999',
+        '00000000-0000-0000-0000-000000000000', 'authenticated',
+        'authenticated', 'arun@example.com', '{"display_name":"Arun"}',
+        now(), now());
+
+delete from profiles where id = '99999999-9999-4999-8999-999999999999';
+
+insert into profiles (id, display_name, updated_at)
+values ('99999999-9999-4999-8999-999999999999', 'Arun',
+        '3000-01-01T00:00:00Z');
+
+select ok(
+  (select updated_at < '2100-01-01'::timestamptz from profiles
+    where id = '99999999-9999-4999-8999-999999999999'),
+  'a profile inserted with a future timestamp is stamped with server time: '
+  'one row in the year 3000 pinned every co-member''s profiles cursor there, '
+  'and names and payment handles stopped travelling for good');
+
+update profiles set updated_at = '2020-01-01T00:00:00Z'
+ where id = '99999999-9999-4999-8999-999999999999';
+
+select ok(
+  (select updated_at > '2025-01-01'::timestamptz from profiles
+    where id = '99999999-9999-4999-8999-999999999999'),
+  'and a backdated one is too, which would otherwise change a name on the '
+  'server that no other device ever fetched');
 
 set local role authenticated;
 set local "request.jwt.claims" to

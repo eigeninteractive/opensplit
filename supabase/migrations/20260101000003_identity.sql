@@ -94,7 +94,19 @@ begin
 end;
 $$;
 
-create trigger trg_profiles_touch before update on profiles
+-- INSERT as well as UPDATE, and the insert half is the one that matters.
+--
+-- A column default is not a guarantee: `authenticated` holds an INSERT grant on
+-- this table and profiles_insert admits `id = auth.uid()`, so a client that
+-- reaches the insert path can supply its own updated_at. One row stamped in the
+-- year 3000 pins every co-member's profiles cursor there and the feed stops --
+-- names and UPI handles stop travelling, permanently and silently.
+--
+-- handle_new_user creates the row on signup, so today the insert path is only
+-- reachable for an account whose profile has been deleted. That is one row away
+-- from being reachable, and it is the same hole already closed on groups and
+-- members. The server owns this clock on every path or it does not own it.
+create trigger trg_profiles_touch before insert or update on profiles
   for each row execute function touch_profile();
 
 -- ----------------------------------------------------------------------------

@@ -490,7 +490,13 @@ create table entry_events (
 -- The feed is "this group, newest first"; an expense's history is "this entry,
 -- in order". Same trailing id as the entries cursor, and for the same reason: a
 -- batch written in one transaction can share a timestamp.
-create index idx_entry_events_group on entry_events (group_id, created_at desc, id);
+-- Ascending, matching the order the activity feed is read in: the client asks
+-- for `(created_at, id)` strictly after its cursor and orders both ascending.
+-- Against a `(created_at desc, id asc)` index that ordering is mixed relative
+-- to the query, so neither a forward nor a backward scan satisfies it and
+-- Postgres sorts instead -- on the one feed that a device seeing an active
+-- group for the first time reads in its entirety.
+create index idx_entry_events_group on entry_events (group_id, created_at, id);
 create index idx_entry_events_entry on entry_events (entry_id, created_at);
 
 alter table entry_events enable row level security;

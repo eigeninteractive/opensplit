@@ -347,9 +347,15 @@ class Outbox extends Table {
 /// Per-group delta-sync position. Client-only.
 @DataClassName('SyncCursorRow')
 class SyncCursors extends Table {
-  TextColumn get groupId => text()();
+  /// Which feed this cursor belongs to, as named by [ChangeFeed.key].
+  ///
+  /// A feed name rather than a group id, which is what this column used to be
+  /// called while already holding `events:<id>` and `__profiles__` alongside
+  /// bare group ids. Three naming schemes in one primary key is how two feeds
+  /// come to share a row.
+  TextColumn get feed => text()();
 
-  /// Highest server `updated_at` already pulled. Null means never synced.
+  /// Highest server timestamp already pulled. Null means never synced.
   DateTimeColumn get cursor => dateTime().nullable()();
 
   /// Id of the last row consumed at exactly [cursor].
@@ -364,5 +370,5 @@ class SyncCursors extends Table {
   DateTimeColumn get lastSyncedAt => dateTime().nullable()();
 
   @override
-  Set<Column> get primaryKey => {groupId};
+  Set<Column> get primaryKey => {feed};
 }

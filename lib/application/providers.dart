@@ -103,7 +103,11 @@ AppDatabase appDatabase(Ref ref) {
 /// and nothing recorded in the meantime is lost. The queue coalesces per row,
 /// so its size is bounded by how many rows were touched, not how many times.
 @Riverpod(keepAlive: true)
-OutboxQueue outboxQueue(Ref ref) => OutboxQueue(ref.watch(appDatabaseProvider));
+OutboxQueue outboxQueue(Ref ref) {
+  final queue = OutboxQueue(ref.watch(appDatabaseProvider));
+  ref.onDispose(queue.dispose);
+  return queue;
+}
 
 /// Writes the server refused outright, and will not accept on a retry.
 ///
@@ -701,6 +705,9 @@ SyncScheduler syncScheduler(Ref ref) {
   final scheduler = SyncScheduler(
     sync: () => ref.read(syncControllerProvider.notifier).syncAll(),
     online: ref.watch(networkSignalProvider).changes,
+    // Every local write, from every screen, through one wire. See
+    // [OutboxQueue.queued] for why this is not a sync call at each save site.
+    writes: ref.watch(outboxQueueProvider).queued,
   );
   ref.onDispose(scheduler.dispose);
   return scheduler;

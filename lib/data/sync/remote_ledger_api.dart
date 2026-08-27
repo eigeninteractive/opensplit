@@ -3,23 +3,8 @@ import '../../domain/models/entry_snapshot.dart';
 import '../../domain/models/group.dart';
 import '../../domain/models/member.dart';
 import '../../domain/models/profile.dart';
+import 'change_feed.dart';
 import 'sync_cursor.dart';
-
-/// One page of a group's delta feed.
-class EntryDelta {
-  const EntryDelta({
-    required this.entries,
-    required this.nextCursor,
-    required this.hasMore,
-  });
-
-  /// Includes soft-deleted entries. A deletion is a delta like any other; if it
-  /// were filtered out, a deleted expense would live forever on every device
-  /// that had already synced it.
-  final List<Entry> entries;
-  final SyncCursor? nextCursor;
-  final bool hasMore;
-}
 
 /// Raised when the server rejects a write.
 class RemoteRejected implements Exception {
@@ -56,11 +41,15 @@ abstract interface class RemoteLedgerApi {
   /// Soft-deletes an entry, returning it with the server's new `updatedAt`.
   Future<Entry> deleteEntry(String entryId);
 
-  /// Rows written strictly after [cursor], ordered by `(updated_at, id)`.
-  Future<EntryDelta> pullEntries({
+  /// This group's expenses, changed strictly after [since].
+  ///
+  /// Includes soft-deleted rows. A deletion is a change like any other; filter
+  /// it out and a deleted expense lives forever on every device that had
+  /// already synced it.
+  Future<ChangePage<Entry>> pullEntries({
     required String groupId,
-    SyncCursor? cursor,
-    int limit = 200,
+    SyncCursor? since,
+    required int limit,
   });
 
   /// Every group this account is currently a member of.
@@ -73,11 +62,34 @@ abstract interface class RemoteLedgerApi {
   ///
   /// Groups left behind are excluded. Leaving is the one way membership ends,
   /// and rediscovering a group on the next sync would undo it.
+  ///
+  /// Deliberately not a feed, and the one thing here that answers "which"
+  /// rather than "what changed": a feed needs a cursor, a cursor needs
+  /// somewhere to start, and on the device this exists for there is nothing
+  /// local to start from.
   Future<List<String>> pullMyGroupIds();
 
-  Future<Group?> pullGroup(String groupId);
+  /// One group's own row, if it changed strictly after [since].
+  ///
+  /// A page of at most one row, which is worth stating because it looks like
+  /// ceremony and is not. Routed through the same cursor as everything else, a
+  /// settled group costs an empty answer per sync instead of refetching its row
+  /// — and syncs are frequent now that every write triggers one.
+  Future<ChangePage<Group>> pullGroup({
+    required String groupId,
+    SyncCursor? since,
+    required int limit,
+  });
 
-  Future<List<Member>> pullMembers(String groupId);
+  /// This group's members, changed strictly after [since].
+  ///
+  /// Includes members who have left: `left_at` is a column, so leaving is a
+  /// change to pull rather than a row to stop sending.
+  Future<ChangePage<Member>> pullMembers({
+    required String groupId,
+    SyncCursor? since,
+    required int limit,
+  });
 
   /// Returns the stored row, so the caller can adopt the server's
   /// `updated_at` instead of leaving a device clock in the version column.
@@ -94,7 +106,14 @@ abstract interface class RemoteLedgerApi {
   /// Now the name lives on the account and this pull carries it, with the same
   /// `updated_at` cursor everything else uses so a sync fetches only what
   /// actually changed.
-  Future<List<Profile>> pullProfiles({DateTime? since});
+  ///
+  /// Account-wide rather than per group, and correct because `profiles_read`
+  /// already scopes it: your own row plus anybody sharing a group with you. Per
+  /// group, somebody in three of your groups was fetched three times.
+  Future<ChangePage<Profile>> pullProfiles({
+    SyncCursor? since,
+    required int limit,
+  });
 
   /// Writes your own name and payment handle. The server refuses any other row.
   Future<Profile> pushProfile(Profile profile);
@@ -113,9 +132,14 @@ abstract interface class RemoteLedgerApi {
   /// unexpressible now: there is no diff on the wire, only the expense's own
   /// shape at each moment, and the difference between consecutive shapes is
   /// worked out on the device that reads them.
-  Future<List<EntrySnapshot>> pullEntrySnapshots({
+  ///
+  /// Cursored on `(created_at, id)` rather than `(updated_at, id)`, and that is
+  /// the only way this feed differs from the others: these rows are append-only
+  /// and never revised, so there is no second write to order against the first.
+  Future<ChangePage<EntrySnapshot>> pullEntrySnapshots({
     required String groupId,
-    DateTime? since,
+    SyncCursor? since,
+    required int limit,
   });
 
   /// Exchange rates published on or after [since] (`yyyy-MM-dd`).

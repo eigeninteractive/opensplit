@@ -5,6 +5,7 @@ import '../../domain/models/entry_snapshot.dart';
 import '../../domain/models/group.dart';
 import '../../domain/models/member.dart';
 import '../../domain/models/profile.dart';
+import 'change_feed.dart';
 import 'remote_ledger_api.dart';
 import 'sync_cursor.dart';
 import 'wire.dart';
@@ -21,15 +22,89 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
 
   final SupabaseClient _client;
 
-  /// Rows per request on every unbounded sweep.
+  /// Rows per request on the one sweep that still pages itself.
   ///
   /// Comfortably under PostgREST's `max_rows`, which is 1000 by default and is
   /// a silent ceiling: a larger request is not an error, it is a short answer,
-  /// with nothing in the response to say it was cut. Anything here that reads
-  /// "everything since a cursor" has to page, because the alternative is a
-  /// cursor that advances by only as much as arrived and a device that takes
-  /// days to catch up — which is exactly what the rate table did.
+  /// with nothing in the response to say it was cut. Every change feed now
+  /// takes its page size from the caller and reports `hasMore`, so the engine
+  /// does the paging; rates are the exception, being a high-water mark rather
+  /// than a cursor.
   static const int _pageSize = 500;
+
+  /// One keyset page of a change feed.
+  ///
+  /// Every feed in the schema is shaped for this: `(group_id, updated_at, id)`
+  /// on entries and members, `(updated_at, id)` on groups and profiles,
+  /// `(group_id, created_at, id)` on activity. One implementation, so a feed
+  /// cannot quietly acquire its own paging semantics.
+  ///
+  /// Keyset rather than `range()`, and that is a correctness matter rather than
+  /// a performance one. Offset paging over `<time> > since` re-sorts under its
+  /// own feet: bump a profile mid-sweep and it moves to the end of the
+  /// ordering, shifting every row after its old position back by one, so the
+  /// row that lands on the next offset boundary is never read — and the cursor
+  /// advances past it anyway. That skip was permanent.
+  Future<ChangePage<T>> _keyset<T>({
+    required String table,
+    required SyncCursor? since,
+    required int limit,
+    required T Function(Map<String, dynamic>) parse,
+    String columns = '*',
+    String timeColumn = 'updated_at',
+    Map<String, String> equals = const {},
+  }) async {
+    try {
+      var query = _client.from(table).select(columns);
+      for (final filter in equals.entries) {
+        query = query.eq(filter.key, filter.value);
+      }
+
+      if (since != null) {
+        // Row-value comparison, spelled out because PostgREST has no syntax for
+        // `(updated_at, id) > (?, ?)`. Anything strictly after the pair.
+        //
+        // Both values are double-quoted. Inside an `or=(...)` group PostgREST
+        // treats `.` `,` `:` `(` `)` as structural, and an ISO-8601 timestamp
+        // is full of them — unquoted, the filter parses into something else
+        // and quietly matches nothing, so paging stops after the first page
+        // and the rest of the feed never arrives.
+        final at = '"${since.at.toUtc().toIso8601String()}"';
+        query = query.or(
+          '$timeColumn.gt.$at,and($timeColumn.eq.$at,id.gt."${since.id}")',
+        );
+      }
+
+      // `ascending` must be stated: supabase_dart's order() defaults to
+      // DESCENDING, which silently reverses the feed. The cursor then walks
+      // backwards from the newest row, re-reading what it has already applied
+      // and never reaching the oldest — a group would sync its two most recent
+      // expenses and then quietly stop.
+      final rows = await query
+          .order(timeColumn, ascending: true)
+          .order('id', ascending: true)
+          // One extra row purely to answer hasMore without a count.
+          .limit(limit + 1);
+
+      final page = rows.take(limit).toList();
+
+      return ChangePage(
+        rows: [for (final row in page) parse(row)],
+        // Read off the wire rather than the parsed model: the timestamp is
+        // `not null` in the schema and nullable in the domain models, and a
+        // cursor is the one place that must not fall back to a guess.
+        cursor: page.isEmpty
+            ? null
+            : SyncCursor(
+                DateTime.parse(page.last[timeColumn] as String),
+                page.last['id'] as String,
+              ),
+        hasMore: rows.length > limit,
+      );
+    } on PostgrestException catch (e) {
+      throw _translate(e);
+    }
+  }
 
   /// Embedded selects, aliased so the payload matches the wire codec.
   static const String _entryColumns =
@@ -97,58 +172,21 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
   }
 
   @override
-  Future<EntryDelta> pullEntries({
+  Future<ChangePage<Entry>> pullEntries({
     required String groupId,
-    SyncCursor? cursor,
-    int limit = 200,
-  }) async {
-    try {
-      var query = _client
-          .from('entries')
-          .select(_entryColumns)
-          .eq('group_id', groupId);
-
-      if (cursor != null) {
-        // Row-value comparison, spelled out because PostgREST has no syntax for
-        // `(updated_at, id) > (?, ?)`. Anything strictly after the pair.
-        //
-        // Both values are double-quoted. Inside an `or=(...)` group PostgREST
-        // treats `.` `,` `:` `(` `)` as structural, and an ISO-8601 timestamp
-        // is full of them — unquoted, the filter parses into something else
-        // and quietly matches nothing, so paging stops after the first page
-        // and the rest of the group never arrives.
-        final at = '"${cursor.updatedAt.toUtc().toIso8601String()}"';
-        query = query.or(
-          'updated_at.gt.$at,and(updated_at.eq.$at,id.gt."${cursor.id}")',
-        );
-      }
-
-      // Soft-deleted rows are deliberately included: a deletion is a delta, and
-      // filtering it out would strand the row on every device that had it.
-      // `ascending` must be stated: supabase_dart's order() defaults to
-      // DESCENDING, which silently reverses the feed. The cursor then walks
-      // backwards from the newest row, re-reading what it has already applied
-      // and never reaching the oldest — a group would sync its two most recent
-      // expenses and then quietly stop.
-      final rows = await query
-          .order('updated_at', ascending: true)
-          .order('id', ascending: true)
-          .limit(limit + 1);
-
-      final parsed = [for (final row in rows.take(limit)) entryFromJson(row)];
-
-      return EntryDelta(
-        entries: parsed,
-        nextCursor: parsed.isEmpty
-            ? cursor
-            : SyncCursor(parsed.last.updatedAt, parsed.last.id),
-        // One extra row was requested purely to answer this without a count.
-        hasMore: rows.length > limit,
+    SyncCursor? since,
+    required int limit,
+  }) =>
+      // Soft-deleted rows are deliberately included: a deletion is a change,
+      // and filtering it out would strand the row on every device that has it.
+      _keyset(
+        table: 'entries',
+        columns: _entryColumns,
+        equals: {'group_id': groupId},
+        since: since,
+        limit: limit,
+        parse: entryFromJson,
       );
-    } on PostgrestException catch (e) {
-      throw _translate(e);
-    }
-  }
 
   @override
   Future<List<String>> pullMyGroupIds() async {
@@ -173,20 +211,30 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
   }
 
   @override
-  Future<Group?> pullGroup(String groupId) async {
-    final row = await _client
-        .from('groups')
-        .select()
-        .eq('id', groupId)
-        .maybeSingle();
-    return row == null ? null : groupFromJson(row);
-  }
+  Future<ChangePage<Group>> pullGroup({
+    required String groupId,
+    SyncCursor? since,
+    required int limit,
+  }) => _keyset(
+    table: 'groups',
+    equals: {'id': groupId},
+    since: since,
+    limit: limit,
+    parse: groupFromJson,
+  );
 
   @override
-  Future<List<Member>> pullMembers(String groupId) async {
-    final rows = await _client.from('members').select().eq('group_id', groupId);
-    return [for (final row in rows) memberFromJson(row)];
-  }
+  Future<ChangePage<Member>> pullMembers({
+    required String groupId,
+    SyncCursor? since,
+    required int limit,
+  }) => _keyset(
+    table: 'members',
+    equals: {'group_id': groupId},
+    since: since,
+    limit: limit,
+    parse: memberFromJson,
+  );
 
   @override
   Future<Group> pushGroup(Group group) async {
@@ -221,38 +269,19 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
   }
 
   @override
-  Future<List<Profile>> pullProfiles({DateTime? since}) async {
-    // No group filter and none needed: profiles_read already limits this to
-    // your own row plus anybody sharing a group with you, so asking for
-    // "everything I can see" returns exactly the set that matters. Doing it
-    // per group would fetch the same person once per group they are in.
-    final profiles = <Profile>[];
-
-    // Paged by offset rather than by advancing the cursor, and ordered by
-    // (updated_at, id) so the offsets mean something. Advancing the cursor
-    // between pages would need the same row-value comparison pullEntries
-    // spells out, because two profiles genuinely can share an updated_at —
-    // redeem_invite writes a profile and a member in one transaction.
-    for (var offset = 0; ; offset += _pageSize) {
-      var query = _client.from('profiles').select();
-      // UTC and ISO, matching how the entries cursor is written. A local-zone
-      // string here would silently shift the boundary by the offset and skip
-      // every change made inside it.
-      if (since != null) {
-        query = query.gt('updated_at', since.toUtc().toIso8601String());
-      }
-
-      final rows = await query
-          .order('updated_at', ascending: true)
-          .order('id', ascending: true)
-          .range(offset, offset + _pageSize - 1);
-
-      profiles.addAll([for (final row in rows) profileFromJson(row)]);
-      if (rows.length < _pageSize) break;
-    }
-
-    return profiles;
-  }
+  Future<ChangePage<Profile>> pullProfiles({
+    SyncCursor? since,
+    required int limit,
+  }) =>
+      // No group filter and none needed: profiles_read already limits this to
+      // your own row plus anybody sharing a group with you, so asking for
+      // "everything I can see" returns exactly the set that matters.
+      _keyset(
+        table: 'profiles',
+        since: since,
+        limit: limit,
+        parse: profileFromJson,
+      );
 
   @override
   Future<Profile> pushProfile(Profile profile) async {
@@ -269,33 +298,18 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
   }
 
   @override
-  Future<List<EntrySnapshot>> pullEntrySnapshots({
+  Future<ChangePage<EntrySnapshot>> pullEntrySnapshots({
     required String groupId,
-    DateTime? since,
-  }) async {
-    final snapshots = <EntrySnapshot>[];
-
-    // Paged, and it matters most here: a device seeing an active group for the
-    // first time asks for its entire history at once. Truncated at max_rows,
-    // the high-water mark would advance only as far as the page reached and the
-    // feed would fill in a thousand rows per sync.
-    for (var offset = 0; ; offset += _pageSize) {
-      var query = _client.from('entry_events').select().eq('group_id', groupId);
-      if (since != null) {
-        query = query.gt('created_at', since.toUtc().toIso8601String());
-      }
-
-      final rows = await query
-          .order('created_at', ascending: true)
-          .order('id', ascending: true)
-          .range(offset, offset + _pageSize - 1);
-
-      snapshots.addAll([for (final row in rows) entrySnapshotFromJson(row)]);
-      if (rows.length < _pageSize) break;
-    }
-
-    return snapshots;
-  }
+    SyncCursor? since,
+    required int limit,
+  }) => _keyset(
+    table: 'entry_events',
+    timeColumn: 'created_at',
+    equals: {'group_id': groupId},
+    since: since,
+    limit: limit,
+    parse: entrySnapshotFromJson,
+  );
 
   @override
   Future<List<RemoteFxRate>> pullFxRates({required String since}) async {

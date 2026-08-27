@@ -1,14 +1,13 @@
-import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../../domain/models/entry.dart';
 import '../local/database.dart';
-import '../local/entry_writer.dart';
 import '../repositories/mappers.dart';
+import 'change_feed.dart';
+import 'feeds.dart';
 import 'outbox_queue.dart';
 import 'remote_ledger_api.dart';
 import 'sync_cursor.dart';
-import 'wire.dart' show memberAmountsToJson;
 
 /// What one sync run did.
 class SyncReport {
@@ -144,7 +143,44 @@ class SyncEngine {
   /// table was swept three times, to no effect after the first.
   Future<void> pullShared() async {
     await pullFxRates();
-    await pullProfiles();
+    await drain(ProfileFeed(api, db));
+  }
+
+  /// Runs one feed to exhaustion.
+  ///
+  /// The entire pull engine. Every feed is the same shape -- see [ChangeFeed] --
+  /// so the parts that are easy to get wrong are written once here rather than
+  /// five times with five sets of mistakes.
+  ///
+  /// Two orderings in six lines are load-bearing. The cursor is written *after*
+  /// the page is applied, so a crash or a dropped connection re-reads a page
+  /// rather than skipping it: every apply is idempotent, and re-reading costs a
+  /// request while skipping costs an expense. And the cursor comes from the
+  /// page, not from the rows -- an adapter reports where the feed stands, which
+  /// is the only thing that knows how its own ordering works.
+  ///
+  /// Terminating is not an assumption either. A page that reports more but
+  /// carries nothing would spin forever, so an empty page ends the loop
+  /// regardless of what it claims.
+  Future<int> drain<T>(ChangeFeed<T> feed) async {
+    var cursor = await _readCursor(feed.key);
+    var applied = 0;
+
+    while (true) {
+      final page = await feed.fetch(since: cursor, limit: pageSize);
+      if (page.rows.isEmpty) break;
+
+      applied += await feed.apply(page.rows);
+
+      final next = page.cursor;
+      if (next == null) break;
+      cursor = next;
+      await _writeCursor(feed.key, next);
+
+      if (!page.hasMore) break;
+    }
+
+    return applied;
   }
 
   /// A backstop on [push], not the thing that ends it — see there.
@@ -157,7 +193,7 @@ class SyncEngine {
   /// that many rows and left the rest for the next sync, and that was not
   /// merely slow: [pull] runs immediately afterwards, and a row still waiting
   /// to be pushed carries a *device* clock in `updated_at`, which is what
-  /// `_applyRemote` then compares against the server's. A long offline session
+  /// [EntryFeed] then compares against the server's. A long offline session
   /// could have an edit overwritten by the pull that followed the push which
   /// had not reached it — silently, and without even a dead letter to show for
   /// it, since the item was never attempted.
@@ -257,202 +293,28 @@ class SyncEngine {
     }
   }
 
-  /// Applies every change made since the stored cursor.
-  /// The name and payment handle of everybody you share a group with.
-  ///
-  /// Not per group: `profiles_read` on the server already scopes this to your
-  /// own row plus your co-members, so one request answers for every group at
-  /// once and a person in three of your groups is fetched once rather than
-  /// three times.
-  ///
-  /// Cursored on `updated_at` like everything else, under a reserved group id
-  /// — profiles are not group-scoped, but the cursor table is keyed that way
-  /// and inventing a second table for one row would be worse.
-  static const profilesCursorKey = '__profiles__';
-
-  Future<void> pullProfiles() async {
-    final row = await (db.select(
-      db.syncCursors,
-    )..where((t) => t.groupId.equals(profilesCursorKey))).getSingleOrNull();
-
-    final profiles = await api.pullProfiles(since: row?.cursor);
-    if (profiles.isEmpty) return;
-
-    await db.batch((batch) {
-      for (final profile in profiles) {
-        batch.insert(
-          db.profiles,
-          ProfilesCompanion.insert(
-            id: profile.id,
-            displayName: Value(profile.displayName),
-            avatarUrl: Value(profile.avatarUrl),
-            upiVpa: Value(profile.upiVpa),
-          ),
-          onConflict: DoUpdate(
-            (_) => ProfilesCompanion(
-              displayName: Value(profile.displayName),
-              avatarUrl: Value(profile.avatarUrl),
-              upiVpa: Value(profile.upiVpa),
-            ),
-          ),
-        );
-      }
-    });
-
-    // The server orders by updated_at, so the last row carries the newest.
-    // Stored as the server reported it: comparing a device clock against a
-    // server one is exactly what this column exists to avoid.
-    final newest = profiles.last.updatedAt;
-    if (newest != null) {
-      await db
-          .into(db.syncCursors)
-          .insertOnConflictUpdate(
-            SyncCursorsCompanion.insert(
-              groupId: profilesCursorKey,
-              cursor: Value(newest),
-              lastSyncedAt: Value(_clock()),
-            ),
-          );
-    }
-  }
-
-  /// Where a group's activity has been pulled up to.
-  ///
-  /// Its own cursor row, rather than `max(created_at)` over the local table.
-  /// The local table also holds this device's provisional snapshots, stamped
-  /// with a device clock -- often a little ahead of the server's -- so asking
-  /// for everything after the newest local row would skip whatever a co-member
-  /// recorded in between, permanently.
-  ///
-  /// Keyed off the group id so it cannot collide with the entries cursor, which
-  /// uses the bare id, or with the profiles one.
-  static String snapshotsCursorKey(String groupId) => 'events:$groupId';
-
-  /// The group's activity: what each expense looked like after each change.
-  ///
-  /// Cursored on `created_at` alone rather than the `(updated_at, id)` pair the
-  /// entries feed uses, and it can be: these rows are append-only and never
-  /// revised, so there is no second write to order against the first. The
-  /// server owns that column outright -- no client holds a grant on the table
-  /// at all -- so nothing can stamp a row in the future and pin every member's
-  /// cursor there.
-  Future<void> _pullEntrySnapshots(String groupId) async {
-    final key = snapshotsCursorKey(groupId);
-    final row = await (db.select(
-      db.syncCursors,
-    )..where((t) => t.groupId.equals(key))).getSingleOrNull();
-
-    final snapshots = await api.pullEntrySnapshots(
-      groupId: groupId,
-      since: row?.cursor,
-    );
-    if (snapshots.isEmpty) return;
-
-    await db.transaction(() async {
-      await db.batch((batch) {
-        for (final snapshot in snapshots) {
-          batch.insert(
-            db.entrySnapshots,
-            EntrySnapshotsCompanion.insert(
-              id: snapshot.id,
-              entryId: snapshot.entryId,
-              groupId: snapshot.groupId,
-              actorId: Value(snapshot.actorId),
-              createdAt: snapshot.createdAt,
-              description: snapshot.description,
-              currency: snapshot.currency,
-              amountMinor: snapshot.amountMinor,
-              entryDate: snapshot.entryDate,
-              splitKind: snapshot.splitKind,
-              categoryId: Value(snapshot.categoryId),
-              notes: Value(snapshot.notes),
-              deletedAt: Value(snapshot.deletedAt),
-              payers: jsonEncode(memberAmountsToJson(snapshot.payers)),
-              shares: jsonEncode(memberAmountsToJson(snapshot.shares)),
-            ),
-            // A snapshot is never revised, so a row already here is the same
-            // row arriving twice.
-            mode: InsertMode.insertOrIgnore,
-          );
-        }
-      });
-
-      // The server's account of these expenses has arrived, so this device's
-      // guesses about them are spent.
-      //
-      // Superseded rather than merged, and per entry rather than per row: five
-      // edits made offline are five provisional lines here and one snapshot on
-      // the server, which deduped them. Keeping ours alongside would show the
-      // same edit twice, in two voices, one of which nobody else can see.
-      //
-      // Scoped to the entries actually pulled, so a provisional line for an
-      // expense whose push was refused outright stays exactly where it is --
-      // which is the one case where it is the only record there is.
-      final touched = {for (final snapshot in snapshots) snapshot.entryId};
-      await (db.delete(db.entrySnapshots)
-            ..where((t) => t.entryId.isIn(touched) & t.isProvisional))
-          .go();
-    });
-
-    // The server orders by created_at ascending, so the last row is the newest
-    // it has. Stored as the server reported it, never as a local clock.
-    await db
-        .into(db.syncCursors)
-        .insertOnConflictUpdate(
-          SyncCursorsCompanion.insert(
-            groupId: key,
-            cursor: Value(snapshots.last.createdAt),
-            lastSyncedAt: Value(_clock()),
-          ),
-        );
-  }
-
   /// Applies one group's changes: its row, its members, its entries and its
   /// activity.
   ///
-  /// Deliberately does NOT pull rates or profiles — see [pullShared], which the
+  /// The order is the local foreign key graph, and it is not optional. Members
+  /// reference the group; an entry's payers and shares reference members; a
+  /// snapshot references the entry it describes and the member who made the
+  /// change. Pulling activity before the expenses it talks about fails the
+  /// constraint and takes the whole sync down with it -- which, on a device
+  /// seeing the group for the first time, is every row there is.
+  ///
+  /// Deliberately does NOT pull rates or profiles -- see [pullShared], which the
   /// callers run once per sync rather than once per group.
+  ///
+  /// Counts entries only. It is the number the callers report and the only one
+  /// that means "something happened to the money"; a renamed group is a change
+  /// nobody needs counted.
   Future<int> pull(String groupId) async {
-    await _pullGroupAndMembers(groupId);
-
-    var cursor = await _readCursor(groupId);
-    var applied = 0;
-
-    while (true) {
-      final page = await api.pullEntries(
-        groupId: groupId,
-        cursor: cursor,
-        limit: pageSize,
-      );
-
-      // One transaction for the page, not one per row. Each _applyRemote
-      // writes an entry and replaces its payers and shares, so a 200-row page
-      // was 200 separate commits — and SQLite's cost here is dominated by the
-      // commit, not the statements. Drift nests the inner transactions as
-      // savepoints, so this changes the number of fsyncs, not the semantics.
-      await db.transaction(() async {
-        for (final entry in page.entries) {
-          if (await _applyRemote(entry)) applied++;
-        }
-      });
-
-      if (page.nextCursor != null) {
-        cursor = page.nextCursor;
-        await _writeCursor(groupId, cursor!);
-      }
-      if (!page.hasMore) break;
-      // A page that reports more but advances nothing would spin forever.
-      if (page.entries.isEmpty) break;
-    }
-
-    // Last, and it has to be. Every event references the entry it describes,
-    // and foreign keys are enforced on this database — so pulling the feed
-    // before the entries it talks about fails the constraint and takes the
-    // whole sync down with it. On a device seeing the group for the first
-    // time, that is every event there is.
-    await _pullEntrySnapshots(groupId);
-
-    return applied;
+    await drain(GroupFeed(api, db, groupId));
+    await drain(MemberFeed(api, db, groupId));
+    final entries = await drain(EntryFeed(api, db, groupId));
+    await drain(SnapshotFeed(api, db, groupId));
+    return entries;
   }
 
   /// Mirrors published exchange rates onto the device.
@@ -510,90 +372,6 @@ class SyncEngine {
       '${date.month.toString().padLeft(2, '0')}-'
       '${date.day.toString().padLeft(2, '0')}';
 
-  /// Applies the group row and its members, newest write winning.
-  ///
-  /// These are refetched whole rather than paged by cursor — a group has one
-  /// row and a handful of members, so a delta feed would cost more than it
-  /// saves. What they are NOT is applied unconditionally: before these tables
-  /// had an `updated_at`, this method overwrote whatever the device held on
-  /// every sync, so a rename made offline was silently discarded by the next
-  /// pull that happened to run before the outbox drained.
-  Future<void> _pullGroupAndMembers(String groupId) async {
-    final group = await api.pullGroup(groupId);
-    final localGroup = await (db.select(
-      db.groups,
-    )..where((t) => t.id.equals(groupId))).getSingleOrNull();
-    if (group != null && _remoteWins(localGroup?.updatedAt, group.updatedAt)) {
-      await db
-          .into(db.groups)
-          .insertOnConflictUpdate(
-            GroupsCompanion.insert(
-              id: group.id,
-              name: group.name,
-              defaultCurrency: group.defaultCurrency,
-              isDirect: Value(group.isDirect),
-              simplifyDebts: Value(group.simplifyDebts),
-              createdBy: Value(group.createdBy),
-              createdAt: group.createdAt,
-              archivedAt: Value(group.archivedAt),
-              updatedAt: Value(group.updatedAt ?? _clock()),
-            ),
-          );
-    }
-
-    // Members must land before entries: an entry's payers and shares reference
-    // them, and the foreign keys are real.
-    for (final member in await api.pullMembers(groupId)) {
-      final localMember = await (db.select(
-        db.members,
-      )..where((t) => t.id.equals(member.id))).getSingleOrNull();
-      if (!_remoteWins(localMember?.updatedAt, member.updatedAt)) continue;
-      await db
-          .into(db.members)
-          .insertOnConflictUpdate(
-            MembersCompanion.insert(
-              id: member.id,
-              groupId: member.groupId,
-              profileId: Value(member.profileId),
-              displayName: member.displayName,
-              joinedAt: member.joinedAt,
-              leftAt: Value(member.leftAt),
-              upiVpa: Value(member.upiVpa),
-              updatedAt: Value(member.updatedAt ?? _clock()),
-            ),
-          );
-    }
-  }
-
-  /// Whether a remote row should replace the local one.
-  ///
-  /// Both sides are server timestamps once a row has been pushed, so this is a
-  /// genuine last-write-wins rather than a race between two devices' clocks.
-  /// A local row with no timestamp has never reached the server and cannot be
-  /// the newer of the two; a remote row with none came from a backend that
-  /// predates versioning, and applying it matches the old behaviour.
-  static bool _remoteWins(DateTime? local, DateTime? remote) {
-    if (local == null || remote == null) return true;
-    return local.isBefore(remote);
-  }
-
-  /// Writes a remote entry unless the local copy is already at least as new.
-  ///
-  /// Both sides of this comparison are server timestamps, so it is a genuine
-  /// last-write-wins and not a race between two devices' clocks.
-  Future<bool> _applyRemote(Entry remote) async {
-    final local = await (db.select(
-      db.entries,
-    )..where((t) => t.id.equals(remote.id))).getSingleOrNull();
-
-    if (local != null && !local.updatedAt.isBefore(remote.updatedAt)) {
-      return false;
-    }
-
-    await writeEntryLocally(db, remote);
-    return true;
-  }
-
   Future<Entry?> _loadEntry(String entryId) async {
     final row = await (db.select(
       db.entries,
@@ -616,21 +394,23 @@ class SyncEngine {
     );
   }
 
-  Future<SyncCursor?> _readCursor(String groupId) async {
+  Future<SyncCursor?> _readCursor(String feed) async {
     final row = await (db.select(
       db.syncCursors,
-    )..where((t) => t.groupId.equals(groupId))).getSingleOrNull();
-    if (row?.cursor == null || row?.cursorId == null) return null;
-    return SyncCursor(row!.cursor!, row.cursorId!);
+    )..where((t) => t.feed.equals(feed))).getSingleOrNull();
+    final at = row?.cursor;
+    final id = row?.cursorId;
+    if (at == null || id == null) return null;
+    return SyncCursor(at, id);
   }
 
-  Future<void> _writeCursor(String groupId, SyncCursor cursor) async {
+  Future<void> _writeCursor(String feed, SyncCursor cursor) async {
     await db
         .into(db.syncCursors)
         .insertOnConflictUpdate(
           SyncCursorsCompanion.insert(
-            groupId: groupId,
-            cursor: Value(cursor.updatedAt),
+            feed: feed,
+            cursor: Value(cursor.at),
             cursorId: Value(cursor.id),
             lastSyncedAt: Value(_clock()),
           ),

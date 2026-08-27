@@ -113,7 +113,9 @@ void main() {
         );
     await db
         .into(db.syncCursors)
-        .insert(SyncCursorsCompanion.insert(groupId: 'g1', cursor: Value(now)));
+        .insert(
+          SyncCursorsCompanion.insert(feed: 'entries:g1', cursor: Value(now)),
+        );
     await OutboxQueue(db).enqueue(OutboxTarget.entry, 'e1');
   }
 

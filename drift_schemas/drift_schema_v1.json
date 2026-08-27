@@ -1243,8 +1243,8 @@
         "was_declared_in_moor": false,
         "columns": [
           {
-            "name": "group_id",
-            "getter_name": "groupId",
+            "name": "feed",
+            "getter_name": "feed",
             "moor_type": "string",
             "nullable": false,
             "customConstraints": null,
@@ -1287,7 +1287,7 @@
         "without_rowid": false,
         "constraints": [],
         "explicit_pk": [
-          "group_id"
+          "feed"
         ]
       }
     }
@@ -1397,7 +1397,7 @@
       "sql": [
         {
           "dialect": "sqlite",
-          "sql": "CREATE TABLE IF NOT EXISTS \"sync_cursors\" (\"group_id\" TEXT NOT NULL, \"cursor\" INTEGER NULL, \"cursor_id\" TEXT NULL, \"last_synced_at\" INTEGER NULL, PRIMARY KEY (\"group_id\"));"
+          "sql": "CREATE TABLE IF NOT EXISTS \"sync_cursors\" (\"feed\" TEXT NOT NULL, \"cursor\" INTEGER NULL, \"cursor_id\" TEXT NULL, \"last_synced_at\" INTEGER NULL, PRIMARY KEY (\"feed\"));"
         }
       ]
     }

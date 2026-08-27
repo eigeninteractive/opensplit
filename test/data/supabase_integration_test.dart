@@ -453,10 +453,21 @@ void main() {
       await stranger.auth.signInAnonymously();
       final strangerApi = SupabaseLedgerApi(stranger);
 
-      expect(await strangerApi.pullGroup(created.group.id), isNull);
-      expect(await strangerApi.pullMembers(created.group.id), isEmpty);
-      final delta = await strangerApi.pullEntries(groupId: created.group.id);
-      expect(delta.entries, isEmpty);
+      final group = await strangerApi.pullGroup(
+        groupId: created.group.id,
+        limit: 200,
+      );
+      expect(group.rows, isEmpty);
+      final members = await strangerApi.pullMembers(
+        groupId: created.group.id,
+        limit: 200,
+      );
+      expect(members.rows, isEmpty);
+      final delta = await strangerApi.pullEntries(
+        groupId: created.group.id,
+        limit: 200,
+      );
+      expect(delta.rows, isEmpty);
     });
 
     test('a second device finds the groups the account belongs to', () async {

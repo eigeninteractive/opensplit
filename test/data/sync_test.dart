@@ -5,6 +5,7 @@ import 'package:opensplit/data/repositories/drift_activity_repository.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';
 import 'package:opensplit/data/repositories/drift_profile_repository.dart';
+import 'package:opensplit/data/sync/feeds.dart';
 import 'package:opensplit/data/sync/outbox_queue.dart';
 import 'package:opensplit/data/sync/sync_engine.dart';
 import 'package:opensplit/domain/balance/balance_fold.dart';
@@ -579,7 +580,8 @@ void main() {
       expect(
         await a.outbox.pendingCount(),
         9,
-        reason: 'group + 3 members + 5 entries. Activity is not queued at '
+        reason:
+            'group + 3 members + 5 entries. Activity is not queued at '
             'all any more: the server writes it from the expense it commits',
       );
 
@@ -909,8 +911,9 @@ void main() {
       // The server's own view, read before anything else touches it: the
       // rename has to have landed, and the claim has to have survived it.
       final onServer = (await server.pullMembers(
-        created.group.id,
-      )).firstWhere((m) => m.id == priya.id);
+        groupId: created.group.id,
+        limit: 500,
+      )).rows.firstWhere((m) => m.id == priya.id);
       expect(onServer.displayName, 'Priya S', reason: 'the rename still lands');
       expect(
         onServer.profileId,
@@ -938,7 +941,7 @@ void main() {
         const Profile(id: 'priya-account', displayName: 'Priya'),
       );
 
-      await engine.pullProfiles();
+      await engine.drain(ProfileFeed(server, db));
       final first = await DriftProfileRepository(db).byId('priya-account');
       expect(first?.displayName, 'Priya');
 
@@ -949,7 +952,7 @@ void main() {
         const Profile(id: 'priya-account', displayName: 'Priya S'),
       );
 
-      await engine.pullProfiles();
+      await engine.drain(ProfileFeed(server, db));
       final second = await DriftProfileRepository(db).byId('priya-account');
       expect(
         second?.displayName,
@@ -966,14 +969,14 @@ void main() {
 
       server.seedProfile(const Profile(id: 'a', displayName: 'Ravi'));
 
-      await engine.pullProfiles();
+      await engine.drain(ProfileFeed(server, db));
       expect(
         server.lastProfilesSince,
         isNull,
         reason: 'the first pull holds nothing, so it asks for everything',
       );
 
-      await engine.pullProfiles();
+      await engine.drain(ProfileFeed(server, db));
       expect(
         server.lastProfilesSince,
         isNotNull,
@@ -1037,11 +1040,10 @@ void main() {
       );
 
       // Before syncing, A has its own account of both writes.
-      expect(
-        (await a.feed(g.groupId)).map((e) => e.kind),
-        [EntryEventKind.edited, EntryEventKind.created],
-        reason: 'provisional, but on screen the moment each save happened',
-      );
+      expect((await a.feed(g.groupId)).map((e) => e.kind), [
+        EntryEventKind.edited,
+        EntryEventKind.created,
+      ], reason: 'provisional, but on screen the moment each save happened');
 
       await a.sync.syncGroup(g.groupId);
       await b.sync.syncGroup(g.groupId);
@@ -1120,7 +1122,8 @@ void main() {
       expect(
         feed.first.actorId,
         g.ravi,
-        reason: 'resolved by the server from the session, not sent with the '
+        reason:
+            'resolved by the server from the session, not sent with the '
             'write',
       );
     });
@@ -1225,6 +1228,122 @@ void main() {
     });
   });
 
+  group('one engine, five feeds', () {
+    /// A third device, holding nothing, to pull onto.
+    Device freshDevice() {
+      final device = Device('paged', server, profileId: 'profile-arun');
+      addTearDown(device.close);
+      return device;
+    }
+
+    Future<void> addExpenses(
+      ({String groupId, String ravi, String priya, String arun}) g,
+      int count,
+    ) async {
+      for (var i = 0; i < count; i++) {
+        await a.entries.create(
+          EntryDraft(
+            groupId: g.groupId,
+            currency: 'INR',
+            amountMinor: 30000,
+            description: 'Dinner $i',
+            split: EqualSplit([g.ravi, g.priya, g.arun]),
+            payerAmounts: {g.ravi: 30000},
+          ),
+          createdBy: g.ravi,
+        );
+      }
+    }
+
+    test('a feed that spans several pages arrives whole', () async {
+      final g = await seedGroup();
+      await addExpenses(g, 5);
+      await a.sync.syncGroup(g.groupId);
+
+      final device = freshDevice();
+      final engine = SyncEngine(
+        db: device.db,
+        api: server,
+        outbox: device.outbox,
+        pageSize: 2,
+      );
+      await engine.pullShared();
+      await engine.pull(g.groupId);
+
+      expect(
+        (await device.entries.getEntries(g.groupId)).length,
+        5,
+        reason:
+            'five rows in pages of two: the cursor has to advance across a '
+            'boundary four times without losing or repeating a row',
+      );
+      expect(
+        (await DriftActivityRepository(
+          device.db,
+        ).watchGroup(g.groupId).first).length,
+        5,
+        reason: 'the activity feed pages on (created_at, id) the same way',
+      );
+    });
+
+    test('rows sharing a timestamp survive a page boundary', () async {
+      final g = await seedGroup();
+      await addExpenses(g, 3);
+      await a.sync.syncGroup(g.groupId);
+
+      // Postgres now() is transaction time, so a batch written in one
+      // transaction shares an updated_at exactly. A cursor on the timestamp
+      // alone either skips the rest of that batch forever or re-reads it
+      // forever; the pair terminates and loses nothing. Three rows at one
+      // instant, read two at a time, puts the tie right on the boundary.
+      final ledger = await a.ledger(g.groupId);
+      await server.inOneTransaction(() async {
+        for (final entry in ledger) {
+          await server.upsertEntry(
+            entry.copyWith(description: '${entry.description} (revised)'),
+          );
+        }
+      });
+
+      final device = freshDevice();
+      final engine = SyncEngine(
+        db: device.db,
+        api: server,
+        outbox: device.outbox,
+        pageSize: 2,
+      );
+      await engine.pullShared();
+      await engine.pull(g.groupId);
+
+      final pulled = await device.entries.getEntries(g.groupId);
+      expect(pulled, hasLength(3));
+      expect(
+        pulled.every((entry) => entry.description.endsWith('(revised)')),
+        isTrue,
+        reason: 'every row of the tied batch arrived, not just the first page',
+      );
+    });
+
+    test('a settled feed costs an empty answer, not a refetch', () async {
+      final g = await seedGroup();
+      await addExpenses(g, 1);
+      await a.sync.syncGroup(g.groupId);
+
+      final device = freshDevice();
+      await device.sync.syncGroup(g.groupId);
+
+      // Members used to be refetched whole on every sync, with a SELECT per
+      // row to decide whether to keep them. Syncs are frequent now that every
+      // write triggers one, so "the group has not changed" has to be cheap.
+      final second = await device.sync.syncGroup(g.groupId);
+      expect(
+        second.pulled,
+        0,
+        reason: 'nothing changed on the server, so nothing should be applied',
+      );
+    });
+  });
+
   group('the outbox is a set of dirty rows, not a log', () {
     test('re-dirtying a row keeps when it first went dirty', () async {
       final clock = _StepClock();
@@ -1239,6 +1358,25 @@ void main() {
         first,
         reason: 'a second edit is not the row becoming new',
       );
+    });
+
+    test('every enqueue announces itself', () async {
+      final outbox = OutboxQueue(a.db);
+      addTearDown(outbox.dispose);
+
+      final announced = <void>[];
+      final subscription = outbox.queued.listen(announced.add);
+      addTearDown(subscription.cancel);
+
+      await outbox.enqueue(OutboxTarget.entry, 'e1');
+      await outbox.enqueue(OutboxTarget.group, 'g1');
+      await pumpEventQueue();
+
+      // The other half of the wire that makes saving an expense reach the
+      // group. Every mutation in the app funnels through enqueue, so this is
+      // what covers screens nobody has written yet -- and what stops the fix
+      // being a sync call at each save site, one of which will be forgotten.
+      expect(announced, hasLength(2));
     });
 
     test('re-dirtying a row does clear its retry state', () async {

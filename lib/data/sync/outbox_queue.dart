@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:drift/drift.dart';
@@ -44,6 +45,28 @@ class OutboxQueue {
   final AppDatabase _db;
   final DateTime Function() _clock;
 
+  final _queued = StreamController<void>.broadcast();
+
+  /// Fires whenever a local write joins the queue.
+  ///
+  /// The one wire that makes "save" mean "and tell everybody". Every mutation
+  /// in the app funnels through [enqueue], so listening here covers expenses,
+  /// settlements, group and member edits and your own profile — and covers
+  /// whatever is added next without anybody remembering to.
+  ///
+  /// The alternative was a sync call at each save site, which is how this went
+  /// unnoticed for so long: there was one, on opening a group screen, and
+  /// saving an expense returned to a screen that was already mounted, so it
+  /// never ran again. The expense sat on the phone until something else
+  /// happened to trigger a sync — nobody else in the group was told, and no
+  /// notification was sent.
+  ///
+  /// Carries no payload. A listener's job is to drain the queue, and the queue
+  /// already knows what is in it.
+  Stream<void> get queued => _queued.stream;
+
+  Future<void> dispose() => _queued.close();
+
   /// Longest a failing item waits between attempts.
   static const Duration maxBackoff = Duration(minutes: 5);
 
@@ -84,6 +107,8 @@ class OutboxQueue {
             ),
           ),
         );
+
+    if (_queued.hasListener) _queued.add(null);
   }
 
   /// Items ready to be attempted now, in an order the server can accept.
@@ -179,9 +204,7 @@ class OutboxQueue {
     // two dead letters for one user action -- the second of them about a row
     // nobody had ever heard of. The server writes the history now, so there is
     // only ever the expense to report.
-    return query.watch().asyncMap(
-      (rows) => Future.wait(rows.map(_describe)),
-    );
+    return query.watch().asyncMap((rows) => Future.wait(rows.map(_describe)));
   }
 
   Future<FailedWrite> _describe(OutboxRow row) async {
