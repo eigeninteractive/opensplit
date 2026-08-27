@@ -106,23 +106,28 @@ jobs:
           test -z "$(git status --porcelain --untracked-files=all)"
 
   build:
-    name: Build
+    name: Web bundle
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "17"
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.47.1"
           cache: true
       - run: flutter pub get --enforce-lockfile
       - run: dart run build_runner build
+      # The web bundle only. Android used to be compiled here too, as a release
+      # APK, and it was by a wide margin the slowest thing in CI — a whole
+      # Gradle and NDK toolchain, stood up to prove something release proves
+      # again minutes later. Release calls this workflow and then builds the
+      # signed bundle from the same commit, and it deploys nothing if that
+      # fails, so main is never published from a tree Android cannot build.
+      #
+      # This job exists for pull requests, where release does not run and this
+      # is the only compile check there is. That is also exactly what dropping
+      # the APK costs: an Android-only break now surfaces on the push to main
+      # rather than on the pull request that introduced it.
       - run: dart run tool/build_web.dart --config=env/ci.example.json
-      # No upload credentials enter PR jobs; this is a compile check, not a release.
-      - run: flutter build apk --release --dart-define-from-file=env/ci.example.json
