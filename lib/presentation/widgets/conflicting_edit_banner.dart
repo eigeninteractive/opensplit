@@ -1,22 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../application/providers.dart';
 import '../../data/repositories/drift_conflict_repository.dart';
 import '../../domain/models/entry.dart';
+import '../../domain/money_format.dart';
 
-/// Says that an edit was overtaken, and asks which version was meant.
+/// Says that an edit did not apply, and what the expense says instead.
 ///
-/// Distinct from [UnsyncedChangesBanner] on purpose, in colour and in wording.
-/// A dead letter means "this never reached anybody and something is wrong"; this
-/// means "everybody has this expense, and your change to it was not the one that
-/// landed". The first is an error. The second is two people editing at once,
-/// which is ordinary — so it is coloured as information and asks a question
-/// rather than reporting a fault.
+/// Distinct from [UnsyncedChangesBanner] in colour and in wording, because they
+/// mean opposite things. A dead letter says nobody else can see this. This says
+/// everybody can see the expense — your change to it was just not the one that
+/// landed. The first is a fault; the second is two people editing at once,
+/// which is ordinary, so it is coloured as information.
 ///
-/// It does not go away on its own. The whole point of the mechanism is that a
-/// losing edit is never discarded silently, and a banner that timed out would
-/// discard it silently a few seconds later.
+/// It offers no way to re-apply the edit, and that is the design rather than an
+/// omission. A one-tap "use mine" in a shared ledger is a button for
+/// overwriting somebody's deliberate correction without reading it — the same
+/// kind of silent, unexamined rewrite the server check exists to catch. So the
+/// notice states both versions, which is usually enough to settle it on the
+/// spot, and the only way to change the expense is the screen that changes
+/// expenses.
+///
+/// It does not time out. The whole point is that a losing edit is never
+/// discarded silently, and a banner that vanished on its own would discard it
+/// silently a few seconds later.
 class ConflictingEditBanner extends ConsumerWidget {
   const ConflictingEditBanner({super.key, this.padding = EdgeInsets.zero});
 
@@ -31,6 +40,7 @@ class ConflictingEditBanner extends ConsumerWidget {
 
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
+    final first = conflicts.first;
     final count = conflicts.length;
 
     return Padding(
@@ -41,7 +51,7 @@ class ConflictingEditBanner extends ConsumerWidget {
           color: scheme.onTertiaryContainer,
         ),
         leading: Icon(
-          Icons.merge_type_rounded,
+          Icons.published_with_changes_rounded,
           color: scheme.onTertiaryContainer,
         ),
         content: Column(
@@ -50,157 +60,59 @@ class ConflictingEditBanner extends ConsumerWidget {
           children: [
             Text(
               count == 1
-                  ? 'Your edit was overtaken'
-                  : '$count edits were overtaken',
+                  ? 'Your change to “${first.attempted.description}” did not '
+                        'apply'
+                  : '$count of your changes did not apply',
               style: text.titleSmall?.copyWith(
                 color: scheme.onTertiaryContainer,
               ),
             ),
             const SizedBox(height: 4),
-            Text(
-              count == 1
-                  ? 'Somebody changed “${conflicts.single.attempted.description}” '
-                        'while you were editing it. The group has their '
-                        'version; yours is kept here.'
-                  : 'Somebody changed them while you were editing. The group '
-                        'has their versions; yours are kept here.',
-            ),
+            Text(_explain(ref, first, count)),
           ],
         ),
         actions: [
+          TextButton(
+            onPressed: () =>
+                ref.read(conflictRepositoryProvider).forget(first.entryId),
+            child: const Text('Dismiss'),
+          ),
           FilledButton(
-            onPressed: () => _review(context, ref, conflicts.first),
-            child: const Text('Review'),
+            onPressed: () =>
+                context.go('/g/${first.groupId}/e/${first.entryId}'),
+            child: const Text('Open'),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _review(
-    BuildContext context,
-    WidgetRef ref,
-    PendingConflict conflict,
-  ) async {
-    final choice = await showDialog<_Resolution>(
-      context: context,
-      builder: (context) => _ConflictDialog(conflict: conflict),
-    );
-    if (choice == null) return;
-
-    final conflicts = ref.read(conflictRepositoryProvider);
-    switch (choice) {
-      case _Resolution.keepTheirs:
-        await conflicts.forget(conflict.entryId);
-      case _Resolution.useMine:
-        // Written through the ordinary edit path, from the base the server
-        // holds now — so if somebody has changed it *again* in the meantime,
-        // this is refused again and parked again rather than quietly winning.
-        //
-        // The actor is this device's member row, so the feed line reads as an
-        // edit by whoever resolved it. Null is a real answer here and is
-        // recorded as one: a change nobody can be attributed to still belongs
-        // on the record.
-        final ledger = ref.read(groupLedgerProvider(conflict.groupId));
-        await ref
-            .read(entryRepositoryProvider)
-            .reapply(conflict.attempted, actorId: ledger?.me?.id);
-        await conflicts.forget(conflict.entryId);
+  /// The two amounts, in the group's own words.
+  ///
+  /// Amounts and not a field-by-field diff, because amounts are exactly what
+  /// the server refuses over: an edit that moves no money is never refused, so
+  /// if there is a notice at all, these two numbers are what differ.
+  String _explain(WidgetRef ref, PendingConflict conflict, int count) {
+    if (count > 1) {
+      return 'Somebody else changed them first. The group has their versions, '
+          'and yours were not applied.';
     }
+
+    final mine = _money(ref, conflict.attempted);
+    final theirs = conflict.current;
+
+    if (theirs == null) {
+      return 'You set it to $mine, but somebody else changed it first and it '
+          'is no longer on this device.';
+    }
+    return 'You set it to $mine. Somebody else changed it first, so the group '
+        'has ${_money(ref, theirs)}.';
   }
-}
 
-enum _Resolution { useMine, keepTheirs }
-
-/// The two versions, side by side, and nothing else.
-///
-/// Only money is shown. The server refuses a stale write exactly when the
-/// amounts disagree, so that is what the question is about — listing a
-/// description that both versions share would bury the one line that decides
-/// it.
-class _ConflictDialog extends StatelessWidget {
-  const _ConflictDialog({required this.conflict});
-
-  final PendingConflict conflict;
-
-  @override
-  Widget build(BuildContext context) {
-    final current = conflict.current;
-
-    return AlertDialog(
-      title: Text(conflict.attempted.description),
-      content: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (!conflict.stillDisagrees) ...[
-              Text(
-                'This has since been changed back — the two versions now '
-                'agree. Either choice keeps what you see in the group.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 16),
-            ],
-            _Version(
-              label: 'The group has',
-              entry: current,
-              emptyNote: 'This expense is no longer on this device.',
-            ),
-            const SizedBox(height: 16),
-            _Version(label: 'You wrote', entry: conflict.attempted),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(_Resolution.keepTheirs),
-          child: const Text('Keep theirs'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(_Resolution.useMine),
-          child: const Text('Use mine'),
-        ),
-      ],
-    );
-  }
-}
-
-class _Version extends StatelessWidget {
-  const _Version({required this.label, required this.entry, this.emptyNote});
-
-  final String label;
-  final Entry? entry;
-  final String? emptyNote;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    final scheme = Theme.of(context).colorScheme;
-    final version = entry;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: text.labelMedium?.copyWith(color: scheme.onSurfaceVariant),
-        ),
-        const SizedBox(height: 4),
-        if (version == null)
-          Text(emptyNote ?? 'Nothing', style: text.bodyMedium)
-        else ...[
-          Text(
-            '${version.currency} '
-            '${(version.amountMinor / 100).toStringAsFixed(2)}',
-            style: text.titleMedium,
-          ),
-          Text(
-            version.description,
-            style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-          ),
-        ],
-      ],
-    );
-  }
+  /// The same formatter every other amount in the app goes through, so a
+  /// notice about money reads like the money it is about.
+  String _money(WidgetRef ref, Entry entry) => formatMoney(
+    ref.watch(currenciesProvider).value?[entry.currency],
+    entry.amountMinor,
+  );
 }

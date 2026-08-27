@@ -224,7 +224,7 @@ class SyncEngine {
             // Composed against a version somebody has since changed. Neither a
             // retry nor a dead letter; see _parkConflict.
             case RejectionKind.stale:
-              await _parkConflict(item, e);
+              await _parkConflict(item);
             // A rejected invariant or a permission failure will be rejected
             // exactly the same way next time. Retrying forever would wedge
             // everything queued behind it, so it is dropped and recorded
@@ -262,7 +262,7 @@ class SyncEngine {
   /// holding this device's version until somebody decides -- would leave these
   /// balances disagreeing with everybody else's for as long as nobody noticed,
   /// which is the failure this whole design exists to make impossible.
-  Future<void> _parkConflict(OutboxRow item, RemoteRejected rejection) async {
+  Future<void> _parkConflict(OutboxRow item) async {
     final loaded = await _loadEntry(item.targetId);
     if (loaded == null) return;
     final (entry, base) = loaded;
@@ -275,7 +275,6 @@ class SyncEngine {
               entryId: entry.id,
               groupId: entry.groupId,
               attempted: jsonEncode(entryToJson(entry)),
-              reason: rejection.message,
               rejectedAt: _clock(),
             ),
           );

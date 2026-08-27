@@ -954,14 +954,6 @@ class EntryConflicts extends Table with TableInfo {
     requiredDuringInsert: true,
     $customConstraints: 'NOT NULL',
   );
-  late final GeneratedColumn<String> reason = GeneratedColumn<String>(
-    'reason',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
   late final GeneratedColumn<int> rejectedAt = GeneratedColumn<int>(
     'rejected_at',
     aliasedName,
@@ -975,7 +967,6 @@ class EntryConflicts extends Table with TableInfo {
     entryId,
     groupId,
     attempted,
-    reason,
     rejectedAt,
   ];
   @override

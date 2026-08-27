@@ -273,6 +273,13 @@ class Entries extends Table {
 /// One row per expense. A second refused edit replaces the first, because what
 /// is being kept is "what this device last wanted this expense to say", not a
 /// history of attempts.
+///
+/// What is deliberately NOT here is a way to re-apply it in one tap. Re-doing
+/// an edit is the same act as making it, and the app already has a screen for
+/// that; a second write path whose whole purpose is "overwrite what they just
+/// corrected, without reading it" would be a worse version of the problem the
+/// server check exists to catch. This says what happened and what you had
+/// typed. Deciding is done the ordinary way, on the expense itself.
 @DataClassName('EntryConflictRow')
 class EntryConflicts extends Table {
   TextColumn get entryId =>
@@ -282,12 +289,13 @@ class EntryConflicts extends Table {
 
   /// The entry as this device meant to write it, through the wire codec.
   ///
+  /// Kept so the notice can say what you had put, which is usually enough to
+  /// decide whether you still care -- if somebody else already set the amount
+  /// you were setting, there is nothing left to do.
+  ///
   /// Stored whole rather than as a diff. A diff would need a base to be read
   /// against, and the base is precisely what has moved.
   TextColumn get attempted => text()();
-
-  /// The server's own words about why it refused.
-  TextColumn get reason => text()();
 
   DateTimeColumn get rejectedAt => dateTime()();
 

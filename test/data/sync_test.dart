@@ -1233,7 +1233,10 @@ void main() {
     /// Ravi and Priya both hold the expense, then both edit it. Priya's push
     /// lands first, so Ravi's is composed against a version that no longer
     /// exists.
-    Future<({String groupId, String entryId, String ravi})> divergent({
+    Future<
+      ({String groupId, String entryId, String ravi, String priya, String arun})
+    >
+    divergent({
       required int raviAmount,
       required String raviDescription,
       required int priyaAmount,
@@ -1283,7 +1286,13 @@ void main() {
         actorId: g.ravi,
       );
 
-      return (groupId: g.groupId, entryId: entry.id, ravi: g.ravi);
+      return (
+        groupId: g.groupId,
+        entryId: entry.id,
+        ravi: g.ravi,
+        priya: g.priya,
+        arun: g.arun,
+      );
     }
 
     test('the ledger converges and the edit is kept', () async {
@@ -1314,8 +1323,13 @@ void main() {
         60000,
         reason: 'and what A meant is kept, because it is the only copy left',
       );
-      expect(conflicts.single.current?.amountMinor, 45000);
-      expect(conflicts.single.stillDisagrees, isTrue);
+      expect(
+        conflicts.single.current?.amountMinor,
+        45000,
+        reason:
+            'alongside what the group has, which is what makes the two '
+            'numbers together enough to settle it without a dialog',
+      );
     });
 
     test('it does not sit in the outbox being refused forever', () async {
@@ -1361,7 +1375,7 @@ void main() {
       expect((await b.ledger(g.groupId)).single.description, 'Dinner at Toit');
     });
 
-    test('using mine re-applies it from the version that won', () async {
+    test('editing it again lands, and clears the notice', () async {
       final g = await divergent(
         raviAmount: 60000,
         raviDescription: 'Dinner',
@@ -1370,15 +1384,35 @@ void main() {
       await a.sync.syncGroup(g.groupId);
 
       final conflicts = DriftConflictRepository(a.db);
-      final parked = await conflicts.byEntry(g.entryId);
-      await a.entries.reapply(parked!.attempted, actorId: g.ravi);
-      await conflicts.forget(g.entryId);
+      expect(await conflicts.byEntry(g.entryId), isNotNull);
+
+      // The ordinary edit path, which is the only way there is. It is composed
+      // against what the server holds now -- put there by the pull that
+      // followed the rejection -- so it is an ordinary edit and lands. Being
+      // refused a second time would mean the base never moved off the version
+      // that was overtaken.
+      await a.entries.update(
+        g.entryId,
+        EntryDraft(
+          groupId: g.groupId,
+          currency: 'INR',
+          amountMinor: 60000,
+          description: 'Dinner',
+          split: EqualSplit([g.ravi, g.priya, g.arun]),
+          payerAmounts: {g.ravi: 60000},
+        ),
+        actorId: g.ravi,
+      );
+
+      expect(
+        await conflicts.byEntry(g.entryId),
+        isNull,
+        reason:
+            'editing the expense is the acknowledgement: they have seen '
+            'what it says and acted, so the banner has nothing left to ask',
+      );
 
       await a.sync.syncGroup(g.groupId);
-
-      // The re-application is composed against what the server holds now, so
-      // it is an ordinary edit and lands. Being refused a second time would
-      // mean the base never moved off the version that was overtaken.
       expect((await a.ledger(g.groupId)).single.amountMinor, 60000);
       await b.sync.syncGroup(g.groupId);
       expect(
@@ -1386,7 +1420,6 @@ void main() {
         60000,
         reason: 'and it reaches the rest of the group like any other edit',
       );
-      expect(await conflicts.watchAll().first, isEmpty);
     });
 
     test('the feed records both versions, in order', () async {

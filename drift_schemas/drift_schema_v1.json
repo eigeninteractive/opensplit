@@ -1153,16 +1153,6 @@
             "dsl_features": []
           },
           {
-            "name": "reason",
-            "getter_name": "reason",
-            "moor_type": "string",
-            "nullable": false,
-            "customConstraints": null,
-            "default_dart": null,
-            "default_client_dart": null,
-            "dsl_features": []
-          },
-          {
             "name": "rejected_at",
             "getter_name": "rejectedAt",
             "moor_type": "dateTime",
@@ -1491,7 +1481,7 @@
       "sql": [
         {
           "dialect": "sqlite",
-          "sql": "CREATE TABLE IF NOT EXISTS \"entry_conflicts\" (\"entry_id\" TEXT NOT NULL REFERENCES entries (id) ON DELETE CASCADE, \"group_id\" TEXT NOT NULL REFERENCES \"groups\" (id) ON DELETE CASCADE, \"attempted\" TEXT NOT NULL, \"reason\" TEXT NOT NULL, \"rejected_at\" INTEGER NOT NULL, PRIMARY KEY (\"entry_id\"));"
+          "sql": "CREATE TABLE IF NOT EXISTS \"entry_conflicts\" (\"entry_id\" TEXT NOT NULL REFERENCES entries (id) ON DELETE CASCADE, \"group_id\" TEXT NOT NULL REFERENCES \"groups\" (id) ON DELETE CASCADE, \"attempted\" TEXT NOT NULL, \"rejected_at\" INTEGER NOT NULL, PRIMARY KEY (\"entry_id\"));"
         }
       ]
     },
