@@ -50,6 +50,20 @@ create policy profiles_update on profiles
   for update to authenticated
   using (id = auth.uid()) with check (id = auth.uid());
 
+-- Your own row, and only ever your own.
+--
+-- handle_new_user has already created it, so this is never how a profile comes
+-- into existence — it is what makes an upsert legal. The client pushes every
+-- table the same way, as an upsert of the row it holds, and PostgREST sends
+-- that as INSERT ... ON CONFLICT DO UPDATE. Without an insert policy the
+-- statement is refused before it ever reaches the conflict, so *nobody* could
+-- push a name or a payment handle: the update policy above was unreachable.
+--
+-- The check is the same one, so a client can no more insert somebody else's
+-- profile than it can update it.
+create policy profiles_insert on profiles
+  for insert to authenticated with check (id = auth.uid());
+
 -- ----------------------------------------------------------------------------
 -- Groups.
 --

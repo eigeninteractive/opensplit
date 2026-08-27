@@ -9,11 +9,22 @@
 create table profiles (
   id           uuid primary key references auth.users(id) on delete cascade,
 
-  -- Non-empty, like groups.name and members.display_name. This is the name
-  -- every co-member reads a shared ledger by, and GroupLedger.nameOfMember
-  -- falls back to the member row when it is blank — so an empty one is not a
-  -- visible error, it is a name that quietly stops travelling.
-  display_name text not null check (length(trim(display_name)) > 0),
+  -- Null means nobody has chosen one yet, and that is a state worth being able
+  -- to represent.
+  --
+  -- This used to be `not null`, which forced handle_new_user to invent a name
+  -- for anyone signing up without one — 'Someone' for every guest. The app then
+  -- could not tell an invented name from a chosen one, so it asked for a name
+  -- again in the new-group sheet and wrote the answer back to the account as a
+  -- side effect of making a group. Three places set one name, and none of them
+  -- could say whether it had been set.
+  --
+  -- Nullable makes the question answerable exactly once: if this is null, ask;
+  -- otherwise never ask again. Non-empty when it is present, so 'set to blank'
+  -- is not a third state on top of the two.
+  display_name text check (
+    display_name is null or length(trim(display_name)) > 0
+  ),
   avatar_url   text,
 
   -- UPI virtual payment address, for the settle-up handoff. Personal rather
@@ -50,13 +61,17 @@ begin
   -- with no email at all, both produce '' rather than null — which coalesce
   -- would happily accept and the non-empty check would then reject, failing
   -- the signup itself.
+  --
+  -- No final fallback. If neither the provider nor the email says who this is,
+  -- then nobody has said, and the honest record of that is null — the app asks
+  -- once and stops. Inventing 'Someone' here is what made a chosen name and an
+  -- assigned one indistinguishable everywhere downstream.
   insert into public.profiles (id, display_name)
   values (
     new.id,
     coalesce(
       nullif(trim(new.raw_user_meta_data->>'display_name'), ''),
-      nullif(split_part(coalesce(new.email, ''), '@', 1), ''),
-      'Someone'
+      nullif(split_part(coalesce(new.email, ''), '@', 1), '')
     )
   );
   return new;

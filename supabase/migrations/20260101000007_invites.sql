@@ -227,16 +227,19 @@ begin
   --
   -- Someone arriving on an invite link is signed in anonymously a moment
   -- earlier, and handle_new_user has no email or metadata to work from, so
-  -- their profile is called 'Someone'. Meanwhile the group already knows them
+  -- their profile has no name at all. Meanwhile the group already knows them
   -- as 'Priya', because that is what the person who invited them typed. Taking
   -- that name means they appear as themselves from the first screen instead of
   -- as a stranger, and it is theirs to change afterwards on the Account page.
   --
-  -- Guarded on the default rather than on emptiness: a name the user has
-  -- actually set is never overwritten by whatever a friend guessed.
+  -- Guarded on null rather than on a sentinel: this used to compare against the
+  -- literal 'Someone' that handle_new_user invented, which could not tell a
+  -- name nobody chose from a name somebody genuinely typed. Null says exactly
+  -- one thing, so a name the user has actually set is never overwritten by
+  -- whatever a friend guessed.
   update profiles
      set display_name = v_member.display_name
-   where id = v_uid and display_name = 'Someone';
+   where id = v_uid and display_name is null;
 
   update invites
      set redeemed_at = now(), redeemed_by = v_uid

@@ -1,7 +1,7 @@
 -- Device tokens: strictly private, and the fan-out skips the author.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(11);
+select plan(16);
 
 insert into auth.users (id, instance_id, aud, role, email, raw_user_meta_data,
                         created_at, updated_at)
@@ -125,5 +125,71 @@ select is(
   0,
   'claiming one grants no visibility of anybody else');
 
+-- ---------------------------------------------------------------------------
+-- The fan-out is a trigger in this migration, not a row in a dashboard
+--
+-- A Supabase Database Webhook creates exactly this trigger, calling
+-- supabase_functions.http_request(). Declaring it here is what makes it survive
+-- a db reset, keeps the secret in app_settings beside fx_fetch_secret, and
+-- keeps the whole chain reproducible on a plain Postgres with pg_net.
+-- ---------------------------------------------------------------------------
+set local role postgres;
+
+select has_trigger('public', 'entries', 'trg_entries_notify',
+  'entries carries its own notify trigger, so a deployment fans out without '
+  'anybody clicking anything');
+
+-- Every test above ran unconfigured, and so did the expense at the top of this
+-- file. That path has to be silent rather than fatal: a deployment with no push
+-- set up still records expenses.
+select is(
+  (select count(*)::int from net.http_request_queue),
+  0,
+  'with no notify_function_url set, saving an expense queues nothing');
+
+insert into app_settings (key, value) values
+  ('notify_function_url',   'http://example.test/functions/v1/notify-entry'),
+  ('notify_webhook_secret', 'a-test-secret');
+
+insert into entries (id, group_id, currency, amount_minor, created_by)
+values ('99999999-9999-4999-8999-999999999999',
+        '33333333-3333-4333-8333-333333333333', 'INR', 50000,
+        '44444444-4444-4444-8444-444444444444');
+insert into entry_payers (entry_id, member_id, amount_minor)
+values ('99999999-9999-4999-8999-999999999999',
+        '44444444-4444-4444-8444-444444444444', 50000);
+insert into entry_shares (entry_id, member_id, amount_minor)
+values ('99999999-9999-4999-8999-999999999999',
+        '44444444-4444-4444-8444-444444444444', 50000);
+set constraints all immediate;
+set constraints all deferred;
+
+select is(
+  (select count(*)::int from net.http_request_queue
+    where url = 'http://example.test/functions/v1/notify-entry'),
+  1,
+  'once configured, an expense queues exactly one request');
+
+select is(
+  (select headers->>'x-webhook-secret' from net.http_request_queue
+    where url = 'http://example.test/functions/v1/notify-entry'),
+  'a-test-secret',
+  'carrying the secret the function compares in constant time');
+
+-- The reason for building the body by hand rather than sending to_jsonb(new):
+-- the description and the notes never leave the database. The device already
+-- has to pull the delta, and it is the device that writes the text.
+select is(
+  (select convert_from(body, 'utf8')::jsonb -> 'record'
+     from net.http_request_queue
+    where url = 'http://example.test/functions/v1/notify-entry'),
+  jsonb_build_object(
+    'id',         '99999999-9999-4999-8999-999999999999',
+    'group_id',   '33333333-3333-4333-8333-333333333333',
+    'created_by', '44444444-4444-4444-8444-444444444444'
+  ),
+  'and three ids, not the row');
+
 select * from finish();
+
 rollback;

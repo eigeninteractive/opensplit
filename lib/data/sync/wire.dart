@@ -171,7 +171,7 @@ Map<String, dynamic> profileToJson(Profile profile) => {
 
 Profile profileFromJson(Map<String, dynamic> json) => Profile(
   id: json['id'] as String,
-  displayName: json['display_name'] as String,
+  displayName: json['display_name'] as String?,
   avatarUrl: json['avatar_url'] as String?,
   upiVpa: json['upi_vpa'] as String?,
   updatedAt: DateTime.parse(json['updated_at'] as String),

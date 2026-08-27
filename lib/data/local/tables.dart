@@ -29,7 +29,9 @@ class Currencies extends Table {
 @DataClassName('ProfileRow')
 class Profiles extends Table {
   TextColumn get id => text()();
-  TextColumn get displayName => text()();
+
+  /// Null until somebody chooses one. See [Profile.displayName].
+  TextColumn get displayName => text().nullable()();
   TextColumn get avatarUrl => text().nullable()();
 
   /// UPI virtual payment address, used to build a settle-up handoff. Personal,

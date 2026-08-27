@@ -93,7 +93,7 @@
             "name": "display_name",
             "getter_name": "displayName",
             "moor_type": "string",
-            "nullable": false,
+            "nullable": true,
             "customConstraints": null,
             "default_dart": null,
             "default_client_dart": null,
@@ -1209,7 +1209,7 @@
       "sql": [
         {
           "dialect": "sqlite",
-          "sql": "CREATE TABLE IF NOT EXISTS \"profiles\" (\"id\" TEXT NOT NULL, \"display_name\" TEXT NOT NULL, \"avatar_url\" TEXT NULL, \"upi_vpa\" TEXT NULL, \"updated_at\" INTEGER NULL, PRIMARY KEY (\"id\"));"
+          "sql": "CREATE TABLE IF NOT EXISTS \"profiles\" (\"id\" TEXT NOT NULL, \"display_name\" TEXT NULL, \"avatar_url\" TEXT NULL, \"upi_vpa\" TEXT NULL, \"updated_at\" INTEGER NULL, PRIMARY KEY (\"id\"));"
         }
       ]
     },

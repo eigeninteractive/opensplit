@@ -36,7 +36,7 @@ final class DriftProfileRepository {
         .insertOnConflictUpdate(
           ProfilesCompanion.insert(
             id: profile.id,
-            displayName: profile.displayName,
+            displayName: Value(profile.displayName),
             avatarUrl: Value(profile.avatarUrl),
             upiVpa: Value(profile.upiVpa),
             updatedAt: Value(profile.updatedAt),

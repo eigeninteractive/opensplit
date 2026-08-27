@@ -365,10 +365,23 @@ supabase functions deploy notify-entry
 supabase secrets set FCM_PROJECT_ID=your-project \
                      FCM_SERVICE_ACCOUNT="$(cat service-account.json)" \
                      NOTIFY_WEBHOOK_SECRET="$(openssl rand -hex 32)"
+
+# Point the trigger at the function, exactly as the rate fetch is pointed:
+insert into app_settings (key, value) values
+  ('notify_function_url',
+   'https://<project>.supabase.co/functions/v1/notify-entry'),
+  ('notify_webhook_secret', '<the same NOTIFY_WEBHOOK_SECRET>');
 ```
 
-Then add a database webhook on `entries` (INSERT only) pointing at the
-function, with a header `x-webhook-secret` set to the same value.
+There is deliberately **no Database Webhook to create in the dashboard**. A
+Supabase webhook is a row that creates a trigger calling
+`supabase_functions.http_request()`; `trg_entries_notify` is that trigger,
+declared in `20260101000008_push.sql` and applied by `db push` like everything
+else. So it cannot be lost, the secret lives beside `fx_fetch_secret` rather
+than in dashboard config, and the chain works on any Postgres with pg_net.
+
+Until both rows are set the trigger no-ops, which is why a deployment with no
+push configured still records expenses normally.
 
 **The secret is not optional.** The function refuses to run without it, because
 otherwise anyone holding the publishable key — which is public by design —
@@ -446,7 +459,7 @@ Three terminals:
 ```bash
 supabase start                                    # database, auth, storage
 supabase functions serve --env-file supabase/functions/.env
-./supabase/dev/local-webhook.sh                   # the entries INSERT trigger
+./supabase/dev/local-notify.sh                    # points the trigger locally
 ```
 
 `supabase/functions/.env` needs `NOTIFY_WEBHOOK_SECRET` (any random string
@@ -454,9 +467,11 @@ locally), plus `FCM_PROJECT_ID` and `FCM_SERVICE_ACCOUNT` if you want the send
 to actually reach a device. Without the FCM pair the function still runs and
 answers `unconfigured`, which is enough to prove the wiring.
 
-There is no dashboard locally, so the webhook is a trigger created by that
-script. **`supabase db reset` drops it** — rerun the script afterwards, or push
-stops firing with nothing to say why.
+The trigger comes from the migrations and is always present. What that script
+writes is the two `app_settings` rows it reads, pointing at the functions
+running on the host. **`supabase db reset` clears them** — rerun the script
+afterwards, or the trigger keeps firing into a URL it does not have and pushes
+silently stop.
 
 To check the chain without a device:
 

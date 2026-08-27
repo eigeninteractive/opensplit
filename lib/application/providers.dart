@@ -340,7 +340,7 @@ class GroupLedger {
   /// Falls back to the member row when the profile has not synced yet, which is
   /// the ordinary state for a few seconds after somebody accepts an invite.
   String nameOfMember(Member member) {
-    final claimed = profiles[member.profileId]?.displayName.trim() ?? '';
+    final claimed = profiles[member.profileId]?.displayName?.trim() ?? '';
     return claimed.isEmpty ? member.displayName : claimed;
   }
 

@@ -12,7 +12,19 @@ part 'profile.freezed.dart';
 abstract class Profile with _$Profile {
   const factory Profile({
     required String id,
-    required String displayName,
+
+    /// Null until somebody chooses one.
+    ///
+    /// Nullable rather than defaulted, because "nobody has said who this is"
+    /// and "this person is called Someone" are different facts and the app has
+    /// to act differently on them: the first is a question to ask once, the
+    /// second is an answer to respect. A sentinel string cannot tell them
+    /// apart, which is how the same name came to be asked for in three places.
+    ///
+    /// Display sites do not need to handle it: a name is only ever rendered
+    /// through [GroupLedger.nameOfMember], which falls back to the member row —
+    /// and a member always has a name.
+    String? displayName,
     String? avatarUrl,
 
     /// UPI virtual payment address. Personal rather than group-scoped — you

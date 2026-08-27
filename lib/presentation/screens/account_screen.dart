@@ -66,7 +66,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   void _seed(Profile? profile) {
     if (_seeded || profile == null) return;
     _seeded = true;
-    _name.text = profile.displayName;
+    _name.text = profile.displayName ?? '';
     _vpa.text = profile.upiVpa ?? '';
   }
 

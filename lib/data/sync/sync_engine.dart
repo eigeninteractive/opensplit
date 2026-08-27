@@ -284,7 +284,7 @@ class SyncEngine {
           db.profiles,
           ProfilesCompanion.insert(
             id: profile.id,
-            displayName: profile.displayName,
+            displayName: Value(profile.displayName),
             avatarUrl: Value(profile.avatarUrl),
             upiVpa: Value(profile.upiVpa),
           ),

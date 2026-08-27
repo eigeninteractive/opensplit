@@ -222,9 +222,15 @@ create table app_settings (
 alter table app_settings enable row level security;
 -- No policy: service role only. Nothing here is any user's business.
 
+-- Shared by both Edge Functions rather than being about rates alone: the push
+-- fan-out reaches notify-entry the same way and for the same reason, and reads
+-- notify_function_url and notify_webhook_secret from here. See
+-- notify_entry_created() in the push migration.
 comment on table app_settings is
-  'Operator configuration. Set fx_function_url and fx_fetch_secret to enable '
-  'the scheduled exchange-rate fetch.';
+  'Operator configuration, one row per key. fx_function_url and '
+  'fx_fetch_secret enable the scheduled exchange-rate fetch; '
+  'notify_function_url and notify_webhook_secret enable the push fan-out. '
+  'Each feature no-ops until its pair is set.';
 
 -- Fire and forget: pg_net queues the request and returns immediately, so a slow
 -- or dead rate provider can never hold a database transaction open.

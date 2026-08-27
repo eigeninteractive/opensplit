@@ -253,9 +253,8 @@ class _Claim extends ConsumerWidget {
     }
 
     final me = ref.watch(myProfileProvider).value;
-    final who = me?.displayName.trim().isNotEmpty ?? false
-        ? me!.displayName
-        : account.email ?? 'this device';
+    final myName = me?.displayName?.trim() ?? '';
+    final who = myName.isEmpty ? account.email ?? 'this device' : myName;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
