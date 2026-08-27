@@ -117,6 +117,9 @@ void main() {
   setUpAll(() async {
     available = await _serverIsUp();
     if (!available) {
+      if (const bool.fromEnvironment('REQUIRE_SUPABASE')) {
+        fail('CI requires a running local Supabase at $_apiUrl.');
+      }
       // ignore: avoid_print
       print('Skipping: no local Supabase on $_apiUrl. Run `supabase start`.');
     }

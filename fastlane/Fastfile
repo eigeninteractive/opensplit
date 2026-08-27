@@ -1,0 +1,36 @@
+default_platform(:android)
+
+platform :android do
+  desc "Distribute the signed CI bundle to Google Play internal testers"
+  lane :internal do
+    status = ENV.fetch("PLAY_RELEASE_STATUS", "completed")
+    unless %w[completed draft].include?(status)
+      UI.user_error!("PLAY_RELEASE_STATUS must be completed or draft")
+    end
+
+    credentials = ENV.fetch("GOOGLE_APPLICATION_CREDENTIALS")
+    unless File.file?(credentials)
+      UI.user_error!("Google credentials file is missing")
+    end
+
+    # Resolve against this file, not Fastlane's changing working directory.
+    bundle = File.expand_path(
+      "../build/app/outputs/bundle/release/app-release.aab", __dir__
+    )
+    UI.user_error!("Build the signed release AAB first") unless File.file?(bundle)
+
+    upload_to_play_store(
+      track: "internal",
+      release_status: status,
+      json_key: credentials,
+      aab: bundle,
+      skip_upload_apk: true,
+      skip_upload_metadata: true,
+      skip_upload_changelogs: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      # Fail visibly rather than silently changing review semantics on retry.
+      rescue_changes_not_sent_for_review: false
+    )
+  end
+end

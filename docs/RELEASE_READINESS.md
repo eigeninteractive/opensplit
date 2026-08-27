@@ -1,4 +1,4 @@
-# Release readiness — 27 August 2026
+# Release readiness — updated 28 August 2026
 
 Status: substantial implementation hardening is complete, but this is not a
 production-release approval. Nothing has been deployed or published. Local
@@ -28,7 +28,7 @@ integrations work.
 | Architecture | Provider composition split into backend, local storage, ledger, session, sync, push, routing, and platform modules. Token operations have a repository boundary. Existing Riverpod state management is retained. |
 | Dependencies | Updated Drift/sqlite3 native assets and compatible code-generation tooling; removed the old direct SQLite bootstrap dependency. |
 | UI foundation | Added localization infrastructure and shell strings; large-text and keyboard tests. This is not a claim that every string is localized or that screen-reader testing is complete. |
-| Release tooling | Single web packaging command for static site, Flutter, and worker configuration; safe client-key checks; self-hosted HTTPS validation; pinned CI and manual artifact-only release workflow. |
+| Release tooling | Web packaging, configuration validation, generation drift gates, and gated main deployment to Firebase Hosting and Play internal via Fastlane/OIDC. Artifact-only bootstrap remains available. See [CI/CD setup](CI_CD.md). |
 
 ## Verification
 
@@ -56,7 +56,10 @@ reload is an offline-shell check, not a full browser-network-disconnection test.
 1. **Android signing is blocked locally.** Release compilation reached packaging,
    which failed because macOS denied access to the configured
    `/Users/seenuk/Downloads/upload-keystore.jks`. Make the key readable to the
-   build process and rerun the signed APK/AAB build. Do not substitute a debug
+   build process and rerun the signed APK/AAB build. The 28 August retry again
+   reached `signReleaseBundle` but was denied by macOS; file existence alone does
+   not establish process access. CI uses a temporary decoded key and does not
+   depend on the Downloads path. Do not substitute a debug
    signature for release verification or commit a keystore/password.
 2. **An upstream build warning remains.** `in_app_review` 2.0.12 applies the old
    Kotlin Gradle plugin. The pinned Flutter 3.47.1 toolchain warns about future
@@ -69,8 +72,10 @@ reload is an offline-shell check, not a full browser-network-disconnection test.
    Links, foreground/background push and opt-out, and UPI cancellation/success
    handoff need the intended credentials and actual devices. Verify the Play
    signing certificate against `site/.well-known/assetlinks.json`.
-4. **Run remote CI on the final commit.** These results are local. The manual
-   release workflow packages artifacts after CI; it does not deploy them.
+4. **Configure and run remote CI on the final commit.** These results are local.
+   Main pushes now deploy only after all checks pass. GitHub environment secrets,
+   OIDC trust, Play permissions, and the first manual bundle upload must be set
+   up before enabling automated distribution. See [CI/CD setup](CI_CD.md).
 5. **Complete operational acceptance.** Backups/restore rehearsal, SMTP delivery,
    Auth abuse limits/CAPTCHA decisions, secret provisioning, monitoring/alerts,
    support ownership, and legal/store-listing review are deployment gates, not

@@ -6,7 +6,8 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-// Upload key, read from android/key.properties, which is gitignored.
+// Local upload key comes from gitignored android/key.properties. CI passes
+// credentials through the environment so passwords never need serialization.
 //
 // Absent on a fresh clone and in CI, and that is a supported state: the release
 // build then falls back to the debug key below, so `flutter build apk --debug`
@@ -18,6 +19,19 @@ plugins {
 val keystoreProperties = Properties().apply {
     val file = rootProject.file("key.properties")
     if (file.exists()) file.inputStream().use { load(it) }
+}
+val ciSigning = mapOf(
+    "storeFile" to "ANDROID_UPLOAD_KEYSTORE_PATH",
+    "storePassword" to "ANDROID_UPLOAD_STORE_PASSWORD",
+    "keyAlias" to "ANDROID_UPLOAD_KEY_ALIAS",
+    "keyPassword" to "ANDROID_UPLOAD_KEY_PASSWORD"
+)
+if (ciSigning.values.any { System.getenv(it) != null }) {
+    ciSigning.forEach { (property, variable) ->
+        val value = System.getenv(variable)
+        require(!value.isNullOrEmpty()) { "Missing signing variable: $variable" }
+        keystoreProperties.setProperty(property, value)
+    }
 }
 val hasUploadKey = keystoreProperties.getProperty("storeFile") != null
 

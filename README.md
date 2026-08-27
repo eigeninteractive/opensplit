@@ -168,9 +168,12 @@ The source service workers intentionally contain unresolved placeholders. Only
 `tool/build_web.dart` may produce a deployable web directory: it verifies the
 configuration, injects Firebase's public identifiers, and keys the offline cache
 to the commit being built. CI uses structurally valid inert identifiers to prove
-the release build; the manual **Release candidate** workflow requires the real
-production variables and Android upload-key secrets, reruns every gate, and
-uploads artifacts without deploying either one.
+the release build. After every CI gate passes, pushes to `main` build with real
+production variables, deploy Firebase Hosting, and distribute a signed AAB to
+Play internal testing. Release reruns the same CI checks before publishing.
+A manual **Release** run with **deploy unchecked** creates
+artifacts only, for first-upload bootstrap. See [CI/CD setup](docs/CI_CD.md) for
+keyless Google authentication, GitHub secrets, signing, and release controls.
 
 Every integration is off unless configured, and hidden rather than shown broken:
 

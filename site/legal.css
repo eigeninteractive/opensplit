@@ -1,0 +1,115 @@
+/* The design's visual language, applied to the three document pages.
+ *
+ * A shared file rather than a <style> block in each: these are the same page
+ * three times over, and the previous arrangement had one stylesheet copied
+ * into all of them, which is how two of them end up a shade apart after a
+ * restyle. The landing page keeps its own inline styles — it is one page, it
+ * arrived that way, and nothing shares them.
+ *
+ * Values are the ones in brand/static_site_designer/Terms.dc.html.
+ */
+:root {
+  --bg: #FBF8FF;
+  --ink: #1B1B21;
+  --body: #33323A;
+  --muted: #78767F;
+  --faint: #918F9A;
+  --rule: #E3E0EA;
+  --brand: #5B5891;
+  --brand-hover: #434078;
+  --tint: #F5F2FA;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Instrument Sans', Helvetica, Arial, sans-serif;
+}
+
+a { color: var(--brand); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: var(--brand-hover); }
+
+/* Nav ---------------------------------------------------------------------*/
+.sitenav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 5vw;
+  border-bottom: 1px solid var(--rule);
+}
+.sitenav a { text-decoration: none; }
+.wordmark { display: flex; align-items: center; gap: 10px; }
+.wordmark svg { width: 26px; height: 26px; flex: none; }
+.wordmark span { font-size: 18px; letter-spacing: -.03em; color: var(--ink); }
+.wordmark .thin { font-weight: 400; }
+.wordmark .thick { font-weight: 700; }
+.back { font-size: 14px; font-weight: 600; color: #47464F; }
+
+/* Document ----------------------------------------------------------------*/
+main { max-width: 720px; margin: 0 auto; padding: 64px 5vw 100px; }
+
+.eyebrow {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+  letter-spacing: .14em;
+  color: var(--brand);
+}
+
+h1 {
+  font-size: clamp(30px, 4vw, 42px);
+  line-height: 1.15;
+  letter-spacing: -.02em;
+  font-weight: 700;
+  margin: 10px 0 0;
+}
+.updated { font-size: 14px; color: var(--muted); margin: 10px 0 32px; }
+
+h2 { font-size: 21px; font-weight: 700; margin: 40px 0 12px; letter-spacing: -.01em; }
+h3 { font-size: 17px; font-weight: 700; margin: 24px 0 8px; }
+
+p, li { font-size: 15.5px; line-height: 1.7; color: var(--body); }
+p { margin: 0 0 16px; }
+ul { padding-left: 20px; margin: 0 0 16px; }
+li { margin-bottom: 8px; }
+strong { font-weight: 700; color: var(--ink); }
+
+code {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .9em;
+  background: var(--tint);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+/* The callout the design uses for its own disclaimer, reused for ours. */
+.note {
+  margin: 24px 0;
+  padding: 16px 20px;
+  border-radius: 14px;
+  background: var(--tint);
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--body);
+}
+.note p { margin: 0; font-size: inherit; }
+.note p + p { margin-top: 12px; }
+
+/* Footer ------------------------------------------------------------------*/
+footer {
+  padding: 32px 5vw;
+  border-top: 1px solid var(--rule);
+  display: flex;
+  justify-content: space-between;
+  gap: 16px 24px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--faint);
+}
+footer a { color: var(--faint); text-decoration: none; }
+footer a:hover { color: var(--brand); }
+.footer-links { display: flex; gap: 20px; flex-wrap: wrap; }

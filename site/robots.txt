@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+
+# The client is a single-page app: every path under /app returns the same
+# shell with a 200, so a crawler following links inside it would mint an
+# unbounded set of URLs that are all the same document — and all of them
+# duplicating the landing page's title. Nothing under here is indexable
+# anyway; it is behind a session.
+Disallow: /app
+
+Sitemap: https://opensplit.web.app/sitemap.xml

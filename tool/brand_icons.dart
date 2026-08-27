@@ -38,6 +38,15 @@ void _favicon() {
   final icon = _fill(_read('assets/icon/icon-foreground.png'), 0.88, 32);
   File('site/favicon.png').writeAsBytesSync(encodePng(icon));
   stdout.writeln('brand_icons: site/favicon.png at 32px');
+
+  // Also as .ico, for everything that asks for /favicon.ico without reading
+  // the document first — crawlers, feed readers, link unfurlers. Every page
+  // declares its icons, so nothing of ours depends on this; what it stops is
+  // the request arriving and getting an answer that is not an image. With the
+  // single-page rewrite scoped to /app it would 404, and before that it was
+  // worse: 200, text/html, the whole app shell.
+  File('site/favicon.ico').writeAsBytesSync(encodeIco(icon));
+  stdout.writeln('brand_icons: site/favicon.ico at 32px');
 }
 
 /// The status bar icon for a notification.

@@ -57,6 +57,13 @@ app.*.map.json
 *.freezed.dart
 lib/l10n/app_localizations*.dart
 
+# Locked CI dependencies and ephemeral Google credentials.
+.bundle/
+vendor/bundle/
+gha-creds-*.json
+fastlane/report.xml
+fastlane/README.md
+
 # Supabase CLI local state
 supabase/.temp/
 supabase/.branches/

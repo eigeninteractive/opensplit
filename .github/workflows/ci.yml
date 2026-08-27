@@ -4,81 +4,125 @@ on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
+  workflow_dispatch:
   workflow_call:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   dart:
     name: Analyse and test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.47.1'
-
-      - run: flutter pub get
+          flutter-version: "3.47.1"
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - run: flutter gen-l10n
       - run: dart run build_runner build
+      - name: Regenerate committed database contracts
+        run: |
+          dart run drift_dev schema dump lib/data/local/database.dart drift_schemas/
+          dart run drift_dev schema generate drift_schemas/ test/data/generated_migrations/
+          dart format test/data/generated_migrations
       - run: dart format --output=none --set-exit-if-changed lib test tool
-      - run: dart analyze --fatal-infos
-      - run: node --test test/web_service_worker_test.mjs
-
-      - uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.9.3
-      - run: deno fmt --check supabase/functions
-      - run: deno check supabase/functions/fetch-fx/index.ts
-      - run: deno check supabase/functions/notify-entry/index.ts
-
-      # The Supabase integration tests skip themselves when nothing is
-      # listening, so this stays green without a backend.
-      - run: flutter test
-
-      # The domain runs on the web too, where an int is a double. The
-      # allocator's BigInt intermediates exist for this and nothing else
-      # proves them.
+      - name: Check automatic fixes and generated contract drift
+        run: |
+          for directory in lib test tool; do dart fix --apply "$directory"; done
+          git diff --exit-code
+          test -z "$(git status --porcelain --untracked-files=all)"
+      - run: flutter analyze --fatal-infos --no-pub
+      - run: flutter test --exclude-tags integration
       - run: flutter test --platform chrome test/domain
+      - name: Check tools did not mutate the checkout
+        run: |
+          git diff --exit-code
+          test -z "$(git status --porcelain --untracked-files=all)"
 
   database:
     name: Database tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: supabase/setup-cli@v1
         with:
           version: 2.115.0
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.47.1'
-
+          flutter-version: "3.47.1"
+          cache: true
       - run: supabase start
-      # Invariant trigger, RLS non-recursion, invite claim flow, and what a
-      # modified client can do to another member of its own group.
       - run: supabase test db
-
-      # The adapter against the real thing. These skip themselves when nothing
-      # is listening, which is why the `dart` job above stays green without a
-      # backend — and is also why they have to be run somewhere that DOES have
-      # one, or they never run at all. They are the only thing that catches a
-      # wrong RPC signature, a PostgREST filter that does not mean what it
-      # looks like, or a policy that forbids something the app has to do.
-      - run: flutter pub get
+      - run: flutter pub get --enforce-lockfile
       - run: dart run build_runner build
-      - run: flutter test test/data/supabase_integration_test.dart
+      # Never let the adapter tests silently pass without their database.
+      - run: flutter test --dart-define=REQUIRE_SUPABASE=true test/data/supabase_integration_test.dart
+      - if: always()
+        run: supabase stop --no-backup
+
+  tooling:
+    name: Release tooling and Edge Functions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      BUNDLE_FROZEN: "true"
+      FASTLANE_SKIP_UPDATE_CHECK: "true"
+      FASTLANE_OPT_OUT_USAGE: "true"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24.20.0"
+      - run: node --test test/web_service_worker_test.mjs
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+      - run: ruby -c fastlane/Fastfile
+      - run: bundle exec fastlane lanes
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.9.3
+      - run: deno fmt --check supabase/functions
+      - run: deno check --config=supabase/functions/deno.json supabase/functions/fetch-fx/index.ts supabase/functions/notify-entry/index.ts
+      - name: Check tools did not mutate the checkout
+        run: |
+          git diff --exit-code
+          test -z "$(git status --porcelain --untracked-files=all)"
 
   build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.47.1'
-
-      - run: flutter pub get
+          flutter-version: "3.47.1"
+          cache: true
+      - run: flutter pub get --enforce-lockfile
       - run: dart run build_runner build
       - run: dart run tool/build_web.dart --config=env/ci.example.json
+      # No upload credentials enter PR jobs; this is a compile check, not a release.
       - run: flutter build apk --release --dart-define-from-file=env/ci.example.json
