@@ -110,7 +110,7 @@ grant select, insert, update, delete on device_tokens to authenticated;
 -- ----------------------------------------------------------------------------
 grant execute on function upsert_entry(
   uuid, uuid, char(3), bigint, jsonb, jsonb, text, entry_kind, split_kind,
-  date, uuid, text, numeric, text, uuid
+  date, uuid, text, numeric, text, uuid, timestamptz
 ) to authenticated;
 grant execute on function delete_entry(uuid) to authenticated;
 grant execute on function create_invite(uuid, interval) to authenticated;

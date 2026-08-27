@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/repositories/drift_activity_repository.dart';
+import 'package:opensplit/data/repositories/drift_conflict_repository.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';
 import 'package:opensplit/data/repositories/drift_profile_repository.dart';
@@ -1224,6 +1225,185 @@ void main() {
         reason:
             'the server owns the clock, so a device with a wrong one '
             'cannot push everybody else past what it has not read',
+      );
+    });
+  });
+
+  group('an edit overtaken by somebody else', () {
+    /// Ravi and Priya both hold the expense, then both edit it. Priya's push
+    /// lands first, so Ravi's is composed against a version that no longer
+    /// exists.
+    Future<({String groupId, String entryId, String ravi})> divergent({
+      required int raviAmount,
+      required String raviDescription,
+      required int priyaAmount,
+    }) async {
+      final g = await seedGroup();
+      final entry = await a.entries.create(
+        EntryDraft(
+          groupId: g.groupId,
+          currency: 'INR',
+          amountMinor: 30000,
+          description: 'Dinner',
+          split: EqualSplit([g.ravi, g.priya, g.arun]),
+          payerAmounts: {g.ravi: 30000},
+        ),
+        createdBy: g.ravi,
+      );
+      await a.sync.syncGroup(g.groupId);
+      await b.sync.syncGroup(g.groupId);
+
+      // B edits and pushes. A never hears about it -- it is offline, or simply
+      // has not synced since.
+      await b.entries.update(
+        entry.id,
+        EntryDraft(
+          groupId: g.groupId,
+          currency: 'INR',
+          amountMinor: priyaAmount,
+          description: 'Dinner',
+          split: EqualSplit([g.ravi, g.priya, g.arun]),
+          payerAmounts: {g.ravi: priyaAmount},
+        ),
+        actorId: g.priya,
+      );
+      await b.sync.syncGroup(g.groupId);
+
+      // A edits the copy it still believes in.
+      await a.entries.update(
+        entry.id,
+        EntryDraft(
+          groupId: g.groupId,
+          currency: 'INR',
+          amountMinor: raviAmount,
+          description: raviDescription,
+          split: EqualSplit([g.ravi, g.priya, g.arun]),
+          payerAmounts: {g.ravi: raviAmount},
+        ),
+        actorId: g.ravi,
+      );
+
+      return (groupId: g.groupId, entryId: entry.id, ravi: g.ravi);
+    }
+
+    test('the ledger converges and the edit is kept', () async {
+      final g = await divergent(
+        raviAmount: 60000,
+        raviDescription: 'Dinner',
+        priyaAmount: 45000,
+      );
+
+      await a.sync.syncGroup(g.groupId);
+
+      // The money follows the server. The alternative -- holding this device's
+      // version until somebody decides -- leaves A reading balances nobody
+      // else in the group agrees with, for as long as nobody notices.
+      final onA = (await a.ledger(g.groupId)).single;
+      expect(
+        onA.amountMinor,
+        45000,
+        reason:
+            "A converged on the group's version rather than keeping its "
+            'own and splitting the group over one expense',
+      );
+
+      final conflicts = await DriftConflictRepository(a.db).watchAll().first;
+      expect(conflicts, hasLength(1));
+      expect(
+        conflicts.single.attempted.amountMinor,
+        60000,
+        reason: 'and what A meant is kept, because it is the only copy left',
+      );
+      expect(conflicts.single.current?.amountMinor, 45000);
+      expect(conflicts.single.stillDisagrees, isTrue);
+    });
+
+    test('it does not sit in the outbox being refused forever', () async {
+      final g = await divergent(
+        raviAmount: 60000,
+        raviDescription: 'Dinner',
+        priyaAmount: 45000,
+      );
+
+      await a.sync.syncGroup(g.groupId);
+
+      expect(
+        await a.outbox.pendingCount(),
+        0,
+        reason: 'resending the same stale base is refused identically forever',
+      );
+      expect(
+        await a.outbox.deadLetters(),
+        isEmpty,
+        reason:
+            'and it is not a dead letter either: a dead letter says nobody '
+            'can see this, which is exactly wrong -- everybody can see the '
+            'expense, just not this edit to it',
+      );
+    });
+
+    test('an edit that moves no money is simply applied', () async {
+      final g = await divergent(
+        raviAmount: 45000,
+        raviDescription: 'Dinner at Toit',
+        priyaAmount: 45000,
+      );
+
+      await a.sync.syncGroup(g.groupId);
+
+      // A's edit was composed against a version B had already replaced, but it
+      // carries B's amount, so applying it moves nothing. Arbitrating that
+      // would cost two people a decision to settle a typo.
+      expect(await DriftConflictRepository(a.db).watchAll().first, isEmpty);
+      expect((await a.ledger(g.groupId)).single.description, 'Dinner at Toit');
+
+      await b.sync.syncGroup(g.groupId);
+      expect((await b.ledger(g.groupId)).single.description, 'Dinner at Toit');
+    });
+
+    test('using mine re-applies it from the version that won', () async {
+      final g = await divergent(
+        raviAmount: 60000,
+        raviDescription: 'Dinner',
+        priyaAmount: 45000,
+      );
+      await a.sync.syncGroup(g.groupId);
+
+      final conflicts = DriftConflictRepository(a.db);
+      final parked = await conflicts.byEntry(g.entryId);
+      await a.entries.reapply(parked!.attempted, actorId: g.ravi);
+      await conflicts.forget(g.entryId);
+
+      await a.sync.syncGroup(g.groupId);
+
+      // The re-application is composed against what the server holds now, so
+      // it is an ordinary edit and lands. Being refused a second time would
+      // mean the base never moved off the version that was overtaken.
+      expect((await a.ledger(g.groupId)).single.amountMinor, 60000);
+      await b.sync.syncGroup(g.groupId);
+      expect(
+        (await b.ledger(g.groupId)).single.amountMinor,
+        60000,
+        reason: 'and it reaches the rest of the group like any other edit',
+      );
+      expect(await conflicts.watchAll().first, isEmpty);
+    });
+
+    test('the feed records both versions, in order', () async {
+      final g = await divergent(
+        raviAmount: 60000,
+        raviDescription: 'Dinner',
+        priyaAmount: 45000,
+      );
+      await a.sync.syncGroup(g.groupId);
+
+      final feed = await a.feed(g.groupId);
+      expect(
+        feed.any((line) => line.kind == EntryEventKind.edited),
+        isTrue,
+        reason:
+            "B's edit is on the record, attributed to B, even though A "
+            'never saw it happen',
       );
     });
   });

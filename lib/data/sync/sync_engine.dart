@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 
 import '../../domain/models/entry.dart';
@@ -8,6 +10,7 @@ import 'feeds.dart';
 import 'outbox_queue.dart';
 import 'remote_ledger_api.dart';
 import 'sync_cursor.dart';
+import 'wire.dart' show entryToJson;
 
 /// What one sync run did.
 class SyncReport {
@@ -217,11 +220,20 @@ class SyncEngine {
           await outbox.complete(item.id);
           sent++;
         } on RemoteRejected catch (e) {
-          // A rejected invariant or a permission failure will be rejected
-          // exactly the same way next time. Retrying forever would wedge
-          // everything queued behind it, so it is dropped and recorded
-          // instead.
-          await outbox.fail(item.id, e.message, permanent: e.permanent);
+          switch (e.kind) {
+            // Composed against a version somebody has since changed. Neither a
+            // retry nor a dead letter; see _parkConflict.
+            case RejectionKind.stale:
+              await _parkConflict(item, e);
+            // A rejected invariant or a permission failure will be rejected
+            // exactly the same way next time. Retrying forever would wedge
+            // everything queued behind it, so it is dropped and recorded
+            // instead.
+            case RejectionKind.permanent:
+              await outbox.fail(item.id, e.message, permanent: true);
+            case RejectionKind.transient:
+              await outbox.fail(item.id, e.message);
+          }
           failed++;
         } catch (e) {
           await outbox.fail(item.id, '$e');
@@ -233,6 +245,50 @@ class SyncEngine {
     return (sent: sent, failed: failed);
   }
 
+  /// Takes a refused edit out of the queue and parks it for a person.
+  ///
+  /// Three things happen, and the order of the middle one is the point.
+  ///
+  /// The intention is stashed whole, because it is the only copy: the local
+  /// row is about to become the server's. Then the row's version marker is
+  /// wound back to the base it was composed against, which is what lets the
+  /// pull immediately afterwards apply the server's version over the top --
+  /// without it, [EntryFeed]'s last-write-wins guard sees a local clock newer
+  /// than the server's, keeps this device's rejected copy, and leaves the group
+  /// permanently split over one expense. And the item leaves the queue, because
+  /// resending it is refused identically forever.
+  ///
+  /// The ledger converges and the intention waits. The other direction --
+  /// holding this device's version until somebody decides -- would leave these
+  /// balances disagreeing with everybody else's for as long as nobody noticed,
+  /// which is the failure this whole design exists to make impossible.
+  Future<void> _parkConflict(OutboxRow item, RemoteRejected rejection) async {
+    final loaded = await _loadEntry(item.targetId);
+    if (loaded == null) return;
+    final (entry, base) = loaded;
+
+    await db.transaction(() async {
+      await db
+          .into(db.entryConflicts)
+          .insertOnConflictUpdate(
+            EntryConflictsCompanion.insert(
+              entryId: entry.id,
+              groupId: entry.groupId,
+              attempted: jsonEncode(entryToJson(entry)),
+              reason: rejection.message,
+              rejectedAt: _clock(),
+            ),
+          );
+
+      if (base != null) {
+        await (db.update(db.entries)..where((t) => t.id.equals(entry.id)))
+            .write(EntriesCompanion(updatedAt: Value(base)));
+      }
+    });
+
+    await outbox.complete(item.id);
+  }
+
   Future<void> _pushOne(OutboxRow item) async {
     final target = OutboxTarget.values.byName(item.operation);
 
@@ -240,15 +296,19 @@ class SyncEngine {
       case OutboxTarget.entry:
         // Read the row now rather than trusting a payload captured at queue
         // time: the entry may have been edited several times since.
-        final entry = await _loadEntry(item.targetId);
-        if (entry == null) return;
+        final loaded = await _loadEntry(item.targetId);
+        if (loaded == null) return;
+        final (entry, base) = loaded;
 
         final stored = entry.isDeleted
             ? await api.deleteEntry(entry.id)
-            : await api.upsertEntry(entry);
+            // The base goes with it, so the server can tell an ordinary edit
+            // from one composed against a version somebody has since changed.
+            : await api.upsertEntry(entry, baseUpdatedAt: base);
 
         // Adopt the server's timestamp so the next pull does not treat our own
-        // write as a change to apply.
+        // write as a change to apply -- and move the base with it, since this
+        // row is now derived from exactly what the server just stored.
         await _stampUpdatedAt(stored.id, stored.updatedAt);
 
       case OutboxTarget.group:
@@ -372,7 +432,8 @@ class SyncEngine {
       '${date.month.toString().padLeft(2, '0')}-'
       '${date.day.toString().padLeft(2, '0')}';
 
-  Future<Entry?> _loadEntry(String entryId) async {
+  /// The entry, and the server version it was composed against.
+  Future<(Entry, DateTime?)?> _loadEntry(String entryId) async {
     final row = await (db.select(
       db.entries,
     )..where((t) => t.id.equals(entryId))).getSingleOrNull();
@@ -385,12 +446,15 @@ class SyncEngine {
       db.entryShares,
     )..where((t) => t.entryId.equals(entryId))).get();
 
-    return row.toDomain(payers: payers, shares: shares);
+    return (row.toDomain(payers: payers, shares: shares), row.baseUpdatedAt);
   }
 
   Future<void> _stampUpdatedAt(String entryId, DateTime updatedAt) async {
     await (db.update(db.entries)..where((t) => t.id.equals(entryId))).write(
-      EntriesCompanion(updatedAt: Value(updatedAt)),
+      EntriesCompanion(
+        updatedAt: Value(updatedAt),
+        baseUpdatedAt: Value(updatedAt),
+      ),
     );
   }
 

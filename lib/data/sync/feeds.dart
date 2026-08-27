@@ -181,6 +181,13 @@ class EntryFeed implements ChangeFeed<Entry> {
           continue;
         }
         await writeEntryLocally(_db, remote);
+
+        // This row is now derived from exactly what the server holds, so the
+        // base moves with it. A local edit will change `updated_at` to a
+        // device clock and leave this alone, which is the pair that lets the
+        // next push say what version it was composed against.
+        await (_db.update(_db.entries)..where((t) => t.id.equals(remote.id)))
+            .write(EntriesCompanion(baseUpdatedAt: Value(remote.updatedAt)));
         applied++;
       }
     });

@@ -6,18 +6,34 @@ import '../../domain/models/profile.dart';
 import 'change_feed.dart';
 import 'sync_cursor.dart';
 
+/// What kind of "no" the server said.
+enum RejectionKind {
+  /// Worth another attempt later: a dropped connection, a timeout, a restart.
+  transient,
+
+  /// Refused identically forever — a violated invariant, a denied permission.
+  /// Retrying only wedges everything queued behind it.
+  permanent,
+
+  /// Composed against a version of the row that somebody has since changed.
+  ///
+  /// The third kind, and it had to be added rather than folded into one of the
+  /// other two. Retrying is pointless, because the same stale base is refused
+  /// the same way forever. But it is not permanent either: a person can look
+  /// at both versions and say which they meant. It is the one rejection whose
+  /// resolution is a decision rather than a wait.
+  stale,
+}
+
 /// Raised when the server rejects a write.
 class RemoteRejected implements Exception {
-  const RemoteRejected(this.message, {this.permanent = false});
+  const RemoteRejected(this.message, {this.kind = RejectionKind.transient});
 
   final String message;
-
-  /// True when retrying cannot help — a violated invariant, a permission
-  /// failure. The outbox drops these rather than retrying forever.
-  final bool permanent;
+  final RejectionKind kind;
 
   @override
-  String toString() => 'RemoteRejected: $message';
+  String toString() => 'RemoteRejected($kind): $message';
 }
 
 /// The entire surface the client needs from a server.
@@ -36,7 +52,17 @@ abstract interface class RemoteLedgerApi {
   /// produces no duplicate. Returns the stored entry, carrying the server's
   /// `updatedAt` — never the client's clock, which is what makes last-write-
   /// wins meaningful across devices with different times.
-  Future<Entry> upsertEntry(Entry entry);
+  ///
+  /// [baseUpdatedAt] is the server version this edit was composed against, and
+  /// is what lets the server tell an ordinary edit from one written against a
+  /// version somebody has since changed. Null for a row this device invented
+  /// and has never pushed: there is no version to be stale against.
+  ///
+  /// Throws [RemoteRejected] with [RejectionKind.stale] when the base no
+  /// longer matches *and* applying the write would move money. A stale base on
+  /// its own is not refused — see the RPC, which explains why arbitrating a
+  /// typo would cost more than it saves.
+  Future<Entry> upsertEntry(Entry entry, {DateTime? baseUpdatedAt});
 
   /// Soft-deletes an entry, returning it with the server's new `updatedAt`.
   Future<Entry> deleteEntry(String entryId);

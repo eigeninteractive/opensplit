@@ -3,7 +3,7 @@
 -- Run with: supabase test db
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(30);
+select plan(38);
 
 -- ---------------------------------------------------------------------------
 -- Reference data
@@ -203,6 +203,118 @@ select is(
   (select count(*)::int from entry_shares
     where entry_id = '88888888-8888-4888-8888-888888888888'),
   2, 'children were replaced, not duplicated');
+
+-- ---------------------------------------------------------------------------
+-- Editing against a version somebody has since changed
+--
+-- Whole-entry last-write-wins is the rule, and the right one: an amount, its
+-- payers and its shares are one coherent fact. What it cannot do by itself is
+-- say that it happened, so an edit carrying a base version that no longer
+-- matches is refused -- but only when applying it would move money, because
+-- two people fixing a typo should not have to arbitrate.
+-- ---------------------------------------------------------------------------
+select lives_ok($$
+  select upsert_entry(
+    '88888888-8888-4888-8888-888888888888'::uuid, '33333333-3333-4333-8333-333333333333'::uuid,
+    'INR', 50000,
+    '[{"member_id":"44444444-4444-4444-8444-444444444444","amount_minor":50000}]'::jsonb,
+    '[{"member_id":"44444444-4444-4444-8444-444444444444","amount_minor":25000,"weight":1},
+      {"member_id":"55555555-5555-4555-8555-555555555555","amount_minor":25000,"weight":1}]'::jsonb,
+    'Base version')
+$$, 'an edit with no base version is never refused: there is nothing to be '
+    'stale against, and a first write has no predecessor');
+
+-- A base that matches is simply an ordinary edit.
+select lives_ok(format($$
+  select upsert_entry(
+    %L::uuid, %L::uuid,
+    'INR', 60000,
+    '[{"member_id":"44444444-4444-4444-8444-444444444444","amount_minor":60000}]'::jsonb,
+    '[{"member_id":"44444444-4444-4444-8444-444444444444","amount_minor":30000,"weight":1},
+      {"member_id":"55555555-5555-4555-8555-555555555555","amount_minor":30000,"weight":1}]'::jsonb,
+    'Still fine', 'expense', 'equal', current_date, null, null, null, null,
+    null, %L::timestamptz)
+$$, '88888888-8888-4888-8888-888888888888',
+    '33333333-3333-4333-8333-333333333333',
+    (select updated_at from entries
+      where id = '88888888-8888-4888-8888-888888888888')),
+  'an edit whose base still matches is applied');
+
+-- Prose against a stale base, with the money left exactly where the server has
+-- it. Nothing is at stake, so nothing is refused.
+select lives_ok($$
+  select upsert_entry(
+    '88888888-8888-4888-8888-888888888888'::uuid,
+    '33333333-3333-4333-8333-333333333333'::uuid,
+    'INR', 60000,
+    '[{"member_id":"44444444-4444-4444-8444-444444444444","amount_minor":60000}]'::jsonb,
+    '[{"member_id":"44444444-4444-4444-8444-444444444444","amount_minor":30000,"weight":1},
+      {"member_id":"55555555-5555-4555-8555-555555555555","amount_minor":30000,"weight":1}]'::jsonb,
+    'Typo fixed', 'expense', 'equal', current_date, null, null, null, null,
+    null, '2020-01-01T00:00:00Z'::timestamptz)
+$$, 'a stale base alone is not a conflict: last-write-wins on a description '
+    'costs nobody anything');
+
+select is(
+  (select description from entries
+    where id = '88888888-8888-4888-8888-888888888888'),
+  'Typo fixed', 'and it landed');
+
+-- The same stale base, now carrying an amount that disagrees with the server.
+select throws_ok($$
+  select upsert_entry(
+    '88888888-8888-4888-8888-888888888888'::uuid,
+    '33333333-3333-4333-8333-333333333333'::uuid,
+    'INR', 90000,
+    '[{"member_id":"44444444-4444-4444-8444-444444444444","amount_minor":90000}]'::jsonb,
+    '[{"member_id":"44444444-4444-4444-8444-444444444444","amount_minor":45000,"weight":1},
+      {"member_id":"55555555-5555-4555-8555-555555555555","amount_minor":45000,"weight":1}]'::jsonb,
+    'Bigger', 'expense', 'equal', current_date, null, null, null, null,
+    null, '2020-01-01T00:00:00Z'::timestamptz)
+$$, '40001', null,
+  'an edit that would move money away from where the server has it, composed '
+  'against a version somebody has since changed, is refused rather than '
+  'silently overwriting them');
+
+select is(
+  (select amount_minor from entries
+    where id = '88888888-8888-4888-8888-888888888888'),
+  60000::bigint, 'and the server''s amount is untouched');
+
+-- The case that makes the predicate about money rather than about parameters.
+-- This edit changes only the description, but upsert_entry writes the whole
+-- row, so its stale amount would revert whatever the other person just did.
+select throws_ok($$
+  select upsert_entry(
+    '88888888-8888-4888-8888-888888888888'::uuid,
+    '33333333-3333-4333-8333-333333333333'::uuid,
+    'INR', 50000,
+    '[{"member_id":"44444444-4444-4444-8444-444444444444","amount_minor":50000}]'::jsonb,
+    '[{"member_id":"44444444-4444-4444-8444-444444444444","amount_minor":25000,"weight":1},
+      {"member_id":"55555555-5555-4555-8555-555555555555","amount_minor":25000,"weight":1}]'::jsonb,
+    'Only the words changed', 'expense', 'equal', current_date, null, null,
+    null, null, null, '2020-01-01T00:00:00Z'::timestamptz)
+$$, '40001', null,
+  'a description-only edit is still refused when it carries a stale amount: '
+  'the RPC writes the whole row, so "I only changed the words" would have '
+  'reverted the amount somebody else had just corrected');
+
+-- Re-splitting between the same people, total unchanged. The balance invariant
+-- is satisfied and every share moved, which is the attack the snapshot
+-- redesign exists for -- and against a stale base it is refused outright.
+select throws_ok($$
+  select upsert_entry(
+    '88888888-8888-4888-8888-888888888888'::uuid,
+    '33333333-3333-4333-8333-333333333333'::uuid,
+    'INR', 60000,
+    '[{"member_id":"44444444-4444-4444-8444-444444444444","amount_minor":60000}]'::jsonb,
+    '[{"member_id":"44444444-4444-4444-8444-444444444444","amount_minor":10000,"weight":1},
+      {"member_id":"55555555-5555-4555-8555-555555555555","amount_minor":50000,"weight":5}]'::jsonb,
+    'Re-split', 'expense', 'equal', current_date, null, null, null, null,
+    null, '2020-01-01T00:00:00Z'::timestamptz)
+$$, '40001', null,
+  'and so is a re-split that leaves the total alone: the money is the shares, '
+  'not just the amount');
 
 -- Soft delete only.
 select lives_ok(

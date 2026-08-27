@@ -113,7 +113,7 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
       'shares:entry_shares(member_id,amount_minor,weight)';
 
   @override
-  Future<Entry> upsertEntry(Entry entry) async {
+  Future<Entry> upsertEntry(Entry entry, {DateTime? baseUpdatedAt}) async {
     try {
       final row = await _client.rpc<Map<String, dynamic>>(
         'upsert_entry',
@@ -145,6 +145,7 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
           'p_fx_rate': entry.fxRate,
           'p_fx_source': entry.fxSource,
           'p_client_key': entry.clientKey,
+          'p_base_updated_at': baseUpdatedAt?.toUtc().toIso8601String(),
         },
       );
 
@@ -392,9 +393,21 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
       '2BP01', // dependent_objects_still_exist — a group with expenses in it
       'P0002', // no_data_found
     };
+
+    // serialization_failure, raised by upsert_entry when an edit was composed
+    // against a version somebody has since changed. Standard, and semantically
+    // exact -- but it must be named here, because the default for an unlisted
+    // code is "transient", and retrying this one resends the same stale base
+    // forever.
+    if (e.code == '40001') {
+      return RemoteRejected(e.message, kind: RejectionKind.stale);
+    }
+
     return RemoteRejected(
       e.message,
-      permanent: permanentCodes.contains(e.code),
+      kind: permanentCodes.contains(e.code)
+          ? RejectionKind.permanent
+          : RejectionKind.transient,
     );
   }
 }

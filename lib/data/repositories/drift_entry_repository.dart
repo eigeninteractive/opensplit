@@ -94,6 +94,32 @@ final class DriftEntryRepository {
     await _enqueue(after.id);
   }
 
+  /// Writes an edit that was parked as a conflict, from the new base.
+  ///
+  /// The same path as every other write -- [_writeWithSnapshot], the local
+  /// tables, the outbox -- and deliberately so: a "use mine" that wrote an
+  /// expense by some other route would be a second door into the ledger, which
+  /// is the thing this design spent a redesign closing.
+  ///
+  /// What makes it not simply a repeat of the refused write is what it does
+  /// *not* touch. `base_updated_at` on the row is now the server's current
+  /// version, put there by the pull that followed the rejection, and nothing
+  /// here changes it -- so the push this queues is composed against what the
+  /// server holds today rather than against the version that was overtaken.
+  ///
+  /// [at] becomes the entry's `updated_at`, a device clock, exactly as an
+  /// ordinary edit does. The server replaces it on arrival.
+  Future<Entry> reapply(
+    Entry attempted, {
+    required String? actorId,
+    DateTime? now,
+  }) async {
+    final at = now ?? _clock();
+    final entry = attempted.copyWith(updatedAt: at);
+    await _writeWithSnapshot(after: entry, actorId: actorId, at: at);
+    return entry;
+  }
+
   /// The most recent thing recorded about an entry, from either source.
   Future<EntrySnapshot?> _latestSnapshot(String entryId) async {
     final row =

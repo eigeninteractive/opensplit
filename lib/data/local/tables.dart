@@ -233,6 +233,21 @@ class Entries extends Table {
 
   /// Sync cursor column. Server `now()` once synced, never a client clock.
   DateTimeColumn get updatedAt => dateTime()();
+
+  /// The server version this row was last derived from.
+  ///
+  /// Distinct from [updatedAt], and the difference is the whole point: a local
+  /// edit moves [updatedAt] to a device clock and leaves this alone, so the
+  /// pair says both "what this device thinks now" and "what the server said
+  /// when this edit was composed". The second is what the push sends as its
+  /// base, and what lets the server tell a fresh edit from one written against
+  /// a version somebody has since changed.
+  ///
+  /// Null for a row this device invented and has never pushed. There is no
+  /// version to be stale against, so the write is an insert and is never
+  /// refused as a conflict.
+  DateTimeColumn get baseUpdatedAt => dateTime().nullable()();
+
   DateTimeColumn get deletedAt => dateTime().nullable()();
 
   /// Client-generated id making a retried write idempotent.
@@ -240,6 +255,44 @@ class Entries extends Table {
 
   @override
   Set<Column> get primaryKey => {id};
+}
+
+/// An edit the server refused because the expense had changed underneath it.
+///
+/// The third outcome, and it needed to be. The outbox has two: retry with
+/// backoff, or set aside permanently. A stale write is neither -- retrying
+/// sends the same stale base and is refused identically forever, and it is not
+/// permanent because a person can look at both versions and decide.
+///
+/// So the ledger converges and the intention is parked here. That direction is
+/// deliberate: holding the local version instead would leave this device's
+/// balances disagreeing with everybody else's for as long as nobody noticed,
+/// which is the exact failure this app has spent two redesigns removing. The
+/// money follows the server; what you meant becomes something to review.
+///
+/// One row per expense. A second refused edit replaces the first, because what
+/// is being kept is "what this device last wanted this expense to say", not a
+/// history of attempts.
+@DataClassName('EntryConflictRow')
+class EntryConflicts extends Table {
+  TextColumn get entryId =>
+      text().references(Entries, #id, onDelete: KeyAction.cascade)();
+  TextColumn get groupId =>
+      text().references(Groups, #id, onDelete: KeyAction.cascade)();
+
+  /// The entry as this device meant to write it, through the wire codec.
+  ///
+  /// Stored whole rather than as a diff. A diff would need a base to be read
+  /// against, and the base is precisely what has moved.
+  TextColumn get attempted => text()();
+
+  /// The server's own words about why it refused.
+  TextColumn get reason => text()();
+
+  DateTimeColumn get rejectedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {entryId};
 }
 
 @DataClassName('EntryPayerRow')

@@ -14,6 +14,7 @@ import '../widgets/balance_arrow.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/create_group_sheet.dart';
 import '../widgets/link_account_prompt.dart';
+import '../widgets/conflicting_edit_banner.dart';
 import '../widgets/unsynced_changes_banner.dart';
 import '../router.dart';
 
@@ -85,10 +86,12 @@ class _GroupList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Two leading slots, each of which renders as nothing until it has
+    // Three leading slots, each of which renders as nothing until it has
     // something to say. The refused-write banner comes first: it is the one
-    // that means data is already wrong somewhere.
-    const leading = 2;
+    // that means data is already wrong somewhere. The overtaken-edit banner
+    // follows, because it means the group is right and this device's last
+    // change to it was not.
+    const leading = 3;
     final empty = groups.isEmpty;
     final rows = empty ? 1 : groups.length;
     final trailing = archivedCount > 0 ? 1 : 0;
@@ -106,7 +109,8 @@ class _GroupList extends StatelessWidget {
         // be folding balances.
         itemBuilder: (context, index) {
           if (index == 0) return const UnsyncedChangesBanner();
-          if (index == 1) return const LinkAccountPrompt();
+          if (index == 1) return const ConflictingEditBanner();
+          if (index == 2) return const LinkAccountPrompt();
 
           final row = index - leading;
           if (empty) {

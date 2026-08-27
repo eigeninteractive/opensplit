@@ -48,7 +48,14 @@ create or replace function upsert_entry(
   p_notes       text        default null,
   p_fx_rate     numeric     default null,
   p_fx_source   text        default null,
-  p_client_key  uuid        default null
+  p_client_key  uuid        default null,
+
+  -- The server version this edit was composed against.
+  --
+  -- Null means "I am not claiming a base": a row this device invented, or a
+  -- client that does not send one. Both skip the check below, which is why
+  -- adding this parameter changed no existing behaviour.
+  p_base_updated_at timestamptz default null
 )
 returns entries
 language plpgsql
@@ -56,8 +63,11 @@ security definer
 set search_path = public
 as $$
 declare
-  v_member uuid;
-  v_row    entries;
+  v_member   uuid;
+  v_row      entries;
+  v_current  timestamptz;
+  v_stored   jsonb;
+  v_incoming jsonb;
 begin
   if not is_group_member(p_group_id) then
     raise exception 'Not a member of group %', p_group_id
@@ -77,6 +87,82 @@ begin
   ) then
     raise exception 'Entry % belongs to another group', p_id
       using errcode = 'insufficient_privilege';
+  end if;
+
+  -- The expense moved since this edit was composed.
+  --
+  -- Whole-entry last-write-wins is the rule everywhere else here, and it is the
+  -- right rule for an expense: amount, payers and shares are one coherent fact,
+  -- not a bag of independent columns that can be merged pairwise. Merging them
+  -- is how you get a row that balances arithmetically and describes something
+  -- nobody asked for.
+  --
+  -- What last-write-wins cannot do on its own is tell anybody it happened. Two
+  -- people edit one expense, the second push overwrites the first, and the
+  -- person whose edit vanished is never told -- while the feed reads as though
+  -- they reverted their friend on purpose.
+  --
+  -- The predicate is deliberately about money and not about staleness. A stale
+  -- base alone is not a conflict worth refusing: two people fixing a typo
+  -- should not have to arbitrate, and last-write-wins on prose costs nothing.
+  -- What cannot pass silently is a write that would move money away from where
+  -- the server currently has it -- and because this RPC writes the whole row,
+  -- that includes an edit which changes only the description while carrying a
+  -- stale amount along with it. Comparing the money rather than the parameters
+  -- catches exactly that case and lets the harmless ones through.
+  if p_base_updated_at is not null then
+    select updated_at into v_current from entries where id = p_id;
+
+    if found and v_current is distinct from p_base_updated_at then
+      select jsonb_build_object(
+               'amount', e.amount_minor,
+               'payers', coalesce((
+                 select jsonb_agg(
+                          jsonb_build_object(
+                            'member', p.member_id, 'amount', p.amount_minor)
+                          order by p.member_id)
+                   from entry_payers p where p.entry_id = e.id), '[]'::jsonb),
+               'shares', coalesce((
+                 select jsonb_agg(
+                          jsonb_build_object(
+                            'member', s.member_id, 'amount', s.amount_minor)
+                          order by s.member_id)
+                   from entry_shares s where s.entry_id = e.id), '[]'::jsonb))
+        into v_stored
+        from entries e where e.id = p_id;
+
+      -- The same shape from the parameters, so the comparison is between two
+      -- canonical forms rather than between a row and a payload. Ordered by
+      -- member, and weights left out on purpose: a weight is how a split was
+      -- expressed, the amounts are what anybody owes.
+      select jsonb_build_object(
+               'amount', p_amount,
+               'payers', coalesce((
+                 select jsonb_agg(
+                          jsonb_build_object(
+                            'member', (x->>'member_id')::uuid,
+                            'amount', (x->>'amount_minor')::bigint)
+                          order by (x->>'member_id')::uuid)
+                   from jsonb_array_elements(p_payers) x), '[]'::jsonb),
+               'shares', coalesce((
+                 select jsonb_agg(
+                          jsonb_build_object(
+                            'member', (x->>'member_id')::uuid,
+                            'amount', (x->>'amount_minor')::bigint)
+                          order by (x->>'member_id')::uuid)
+                   from jsonb_array_elements(p_shares) x), '[]'::jsonb))
+        into v_incoming;
+
+      if v_stored is distinct from v_incoming then
+        -- serialization_failure, which is what this is: a write composed
+        -- against a version that no longer exists. Nothing in this stack
+        -- retries the code automatically, and the client maps it to its own
+        -- third outcome -- neither a backoff nor a dead letter.
+        raise exception
+          'Entry % changed since this edit was composed', p_id
+          using errcode = '40001';
+      end if;
+    end if;
   end if;
 
   -- A group somebody is still using is not dormant, whatever the reaper

@@ -34,6 +34,7 @@ part 'database.g.dart';
     EntryPayers,
     EntryShares,
     EntrySnapshots,
+    EntryConflicts,
     FxRates,
     Outbox,
     SyncCursors,

@@ -555,6 +555,14 @@ class Entries extends Table with TableInfo {
     requiredDuringInsert: true,
     $customConstraints: 'NOT NULL',
   );
+  late final GeneratedColumn<int> baseUpdatedAt = GeneratedColumn<int>(
+    'base_updated_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
   late final GeneratedColumn<int> deletedAt = GeneratedColumn<int>(
     'deleted_at',
     aliasedName,
@@ -589,6 +597,7 @@ class Entries extends Table with TableInfo {
     createdBy,
     createdAt,
     updatedAt,
+    baseUpdatedAt,
     deletedAt,
     clientKey,
   ];
@@ -916,6 +925,82 @@ class EntrySnapshots extends Table with TableInfo {
   bool get dontWriteConstraints => true;
 }
 
+class EntryConflicts extends Table with TableInfo {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  EntryConflicts(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<String> entryId = GeneratedColumn<String>(
+    'entry_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES entries(id)ON DELETE CASCADE',
+  );
+  late final GeneratedColumn<String> groupId = GeneratedColumn<String>(
+    'group_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES "groups"(id)ON DELETE CASCADE',
+  );
+  late final GeneratedColumn<String> attempted = GeneratedColumn<String>(
+    'attempted',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> reason = GeneratedColumn<String>(
+    'reason',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> rejectedAt = GeneratedColumn<int>(
+    'rejected_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    entryId,
+    groupId,
+    attempted,
+    reason,
+    rejectedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'entry_conflicts';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {entryId};
+  @override
+  Never map(Map<String, dynamic> data, {String? tablePrefix}) {
+    throw UnsupportedError('TableInfo.map in schema verification code');
+  }
+
+  @override
+  EntryConflicts createAlias(String alias) {
+    return EntryConflicts(attachedDatabase, alias);
+  }
+
+  @override
+  List<String> get customConstraints => const ['PRIMARY KEY(entry_id)'];
+  @override
+  bool get dontWriteConstraints => true;
+}
+
 class FxRates extends Table with TableInfo {
   @override
   final GeneratedDatabase attachedDatabase;
@@ -1165,6 +1250,7 @@ class DatabaseAtV1 extends GeneratedDatabase {
   late final EntryPayers entryPayers = EntryPayers(this);
   late final EntryShares entryShares = EntryShares(this);
   late final EntrySnapshots entrySnapshots = EntrySnapshots(this);
+  late final EntryConflicts entryConflicts = EntryConflicts(this);
   late final FxRates fxRates = FxRates(this);
   late final Outbox outbox = Outbox(this);
   late final SyncCursors syncCursors = SyncCursors(this);
@@ -1182,6 +1268,7 @@ class DatabaseAtV1 extends GeneratedDatabase {
     entryPayers,
     entryShares,
     entrySnapshots,
+    entryConflicts,
     fxRates,
     outbox,
     syncCursors,
@@ -1236,6 +1323,20 @@ class DatabaseAtV1 extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('entry_snapshots', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'entries',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('entry_conflicts', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'groups',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('entry_conflicts', kind: UpdateKind.delete)],
     ),
   ]);
   @override

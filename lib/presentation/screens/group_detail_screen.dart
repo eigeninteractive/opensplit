@@ -14,6 +14,7 @@ import '../widgets/balances_panel.dart';
 import '../widgets/link_account_prompt.dart';
 import '../widgets/page_body.dart';
 import '../widgets/pull_to_sync.dart';
+import '../widgets/conflicting_edit_banner.dart';
 import '../widgets/unsynced_changes_banner.dart';
 
 /// Width at which the two halves of a group stop competing for the screen.
@@ -102,6 +103,13 @@ class GroupDetailScreen extends ConsumerWidget {
             // refused makes the entry list and the balances beside it wrong
             // together, and it must be visible on whichever tab is open.
             const UnsyncedChangesBanner(
+              padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+            ),
+            // Beside it rather than folded into it. Both are about a write
+            // that did not land, and they mean opposite things: one says
+            // nobody else can see this, the other says everybody can see
+            // something else. Merging them would have to pick one wording.
+            const ConflictingEditBanner(
               padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
             ),
             // Also here, not only on the group list. Someone who arrived on an

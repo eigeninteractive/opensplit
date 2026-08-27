@@ -10,6 +10,7 @@ import '../data/local/database.dart';
 import '../data/repositories/drift_analytics_repository.dart';
 import '../data/repositories/drift_category_repository.dart';
 import '../data/repositories/drift_currency_repository.dart';
+import '../data/repositories/drift_conflict_repository.dart';
 import '../data/repositories/drift_entry_repository.dart';
 import '../data/repositories/drift_group_repository.dart';
 import '../data/repositories/drift_activity_repository.dart';
@@ -108,6 +109,20 @@ OutboxQueue outboxQueue(Ref ref) {
   ref.onDispose(queue.dispose);
   return queue;
 }
+
+/// Edits the server refused because the expense had moved underneath them.
+@Riverpod(keepAlive: true)
+DriftConflictRepository conflictRepository(Ref ref) =>
+    DriftConflictRepository(ref.watch(appDatabaseProvider));
+
+/// The same, as they happen.
+///
+/// Kept alive and watched app-wide for the same reason the dead letters are: a
+/// parked edit is not a property of whichever group is open, and the person who
+/// made it has no other way to find out it did not apply.
+@Riverpod(keepAlive: true)
+Stream<List<PendingConflict>> pendingConflicts(Ref ref) =>
+    ref.watch(conflictRepositoryProvider).watchAll();
 
 /// Writes the server refused outright, and will not accept on a retry.
 ///

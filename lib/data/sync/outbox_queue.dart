@@ -274,6 +274,10 @@ class OutboxQueue {
   /// poisoned item left in the queue would block everything behind it forever.
   /// It is kept, not deleted, so that a write which never reached the server
   /// can still be accounted for.
+  ///
+  /// A stale write is neither retried nor kept here — see [EntryConflicts]. It
+  /// leaves the queue entirely, because what is left to do about it is not a
+  /// send.
   Future<void> fail(String id, String error, {bool permanent = false}) async {
     if (permanent) {
       await (_db.update(_db.outbox)..where((t) => t.id.equals(id))).write(

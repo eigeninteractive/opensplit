@@ -628,6 +628,16 @@
             "dsl_features": []
           },
           {
+            "name": "base_updated_at",
+            "getter_name": "baseUpdatedAt",
+            "moor_type": "dateTime",
+            "nullable": true,
+            "customConstraints": null,
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": []
+          },
+          {
             "name": "deleted_at",
             "getter_name": "deletedAt",
             "moor_type": "dateTime",
@@ -1071,6 +1081,108 @@
     },
     {
       "id": 9,
+      "references": [
+        5,
+        2
+      ],
+      "type": "table",
+      "data": {
+        "name": "entry_conflicts",
+        "was_declared_in_moor": false,
+        "columns": [
+          {
+            "name": "entry_id",
+            "getter_name": "entryId",
+            "moor_type": "string",
+            "nullable": false,
+            "customConstraints": null,
+            "defaultConstraints": "REFERENCES entries (id) ON DELETE CASCADE",
+            "dialectAwareDefaultConstraints": {
+              "sqlite": "REFERENCES entries (id) ON DELETE CASCADE"
+            },
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": [
+              {
+                "foreign_key": {
+                  "to": {
+                    "table": "entries",
+                    "column": "id"
+                  },
+                  "initially_deferred": false,
+                  "on_update": null,
+                  "on_delete": "cascade"
+                }
+              }
+            ]
+          },
+          {
+            "name": "group_id",
+            "getter_name": "groupId",
+            "moor_type": "string",
+            "nullable": false,
+            "customConstraints": null,
+            "defaultConstraints": "REFERENCES \"groups\" (id) ON DELETE CASCADE",
+            "dialectAwareDefaultConstraints": {
+              "sqlite": "REFERENCES \"groups\" (id) ON DELETE CASCADE"
+            },
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": [
+              {
+                "foreign_key": {
+                  "to": {
+                    "table": "groups",
+                    "column": "id"
+                  },
+                  "initially_deferred": false,
+                  "on_update": null,
+                  "on_delete": "cascade"
+                }
+              }
+            ]
+          },
+          {
+            "name": "attempted",
+            "getter_name": "attempted",
+            "moor_type": "string",
+            "nullable": false,
+            "customConstraints": null,
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": []
+          },
+          {
+            "name": "reason",
+            "getter_name": "reason",
+            "moor_type": "string",
+            "nullable": false,
+            "customConstraints": null,
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": []
+          },
+          {
+            "name": "rejected_at",
+            "getter_name": "rejectedAt",
+            "moor_type": "dateTime",
+            "nullable": false,
+            "customConstraints": null,
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": []
+          }
+        ],
+        "is_virtual": false,
+        "without_rowid": false,
+        "constraints": [],
+        "explicit_pk": [
+          "entry_id"
+        ]
+      }
+    },
+    {
+      "id": 10,
       "references": [],
       "type": "table",
       "data": {
@@ -1128,7 +1240,7 @@
       }
     },
     {
-      "id": 10,
+      "id": 11,
       "references": [],
       "type": "table",
       "data": {
@@ -1235,7 +1347,7 @@
       }
     },
     {
-      "id": 11,
+      "id": 12,
       "references": [],
       "type": "table",
       "data": {
@@ -1343,7 +1455,7 @@
       "sql": [
         {
           "dialect": "sqlite",
-          "sql": "CREATE TABLE IF NOT EXISTS \"entries\" (\"id\" TEXT NOT NULL, \"group_id\" TEXT NOT NULL REFERENCES \"groups\" (id) ON DELETE CASCADE, \"kind\" TEXT NOT NULL, \"description\" TEXT NOT NULL DEFAULT '', \"category_id\" TEXT NULL, \"currency\" TEXT NOT NULL, \"amount_minor\" INTEGER NOT NULL, \"entry_date\" INTEGER NOT NULL, \"split_kind\" TEXT NOT NULL, \"fx_rate\" REAL NULL, \"fx_source\" TEXT NULL, \"fx_at\" INTEGER NULL, \"notes\" TEXT NULL, \"created_by\" TEXT NOT NULL, \"created_at\" INTEGER NOT NULL, \"updated_at\" INTEGER NOT NULL, \"deleted_at\" INTEGER NULL, \"client_key\" TEXT NULL, PRIMARY KEY (\"id\"));"
+          "sql": "CREATE TABLE IF NOT EXISTS \"entries\" (\"id\" TEXT NOT NULL, \"group_id\" TEXT NOT NULL REFERENCES \"groups\" (id) ON DELETE CASCADE, \"kind\" TEXT NOT NULL, \"description\" TEXT NOT NULL DEFAULT '', \"category_id\" TEXT NULL, \"currency\" TEXT NOT NULL, \"amount_minor\" INTEGER NOT NULL, \"entry_date\" INTEGER NOT NULL, \"split_kind\" TEXT NOT NULL, \"fx_rate\" REAL NULL, \"fx_source\" TEXT NULL, \"fx_at\" INTEGER NULL, \"notes\" TEXT NULL, \"created_by\" TEXT NOT NULL, \"created_at\" INTEGER NOT NULL, \"updated_at\" INTEGER NOT NULL, \"base_updated_at\" INTEGER NULL, \"deleted_at\" INTEGER NULL, \"client_key\" TEXT NULL, PRIMARY KEY (\"id\"));"
         }
       ]
     },
@@ -1371,6 +1483,15 @@
         {
           "dialect": "sqlite",
           "sql": "CREATE TABLE IF NOT EXISTS \"entry_snapshots\" (\"id\" TEXT NOT NULL, \"entry_id\" TEXT NOT NULL REFERENCES entries (id) ON DELETE CASCADE, \"group_id\" TEXT NOT NULL REFERENCES \"groups\" (id) ON DELETE CASCADE, \"actor_id\" TEXT NULL REFERENCES members (id) ON DELETE CASCADE, \"created_at\" INTEGER NOT NULL, \"description\" TEXT NOT NULL, \"currency\" TEXT NOT NULL, \"amount_minor\" INTEGER NOT NULL, \"entry_date\" INTEGER NOT NULL, \"split_kind\" TEXT NOT NULL, \"category_id\" TEXT NULL, \"notes\" TEXT NULL, \"deleted_at\" INTEGER NULL, \"payers\" TEXT NOT NULL, \"shares\" TEXT NOT NULL, \"is_provisional\" INTEGER NOT NULL DEFAULT 0 CHECK (\"is_provisional\" IN (0, 1)), PRIMARY KEY (\"id\"));"
+        }
+      ]
+    },
+    {
+      "name": "entry_conflicts",
+      "sql": [
+        {
+          "dialect": "sqlite",
+          "sql": "CREATE TABLE IF NOT EXISTS \"entry_conflicts\" (\"entry_id\" TEXT NOT NULL REFERENCES entries (id) ON DELETE CASCADE, \"group_id\" TEXT NOT NULL REFERENCES \"groups\" (id) ON DELETE CASCADE, \"attempted\" TEXT NOT NULL, \"reason\" TEXT NOT NULL, \"rejected_at\" INTEGER NOT NULL, PRIMARY KEY (\"entry_id\"));"
         }
       ]
     },

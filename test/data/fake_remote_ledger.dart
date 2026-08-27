@@ -70,7 +70,7 @@ class FakeRemoteLedger implements RemoteLedgerApi {
     if (_groups.containsKey(groupId)) return;
     throw RemoteRejected(
       '$what references group $groupId, which the server has never seen',
-      permanent: true,
+      kind: RejectionKind.permanent,
     );
   }
 
@@ -82,16 +82,53 @@ class FakeRemoteLedger implements RemoteLedgerApi {
       throw RemoteRejected(
         'Entry ${entry.id} does not balance: '
         'amount=${entry.amountMinor}, paid=$paid, owed=$owed',
-        permanent: true,
+        kind: RejectionKind.permanent,
       );
     }
   }
 
+  /// What an expense currently says about money, in a form two of them can be
+  /// compared in. Amounts only: a weight is how a split was expressed, the
+  /// amounts are what anybody owes.
+  static String _moneyOf(Entry entry) => [
+    entry.amountMinor,
+    for (final payer in [
+      ...entry.payers,
+    ]..sort((a, b) => a.memberId.compareTo(b.memberId)))
+      'p:${payer.memberId}=${payer.amountMinor}',
+    for (final share in [
+      ...entry.shares,
+    ]..sort((a, b) => a.memberId.compareTo(b.memberId)))
+      's:${share.memberId}=${share.amountMinor}',
+  ].join('|');
+
+  /// The base-version check, exactly as `upsert_entry` applies it.
+  ///
+  /// Refuses only when the base has moved *and* applying the write would move
+  /// money away from where the server has it. A fake that refused on a stale
+  /// base alone would pass a test the real server fails -- and one that never
+  /// refused would let the whole conflict path go untested.
+  void _assertNotStale(Entry entry, DateTime? baseUpdatedAt) {
+    if (baseUpdatedAt == null) return;
+    final json = _entries[entry.id];
+    if (json == null) return;
+
+    final stored = entryFromJson(json);
+    if (stored.updatedAt == baseUpdatedAt) return;
+    if (_moneyOf(stored) == _moneyOf(entry)) return;
+
+    throw RemoteRejected(
+      'Entry ${entry.id} changed since this edit was composed',
+      kind: RejectionKind.stale,
+    );
+  }
+
   @override
-  Future<Entry> upsertEntry(Entry entry) async {
+  Future<Entry> upsertEntry(Entry entry, {DateTime? baseUpdatedAt}) async {
     upsertCalls++;
     _assertGroupKnown(entry.groupId, 'An expense');
     _assertBalanced(entry);
+    _assertNotStale(entry, baseUpdatedAt);
 
     // Idempotency on the client key: a retry after a dropped connection must
     // update the original row, never create a second one.
@@ -110,7 +147,10 @@ class FakeRemoteLedger implements RemoteLedgerApi {
   Future<Entry> deleteEntry(String entryId) async {
     final json = _entries[entryId];
     if (json == null) {
-      throw const RemoteRejected('No such entry', permanent: true);
+      throw const RemoteRejected(
+        'No such entry',
+        kind: RejectionKind.permanent,
+      );
     }
     final at = _stamp();
     json['deleted_at'] = at.toUtc().toIso8601String();
