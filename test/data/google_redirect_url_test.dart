@@ -10,19 +10,25 @@ void main() {
       );
     });
 
-    test('carries the /app prefix only where the client is served under it', () {
-      expect(
-        googleRedirectUrl(
-          Uri.parse('https://opensplit.web.app/app/welcome'),
-          '/',
-        ),
-        'https://opensplit.web.app/app/welcome?from=%2F',
-      );
-      expect(
-        googleRedirectUrl(Uri.parse('https://opensplit.web.app/welcome'), '/'),
-        'https://opensplit.web.app/welcome?from=%2F',
-      );
-    });
+    test(
+      'carries the /app prefix only where the client is served under it',
+      () {
+        expect(
+          googleRedirectUrl(
+            Uri.parse('https://opensplit.web.app/app/welcome'),
+            '/',
+          ),
+          'https://opensplit.web.app/app/welcome?from=%2F',
+        );
+        expect(
+          googleRedirectUrl(
+            Uri.parse('https://opensplit.web.app/welcome'),
+            '/',
+          ),
+          'https://opensplit.web.app/welcome?from=%2F',
+        );
+      },
+    );
 
     test('preserves the invite it was opened from', () {
       // The whole reason the destination travels rather than being rebuilt:
