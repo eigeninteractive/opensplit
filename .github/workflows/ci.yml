@@ -45,6 +45,10 @@ jobs:
       - run: flutter analyze --fatal-infos --no-pub
       - run: flutter test --exclude-tags integration
       - run: flutter test --platform chrome test/domain
+      - name: Test browser database synchronization
+        run: |
+          cp web/sqlite3.wasm web/drift_worker.js test/browser/
+          flutter test --platform chrome --wasm --cross-origin-isolation test/browser
       - name: Check tools did not mutate the checkout
         run: |
           git diff --exit-code

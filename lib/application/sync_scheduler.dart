@@ -148,11 +148,8 @@ class SyncScheduler {
     _running = true;
     _lastRun = _clock();
 
-    // Failure is not reported, and not because it does not matter. Every screen
-    // renders from the local database, so a sync that cannot reach the server
-    // changes nothing anybody can see -- and a write the server refuses
-    // outright is surfaced by the dead-letter list, which outlives any one run.
-    // An error surface here would fire every time somebody walked into a lift.
+    // The coordinator publishes failures and schedules retries. This scheduler
+    // only translates lifecycle, connectivity and local-write events.
     _sync()
         .whenComplete(() {
           _running = false;

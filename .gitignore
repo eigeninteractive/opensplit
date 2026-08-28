@@ -33,6 +33,10 @@ migrate_working_dir/
 /build/
 /coverage/
 
+# Browser-test server serves test/, so copy the shipped SQLite assets here.
+/test/browser/sqlite3.wasm
+/test/browser/drift_worker.js
+
 # Symbolication related
 app.*.symbols
 

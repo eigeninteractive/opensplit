@@ -22,6 +22,7 @@ class SyncReport {
     required this.pulled,
     required this.failed,
     this.error,
+    this.nextPushAt,
   });
 
   final int pushed;
@@ -29,7 +30,10 @@ class SyncReport {
   final int failed;
   final Object? error;
 
-  bool get isClean => failed == 0 && error == null;
+  /// The earliest pending write's next attempt, excluding dead letters.
+  final DateTime? nextPushAt;
+
+  bool get isClean => failed == 0 && error == null && nextPushAt == null;
 
   @override
   String toString() =>
@@ -107,17 +111,13 @@ class SyncEngine {
   /// group created offline, which the server does not know about yet, is not
   /// dropped from the sweep on its way to being pushed.
   ///
-  /// Failure falls back to what is local. Being offline must not empty the
-  /// list and skip pushing the very rows that are waiting to go out.
+  /// Throws if discovery fails. A local-only answer cannot establish that an
+  /// account has no groups. Pending writes are pushed before discovery.
   Future<List<String>> discoverGroups() async {
     final local = await db.select(db.groups).get();
     final ids = <String>{for (final row in local) row.id};
 
-    try {
-      ids.addAll(await api.pullMyGroupIds().timeout(requestTimeout));
-    } catch (_) {
-      // Offline, or the account has no session yet. Local is a safe answer.
-    }
+    ids.addAll(await api.pullMyGroupIds().timeout(requestTimeout));
     return ids.toList()..sort();
   }
 
@@ -215,7 +215,14 @@ class SyncEngine {
           _leaseRenewal,
           (_) => unawaited(_renewLease()),
         );
-        return await operation();
+        final report = await operation();
+        return SyncReport(
+          pushed: report.pushed,
+          pulled: report.pulled,
+          failed: report.failed,
+          error: report.error,
+          nextPushAt: await outbox.nextAttemptAt(),
+        );
       } catch (error) {
         return SyncReport(pushed: 0, pulled: 0, failed: 0, error: error);
       } finally {
@@ -347,7 +354,7 @@ class SyncEngine {
       final next = page.cursor;
       applied += await db.transaction(() async {
         await _assertActive();
-        final count = await feed.apply(page.rows);
+        final count = await feed.applyInTransaction(page.rows);
         if (next != null) await _writeCursor(feed.key, next);
         return count;
       });

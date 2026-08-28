@@ -21,9 +21,7 @@ import '../../application/providers.dart';
 ///    is the gesture that recovers a second device, so it belongs on the group
 ///    list rather than being reserved for a button in Settings.
 ///
-/// Failures are deliberately silent. Being offline is the ordinary case for an
-/// app that is meant to work without a server, and the screen is already
-/// showing everything it knows.
+/// Failures leave saved data visible and are exposed by the sync status UI.
 class PullToSync extends ConsumerWidget {
   const PullToSync.group(String this.groupId, {super.key, required this.child});
 

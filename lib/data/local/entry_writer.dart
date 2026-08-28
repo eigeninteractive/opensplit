@@ -7,7 +7,7 @@ import '../../domain/models/entry_snapshot.dart';
 import '../sync/wire.dart' show memberAmountsToJson;
 import 'database.dart';
 
-/// Writes an entry and its children atomically.
+/// Writes an entry and its children inside the caller's transaction.
 ///
 /// Shared by the repository (local edits) and the sync engine (rows arriving
 /// from the server) so there is exactly one place that knows how an entry is
@@ -32,7 +32,10 @@ import 'database.dart';
 ///
 /// Null on the sync path, where snapshots arrive on their own feed already
 /// written by the server.
-Future<void> writeEntryLocally(
+///
+/// The caller must also write the outbox item or sync cursor in the same
+/// transaction. This helper does not open or commit a transaction itself.
+Future<void> writeEntryInTransaction(
   AppDatabase db,
   Entry entry, {
   EntrySnapshot? snapshot,
@@ -57,61 +60,59 @@ Future<void> writeEntryLocally(
     );
   }
 
-  await db.transaction(() async {
-    await db
-        .into(db.entries)
-        .insertOnConflictUpdate(
-          EntriesCompanion.insert(
-            id: entry.id,
-            groupId: entry.groupId,
-            kind: entry.kind,
-            description: Value(entry.description),
-            categoryId: Value(entry.categoryId),
-            currency: entry.currency,
-            amountMinor: entry.amountMinor,
-            entryDate: entry.entryDate,
-            splitKind: entry.splitKind,
-            fxRate: Value(entry.fxRate),
-            fxSource: Value(entry.fxSource),
-            fxAt: Value(entry.fxAt),
-            notes: Value(entry.notes),
-            createdBy: entry.createdBy,
-            createdAt: entry.createdAt,
-            updatedAt: entry.updatedAt,
-            deletedAt: Value(entry.deletedAt),
-            clientKey: Value(entry.clientKey),
-          ),
-        );
+  await db
+      .into(db.entries)
+      .insertOnConflictUpdate(
+        EntriesCompanion.insert(
+          id: entry.id,
+          groupId: entry.groupId,
+          kind: entry.kind,
+          description: Value(entry.description),
+          categoryId: Value(entry.categoryId),
+          currency: entry.currency,
+          amountMinor: entry.amountMinor,
+          entryDate: entry.entryDate,
+          splitKind: entry.splitKind,
+          fxRate: Value(entry.fxRate),
+          fxSource: Value(entry.fxSource),
+          fxAt: Value(entry.fxAt),
+          notes: Value(entry.notes),
+          createdBy: entry.createdBy,
+          createdAt: entry.createdAt,
+          updatedAt: entry.updatedAt,
+          deletedAt: Value(entry.deletedAt),
+          clientKey: Value(entry.clientKey),
+        ),
+      );
 
-    await (db.delete(
-      db.entryPayers,
-    )..where((t) => t.entryId.equals(entry.id))).go();
-    await (db.delete(
-      db.entryShares,
-    )..where((t) => t.entryId.equals(entry.id))).go();
+  await (db.delete(
+    db.entryPayers,
+  )..where((t) => t.entryId.equals(entry.id))).go();
+  await (db.delete(
+    db.entryShares,
+  )..where((t) => t.entryId.equals(entry.id))).go();
 
-    await db.batch((batch) {
-      batch.insertAll(db.entryPayers, [
-        for (final payer in entry.payers)
-          EntryPayersCompanion.insert(
-            entryId: entry.id,
-            memberId: payer.memberId,
-            amountMinor: payer.amountMinor,
-          ),
-      ]);
-      batch.insertAll(db.entryShares, [
-        for (final share in entry.shares)
-          EntrySharesCompanion.insert(
-            entryId: entry.id,
-            memberId: share.memberId,
-            amountMinor: share.amountMinor,
-            weightMicros: Value(share.weightMicros),
-          ),
-      ]);
-    });
-
-    if (snapshot != null) await _writeSnapshot(db, snapshot);
+  await db.batch((batch) {
+    batch.insertAll(db.entryPayers, [
+      for (final payer in entry.payers)
+        EntryPayersCompanion.insert(
+          entryId: entry.id,
+          memberId: payer.memberId,
+          amountMinor: payer.amountMinor,
+        ),
+    ]);
+    batch.insertAll(db.entryShares, [
+      for (final share in entry.shares)
+        EntrySharesCompanion.insert(
+          entryId: entry.id,
+          memberId: share.memberId,
+          amountMinor: share.amountMinor,
+          weightMicros: Value(share.weightMicros),
+        ),
+    ]);
   });
+
+  if (snapshot != null) await _writeSnapshot(db, snapshot);
 }
 
 /// Records what the expense now looks like, as this device sees it.

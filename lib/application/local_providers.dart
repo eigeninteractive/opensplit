@@ -11,7 +11,6 @@ import '../data/repositories/drift_activity_repository.dart';
 import '../data/repositories/drift_profile_repository.dart';
 import '../data/sync/outbox_queue.dart';
 import '../domain/fx/fx_quote.dart';
-import 'backend_providers.dart';
 import 'session_providers.dart';
 
 part 'local_providers.g.dart';
@@ -22,16 +21,10 @@ part 'local_providers.g.dart';
 /// arrives one frame late would have every repository built against nothing.
 /// The Supabase client restores its stored session during `Supabase.initialize`
 /// — which `main` awaits — so by the time any of this runs the answer is
-/// already known. Watching the auth stream is what makes it react afterwards.
+/// already known. Following the session keeps routing, sync, and the ledger on
+/// the same identity, including immediately after a sign-in completes.
 @Riverpod(keepAlive: true)
-String? currentAccountId(Ref ref) {
-  final auth = ref.watch(authServiceProvider);
-  if (auth == null) return null;
-  // Rebuilds this provider — and therefore the database below it — whenever the
-  // session changes.
-  ref.watch(accountProvider);
-  return auth.currentUser?.id;
-}
+String? currentAccountId(Ref ref) => ref.watch(sessionControllerProvider)?.id;
 
 /// This account's ledger, and no other account's.
 ///

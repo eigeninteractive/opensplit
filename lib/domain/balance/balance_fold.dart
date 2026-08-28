@@ -58,8 +58,8 @@ List<MemberBalance> foldBalances(Iterable<Entry> entries) {
 /// The entries whose payers and shares do not agree with their own total.
 ///
 /// Always empty for a journal this app wrote: `composeEntry` cannot build an
-/// unbalanced entry and `writeEntryLocally` refuses to store one. It is checked
-/// on the way out anyway because the consequence of being wrong is silent —
+/// unbalanced entry and `writeEntryInTransaction` refuses to store one.
+/// It is checked on the way out because the consequence of being wrong is silent —
 /// [foldBalances] over an unbalanced entry produces balances that do not sum to
 /// zero, and a set of balances that does not sum to zero has no settlement plan
 /// at all. The group would show everyone's position correctly and simply offer

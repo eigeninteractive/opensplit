@@ -220,7 +220,7 @@ abstract interface class AuthService {
   /// Google expires rather than waiting to fire against an unrelated launch.
   Future<IdentityOutcome?> resumeIdentityRedirect();
 
-  /// Sends a six-digit code to [email], attaching it to the current session if
+  /// Sends an eight-digit code to [email], attaching it to the current session if
   /// the address is free and starting a sign-in if it is not.
   ///
   /// A code, not a magic link: magic links open in whichever browser the mail

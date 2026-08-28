@@ -61,5 +61,8 @@ abstract interface class ChangeFeed<T> {
   /// A row the local copy already has at least as new a version of is counted
   /// as unchanged: the pull is allowed to arrive after a local edit that has
   /// not been pushed yet, and must not undo it.
-  Future<int> apply(List<T> rows);
+  ///
+  /// The caller must open the transaction covering both these writes and the
+  /// cursor update. Implementations must not open a nested transaction.
+  Future<int> applyInTransaction(List<T> rows);
 }

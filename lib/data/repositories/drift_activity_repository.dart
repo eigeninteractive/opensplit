@@ -16,7 +16,7 @@ import 'mappers.dart';
 ///
 /// No write path here, and that is now literal rather than a convention: the
 /// server holds no insert grant for any client, and locally the only writer is
-/// `writeEntryLocally`, inside the same transaction as the entry it describes.
+/// `writeEntryInTransaction`, inside the same transaction as the entry itself.
 final class DriftActivityRepository {
   DriftActivityRepository(this._db);
 

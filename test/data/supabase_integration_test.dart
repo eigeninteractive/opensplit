@@ -43,7 +43,7 @@ const _anonKey =
 
 const _mailpitUrl = 'http://127.0.0.1:54324';
 
-/// The six-digit code GoTrue just mailed to [email], read out of Mailpit.
+/// The eight-digit code GoTrue just mailed to [email], read out of Mailpit.
 ///
 /// Reading the actual email rather than the database is the point: it proves
 /// the template carries `{{ .Token }}`. The stock Supabase templates send a
@@ -64,7 +64,7 @@ Future<String> _mailedCode(String email) async {
       final messages = (jsonDecode(body) as Map)['messages'] as List;
       if (messages.isNotEmpty) {
         final snippet = (messages.first as Map)['Snippet'] as String;
-        final code = RegExp(r'\b(\d{6})\b').firstMatch(snippet);
+        final code = RegExp(r'\b(\d{8})\b').firstMatch(snippet);
         if (code != null) return code.group(1)!;
       }
       await Future<void>.delayed(const Duration(milliseconds: 100));
@@ -418,9 +418,13 @@ void main() {
           pageSize: 2,
         );
 
-        expect((await paging.syncGroup(created.group.id)).pulled, 6);
+        final firstPull = await paging.syncGroup(created.group.id);
+        expect(firstPull.isClean, isTrue, reason: '$firstPull');
+        expect(firstPull.pulled, 6);
+        final secondPull = await paging.syncGroup(created.group.id);
+        expect(secondPull.isClean, isTrue, reason: '$secondPull');
         expect(
-          (await paging.syncGroup(created.group.id)).pulled,
+          secondPull.pulled,
           0,
           reason: 'a second pass with no changes must pull nothing',
         );
@@ -570,6 +574,31 @@ void main() {
       await sync.syncGroup(created.group.id);
 
       expect(await api.pullMyGroupIds(), contains(created.group.id));
+
+      final other = AppDatabase(NativeDatabase.memory());
+      addTearDown(other.close);
+      final otherSync = SyncEngine(
+        db: other,
+        api: api,
+        outbox: OutboxQueue(other),
+      );
+      final firstPull = await otherSync.syncEverything();
+      expect(firstPull.isClean, isTrue, reason: '$firstPull');
+
+      final addedLater = await groups.createGroup(
+        name: 'Added later ${DateTime.now().microsecondsSinceEpoch}',
+        defaultCurrency: 'INR',
+        creatorDisplayName: 'Ravi',
+        creatorProfileId: user.id,
+      );
+      final upload = await sync.syncGroup(addedLater.group.id);
+      expect(upload.isClean, isTrue, reason: '$upload');
+      final refresh = await otherSync.syncEverything();
+      expect(refresh.isClean, isTrue, reason: '$refresh');
+      expect(
+        (await other.select(other.groups).get()).map((group) => group.id),
+        containsAll([created.group.id, addedLater.group.id]),
+      );
 
       // Somebody else's session must not see it.
       final stranger = SupabaseClient(_apiUrl, _anonKey);

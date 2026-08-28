@@ -16,6 +16,7 @@ import '../widgets/create_group_sheet.dart';
 import '../widgets/link_account_prompt.dart';
 import '../widgets/conflicting_edit_banner.dart';
 import '../widgets/unsynced_changes_banner.dart';
+import '../widgets/sync_status_notice.dart';
 import '../router.dart';
 
 class GroupListScreen extends ConsumerWidget {
@@ -86,12 +87,12 @@ class _GroupList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Three leading slots, each of which renders as nothing until it has
+    // Four leading slots, each of which renders as nothing until it has
     // something to say. The refused-write banner comes first: it is the one
     // that means data is already wrong somewhere. The overtaken-edit banner
     // follows, because it means the group is right and this device's last
     // change to it was not.
-    const leading = 3;
+    const leading = 4;
     final empty = groups.isEmpty;
     final rows = empty ? 1 : groups.length;
     final trailing = archivedCount > 0 ? 1 : 0;
@@ -111,11 +112,14 @@ class _GroupList extends StatelessWidget {
           if (index == 0) return const UnsyncedChangesBanner();
           if (index == 1) return const ConflictingEditBanner();
           if (index == 2) return const LinkAccountPrompt();
+          if (index == 3) {
+            return empty ? const SizedBox.shrink() : const SyncStatusBanner();
+          }
 
           final row = index - leading;
           if (empty) {
             return row == 0
-                ? const _EmptyState()
+                ? const InitialSyncGate(child: _EmptyState())
                 : _ArchivedRow(count: archivedCount);
           }
           return row < groups.length

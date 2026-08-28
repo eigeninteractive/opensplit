@@ -4,7 +4,7 @@ Three templates, and every one of them exists to emit `{{ .Token }}` and
 nothing else.
 
 Supabase's stock templates send `{{ .ConfirmationURL }}` — a magic link. The
-app asks for a six-digit code, so against the stock templates the "check your
+app asks for an eight-digit code, so against the stock templates the "check your
 email" step waits for a number that is never sent, on every path: signing in,
 signing in on a second device, and attaching an address to an anonymous
 account. There is no code change that fixes that; the token has to be in the
@@ -54,4 +54,4 @@ Check it the way it actually fails, which is silently:
 # Locally, http://127.0.0.1:54324 is Mailpit.
 ```
 
-If the mail contains a URL and no six-digit number, the template did not take.
+If the mail contains a URL and no eight-digit number, the template did not take.

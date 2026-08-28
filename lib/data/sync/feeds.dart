@@ -62,7 +62,7 @@ class GroupFeed implements ChangeFeed<Group> {
       _api.pullGroup(groupId: groupId, since: since, limit: limit);
 
   @override
-  Future<int> apply(List<Group> rows) => _db.transaction(() async {
+  Future<int> applyInTransaction(List<Group> rows) async {
     final dirty = await _dirtyIds(_db, OutboxTarget.group);
     var applied = 0;
     for (final group in rows) {
@@ -97,7 +97,7 @@ class GroupFeed implements ChangeFeed<Group> {
       applied++;
     }
     return applied;
-  });
+  }
 }
 
 /// One group's members, including those who have left.
@@ -119,7 +119,7 @@ class MemberFeed implements ChangeFeed<Member> {
       _api.pullMembers(groupId: groupId, since: since, limit: limit);
 
   @override
-  Future<int> apply(List<Member> rows) => _db.transaction(() async {
+  Future<int> applyInTransaction(List<Member> rows) async {
     final dirty = await _dirtyIds(_db, OutboxTarget.member);
     // The local copies in one query rather than one per row. This used to be a
     // SELECT per member inside the loop, which a group of twenty paid on every
@@ -160,7 +160,7 @@ class MemberFeed implements ChangeFeed<Member> {
       }
     });
     return winners.length;
-  });
+  }
 }
 
 /// One group's expenses, with their payers and shares.
@@ -179,34 +179,27 @@ class EntryFeed implements ChangeFeed<Entry> {
       _api.pullEntries(groupId: groupId, since: since, limit: limit);
 
   @override
-  Future<int> apply(List<Entry> rows) async {
+  Future<int> applyInTransaction(List<Entry> rows) async {
     var applied = 0;
-    // One transaction for the page, not one per row. Each write replaces an
-    // entry's payers and shares, so a 200-row page was 200 separate commits —
-    // and SQLite's cost here is dominated by the commit, not the statements.
-    // Drift nests the inner transactions as savepoints, so this changes the
-    // number of fsyncs, not the semantics.
-    await _db.transaction(() async {
-      final dirty = await _dirtyIds(_db, OutboxTarget.entry);
-      for (final remote in rows) {
-        if (dirty.contains(remote.id)) continue;
-        final local = await (_db.select(
-          _db.entries,
-        )..where((t) => t.id.equals(remote.id))).getSingleOrNull();
-        if (local != null && !local.updatedAt.isBefore(remote.updatedAt)) {
-          continue;
-        }
-        await writeEntryLocally(_db, remote);
-
-        // This row is now derived from exactly what the server holds, so the
-        // base moves with it. A local edit will change `updated_at` to a
-        // device clock and leave this alone, which is the pair that lets the
-        // next push say what version it was composed against.
-        await (_db.update(_db.entries)..where((t) => t.id.equals(remote.id)))
-            .write(EntriesCompanion(baseUpdatedAt: Value(remote.updatedAt)));
-        applied++;
+    final dirty = await _dirtyIds(_db, OutboxTarget.entry);
+    for (final remote in rows) {
+      if (dirty.contains(remote.id)) continue;
+      final local = await (_db.select(
+        _db.entries,
+      )..where((t) => t.id.equals(remote.id))).getSingleOrNull();
+      if (local != null && !local.updatedAt.isBefore(remote.updatedAt)) {
+        continue;
       }
-    });
+      await writeEntryInTransaction(_db, remote);
+
+      // This row is now derived from exactly what the server holds, so the
+      // base moves with it. A local edit will change `updated_at` to a
+      // device clock and leave this alone, which is the pair that lets the
+      // next push say what version it was composed against.
+      await (_db.update(_db.entries)..where((t) => t.id.equals(remote.id)))
+          .write(EntriesCompanion(baseUpdatedAt: Value(remote.updatedAt)));
+      applied++;
+    }
     return applied;
   }
 }
@@ -234,53 +227,51 @@ class SnapshotFeed implements ChangeFeed<EntrySnapshot> {
   }) => _api.pullEntrySnapshots(groupId: groupId, since: since, limit: limit);
 
   @override
-  Future<int> apply(List<EntrySnapshot> rows) async {
-    await _db.transaction(() async {
-      await _db.batch((batch) {
-        for (final snapshot in rows) {
-          batch.insert(
-            _db.entrySnapshots,
-            EntrySnapshotsCompanion.insert(
-              id: snapshot.id,
-              entryId: snapshot.entryId,
-              groupId: snapshot.groupId,
-              actorId: Value(snapshot.actorId),
-              createdAt: snapshot.createdAt,
-              description: snapshot.description,
-              currency: snapshot.currency,
-              amountMinor: snapshot.amountMinor,
-              entryDate: snapshot.entryDate,
-              splitKind: snapshot.splitKind,
-              categoryId: Value(snapshot.categoryId),
-              notes: Value(snapshot.notes),
-              deletedAt: Value(snapshot.deletedAt),
-              payers: jsonEncode(memberAmountsToJson(snapshot.payers)),
-              shares: jsonEncode(memberAmountsToJson(snapshot.shares)),
-            ),
-            // A snapshot is never revised, so a row already here is the same
-            // row arriving twice.
-            mode: InsertMode.insertOrIgnore,
-          );
-        }
-      });
-
-      // The server's account of these expenses has arrived, so this device's
-      // guesses about them are spent.
-      //
-      // Superseded rather than merged, and per entry rather than per row: five
-      // edits made offline are five provisional lines here and one snapshot on
-      // the server, which deduped them. Keeping ours alongside would show the
-      // same edit twice, in two voices, one of which nobody else can see.
-      //
-      // Scoped to the entries actually pulled, so a provisional line for an
-      // expense whose push was refused outright stays exactly where it is --
-      // which is the one case where it is the only record there is.
-      final touched = {for (final snapshot in rows) snapshot.entryId};
-      touched.removeAll(await _dirtyIds(_db, OutboxTarget.entry));
-      await (_db.delete(
-        _db.entrySnapshots,
-      )..where((t) => t.entryId.isIn(touched) & t.isProvisional)).go();
+  Future<int> applyInTransaction(List<EntrySnapshot> rows) async {
+    await _db.batch((batch) {
+      for (final snapshot in rows) {
+        batch.insert(
+          _db.entrySnapshots,
+          EntrySnapshotsCompanion.insert(
+            id: snapshot.id,
+            entryId: snapshot.entryId,
+            groupId: snapshot.groupId,
+            actorId: Value(snapshot.actorId),
+            createdAt: snapshot.createdAt,
+            description: snapshot.description,
+            currency: snapshot.currency,
+            amountMinor: snapshot.amountMinor,
+            entryDate: snapshot.entryDate,
+            splitKind: snapshot.splitKind,
+            categoryId: Value(snapshot.categoryId),
+            notes: Value(snapshot.notes),
+            deletedAt: Value(snapshot.deletedAt),
+            payers: jsonEncode(memberAmountsToJson(snapshot.payers)),
+            shares: jsonEncode(memberAmountsToJson(snapshot.shares)),
+          ),
+          // A snapshot is never revised, so a row already here is the same
+          // row arriving twice.
+          mode: InsertMode.insertOrIgnore,
+        );
+      }
     });
+
+    // The server's account of these expenses has arrived, so this device's
+    // guesses about them are spent.
+    //
+    // Superseded rather than merged, and per entry rather than per row: five
+    // edits made offline are five provisional lines here and one snapshot on
+    // the server, which deduped them. Keeping ours alongside would show the
+    // same edit twice, in two voices, one of which nobody else can see.
+    //
+    // Scoped to the entries actually pulled, so a provisional line for an
+    // expense whose push was refused outright stays exactly where it is --
+    // which is the one case where it is the only record there is.
+    final touched = {for (final snapshot in rows) snapshot.entryId};
+    touched.removeAll(await _dirtyIds(_db, OutboxTarget.entry));
+    await (_db.delete(
+      _db.entrySnapshots,
+    )..where((t) => t.entryId.isIn(touched) & t.isProvisional)).go();
     return rows.length;
   }
 }
@@ -304,7 +295,7 @@ class ProfileFeed implements ChangeFeed<Profile> {
       _api.pullProfiles(since: since, limit: limit);
 
   @override
-  Future<int> apply(List<Profile> rows) => _db.transaction(() async {
+  Future<int> applyInTransaction(List<Profile> rows) async {
     final dirty = await _dirtyIds(_db, OutboxTarget.profile);
     final ids = [for (final profile in rows) profile.id];
     final locals = await (_db.select(
@@ -336,5 +327,5 @@ class ProfileFeed implements ChangeFeed<Profile> {
       }
     });
     return winners.length;
-  });
+  }
 }

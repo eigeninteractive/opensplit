@@ -107,6 +107,43 @@ exact only to 2^53; a plausible expense multiplied by a 10^6-scaled weight
 already exceeds that. The allocator uses `BigInt` for exactly this reason, and
 this is the only run that proves it.
 
+Browser storage and sync are tested separately against SQLite in OPFS, using
+the same worker and WebAssembly assets shipped with the app:
+
+```bash
+cp web/sqlite3.wasm web/drift_worker.js test/browser/
+flutter test --platform chrome --wasm --cross-origin-isolation test/browser
+```
+
+This covers first sync, groups created later, expense edits and deletions, and
+reopening the database. Native SQLite tests alone cannot catch browser lock
+failures. Repository mutations and sync pages each own one transaction; feed
+and entry-writing helpers require that transaction instead of nesting one.
+
+### Sync ownership and status
+
+Repository mutations commit the local edit and outbox item together. The sync
+engine owns each incoming page's transaction, including its cursor. Neither
+path accesses Drift's internal transaction state.
+
+One account-scoped coordinator handles foreground refreshes, group opens and
+push wakes. The scheduler supplies launch, resume, connectivity and write
+triggers. Requests received during a run coalesce into a follow-up so writes
+that missed its push phase are not lost. The engine's database lease also
+serializes background isolates and other tabs.
+
+Failed discovery is an error, not an empty group list. Until the first full
+refresh succeeds, an empty device shows progress or a retry notice. Cached
+groups remain usable when a refresh fails. Pending uploads and permanent
+refusals have separate notices.
+
+Network and pull failures retry after 5 seconds with exponential backoff,
+capped at 5 minutes. Upload deadlines live in the outbox and are restored on
+the next launch; dependent writes cannot overtake a backed-off parent.
+Permanent refusals require an explicit retry. Active-run status is kept in
+memory and discarded on account changes, avoiding stale "running" flags after
+a crash. Ledger rows, cursors and queued writes remain durable.
+
 ## Building
 
 Local build success is not production approval.
@@ -355,7 +392,7 @@ stranger to its own data and every push is refused by RLS. The app refuses to
 fall back to it silently, and says which switch is off instead — but the switch
 still has to be on.
 
-**2. Email templates.** The app asks for a six-digit code. Supabase's stock
+**2. Email templates.** The app asks for an eight-digit code. Supabase's stock
 templates send a magic link and no token at all, so against them the "check
 your email" step waits for a number that is never sent. `supabase/templates/`
 holds three that carry `{{ .Token }}`; local picks them up from `config.toml`,
@@ -484,9 +521,8 @@ afternoon:
 Android has blocked cleartext HTTP since API 28, so a debug build also needs
 `android/app/src/debug/res/xml/network_security_config.xml` — already committed,
 and scoped to the debug source set so release builds keep HTTPS mandatory. Without
-it every request fails with `CLEARTEXT communication not permitted`, which in
-this app looks like a sync that never completes, because sync failures are
-swallowed by design.
+it every request fails with `CLEARTEXT communication not permitted`, and the
+app shows a refresh failure while keeping saved data available.
 
 ### Push, locally
 

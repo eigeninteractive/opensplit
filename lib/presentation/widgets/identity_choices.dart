@@ -152,7 +152,7 @@ class _IdentityChoicesState extends ConsumerState<IdentityChoices> {
             keyboardType: TextInputType.number,
             autofillHints: const [AutofillHints.oneTimeCode],
             decoration: const InputDecoration(
-              labelText: 'Six-digit code',
+              labelText: 'Eight-digit code',
               helperText: 'Check your email.',
             ),
             onSubmitted: (_) => _busy ? null : _verify(),

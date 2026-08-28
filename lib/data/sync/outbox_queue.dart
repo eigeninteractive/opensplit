@@ -142,14 +142,19 @@ class OutboxQueue {
   /// oldest dirty row of a kind goes first.
   Future<List<OutboxRow>> due({int limit = 100}) async {
     final now = _clock();
-    final rows =
-        await (_db.select(_db.outbox)..where(
-              (t) =>
-                  t.deadLetteredAt.isNull() &
-                  (t.nextAttemptAt.isNull() |
-                      t.nextAttemptAt.isSmallerOrEqualValue(now)),
-            ))
-            .get();
+    final rows = await _pendingInPushOrder();
+    // A deferred group or member is a barrier for its dependants. Filtering
+    // by deadline before sorting could send a member before its group's retry.
+    return rows
+        .takeWhile((row) => !(row.nextAttemptAt?.isAfter(now) ?? false))
+        .take(limit)
+        .toList();
+  }
+
+  Future<List<OutboxRow>> _pendingInPushOrder() async {
+    final rows = await (_db.select(
+      _db.outbox,
+    )..where((t) => t.deadLetteredAt.isNull())).get();
 
     rows.sort((a, b) {
       final byDependency = _pushOrder(
@@ -159,7 +164,7 @@ class OutboxQueue {
       return a.createdAt.compareTo(b.createdAt);
     });
 
-    return rows.take(limit).toList();
+    return rows;
   }
 
   /// Where a kind of row sits in the dependency graph.
@@ -188,6 +193,15 @@ class OutboxQueue {
       _db.outbox,
     )..where((t) => t.deadLetteredAt.isNull())).get();
     return rows.length;
+  }
+
+  /// The next eligible write's retry time, or `null` if none remain.
+  ///
+  /// A newly queued write is due now. Reading the persisted deadline also
+  /// restores retry scheduling after the app is restarted during backoff.
+  Future<DateTime?> nextAttemptAt() async {
+    final row = (await _pendingInPushOrder()).firstOrNull;
+    return row == null ? null : row.nextAttemptAt ?? _clock();
   }
 
   /// Whether leaving this account would strand an edit held only here.

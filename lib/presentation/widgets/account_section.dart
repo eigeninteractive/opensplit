@@ -11,7 +11,7 @@ import '../navigation.dart';
 
 /// Attaches a real account to an anonymous session.
 ///
-/// A six-digit code, not a magic link. Magic links open in whichever browser
+/// An eight-digit code, not a magic link. Magic links open in whichever browser
 /// the mail app prefers rather than the one holding the session, lose the app's
 /// context entirely on mobile, and are routinely followed and consumed by
 /// corporate mail scanners before the recipient ever sees them. That requires
@@ -310,7 +310,7 @@ class _AccountSectionState extends ConsumerState<AccountSection> {
             keyboardType: TextInputType.number,
             autofillHints: const [AutofillHints.oneTimeCode],
             decoration: const InputDecoration(
-              labelText: 'Six-digit code',
+              labelText: 'Eight-digit code',
               helperText: 'Check your email.',
             ),
           ),

@@ -51,18 +51,13 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
     if (_listeningForSession) return;
     _listeningForSession = true;
 
-    // The ledger and everything that observes it belong to a session. Starting
-    // the scheduler before a restored or newly-created session would construct
-    // repositories before there is an account-scoped database to open. Tying
-    // its lifetime to this provider also guarantees that signing out cancels
-    // every timer and subscription before another account can arrive.
-    ref.listenManual(signedInProvider, (_, signedIn) {
-      if (signedIn) {
-        ref.read(syncSchedulerProvider).start();
-      } else {
-        ref.invalidate(syncSchedulerProvider);
-      }
+    // Start every account-scoped scheduler, including replacements. Listening
+    // only to signedIn misses account changes where that boolean stays true.
+    ref.listenManual(syncSchedulerProvider, (_, scheduler) {
+      scheduler?.start();
+    }, fireImmediately: true);
 
+    ref.listenManual(signedInProvider, (_, signedIn) {
       // Leaves a note for the next cold start, so the web loader draws the
       // layout this session will actually land on. See [recordSignedIn] — it
       // does nothing on Android, which has a platform splash instead.
@@ -101,9 +96,7 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
   /// Coming back to the foreground asks both questions worth asking: what has
   /// the group been doing, and is there a new version of the app.
   void _onResume() {
-    if (ref.read(signedInProvider)) {
-      ref.read(syncSchedulerProvider).resumed();
-    }
+    ref.read(syncSchedulerProvider)?.resumed();
     _offerUpdate();
   }
 

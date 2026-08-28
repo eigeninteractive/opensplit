@@ -71,7 +71,7 @@ final class DriftEntryRepository {
     required Entry after,
     required String? actorId,
     required DateTime at,
-  }) => _db.transaction(() async {
+  }) async {
     final snapshot = snapshotOf(
       after,
       id: _uuid.v4(),
@@ -86,7 +86,7 @@ final class DriftEntryRepository {
     final worthRecording =
         latest == null || !recordsSameShape(latest, snapshot);
 
-    await writeEntryLocally(
+    await writeEntryInTransaction(
       _db,
       after,
       snapshot: worthRecording ? snapshot : null,
@@ -102,7 +102,7 @@ final class DriftEntryRepository {
     )..where((t) => t.entryId.equals(after.id))).go();
 
     await _enqueue(after.id);
-  });
+  }
 
   /// The most recent thing recorded about an entry, from either source.
   Future<EntrySnapshot?> _latestSnapshot(String entryId) async {

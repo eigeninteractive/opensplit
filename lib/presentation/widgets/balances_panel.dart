@@ -113,7 +113,7 @@ class BalancesPanel extends ConsumerWidget {
 ///
 /// Reachable only if an entry on this device has payers or shares that disagree
 /// with its own total, which nothing in the app can write — `composeEntry`
-/// cannot build one and `writeEntryLocally` refuses to store one.
+/// cannot build one and `writeEntryInTransaction` refuses to store one.
 ///
 /// It exists because of what the alternative looked like. The settlement plan
 /// is derived by matching debtors against creditors, so a journal that does not

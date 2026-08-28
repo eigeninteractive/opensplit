@@ -16,6 +16,7 @@ import '../widgets/page_body.dart';
 import '../widgets/pull_to_sync.dart';
 import '../widgets/conflicting_edit_banner.dart';
 import '../widgets/unsynced_changes_banner.dart';
+import '../widgets/sync_status_notice.dart';
 
 /// Width at which the two halves of a group stop competing for the screen.
 const double _wideBreakpoint = 840;
@@ -30,15 +31,17 @@ class GroupDetailScreen extends ConsumerWidget {
     final groupAsync = ref.watch(groupProvider(groupId));
     final ledger = ref.watch(groupLedgerProvider(groupId));
 
-    // Fire-and-forget: the screen is rendered from the local database, so this
-    // only fills in what other devices have added. Its result is deliberately
-    // not awaited or surfaced — there is no spinner to show.
+    // The ledger stays usable during a refresh; status is shown separately.
     ref.watch(groupSyncProvider(groupId));
 
     if (groupAsync.hasValue && groupAsync.value == null) {
       return Scaffold(
         appBar: AppBar(leading: const BackButton()),
-        body: const Center(child: Text('That group is not on this device.')),
+        body: const Center(
+          child: InitialSyncGate(
+            child: Text('That group is not on this device.'),
+          ),
+        ),
       );
     }
     if (ledger == null) {
@@ -112,6 +115,7 @@ class GroupDetailScreen extends ConsumerWidget {
             const ConflictingEditBanner(
               padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
             ),
+            const SyncStatusBanner(padding: EdgeInsets.fromLTRB(16, 8, 16, 0)),
             // Also here, not only on the group list. Someone who arrived on an
             // invite link lands inside a group and stays there — they have the
             // most to lose, since the group is shared and their share of it is

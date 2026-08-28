@@ -262,7 +262,7 @@ secure_password_change = false
 # Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.
 max_frequency = "1s"
 # Number of characters used in the email OTP.
-otp_length = 6
+otp_length = 8
 # Number of seconds before the email OTP expires (defaults to 1 hour).
 otp_expiry = 3600
 
@@ -281,7 +281,7 @@ otp_expiry = 3600
 # subject = "You have been invited"
 # content_path = "./supabase/templates/invite.html"
 
-# The app asks for a six-digit code, and the stock templates send a magic link
+# The app asks for an eight-digit code, and the stock templates send a magic link
 # and no token at all — so without these three the "check your email" step
 # waits for a number that is never sent, on every path there is. See
 # supabase/templates/README.md, and note that templates are NOT deployed by

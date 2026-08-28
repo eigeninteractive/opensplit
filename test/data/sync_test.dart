@@ -299,6 +299,26 @@ void main() {
       },
     );
 
+    test('a new engine resumes after an abandoned lease expires', () async {
+      server.signedInProfileId = 'profile-ravi';
+      await b.db
+          .into(b.db.syncLeases)
+          .insert(
+            SyncLeasesCompanion.insert(
+              name: 'ledger',
+              owner: 'closed-browser-tab',
+              expiresAt: DateTime.now().toUtc().add(
+                const Duration(milliseconds: 100),
+              ),
+            ),
+          );
+
+      final report = await b.sync.syncEverything();
+
+      expect(report.isClean, isTrue, reason: '$report');
+      expect(await b.db.select(b.db.syncLeases).get(), isEmpty);
+    });
+
     test('an expense added on A reaches B with identical balances', () async {
       final g = await seedGroup();
 
@@ -1042,6 +1062,34 @@ void main() {
   });
 
   group('finding groups this device has never seen', () {
+    test(
+      'a failed cursor write rolls back its page and can be retried',
+      () async {
+        final group = await seedGroup();
+        server.signedInProfileId = 'profile-ravi';
+        expect((await a.sync.syncEverything()).isClean, isTrue);
+        await b.db.customStatement('''
+        CREATE TRIGGER reject_member_cursor BEFORE INSERT ON sync_cursors
+        WHEN NEW.feed LIKE 'members:%'
+        BEGIN SELECT RAISE(ABORT, 'test cursor failure'); END;
+      ''');
+
+        final failed = await b.sync.syncEverything();
+        expect(failed.isClean, isFalse);
+        expect(await b.db.select(b.db.members).get(), isEmpty);
+        expect(
+          await (b.db.select(
+            b.db.syncCursors,
+          )..where((row) => row.feed.equals('members:${group.groupId}'))).get(),
+          isEmpty,
+        );
+
+        await b.db.customStatement('DROP TRIGGER reject_member_cursor');
+        expect((await b.sync.syncEverything()).isClean, isTrue);
+        expect(await b.db.select(b.db.members).get(), hasLength(3));
+      },
+    );
+
     // The gap that made a second device, a reinstall, and "sign in on another
     // device" all show an empty app: everything else in the sync API is scoped
     // to a groupId the caller has to already know.
@@ -1100,19 +1148,39 @@ void main() {
       expect(await b.sync.discoverGroups(), isEmpty);
     });
 
-    test('local groups survive a server that cannot be reached', () async {
-      // Being offline must not empty the sweep and skip pushing the very rows
-      // that are queued to go out.
+    test('failed discovery is not a successful local-only answer', () async {
       final created = await a.groups.createGroup(
         name: 'Goa Trip',
         defaultCurrency: 'INR',
         creatorDisplayName: 'Ravi',
         creatorProfileId: 'profile-ravi',
       );
-      server.signedInProfileId = null;
-
-      expect(await a.sync.discoverGroups(), [created.group.id]);
+      server.beforePullMyGroupIds = (_) async => throw StateError('offline');
+      await expectLater(a.sync.discoverGroups(), throwsStateError);
+      expect(
+        (await a.db.select(a.db.groups).get()).single.id,
+        created.group.id,
+      );
+      expect(await a.outbox.pendingCount(), greaterThan(0));
     });
+
+    test(
+      'an empty device reports a discovery failure and can recover',
+      () async {
+        server.signedInProfileId = 'profile-ravi';
+        server.beforePullMyGroupIds = (_) async =>
+            throw StateError('unreachable');
+
+        final failed = await b.sync.syncEverything();
+
+        expect(failed.isClean, isFalse);
+        expect(failed.error, isA<StateError>());
+        expect(await b.db.select(b.db.groups).get(), isEmpty);
+
+        server.beforePullMyGroupIds = null;
+        expect((await b.sync.syncEverything()).isClean, isTrue);
+      },
+    );
   });
 
   group('pushing a member', () {
@@ -1787,6 +1855,56 @@ void main() {
   });
 
   group('the outbox is a set of dirty rows, not a log', () {
+    test(
+      'backed-off parents block dependants until the retry is due',
+      () async {
+        var now = DateTime.utc(2026, 8, 28);
+        final outbox = OutboxQueue(a.db, clock: () => now);
+        addTearDown(outbox.dispose);
+        await outbox.enqueue(OutboxTarget.group, 'g1');
+        await outbox.enqueue(OutboxTarget.member, 'm1');
+        await outbox.enqueue(OutboxTarget.entry, 'e1');
+        await outbox.fail(
+          OutboxQueue.idFor(OutboxTarget.group, 'g1'),
+          'offline',
+        );
+
+        // The member and entry have no deadline, but cannot overtake the group.
+        expect(await outbox.due(), isEmpty);
+        expect(
+          await outbox.nextAttemptAt(),
+          now.add(const Duration(seconds: 2)),
+        );
+
+        now = now.add(const Duration(seconds: 2));
+        expect((await outbox.due()).map((row) => row.targetId), [
+          'g1',
+          'm1',
+          'e1',
+        ]);
+        await outbox.complete(OutboxQueue.idFor(OutboxTarget.group, 'g1'));
+        await outbox.fail(
+          OutboxQueue.idFor(OutboxTarget.member, 'm1'),
+          'offline',
+        );
+        expect(await outbox.due(), isEmpty);
+
+        now = now.add(const Duration(seconds: 2));
+        expect((await outbox.due()).map((row) => row.targetId), ['m1', 'e1']);
+      },
+    );
+
+    test('dead letters have no automatic retry deadline', () async {
+      await a.outbox.enqueue(OutboxTarget.group, 'g1');
+      expect(await a.outbox.nextAttemptAt(), isNotNull);
+      await a.outbox.fail(
+        OutboxQueue.idFor(OutboxTarget.group, 'g1'),
+        'refused',
+        permanent: true,
+      );
+      expect(await a.outbox.nextAttemptAt(), isNull);
+    });
+
     test('re-dirtying a row keeps when it first went dirty', () async {
       final clock = _StepClock();
       final outbox = OutboxQueue(a.db, clock: clock.now);

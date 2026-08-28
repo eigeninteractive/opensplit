@@ -4,7 +4,9 @@ import '../data/sync/sync_engine.dart';
 import 'sync_scheduler.dart';
 import 'backend_providers.dart';
 import 'local_providers.dart';
-import 'session_providers.dart';
+import 'sync_coordinator.dart';
+
+export 'sync_coordinator.dart' show SyncStatus;
 
 part 'sync_providers.g.dart';
 
@@ -21,40 +23,33 @@ SyncEngine? syncEngine(Ref ref) {
   return engine;
 }
 
-/// Runs sync and reports what happened.
+/// Exposes the account's sync coordinator and its observable status.
 ///
-/// Deliberately manual rather than a persistent realtime subscription: peak
-/// concurrent realtime peers is what a hosted backend bills for, and pushing a
-/// wake-up costs nothing. Live subscriptions are reserved for the rare case of
-/// two people editing the same group at the same moment.
-/// Runs sync on demand.
-///
-/// Holds no state, and that is deliberate rather than an omission. Nothing on
-/// screen is driven by "how the last sync went": every panel is a query over
-/// the local database, a pull that cannot reach the server changes nothing
-/// visible, and a write the server refuses outright is surfaced by
-/// [failedWritesProvider] instead — which outlives any one run, as it has to.
-/// A [SyncReport] held here was read by nobody.
+/// Ledger queries remain the source of screen data. Sync status says whether
+/// that data has been refreshed, not what the balances or groups should be.
 @Riverpod(keepAlive: true)
 class SyncController extends _$SyncController {
-  @override
-  void build() {}
+  SyncCoordinator? _coordinator;
 
-  /// Whether there is anything to sync to, and anybody to sync as.
-  ///
-  /// Syncing as nobody would have every request refused by RLS. That is the
-  /// ordinary state before somebody has chosen an account, not an error, so it
-  /// returns quietly.
-  Future<SyncEngine?> _engine() async {
-    if (ref.read(sessionControllerProvider) == null) return null;
-    final engine = ref.read(syncEngineProvider);
-    if (engine == null) return null;
-    return engine;
+  @override
+  SyncStatus build() {
+    final accountId = ref.watch(currentAccountIdProvider);
+    final engine = accountId == null ? null : ref.watch(syncEngineProvider);
+    _coordinator = null;
+    if (engine == null) return const SyncStatus(enabled: false);
+    final coordinator = SyncCoordinator(
+      syncAll: engine.syncEverything,
+      syncGroup: engine.syncGroup,
+    );
+    _coordinator = coordinator;
+    coordinator.addListener(() => state = coordinator.status);
+    ref.onDispose(coordinator.dispose);
+    return coordinator.status;
   }
 
+  /// Refreshes a group through the account-scoped coordinator.
   Future<void> syncGroup(String groupId) async {
-    final engine = await _engine();
-    await engine?.syncGroup(groupId);
+    await _coordinator?.syncGroup(groupId);
   }
 
   /// Syncs every group this account belongs to, including ones this device has
@@ -69,8 +64,7 @@ class SyncController extends _$SyncController {
   /// place that can drain the outbox once and pull rates and profiles once for
   /// the whole run rather than per group.
   Future<void> syncAll() async {
-    final engine = await _engine();
-    await engine?.syncEverything();
+    await _coordinator?.syncAll();
   }
 
   /// Requeues everything the server previously refused and pushes again.
@@ -96,7 +90,8 @@ NetworkSignal networkSignal(Ref ref) => const NetworkSignal();
 /// the triggers are and why pull-to-refresh and push wakes deliberately do not
 /// go through it.
 @Riverpod(keepAlive: true)
-SyncScheduler syncScheduler(Ref ref) {
+SyncScheduler? syncScheduler(Ref ref) {
+  if (ref.watch(currentAccountIdProvider) == null) return null;
   final scheduler = SyncScheduler(
     sync: () => ref.read(syncControllerProvider.notifier).syncAll(),
     online: ref.watch(networkSignalProvider).changes,
@@ -110,16 +105,8 @@ SyncScheduler syncScheduler(Ref ref) {
 
 /// Syncs a group when its screen opens.
 ///
-/// A provider rather than an initState call so it runs once per mount, is
-/// cancelled with the screen, and is trivially overridable in tests. Failures
-/// are swallowed on purpose: the screen renders entirely from the local
-/// database, so a sync that cannot reach the server changes nothing the user
-/// can see and must not produce an error surface.
+/// The coordinator owns failures and retries beyond this screen's lifetime.
 @riverpod
 Future<void> groupSync(Ref ref, String groupId) async {
-  try {
-    await ref.read(syncControllerProvider.notifier).syncGroup(groupId);
-  } catch (_) {
-    // Offline is the normal case, not an error.
-  }
+  await ref.read(syncControllerProvider.notifier).syncGroup(groupId);
 }
