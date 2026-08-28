@@ -1,6 +1,8 @@
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
 import '../../domain/repositories/auth_service.dart';
+import 'google_sign_in_gateway.dart';
+import 'pending_identity_redirect.dart';
 
 /// Supabase-backed identity.
 ///
@@ -16,9 +18,23 @@ import '../../domain/repositories/auth_service.dart';
 /// when the identity provably belongs to somebody already, and it reports which
 /// of the two happened so the caller can say so.
 final class SupabaseAuthService implements AuthService {
-  SupabaseAuthService(this._client);
+  SupabaseAuthService(
+    this._client, {
+    this.googleTokens,
+    this.pending = const PendingIdentityRedirects(),
+  });
 
   final sb.SupabaseClient _client;
+
+  /// How this platform gets a Google ID token without leaving the app.
+  ///
+  /// Null on the web, and that null is the whole platform switch. Google
+  /// Identity Services answers into an iframe or a popup, and neither survives
+  /// the cross-origin isolation the local database needs, so the browser is
+  /// sent to Google instead and comes back with a session already made.
+  final GoogleTokenSource? googleTokens;
+
+  final PendingIdentityRedirects pending;
 
   /// Codes meaning "that identity is already somebody's".
   ///
@@ -39,6 +55,16 @@ final class SupabaseAuthService implements AuthService {
           email: user.email,
           displayName: user.userMetadata?['display_name'] as String?,
         );
+
+  /// Decides which outcome just happened.
+  ///
+  /// The comparison lives here rather than in the type because it is the data
+  /// layer that knows both halves: no caller should be handed two ids and told
+  /// to work it out.
+  IdentityOutcome _outcomeFor(Account account, String? previousUserId) =>
+      previousUserId == null || previousUserId == account.id
+      ? SessionKept(account: account)
+      : SessionReplaced(account: account, strandedUserId: previousUserId);
 
   Account _require(sb.User? user, String what) {
     final account = _toUser(user);
@@ -79,13 +105,30 @@ final class SupabaseAuthService implements AuthService {
   }
 
   @override
-  Future<IdentityOutcome> continueWithGoogle({
-    required String idToken,
-    String? accessToken,
+  Future<GoogleAttempt> continueWithGoogle({
+    required String returnTo,
     bool allowSignIn = false,
   }) async {
-    // The ID token flow rather than the OAuth web redirect: one tap, no browser
-    // bounce, and markedly better on Android.
+    final tokens = googleTokens;
+    if (tokens == null) {
+      return _startGoogleRedirect(returnTo: returnTo, allowSignIn: allowSignIn);
+    }
+    final credential = await tokens.obtainIdToken();
+    if (credential == null) return const AttemptCancelled();
+    return AttemptCompleted(
+      await _exchangeGoogleToken(credential, allowSignIn: allowSignIn),
+    );
+  }
+
+  /// The in-process half: a token is already in hand, so link-then-recover can
+  /// happen inside one call and the user never leaves the app.
+  Future<IdentityOutcome> _exchangeGoogleToken(
+    GoogleCredential credential, {
+    required bool allowSignIn,
+  }) async {
+    final idToken = credential.idToken;
+    final accessToken = credential.accessToken;
+    final nonce = credential.nonce;
     final before = _client.auth.currentUser?.id;
 
     // Nobody is signed in, so there is nothing to link this to and nothing at
@@ -95,11 +138,9 @@ final class SupabaseAuthService implements AuthService {
         provider: sb.OAuthProvider.google,
         idToken: idToken,
         accessToken: accessToken,
+        nonce: nonce,
       );
-      return IdentityOutcome(
-        account: _require(response.user, 'Google sign-in'),
-        previousUserId: null,
-      );
+      return _outcomeFor(_require(response.user, 'Google sign-in'), null);
     }
 
     // linkIdentityWithIdToken is the linking half of the same endpoint — it
@@ -110,11 +151,9 @@ final class SupabaseAuthService implements AuthService {
         provider: sb.OAuthProvider.google,
         idToken: idToken,
         accessToken: accessToken,
+        nonce: nonce,
       );
-      return IdentityOutcome(
-        account: _require(response.user, 'Linking Google'),
-        previousUserId: before,
-      );
+      return _outcomeFor(_require(response.user, 'Linking Google'), before);
     } on sb.AuthException catch (error) {
       if (!_alreadyClaimed.contains(error.code)) _rethrowLinkFailure(error);
       if (!allowSignIn) {
@@ -128,17 +167,130 @@ final class SupabaseAuthService implements AuthService {
     // Usually to a different account — but not always: if it is the same
     // address as the email account already holding this session, Supabase
     // attaches the identity to it and the user id does not change at all.
-    // IdentityOutcome works that out from the ids rather than assuming.
+    // _outcomeFor works that out from the ids rather than assuming.
     final response = await _client.auth.signInWithIdToken(
       provider: sb.OAuthProvider.google,
       idToken: idToken,
       accessToken: accessToken,
+      nonce: nonce,
     );
-    return IdentityOutcome(
-      account: _require(response.user, 'Google sign-in'),
-      previousUserId: before,
+    return _outcomeFor(_require(response.user, 'Google sign-in'), before);
+  }
+
+  /// The redirect half: the page leaves, so every decision has to be made now.
+  ///
+  /// [allowSignIn] is read differently here than on the in-process path, and
+  /// the difference is forced rather than chosen. There, a link can be tried
+  /// and the refusal recovered from inside one call. Here the refusal only
+  /// comes back after a round trip, so a second attempt that tried linking
+  /// again would loop forever. The flag therefore means "the refusal has
+  /// already been shown and accepted", which is the only condition under which
+  /// any caller sets it.
+  Future<GoogleAttempt> _startGoogleRedirect({
+    required String returnTo,
+    required bool allowSignIn,
+  }) async {
+    final before = _client.auth.currentUser?.id;
+    // Nobody signed in means nothing to attach to, so it can only be a
+    // sign-in — the same reasoning the in-process path uses.
+    final intent = before == null || allowSignIn
+        ? IdentityIntent.signIn
+        : IdentityIntent.link;
+
+    await pending.write(
+      PendingIdentityRedirect(
+        intent: intent,
+        previousUserId: before,
+        returnTo: returnTo,
+        startedAt: DateTime.now(),
+      ),
+    );
+
+    final redirectTo = _redirectUrlFor(returnTo);
+    try {
+      if (intent == IdentityIntent.link) {
+        await _client.auth.linkIdentity(
+          sb.OAuthProvider.google,
+          redirectTo: redirectTo,
+        );
+      } else {
+        await _client.auth.signInWithOAuth(
+          sb.OAuthProvider.google,
+          redirectTo: redirectTo,
+        );
+      }
+    } catch (_) {
+      // The page never left, so nothing is pending and a stale record would
+      // fire against the next launch.
+      await pending.clear();
+      rethrow;
+    }
+    return const AttemptRedirected();
+  }
+
+  @override
+  Future<IdentityOutcome?> resumeIdentityRedirect() async {
+    final departure = await pending.take();
+    if (departure == null) return null;
+
+    // Safe to read straight away: `Supabase.initialize` awaits its own handling
+    // of the callback URL before returning, and this is called after it, so the
+    // exchange has already succeeded or already failed.
+    final refusal = _refusalInCallbackUrl();
+    if (refusal != null) {
+      if (departure.intent == IdentityIntent.link) throw refusal;
+      // A sign-in that Google or GoTrue refused outright. Nothing changed.
+      return null;
+    }
+
+    final user = _client.auth.currentUser;
+    // Came back with no session at all: dismissed at Google, or the code
+    // exchange failed. Nothing happened and there is nothing to report.
+    if (user == null) return null;
+
+    return _outcomeFor(
+      _require(user, 'Google sign-in'),
+      departure.previousUserId,
     );
   }
+
+  /// The already-claimed refusal, if the callback carried one.
+  ///
+  /// Readable at all only because `supabase_flutter` clears the callback
+  /// parameters on success and leaves them alone on failure, so a refused
+  /// return still has them in the address bar when this runs.
+  IdentityAlreadyInUse? _refusalInCallbackUrl() {
+    final parameters = {
+      ...Uri.base.queryParameters,
+      // GoTrue puts them in the fragment for the implicit flow and the query
+      // for PKCE; reading both costs nothing and avoids depending on which.
+      ...Uri.splitQueryString(Uri.base.fragment),
+    };
+    final code = parameters['error_code'] ?? parameters['error'];
+    if (code == null) return null;
+    if (!_alreadyClaimed.contains(code) &&
+        !(parameters['error_description'] ?? '').contains('already')) {
+      return null;
+    }
+    return const IdentityAlreadyInUse(
+      'That Google account already has an OpenSplit account of its own.',
+    );
+  }
+
+  /// Where Google should send the browser back to.
+  ///
+  /// Lands on `/welcome` carrying the real destination, rather than on the
+  /// destination itself, because the router already knows how to finish that
+  /// journey: a signed-in arrival at `/welcome` is sent to `from`, and
+  /// `safeReturnLocation` refuses anything that is not an internal route. So
+  /// an invite opened by somebody with no session ends on the invite, and a
+  /// tampered `from` cannot be turned into an open redirect.
+  ///
+  /// The `/app` prefix mirrors the rule in `redirectAppRoute`: production
+  /// serves the client under it and a local `flutter run` serves it at the
+  /// root, and this has to agree with whichever is running.
+  String _redirectUrlFor(String returnTo) =>
+      googleRedirectUrl(Uri.base, returnTo);
 
   @override
   Future<EmailFlow> sendEmailCode(String email) async {
@@ -196,10 +348,7 @@ final class SupabaseAuthService implements AuthService {
       // with a message about an expired code that says nothing about why.
       type: linking ? sb.OtpType.emailChange : sb.OtpType.email,
     );
-    return IdentityOutcome(
-      account: _require(response.user, 'Code verification'),
-      previousUserId: before,
-    );
+    return _outcomeFor(_require(response.user, 'Code verification'), before);
   }
 
   @override
@@ -222,4 +371,23 @@ final class SupabaseAuthService implements AuthService {
     // somebody else's account.
     await _client.rpc<void>('delete_account');
   }
+}
+
+/// Where Google should send the browser back to, given the page it left from.
+///
+/// Separate from the service and taking [base] rather than reading `Uri.base`
+/// because this is the part that silently sends people to the wrong host, and
+/// a global no test can set is a part no test can check.
+///
+/// The `/app` prefix mirrors the rule in `redirectAppRoute`: production serves
+/// the client under it and a local `flutter run` serves it at the root, so the
+/// answer has to follow whichever is running rather than be configured.
+String googleRedirectUrl(Uri base, String returnTo) {
+  final underAppPrefix = base.path == '/app' || base.path.startsWith('/app/');
+  return Uri.parse(base.origin)
+      .replace(
+        path: '${underAppPrefix ? '/app' : ''}/welcome',
+        queryParameters: {'from': returnTo},
+      )
+      .toString();
 }

@@ -1,8 +1,12 @@
+import 'dart:async';
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:in_app_update/in_app_update.dart';
 
 import '../application/providers.dart';
+import '../domain/repositories/auth_service.dart';
 import '../data/web/boot_hint.dart';
 import '../l10n/app_localizations.dart';
 import 'dynamic_colors.dart';
@@ -64,6 +68,34 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
       // does nothing on Android, which has a platform splash instead.
       recordSignedIn(signedIn);
     }, fireImmediately: true);
+
+    // A Google flow that left the page finishes here, on the one launch that
+    // is a return from it. A no-op on every other launch, and on Android
+    // always, where the flow never leaves the app.
+    unawaited(_finishIdentityRedirect());
+  }
+
+  /// Completes a redirect sign-in, and parks its refusal if it was refused.
+  ///
+  /// The refusal is not shown from here. There is no Navigator yet at this
+  /// point in the first frame, and the question needs the screen the user was
+  /// sent back to anyway — see [googleRefusalProvider].
+  Future<void> _finishIdentityRedirect() async {
+    try {
+      await ref.read(accountControllerProvider.notifier).resumeGoogleRedirect();
+    } on IdentityAlreadyInUse catch (refusal) {
+      ref.read(googleRefusalProvider).value = refusal;
+    } catch (error, stackTrace) {
+      // A failed return must not take the launch down with it: the session is
+      // simply unchanged, and every other route into the app still works.
+      developer.log(
+        'Could not finish a Google redirect',
+        name: 'opensplit.auth',
+        level: 900,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
   }
 
   /// Coming back to the foreground asks both questions worth asking: what has

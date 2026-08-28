@@ -44,6 +44,16 @@ String safeReturnLocation(String? location) {
   return uri.toString();
 }
 
+/// Where a sign-in that leaves the app should land when it comes back.
+///
+/// On the welcome screen the destination is whatever sent the user there — an
+/// invite link, usually — so it comes from `from` and is validated. Anywhere
+/// else it is the screen being stood on, because linking an identity from the
+/// account screen should return to the account screen.
+String returnDestination(Uri current) => current.path == '/welcome'
+    ? safeReturnLocation(current.queryParameters['from'])
+    : safeReturnLocation(current.toString());
+
 /// Goes back one screen, or to [fallback] when there is no back to go to.
 ///
 /// Both halves are needed because either one alone is wrong somewhere.

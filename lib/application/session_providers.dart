@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart' show ValueNotifier;
+import 'package:flutter_riverpod/flutter_riverpod.dart' show Provider;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../data/local/local_reset.dart';
 import '../domain/repositories/auth_service.dart';
@@ -6,6 +8,17 @@ import 'local_providers.dart';
 import 'sync_providers.dart';
 
 part 'session_providers.g.dart';
+
+/// Where a refusal raised by a redirect waits until a screen can ask about it.
+///
+/// The in-process flow throws [IdentityAlreadyInUse] to the widget that made
+/// the call, which is still on screen to catch it. A redirect has no such
+/// caller: the refusal arrives on a fresh launch, before any screen has built.
+/// So it is parked here by whoever resumes and collected by the screen the
+/// user was returned to.
+final googleRefusalProvider = Provider<ValueNotifier<IdentityAlreadyInUse?>>(
+  (ref) => ValueNotifier<IdentityAlreadyInUse?>(null),
+);
 
 /// The current session, if any.
 @Riverpod(keepAlive: true)
@@ -176,19 +189,34 @@ class AccountController extends _$AccountController {
 
   /// Throws [IdentityAlreadyInUse] unless [allowSignIn], so the screen gets a
   /// chance to say what signing in would cost before the session is replaced.
-  Future<IdentityOutcome> continueWithGoogle({
-    required String idToken,
-    String? accessToken,
+  Future<GoogleAttempt> continueWithGoogle({
+    required String returnTo,
     bool allowSignIn = false,
   }) async {
+    // Before the call, and on the web that means before the page leaves: a
+    // redirect has no moment on the way back at which refusing would still
+    // help. Only signing in can strand writes, which is what allowSignIn
+    // gates.
     if (allowSignIn) await _checkPendingWrites();
     // No session established first, for the same reason as sendEmailCode.
-    final outcome = await _auth().continueWithGoogle(
-      idToken: idToken,
-      accessToken: accessToken,
+    final attempt = await _auth().continueWithGoogle(
+      returnTo: returnTo,
       allowSignIn: allowSignIn,
     );
-    await _settle();
+    // Nothing to settle for a flow that has not happened yet, or one the user
+    // dismissed. The redirect settles on the way back, in [resumeGoogleRedirect].
+    if (attempt is AttemptCompleted) await _settle();
+    return attempt;
+  }
+
+  /// Finishes a Google flow that left the page, if this launch is a return.
+  ///
+  /// Null when it is not. Throws [IdentityAlreadyInUse] on the refusal the
+  /// in-process path throws inline, so the screen asks the same question and
+  /// calls [continueWithGoogle] again with [allowSignIn] set.
+  Future<IdentityOutcome?> resumeGoogleRedirect() async {
+    final outcome = await _auth().resumeIdentityRedirect();
+    if (outcome != null) await _settle();
     return outcome;
   }
 

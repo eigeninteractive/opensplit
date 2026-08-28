@@ -163,6 +163,24 @@ can be run with the wrong one, and the unused branch never reaches the bundle.
 runtime to use OPFS, and a build without them falls back to a database that does
 not survive a reload.
 
+OPFS also needs the page to be cross-origin isolated, which is why `/app/**` is
+served with `Cross-Origin-Opener-Policy: same-origin` and
+`Cross-Origin-Embedder-Policy: credentialless`. That pair is what makes
+`SharedArrayBuffer` available, and it is why Drift reports `opfsLocks` rather
+than falling back to its IndexedDB store.
+
+The pair is also why **Google sign-in on the web is a redirect rather than a
+button**. COOP `same-origin` severs the opener of every cross-origin popup, and
+Google Identity Services answers into the window that opened it, so an in-page
+Google button fails there — silently, and in release builds only, because the
+assertion that would have caught it is compiled out. `Document-Isolation-Policy`
+grants the same isolation while preserving popups, but only in Chromium, which
+would have left Firefox and Safari without OPFS. So the client hands the whole
+page to Google instead: a top-level navigation is unaffected by either header,
+works identically on every browser, and needs no third-party cookies, no FedCM
+and no JavaScript-origin allow-list. Android is unaffected and still signs in
+natively, without leaving the app.
+
 The source service workers intentionally contain unresolved placeholders. Only
 `tool/build_web.dart` may produce a deployable web directory: it verifies the
 configuration, injects Firebase's public identifiers, and keys the offline cache

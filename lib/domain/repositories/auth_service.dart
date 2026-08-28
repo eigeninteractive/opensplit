@@ -68,27 +68,72 @@ class IdentityAlreadyInUse implements Exception {
 }
 
 /// What attaching an identity did.
-class IdentityOutcome {
-  const IdentityOutcome({required this.account, required this.previousUserId});
+///
+/// A sum type rather than a pair of identifiers to compare. "Did this device's
+/// ledger stay with the account" is the only question a caller has, and
+/// answering it by diffing ids put that derivation at every call site while
+/// exposing a value nothing else ever needed.
+///
+/// Which case applies cannot be inferred from which code path ran, and that is
+/// why this is decided here rather than by the caller. Signing in with Google
+/// using the address an existing email account already owns lands on *that
+/// same account*: Supabase attaches the identity by matching a verified email,
+/// so the sign-in branch ran and yet nothing moved. Only the resulting id
+/// settles it.
+sealed class IdentityOutcome {
+  const IdentityOutcome({required this.account});
 
   final Account account;
+}
 
-  /// Who held the session immediately before, or null if nobody did.
-  final String? previousUserId;
+/// Nothing on this device has to move: the account id did not change.
+///
+/// Covers three arrivals that look different and are not: linking to the
+/// session in hand, a first sign-in with no session to lose, and the sign-in
+/// that lands back on the account this device was already using.
+final class SessionKept extends IdentityOutcome {
+  const SessionKept({required super.account});
+}
 
-  /// True when nothing on this device has to move.
-  ///
-  /// Derived from the ids rather than from which code path ran, because those
-  /// two answers are not always the same. Signing in with Google using the
-  /// address an existing email account already owns lands on *that same
-  /// account*: Supabase attaches the new identity by matching a verified email.
-  /// The sign-in branch ran, but the user id never changed, and wiping the
-  /// device there would delete data that was never orphaned.
-  ///
-  /// A first sign-in with no prior session is the same story for a different
-  /// reason: there was no session to lose.
-  bool get keptTheSession =>
-      previousUserId == null || previousUserId == account.id;
+/// A different account holds the session now.
+///
+/// The ledger on this device stays with the account that wrote it, named by
+/// [strandedUserId] — which local database was left behind is the only part of
+/// the transition a caller can actually act on.
+final class SessionReplaced extends IdentityOutcome {
+  const SessionReplaced({required super.account, required this.strandedUserId});
+
+  final String strandedUserId;
+}
+
+/// What starting a Google flow did.
+///
+/// Two platforms answer differently and the difference is not hideable: a
+/// device that can mint an ID token in-process finishes here, and a browser
+/// that has to leave the page cannot. Making that explicit in the return type
+/// is what stops a caller awaiting a result that is never coming.
+sealed class GoogleAttempt {
+  const GoogleAttempt();
+}
+
+/// Finished without leaving the app.
+final class AttemptCompleted extends GoogleAttempt {
+  const AttemptCompleted(this.outcome);
+
+  final IdentityOutcome outcome;
+}
+
+/// The account picker was dismissed. Nothing happened, and nothing is pending.
+final class AttemptCancelled extends GoogleAttempt {
+  const AttemptCancelled();
+}
+
+/// The page is navigating to Google.
+///
+/// There is no result to await. It arrives on the next launch, from
+/// [AuthService.resumeIdentityRedirect].
+final class AttemptRedirected extends GoogleAttempt {
+  const AttemptRedirected();
 }
 
 /// Identity, kept behind an interface like everything else that touches a
@@ -136,22 +181,44 @@ abstract interface class AuthService {
   /// Attaches Google to the current session, or signs in with it if there is
   /// no session to attach it to.
   ///
+  /// [returnTo] is where the user should land afterwards, as an internal route
+  /// — it survives the browser detour so an invite link opened by somebody with
+  /// no session still ends on the invite. It is validated before use; an
+  /// external destination is refused rather than followed.
+  ///
   /// With no session this is simply a sign-in — the arrival is somebody who
   /// chose "continue with Google" on a device holding nothing, so there is
   /// nothing to weigh up and nothing to warn about.
   ///
-  /// Throws [IdentityAlreadyInUse] when that Google account already belongs to
-  /// an OpenSplit user and [allowSignIn] is false — the point at which the
+  /// Reports [IdentityAlreadyInUse] when that Google account already belongs
+  /// to an OpenSplit user and [allowSignIn] is false — the point at which the
   /// caller has to stop and say what signing in would cost, because by the time
-  /// the session has been replaced it is too late to ask.
+  /// the session has been replaced it is too late to ask. Thrown from here
+  /// where the flow completes in-process, and from [resumeIdentityRedirect]
+  /// where it had to leave the page; the caller's answer is the same either
+  /// way, which is why the refusal is one type and not two.
   ///
-  /// With [allowSignIn] set, that same case signs in instead and the returned
-  /// outcome reports it.
-  Future<IdentityOutcome> continueWithGoogle({
-    required String idToken,
-    String? accessToken,
+  /// With [allowSignIn] set, that same case signs in instead and the outcome
+  /// reports it.
+  Future<GoogleAttempt> continueWithGoogle({
+    required String returnTo,
     bool allowSignIn = false,
   });
+
+  /// Finishes a Google flow that left the page, if this launch is a return
+  /// from one.
+  ///
+  /// Null when it is not, which is almost every launch. Throws
+  /// [IdentityAlreadyInUse] on the same condition the in-process path throws
+  /// it on — the difference is only that the refusal comes back from the
+  /// browser rather than from a call, so it surfaces on arrival instead of
+  /// inline. The caller asks the same question and calls [continueWithGoogle]
+  /// again with [allowSignIn] set.
+  ///
+  /// Safe to call unconditionally at startup, and safe to call twice: the
+  /// record it consumes is cleared as it is read, and an attempt abandoned at
+  /// Google expires rather than waiting to fire against an unrelated launch.
+  Future<IdentityOutcome?> resumeIdentityRedirect();
 
   /// Sends a six-digit code to [email], attaching it to the current session if
   /// the address is free and starting a sign-in if it is not.

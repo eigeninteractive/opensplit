@@ -700,8 +700,8 @@ void main() {
         );
 
         expect(
-          outcome.keptTheSession,
-          isTrue,
+          outcome,
+          isA<SessionKept>(),
           reason: 'linking must not replace the session',
         );
         expect(
@@ -745,9 +745,15 @@ void main() {
       );
 
       expect(
-        outcome.keptTheSession,
-        isFalse,
-        reason: 'the caller has to be told, or it cannot warn anyone in time',
+        outcome,
+        isA<SessionReplaced>().having(
+          (replaced) => replaced.strandedUserId,
+          'strandedUserId',
+          stranger.id,
+        ),
+        reason:
+            'the caller has to be told which account was left behind, or '
+            'it cannot warn anyone in time',
       );
       expect(outcome.account.id, owner.account.id);
       expect(

@@ -7,6 +7,9 @@ environment:
   sdk: ^3.12.2
 
 dependencies:
+  # Runtime, not just tooling: the Google sign-in nonce is hashed for Google
+  # and sent unhashed to Supabase.
+  crypto: ^3.0.7
   drift: ^2.34.3
   drift_flutter: ^0.3.1
   flutter:
@@ -54,7 +57,6 @@ dependencies:
   cupertino_icons: ^1.0.8
 dev_dependencies:
   args: ^2.7.0
-  crypto: ^3.0.7
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0

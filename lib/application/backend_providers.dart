@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
+import '../data/auth/google_sign_in_gateway.dart';
 import '../data/auth/supabase_auth_service.dart';
 import '../data/push/supabase_device_token_repository.dart';
 import '../data/sync/supabase_invite_api.dart';
@@ -25,7 +27,16 @@ sb.SupabaseClient? supabaseClient(Ref ref) {
 @Riverpod(keepAlive: true)
 AuthService? authService(Ref ref) {
   final client = ref.watch(supabaseClientProvider);
-  return client == null ? null : SupabaseAuthService(client);
+  if (client == null) return null;
+  // The one place the two Google flows are chosen between. A platform that can
+  // mint an ID token in-process gets that capability; the web is handed null
+  // and sends the browser to Google instead, because Identity Services answers
+  // into an iframe or a popup and neither survives the cross-origin isolation
+  // `/app/**` needs for its database.
+  return SupabaseAuthService(
+    client,
+    googleTokens: kIsWeb ? null : GoogleSignInGateway(),
+  );
 }
 
 @Riverpod(keepAlive: true)

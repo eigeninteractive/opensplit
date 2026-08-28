@@ -45,6 +45,11 @@ void main() {
     // is what lets sqlite3.wasm use SharedArrayBuffer, and it is also what
     // stops a page loading anything cross-origin that does not opt in — a
     // needless constraint on a marketing site somebody else designs.
+    //
+    // The pair is safe here only because no sign-in depends on a popup any
+    // more: the web hands the whole page to Google and comes back. Reinstating
+    // an in-page Google button without removing these would break sign-in
+    // silently, in release builds only.
     final app = (headerFor('/app/**')['headers'] as List).cast<Map>();
     expect(app, contains(containsPair('key', 'Cross-Origin-Opener-Policy')));
     expect(app, contains(containsPair('key', 'Cross-Origin-Embedder-Policy')));

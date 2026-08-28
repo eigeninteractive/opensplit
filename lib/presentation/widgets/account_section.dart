@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/providers.dart';
 import '../../data/auth/google_sign_in_gateway.dart';
 import '../../domain/repositories/auth_service.dart';
+import '../navigation.dart';
 
 /// Attaches a real account to an anonymous session.
 ///
@@ -46,25 +48,37 @@ class _AccountSectionState extends ConsumerState<AccountSection> {
   bool _busy = false;
   String? _error;
 
-  /// The web's Google sign-ins, which arrive from Google's own button rather
-  /// than from a call. Null on Android.
-  StreamSubscription<GoogleCredential>? _googleSignIns;
-
   @override
   void initState() {
     super.initState();
-    if (GoogleSignInGateway.isConfigured &&
-        !GoogleSignInGateway.startsOnDemand) {
-      unawaited(GoogleSignInGateway().prepare());
-      _googleSignIns = GoogleSignInGateway.signIns.listen(
-        (credential) => unawaited(_run(() => _attach(credential))),
-      );
-    }
+    // A refusal that came back from a redirect has no caller left to catch it,
+    // so it waits in a provider for whichever screen the user was returned to.
+    // This is that screen: nothing else ever asks to link without permission
+    // to fall back, so nothing else can be refused.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final parked = ref.read(googleRefusalProvider);
+      final refusal = parked.value;
+      if (refusal == null) return;
+      parked.value = null;
+      unawaited(_run(() => _signInAfterRefusal()));
+    });
+  }
+
+  /// Asks the question the redirect could not, then signs in if told to.
+  ///
+  /// The same two steps [_attach] takes on Android, split across the page load
+  /// that happened in between.
+  Future<void> _signInAfterRefusal() async {
+    final returnTo = returnDestination(GoRouterState.of(context).uri);
+    if (!await _confirmSignIn('that Google account')) return;
+    if (!mounted) return;
+    await ref
+        .read(accountControllerProvider.notifier)
+        .continueWithGoogle(returnTo: returnTo, allowSignIn: true);
   }
 
   @override
   void dispose() {
-    unawaited(_googleSignIns?.cancel());
     _email.dispose();
     _code.dispose();
     super.dispose();
@@ -175,53 +189,58 @@ class _AccountSectionState extends ConsumerState<AccountSection> {
       _flow = null;
       _code.clear();
     });
-    if (outcome.keptTheSession) {
-      _saved();
-    } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Signed in. Fetching your groups…')),
-      );
-    }
+    _reportOutcome(outcome);
   });
 
-  Future<void> _google() => _run(() async {
-    final credential = await GoogleSignInGateway().obtainIdToken();
-    if (credential == null) return;
-    await _attach(credential);
-  });
+  Future<void> _google() => _run(_attach);
 
-  /// Attaches the Google account behind [credential], or signs in as it.
+  /// Attaches Google to this session, or signs in as it.
   ///
-  /// Shared by both platforms because only the way the token arrives differs —
-  /// Android awaits it, the web is handed it — and everything that matters
-  /// happens after: linking is tried first and the refusal is the one chance to
-  /// ask before a sign-in replaces the session and strands this device's rows.
-  Future<void> _attach(GoogleCredential credential) async {
+  /// Linking is tried first and the refusal is the one chance to ask before a
+  /// sign-in replaces the session and strands this device's rows.
+  ///
+  /// On Android the whole exchange happens here. On the web the first call
+  /// hands the page to Google and returns [AttemptRedirected]; the refusal, if
+  /// there is one, is raised on the way back by
+  /// [AccountController.resumeGoogleRedirect] on the next launch and asked from
+  /// [_resumeRedirect] — the same question, from the other end of a page load.
+  Future<void> _attach() async {
+    // Read before any await: on the web this navigates the page away.
+    final returnTo = returnDestination(GoRouterState.of(context).uri);
     final controller = ref.read(accountControllerProvider.notifier);
+    final GoogleAttempt attempt;
     try {
-      // Linking first, and without permission to fall back. The refusal is the
-      // only chance to ask before the session is replaced.
-      await controller.continueWithGoogle(
-        idToken: credential.idToken,
-        accessToken: credential.accessToken,
-      );
-      _saved();
-      return;
+      // Linking first, and without permission to fall back.
+      attempt = await controller.continueWithGoogle(returnTo: returnTo);
     } on IdentityAlreadyInUse {
-      // Expected, and handled below rather than shown as an error.
-    }
-
-    if (!await _confirmSignIn('that Google account')) return;
-
-    await controller.continueWithGoogle(
-      idToken: credential.idToken,
-      accessToken: credential.accessToken,
-      allowSignIn: true,
-    );
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Signed in. Fetching your groups…')),
+      if (!await _confirmSignIn('that Google account')) return;
+      if (!mounted) return;
+      await controller.continueWithGoogle(
+        returnTo: returnTo,
+        allowSignIn: true,
       );
+      return;
+    }
+    switch (attempt) {
+      case AttemptCompleted(:final outcome):
+        _reportOutcome(outcome);
+      // The page is leaving, or the picker was dismissed.
+      case AttemptRedirected():
+      case AttemptCancelled():
+        return;
+    }
+  }
+
+  /// Says what an identity change did, once it is known to have happened.
+  void _reportOutcome(IdentityOutcome outcome) {
+    switch (outcome) {
+      case SessionKept():
+        _saved();
+      case SessionReplaced():
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Signed in. Fetching your groups…')),
+        );
     }
   }
 
@@ -316,19 +335,13 @@ class _AccountSectionState extends ConsumerState<AccountSection> {
                 : 'Send me a code',
           ),
         ),
-        if (GoogleSignInGateway.isConfigured && !_codeSent) ...[
+        if (GoogleSignInGateway.isOffered && !_codeSent) ...[
           const SizedBox(height: 12),
-          // Google's own button on the web, which is the only thing Google
-          // Identity Services will start a sign-in from; an ordinary one on
-          // Android, which has a call to make.
-          if (GoogleSignInGateway.startsOnDemand)
-            OutlinedButton.icon(
-              onPressed: _busy ? null : _google,
-              icon: const Icon(Icons.account_circle_outlined),
-              label: const Text('Continue with Google'),
-            )
-          else
-            Align(child: GoogleSignInGateway().button()),
+          OutlinedButton.icon(
+            onPressed: _busy ? null : _google,
+            icon: const Icon(Icons.account_circle_outlined),
+            label: const Text('Continue with Google'),
+          ),
         ],
         if (_codeSent)
           TextButton(
