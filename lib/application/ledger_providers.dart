@@ -258,8 +258,8 @@ class GroupLedger {
 
 /// The folded view of a group.
 ///
-/// Null only in the frame before the local database answers. There is no
-/// network in this path, so it is never a spinner the user can perceive.
+/// Null until the local group, members, and entries have loaded. Opening a
+/// browser database can take multiple frames; this does not wait for sync.
 @riverpod
 GroupLedger? groupLedger(Ref ref, String groupId) {
   final group = ref.watch(groupProvider(groupId)).value;

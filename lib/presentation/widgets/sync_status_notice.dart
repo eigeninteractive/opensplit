@@ -4,6 +4,29 @@ import 'package:flutter/widget_previews.dart';
 
 import '../../application/providers.dart';
 
+/// Indicates that the local database has not produced its first result yet.
+class SavedDataLoading extends StatelessWidget {
+  const SavedDataLoading({super.key, required this.label});
+
+  /// The saved content being opened, distinct from a network refresh.
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const CircularProgressIndicator(),
+          const SizedBox(height: 20),
+          Text(label, textAlign: TextAlign.center),
+        ],
+      ),
+    ),
+  );
+}
+
 /// Distinguishes an empty local cache from a verified empty server result.
 class InitialSyncGate extends ConsumerWidget {
   const InitialSyncGate({super.key, required this.child});
@@ -122,4 +145,10 @@ Widget syncFailurePreview() => MaterialApp(
       onRetry: () {},
     ),
   ),
+);
+
+/// Previews the local database loading state before any saved rows are ready.
+@Preview(name: 'Opening saved groups', group: 'Sync', size: Size(360, 240))
+Widget savedDataLoadingPreview() => const MaterialApp(
+  home: Scaffold(body: SavedDataLoading(label: 'Loading saved groups…')),
 );

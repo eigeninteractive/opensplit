@@ -44,7 +44,11 @@ jobs:
           test -z "$(git status --porcelain --untracked-files=all)"
       - run: flutter analyze --fatal-infos --no-pub
       - run: flutter test --exclude-tags integration
-      - run: flutter test --platform chrome test/domain
+      - name: Test domain logic and refresh UI in Chrome
+        run: >-
+          flutter test --platform chrome test/domain
+          test/presentation/sync_refresh_test.dart
+          test/presentation/sync_status_test.dart
       - name: Test browser database synchronization
         run: |
           cp web/sqlite3.wasm web/drift_worker.js test/browser/

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -17,6 +18,7 @@ import '../widgets/pull_to_sync.dart';
 import '../widgets/conflicting_edit_banner.dart';
 import '../widgets/unsynced_changes_banner.dart';
 import '../widgets/sync_status_notice.dart';
+import '../widgets/sync_refresh_button.dart';
 
 /// Width at which the two halves of a group stop competing for the screen.
 const double _wideBreakpoint = 840;
@@ -36,7 +38,10 @@ class GroupDetailScreen extends ConsumerWidget {
 
     if (groupAsync.hasValue && groupAsync.value == null) {
       return Scaffold(
-        appBar: AppBar(leading: const BackButton()),
+        appBar: AppBar(
+          leading: const BackButton(),
+          actions: [if (kIsWeb) SyncRefreshButton.group(groupId)],
+        ),
         body: const Center(
           child: InitialSyncGate(
             child: Text('That group is not on this device.'),
@@ -45,7 +50,13 @@ class GroupDetailScreen extends ConsumerWidget {
       );
     }
     if (ledger == null) {
-      return Scaffold(appBar: AppBar(leading: const BackButton()));
+      return Scaffold(
+        appBar: AppBar(
+          leading: const BackButton(),
+          actions: [if (kIsWeb) SyncRefreshButton.group(groupId)],
+        ),
+        body: const SavedDataLoading(label: 'Loading saved group…'),
+      );
     }
 
     final wide = MediaQuery.sizeOf(context).width >= _wideBreakpoint;
@@ -55,31 +66,30 @@ class GroupDetailScreen extends ConsumerWidget {
         leading: BackButton(onPressed: () => goBack(context, '/')),
         title: Text(ledger.group.name),
         actions: [
-          IconButton(
-            tooltip: 'People',
-            onPressed: () => context.push('/g/$groupId/members'),
-            icon: const Icon(Icons.people_outline),
-          ),
-          IconButton(
-            tooltip: 'Insights',
-            onPressed: () => context.push('/g/$groupId/insights'),
-            icon: const Icon(Icons.insights_outlined),
-          ),
-          IconButton(
-            tooltip: 'Activity',
-            onPressed: () => context.push('/g/$groupId/activity'),
-            icon: const Icon(Icons.history),
-          ),
-          IconButton(
-            tooltip: 'Settle up',
-            onPressed: () => context.push('/g/$groupId/settle'),
-            icon: const Icon(Icons.handshake_outlined),
-          ),
-          IconButton(
-            tooltip: 'Group settings',
-            onPressed: () => context.push('/g/$groupId/settings'),
-            icon: const Icon(Icons.tune),
-          ),
+          if (kIsWeb) SyncRefreshButton.group(groupId),
+          if (kIsWeb && !wide)
+            PopupMenuButton<String>(
+              tooltip: 'Group actions',
+              onSelected: (path) => context.push('/g/$groupId/$path'),
+              itemBuilder: (context) => [
+                for (final action in _groupActions)
+                  PopupMenuItem(
+                    value: action.path,
+                    child: ListTile(
+                      leading: Icon(action.icon),
+                      title: Text(action.label),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+              ],
+            )
+          else
+            for (final action in _groupActions)
+              IconButton(
+                tooltip: action.label,
+                onPressed: () => context.push('/g/$groupId/${action.path}'),
+                icon: Icon(action.icon),
+              ),
         ],
         bottom: wide
             ? null
@@ -149,6 +159,14 @@ class GroupDetailScreen extends ConsumerWidget {
     return wide ? scaffold : DefaultTabController(length: 2, child: scaffold);
   }
 }
+
+const _groupActions = [
+  (label: 'People', icon: Icons.people_outline, path: 'members'),
+  (label: 'Insights', icon: Icons.insights_outlined, path: 'insights'),
+  (label: 'Activity', icon: Icons.history, path: 'activity'),
+  (label: 'Settle up', icon: Icons.handshake_outlined, path: 'settle'),
+  (label: 'Group settings', icon: Icons.tune, path: 'settings'),
+];
 
 class _EntriesList extends ConsumerWidget {
   const _EntriesList({required this.ledger});

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -17,6 +18,7 @@ import '../widgets/link_account_prompt.dart';
 import '../widgets/conflicting_edit_banner.dart';
 import '../widgets/unsynced_changes_banner.dart';
 import '../widgets/sync_status_notice.dart';
+import '../widgets/sync_refresh_button.dart';
 import '../router.dart';
 
 class GroupListScreen extends ConsumerWidget {
@@ -54,7 +56,10 @@ class GroupListScreen extends ConsumerWidget {
     final archived = all.length - groups.length;
 
     return Scaffold(
-      appBar: AppBar(title: const BrandLockup()),
+      appBar: AppBar(
+        title: const BrandLockup(),
+        actions: [if (kIsWeb) const SyncRefreshButton.everything()],
+      ),
       drawer: AdaptiveNavigation.drawerFor(context),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => showCreateGroupSheet(context),
@@ -70,9 +75,7 @@ class GroupListScreen extends ConsumerWidget {
             groups: groups,
             archivedCount: archived,
           ),
-          // The journal is local, so this window is a single frame rather
-          // than anything the user perceives as loading.
-          _ => const SizedBox.shrink(),
+          _ => const SavedDataLoading(label: 'Loading saved groups…'),
         },
       ),
     );
