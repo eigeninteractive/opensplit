@@ -197,14 +197,15 @@ package name and signing certificate. Both live in `env/app.json` under
 can be run with the wrong one, and the unused branch never reaches the bundle.
 
 `web/sqlite3.wasm` and `web/drift_worker.js` are committed: Drift needs both at
-runtime to use OPFS, and a build without them falls back to a database that does
-not survive a reload.
+runtime to use OPFS. OpenSplit deliberately has no IndexedDB fallback because a
+second browser backend would be a second, independent local ledger.
 
 OPFS also needs the page to be cross-origin isolated, which is why `/app/**` is
 served with `Cross-Origin-Opener-Policy: same-origin` and
 `Cross-Origin-Embedder-Policy: credentialless`. That pair is what makes
-`SharedArrayBuffer` available, and it is why Drift reports `opfsLocks` rather
-than falling back to its IndexedDB store.
+`SharedArrayBuffer` available. If no safe OPFS implementation is available,
+OpenSplit refuses to open the local ledger instead of silently changing its
+storage backend.
 
 The pair is also why **Google sign-in on the web is a redirect rather than a
 button**. COOP `same-origin` severs the opener of every cross-origin popup, and

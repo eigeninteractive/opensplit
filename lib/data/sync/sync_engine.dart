@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../domain/models/entry.dart';
 import '../local/database.dart';
@@ -12,6 +11,7 @@ import 'feeds.dart';
 import 'outbox_queue.dart';
 import 'remote_ledger_api.dart';
 import 'sync_cursor.dart';
+import 'sync_gate.dart';
 import 'sync_session.dart';
 import 'wire.dart' show entryToJson;
 
@@ -22,6 +22,7 @@ class SyncReport {
     required this.pulled,
     required this.failed,
     this.error,
+    this.stackTrace,
     this.nextPushAt,
   });
 
@@ -29,6 +30,9 @@ class SyncReport {
   final int pulled;
   final int failed;
   final Object? error;
+
+  /// The origin of [error], when the failing boundary preserved it.
+  final StackTrace? stackTrace;
 
   /// The earliest pending write's next attempt, excluding dead letters.
   final DateTime? nextPushAt;
@@ -57,32 +61,32 @@ class SyncEngine {
     required this.db,
     required this.api,
     required this.outbox,
+    SyncGate? gate,
     DateTime Function()? clock,
     this.pageSize = 200,
     this.requestTimeout = const Duration(seconds: 20),
-  }) : _clock = clock ?? DateTime.now;
+  }) : _clock = clock ?? DateTime.now,
+       _gate = gate ?? createSyncGate(db);
 
   final AppDatabase db;
   final RemoteLedgerApi api;
   final OutboxQueue outbox;
   final DateTime Function() _clock;
+  final SyncGate _gate;
   final int pageSize;
 
   /// Maximum wait per network operation before preserving the write for retry.
   final Duration requestTimeout;
 
-  static const _leaseName = 'ledger';
-  static const _leaseLifetime = Duration(minutes: 2);
-  static const _leaseRenewal = Duration(seconds: 30);
-  static const _leaseWait = Duration(seconds: 15);
-
-  final String _leaseOwner = const Uuid().v4();
   Future<void> _tail = Future<void>.value();
   String? _activeEpoch;
   bool _disposed = false;
 
   /// Stops queued and future runs when the account-scoped provider is disposed.
-  void dispose() => _disposed = true;
+  void dispose() {
+    _disposed = true;
+    _gate.dispose();
+  }
 
   Future<void> _assertActive() async {
     final session = await readSyncSession(db);
@@ -91,15 +95,7 @@ class SyncEngine {
         (_activeEpoch != null && session.epoch != _activeEpoch)) {
       throw StateError('This account synchronization has ended.');
     }
-    if (_activeEpoch != null) {
-      final lease = await (db.select(
-        db.syncLeases,
-      )..where((t) => t.name.equals(_leaseName))).getSingleOrNull();
-      if (lease?.owner != _leaseOwner ||
-          !lease!.expiresAt.isAfter(_clock().toUtc())) {
-        throw StateError('The account synchronization lease expired.');
-      }
-    }
+    if (_activeEpoch != null) await _gate.assertHeld();
   }
 
   /// Every group the server says this account belongs to, including ones this
@@ -134,12 +130,13 @@ class SyncEngine {
         pulled: pulled,
         failed: pushed.failed,
       );
-    } catch (error) {
+    } catch (error, stackTrace) {
       return SyncReport(
         pushed: pushed.sent,
         pulled: 0,
         failed: pushed.failed,
         error: error,
+        stackTrace: stackTrace,
       );
     }
   }
@@ -170,23 +167,22 @@ class SyncEngine {
         pulled: pulled,
         failed: pushed.failed,
       );
-    } catch (error) {
+    } catch (error, stackTrace) {
       return SyncReport(
         pushed: pushed.sent,
         pulled: pulled,
         failed: pushed.failed,
         error: error,
+        stackTrace: stackTrace,
       );
     }
   }
 
-  /// Queues every run in this isolate and holds the account database's lease
-  /// while it executes.
+  /// Queues every run in this isolate and holds the platform's sync gate.
   ///
-  /// The queue prevents two foreground triggers from racing. The lease closes
-  /// the remaining hole: Firebase can open the same database from a background
-  /// isolate, where no Dart mutex is shared. Claim and renewal are short SQL
-  /// statements; network requests never run inside a SQLite transaction.
+  /// The queue prevents two foreground triggers from racing. The gate closes
+  /// the remaining cross-context hole: an Android background isolate shares no
+  /// Dart memory, while browser tabs can disappear without running cleanup.
   Future<SyncReport> _serialized(Future<SyncReport> Function() operation) {
     final previous = _tail;
     final released = Completer<void>();
@@ -194,122 +190,34 @@ class SyncEngine {
 
     return () async {
       await previous;
-      Timer? renewal;
       try {
         if (_disposed) throw StateError('This sync engine is disposed.');
-        if (!await _waitForLease()) {
+        return await _gate.synchronized(() async {
+          _activeEpoch = (await readSyncSession(db)).epoch;
+          await _assertActive();
+          final report = await operation();
           return SyncReport(
-            pushed: 0,
-            pulled: 0,
-            failed: 0,
-            error: TimeoutException(
-              'Another isolate is still synchronizing this account.',
-            ),
+            pushed: report.pushed,
+            pulled: report.pulled,
+            failed: report.failed,
+            error: report.error,
+            stackTrace: report.stackTrace,
+            nextPushAt: await outbox.nextAttemptAt(),
           );
-        }
-
-        _activeEpoch = (await readSyncSession(db)).epoch;
-        await _assertActive();
-
-        renewal = Timer.periodic(
-          _leaseRenewal,
-          (_) => unawaited(_renewLease()),
-        );
-        final report = await operation();
+        });
+      } catch (error, stackTrace) {
         return SyncReport(
-          pushed: report.pushed,
-          pulled: report.pulled,
-          failed: report.failed,
-          error: report.error,
-          nextPushAt: await outbox.nextAttemptAt(),
+          pushed: 0,
+          pulled: 0,
+          failed: 0,
+          error: error,
+          stackTrace: stackTrace,
         );
-      } catch (error) {
-        return SyncReport(pushed: 0, pulled: 0, failed: 0, error: error);
       } finally {
-        renewal?.cancel();
-        await _releaseLease();
         _activeEpoch = null;
         released.complete();
       }
     }();
-  }
-
-  Future<bool> _waitForLease() async {
-    final elapsed = Stopwatch()..start();
-    do {
-      try {
-        if (await _claimLease()) return true;
-      } catch (_) {
-        // The other isolate can briefly hold SQLite's write lock while it
-        // renews or releases. Treat that exactly like seeing an active lease.
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 200));
-    } while (!_disposed && elapsed.elapsed < _leaseWait);
-    return false;
-  }
-
-  Future<bool> _claimLease() async {
-    final now = _clock().toUtc();
-    final expiresAt = now.add(_leaseLifetime);
-    final changed = await db.customUpdate(
-      '''
-      INSERT INTO sync_leases (name, owner, expires_at)
-      VALUES (?, ?, ?)
-      ON CONFLICT(name) DO UPDATE SET
-        owner = excluded.owner,
-        expires_at = excluded.expires_at
-      WHERE sync_leases.expires_at <= ?
-         OR sync_leases.owner = excluded.owner
-      ''',
-      variables: [
-        Variable.withString(_leaseName),
-        Variable.withString(_leaseOwner),
-        Variable.withString(expiresAt.toIso8601String()),
-        Variable.withString(now.toIso8601String()),
-      ],
-      updates: {db.syncLeases},
-    );
-    return changed == 1;
-  }
-
-  Future<void> _renewLease() async {
-    try {
-      final expiresAt = _clock().toUtc().add(_leaseLifetime);
-      final changed = await db.customUpdate(
-        '''
-      UPDATE sync_leases
-         SET expires_at = ?
-       WHERE name = ? AND owner = ?
-      ''',
-        variables: [
-          Variable.withString(expiresAt.toIso8601String()),
-          Variable.withString(_leaseName),
-          Variable.withString(_leaseOwner),
-        ],
-        updates: {db.syncLeases},
-      );
-      if (changed != 1) _disposed = true;
-    } catch (_) {
-      // Fail closed if the lease cannot be renewed. Never let an unobserved
-      // timer exception escape after the database has closed.
-      _disposed = true;
-    }
-  }
-
-  Future<void> _releaseLease() async {
-    try {
-      await db.customUpdate(
-        'DELETE FROM sync_leases WHERE name = ? AND owner = ?',
-        variables: [
-          Variable.withString(_leaseName),
-          Variable.withString(_leaseOwner),
-        ],
-        updates: {db.syncLeases},
-      );
-    } catch (_) {
-      // A crashed connection leaves only an expiring lease. Never replace the
-      // operation's useful result with a cleanup error.
-    }
   }
 
   /// Everything a pull needs that is not about one group.

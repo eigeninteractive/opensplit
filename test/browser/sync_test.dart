@@ -1,15 +1,18 @@
 @TestOn('browser')
 library;
 
+import 'dart:async';
 import 'dart:js_interop';
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/wasm.dart';
 import 'package:opensplit/data/local/database.dart';
+import 'package:opensplit/data/local/open_database_web.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';
 import 'package:opensplit/data/sync/outbox_queue.dart';
 import 'package:opensplit/data/sync/sync_engine.dart';
+import 'package:opensplit/data/sync/sync_gate_web.dart';
 import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/models/profile.dart';
 import 'package:opensplit/domain/split/splitter.dart';
@@ -19,7 +22,61 @@ import 'package:web/web.dart' as web;
 import '../data/fake_remote_ledger.dart';
 
 void main() {
-  test('OPFS sync imports new groups and survives reopening', () async {
+  test('storage selection accepts only safe OPFS implementations', () {
+    expect(
+      selectOpfsStorage(const [
+        WasmStorageImplementation.opfsLocks,
+        WasmStorageImplementation.opfsShared,
+      ]),
+      WasmStorageImplementation.opfsShared,
+    );
+    expect(
+      selectOpfsStorage(const [
+        WasmStorageImplementation.sharedIndexedDb,
+        WasmStorageImplementation.opfsLocks,
+      ]),
+      WasmStorageImplementation.opfsLocks,
+    );
+    expect(
+      () => selectOpfsStorage(const [
+        WasmStorageImplementation.sharedIndexedDb,
+        WasmStorageImplementation.unsafeIndexedDb,
+        WasmStorageImplementation.inMemory,
+      ]),
+      throwsA(isA<UnsupportedError>()),
+    );
+  });
+
+  test('Web Locks serialize tabs and aborted waiters do not run', () async {
+    final name = 'sync-gate-${DateTime.now().microsecondsSinceEpoch}';
+    final first = BrowserSyncGate(name: name);
+    final second = BrowserSyncGate(name: name);
+    final entered = Completer<void>();
+    final release = Completer<void>();
+    var secondEntered = false;
+
+    final firstRun = first.synchronized(() async {
+      entered.complete();
+      await release.future;
+      return 1;
+    });
+    await entered.future;
+    final secondRun = second.synchronized(() async {
+      secondEntered = true;
+      return 2;
+    });
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(secondEntered, isFalse);
+
+    second.dispose();
+    await expectLater(secondRun, throwsA(anything));
+    expect(secondEntered, isFalse);
+    release.complete();
+    expect(await firstRun, 1);
+    first.dispose();
+  });
+
+  test('OPFS sync imports groups and survives reopening', () async {
     driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
     // Flutter's test server adds isolation headers to HTML, but not workers.
     // A blob worker inherits the page's isolation and runs the shipped bytes.
@@ -39,15 +96,10 @@ void main() {
       sqlite3Uri: Uri.base.resolve('/browser/sqlite3.wasm'),
       driftWorkerUri: Uri.parse(workerUrl),
     );
-    // Exercise the backend that failed, never silently fall back to memory.
-    expect(
-      probe.availableStorages,
-      contains(WasmStorageImplementation.opfsLocks),
-      reason: '${probe.missingFeatures}',
-    );
+    final storage = selectOpfsStorage(probe.availableStorages);
+    expect(storage.storageApi, WebStorageApi.opfs);
     final prefix = 'sync-test-${DateTime.now().microsecondsSinceEpoch}';
     final databases = <AppDatabase>[];
-    final names = <String>{};
     final queues = <OutboxQueue>[];
     final engines = <SyncEngine>[];
     addTearDown(() async {
@@ -60,17 +112,11 @@ void main() {
       for (final db in databases) {
         await db.close();
       }
-      for (final name in names) {
-        await probe.deleteDatabase((WebStorageApi.opfs, name));
-      }
     });
 
     Future<AppDatabase> open(String device) async {
       final name = '$prefix-$device';
-      final db = AppDatabase(
-        await probe.open(WasmStorageImplementation.opfsLocks, name),
-      );
-      names.add(name);
+      final db = AppDatabase(await probe.open(storage, name));
       databases.add(db);
       return db;
     }

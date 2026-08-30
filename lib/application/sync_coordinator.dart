@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -107,10 +108,25 @@ class SyncCoordinator extends ChangeNotifier {
       SyncReport report;
       try {
         report = await (full ? _syncAll() : _syncGroup(groupId!));
-      } catch (error) {
-        report = SyncReport(pushed: 0, pulled: 0, failed: 0, error: error);
+      } catch (error, stackTrace) {
+        report = SyncReport(
+          pushed: 0,
+          pulled: 0,
+          failed: 0,
+          error: error,
+          stackTrace: stackTrace,
+        );
       }
       if (_disposed) break;
+      if (report.error != null) {
+        developer.log(
+          'Synchronization attempt failed; saved data remains available.',
+          name: 'opensplit.sync',
+          level: 900,
+          error: report.error,
+          stackTrace: report.stackTrace,
+        );
+      }
       _status = SyncStatus(
         isSyncing: true,
         hasCompletedFullSync:

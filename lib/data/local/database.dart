@@ -1,5 +1,4 @@
 import 'package:drift/drift.dart';
-import 'package:drift_flutter/drift_flutter.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 // Imported for the generated part file: `textEnum` columns resolve these types
@@ -7,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../domain/models/entry.dart';
 import '../../domain/split/splitter.dart';
 import 'reference_data.dart';
+import 'open_database.dart';
 import 'tables.dart';
 
 export 'tables.dart';
@@ -20,9 +20,9 @@ part 'database.g.dart';
 /// screen waits for the network, which is what makes the app usable on a train
 /// in another country and what keeps server cost flat as users are added.
 ///
-/// The same Dart runs on both platforms: native SQLite on Android, and
-/// `sqlite3.wasm` over OPFS on the web, courtesy of drift_flutter. No layer
-/// above this one branches on platform.
+/// The same Dart runs on both platforms: native SQLite on Android and
+/// `sqlite3.wasm` over OPFS on the web. No layer above this one branches on
+/// platform.
 @DriftDatabase(
   tables: [
     Currencies,
@@ -192,24 +192,3 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 }
-
-/// One database file per account, named after it.
-///
-/// The alternative — a single file, repointed and wiped when the account
-/// changes — worked only for as long as every path remembered to wipe it, and
-/// the cost of forgetting was one person's expenses showing up under somebody
-/// else's account on a shared device. Keying the file makes that impossible
-/// rather than merely unlikely: a session that is not [accountId] cannot open
-/// this data at all, whatever any calling code believes.
-///
-/// It also makes switching non-destructive, which is why the wipe is no longer
-/// load-bearing anywhere. What it costs is that reference data — currencies,
-/// categories, exchange rates — is per file and re-pulled after a switch. That
-/// is a few hundred rows on an event that happens approximately never.
-QueryExecutor openAccountDatabase(String accountId) => driftDatabase(
-  name: 'opensplit-$accountId',
-  web: DriftWebOptions(
-    sqlite3Wasm: Uri.parse('sqlite3.wasm'),
-    driftWorker: Uri.parse('drift_worker.js'),
-  ),
-);
