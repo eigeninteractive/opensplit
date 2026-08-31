@@ -18,10 +18,16 @@ drifting apart.
 
 ## The fingerprint list is not optional reading
 
-`sha256_cert_fingerprints` currently holds **the Google Play App Signing key**,
-which is the certificate every install from the Play Store actually carries —
-Play re-signs each upload with it, so it, and not the upload key, is what
-Android checks. It is the one that has to be there.
+`sha256_cert_fingerprints` holds all **three Google Play App Signing
+certificates** used by Play's quantum-ready signing:
+
+- the original classical certificate used on Android 16 and below;
+- the new classical certificate used by the hybrid signature on Android 17+;
+- the post-quantum certificate used by that same Android 17+ signature.
+
+Play chooses the appropriate signature for the device, so omitting any one of
+the three makes App Links depend on the Android version that installed the app.
+These, rather than the upload certificate, are what Store installs trust.
 
 It should also hold **the upload key**, the key `android/key.properties` points
 at. Play never distributes anything signed with it, but every release APK built
@@ -35,14 +41,14 @@ afternoon.
 keytool -list -v -keystore ~/opensplit-upload.jks -alias upload | grep SHA256
 ```
 
-Both are shown together under *Play Console → Test and release → Setup → App
-signing*, and Play offers a ready-made JSON snippet there containing the app
-signing key alone. Adding a second fingerprint to the array is the manual part.
+All four certificates are shown under *Play Console → Test and release → Setup
+→ App signing*. Copy every SHA-256 fingerprint from the three App signing key
+sections, then add the upload certificate manually if Play's generated Digital
+Asset Links snippet omits it.
 
-Get this wrong and verification passes every test run locally and fails for
-every real user, because the app they install is signed with a certificate the
-file has never heard of. It is the single most common way App Links break, and
-the failure is silent: links simply open in the browser.
+Get this wrong and verification can pass on one Android generation and fail on
+another, because those devices receive different signatures. The failure is
+silent: links simply open in the browser.
 
 ```bash
 # Verify on a device against the real, deployed file:

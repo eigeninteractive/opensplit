@@ -354,10 +354,11 @@ clients by hand, in the same Google Cloud project the Firebase project made:
    client even when the token was minted on Android.
 3. **Credentials → Create credentials → OAuth client ID → Android.** Package
    name `com.eigeninteractive.opensplit`, plus the SHA-1 of the signing key.
-   Its id is never needed in the app, but **without this client Android sign-in
-   fails with `ApiException: 10`** — the client is what binds the package name
-   and certificate. Add both the upload key and Play App Signing's SHA-1, the
-   same dual-key problem as `assetlinks.json`.
+   Its id is never needed in the app, but the client is what binds the package
+   name and certificate. Create one for the upload key and for all three Play
+   App Signing certificates: the original classical key and the new classical
+   and post-quantum keys used by Android 17+. A missing client may surface as a
+   `clientConfigurationError`, or even as `canceled`, in Credential Manager.
 4. **Supabase dashboard → Authentication → Providers → Google:** enable it, and
    paste the *web* client's ID and secret.
 
@@ -626,12 +627,13 @@ rewrite swallowed it, and App Links will not verify.
 
 **Before the first Play Store release**, read
 [`site/.well-known/README.md`](site/.well-known/README.md). `assetlinks.json`
-now lists the Google Play App Signing key, which is the certificate every
-install from the Store actually carries — Play re-signs each upload with it, so
-it and not the upload key is what Android checks.
+lists all three Google Play App Signing certificates: the original classical
+key for Android 16 and below, plus the new classical and post-quantum keys used
+by Android 17+. Play re-signs each upload with the keys appropriate for the
+installing device, so every one must be authorized.
 
 It should also list the **upload key**, so that release APKs installed directly
-verify too. Both fingerprints are shown together under *Play Console → Test and
+verify too. All four certificates are shown under *Play Console → Test and
 release → Setup → App signing*. Getting this wrong is silent in the worst way:
 links simply open in a browser, with nothing in the app to say why.
 
