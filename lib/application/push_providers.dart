@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'entry_notification.dart';
 import '../data/push/push_service.dart';
@@ -28,13 +30,21 @@ PushService pushService(Ref ref) {
     describe: (groupId, entryId) => composeEntryNotification(
       entries: ref.read(entryRepositoryProvider),
       groups: ref.read(groupRepositoryProvider),
+      profiles: ref.read(profileRepositoryProvider),
       currencies: ref.read(currencyRepositoryProvider),
       activity: ref.read(activityRepositoryProvider),
       myProfileId: ref.read(currentAccountIdProvider),
       groupId: groupId,
       entryId: entryId,
     ),
-    onOpenRoute: (route) => ref.read(routerProvider).go(route),
+    onOpenGroup: (groupId) {
+      // The background isolate writes through another Drift connection. Tell
+      // this connection to re-run its live queries before the destination
+      // reads them, then pull anything the background attempt did not finish.
+      ref.read(appDatabaseProvider).refreshAfterExternalSync();
+      ref.read(routerProvider).go(groupNotificationRoute(groupId));
+      unawaited(ref.read(syncControllerProvider.notifier).syncGroup(groupId));
+    },
   );
   ref.onDispose(service.dispose);
   return service;

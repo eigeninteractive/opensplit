@@ -105,11 +105,18 @@ class GroupFeed implements ChangeFeed<Group> {
 /// Members land before entries because an entry's payers and shares reference
 /// them and the local foreign keys are real.
 class MemberFeed implements ChangeFeed<Member> {
-  const MemberFeed(this._api, this._db, this.groupId);
+  MemberFeed(this._api, this._db, this.groupId);
 
   final RemoteLedgerApi _api;
   final AppDatabase _db;
   final String groupId;
+
+  /// Profiles referenced by member rows this run actually accepted.
+  ///
+  /// Kept on the feed so [SyncEngine] can hydrate them after the member
+  /// transaction commits. A network request must never be held inside that
+  /// transaction.
+  final Set<String> profileIdsToHydrate = {};
 
   @override
   String get key => 'members:$groupId';
@@ -137,6 +144,10 @@ class MemberFeed implements ChangeFeed<Member> {
           member,
     ];
     if (winners.isEmpty) return 0;
+
+    profileIdsToHydrate.addAll(
+      winners.map((member) => member.profileId).nonNulls,
+    );
 
     await _db.batch((batch) {
       for (final member in winners) {

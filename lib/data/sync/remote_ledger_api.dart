@@ -146,6 +146,16 @@ abstract interface class RemoteLedgerApi {
     required int limit,
   });
 
+  /// Fetches the current rows for profiles newly referenced by membership.
+  ///
+  /// The incremental profile feed alone cannot discover every row correctly:
+  /// its RLS-filtered result set grows when an invite is redeemed, and the
+  /// newly visible profile may have an `updated_at` older than the device's
+  /// existing cursor. Member synchronization supplies the exact ids that just
+  /// became relevant, so this lookup closes that visibility gap without
+  /// throwing away incremental profile sync.
+  Future<List<Profile>> pullProfilesByIds(List<String> profileIds);
+
   /// Writes your own name and payment handle. The server refuses any other row.
   Future<Profile> pushProfile(Profile profile);
 

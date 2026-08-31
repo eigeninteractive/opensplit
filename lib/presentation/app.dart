@@ -96,6 +96,9 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
   /// Coming back to the foreground asks both questions worth asking: what has
   /// the group been doing, and is there a new version of the app.
   void _onResume() {
+    if (ref.read(signedInProvider)) {
+      ref.read(appDatabaseProvider).refreshAfterExternalSync();
+    }
     ref.read(syncSchedulerProvider)?.resumed();
     _offerUpdate();
   }

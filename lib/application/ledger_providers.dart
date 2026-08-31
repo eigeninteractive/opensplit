@@ -1,8 +1,9 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../domain/balance/balance_fold.dart';
-import '../domain/fx/estimated_total.dart';
 import '../domain/balance/member_balance.dart';
 import '../domain/balance/simplify.dart';
+import '../domain/fx/estimated_total.dart';
+import '../domain/member_identity.dart';
 import '../domain/models/category.dart';
 import '../domain/models/currency.dart';
 import '../domain/models/entry.dart';
@@ -186,10 +187,8 @@ class GroupLedger {
   ///
   /// Falls back to the member row when the profile has not synced yet, which is
   /// the ordinary state for a few seconds after somebody accepts an invite.
-  String nameOfMember(Member member) {
-    final claimed = profiles[member.profileId]?.displayName?.trim() ?? '';
-    return claimed.isEmpty ? member.displayName : claimed;
-  }
+  String nameOfMember(Member member) =>
+      memberDisplayName(member, profiles[member.profileId]);
 
   String? upiOf(Member member) =>
       profiles[member.profileId]?.upiVpa ?? member.upiVpa;

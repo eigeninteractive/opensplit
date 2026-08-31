@@ -31,7 +31,7 @@ class PushService {
     required this.onWake,
     required this.describe,
     required this.onTokenChanged,
-    required this.onOpenRoute,
+    required this.onOpenGroup,
     required this.isEnabled,
   });
 
@@ -49,12 +49,8 @@ class PushService {
   /// every time FCM rotates it.
   final Future<void> Function(String token) onTokenChanged;
 
-  /// Navigate, because somebody tapped a notification.
-  ///
-  /// A notification about one expense that opens the app's front door has
-  /// wasted the tap: whatever it said, the thing it said it about is now
-  /// several screens away.
-  final void Function(String route) onOpenRoute;
+  /// Opens and refreshes the affected group after a notification tap.
+  final void Function(String groupId) onOpenGroup;
 
   /// Whether the current account still wants notifications on this device.
   final bool Function() isEnabled;
@@ -95,8 +91,8 @@ class PushService {
         ),
         // Tapping a notification this app posted, while it is running.
         onDidReceiveNotificationResponse: (response) {
-          final route = response.payload;
-          if (route != null && route.isNotEmpty) onOpenRoute(route);
+          final groupId = response.payload;
+          if (groupId != null && groupId.isNotEmpty) onOpenGroup(groupId);
         },
       );
       await _local
@@ -144,7 +140,7 @@ class PushService {
     if ((launch?.didNotificationLaunchApp ?? false) &&
         payload != null &&
         payload.isNotEmpty) {
-      onOpenRoute(payload);
+      onOpenGroup(payload);
     }
 
     // FCM rotates a registration token on reinstall, on restore to a new
@@ -239,15 +235,13 @@ class PushService {
           channelDescription: activityChannelDescription,
         ),
       ),
-      // Tapping it opens the entry it is about, not just the app.
-      payload: '/g/$groupId/e/$entryId',
+      payload: groupId,
     );
   }
 
   void _open(RemoteMessage message) {
     final groupId = message.data['group_id'];
-    final entryId = message.data['entry_id'];
-    if (groupId is! String || entryId is! String) return;
-    onOpenRoute('/g/$groupId/e/$entryId');
+    if (groupId is! String) return;
+    onOpenGroup(groupId);
   }
 }

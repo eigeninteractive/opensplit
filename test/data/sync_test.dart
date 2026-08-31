@@ -1228,6 +1228,47 @@ void main() {
   });
 
   group('a name follows the account, not the group', () {
+    test(
+      'an invite claim hydrates a profile older than the feed cursor',
+      () async {
+        final created = await a.groups.createGroup(
+          name: 'Goa Trip',
+          defaultCurrency: 'INR',
+          creatorDisplayName: 'Ravi',
+          creatorProfileId: 'profile-ravi',
+        );
+        final priya = await a.groups.addMember(
+          created.group.id,
+          displayName: 'Priya placeholder',
+        );
+        await a.sync.syncGroup(created.group.id);
+
+        // Priya's Google account existed before this device could see it. A
+        // later visible profile moves the account-wide cursor beyond hers.
+        server.seedProfile(
+          const Profile(id: 'profile-priya', displayName: 'Priya D'),
+        );
+        server.seedProfile(
+          const Profile(id: 'profile-later', displayName: 'Later profile'),
+        );
+        await a.sync.pullShared();
+        await (a.db.delete(
+          a.db.profiles,
+        )..where((t) => t.id.equals('profile-priya'))).go();
+
+        // Redeeming the invite changes the member, not an already-named Google
+        // profile. The incremental profile feed therefore cannot see Priya
+        // behind its cursor; the member claim must hydrate her exact row.
+        server.claimMember(priya.id, 'profile-priya');
+        await a.sync.syncGroup(created.group.id);
+
+        final profile = await DriftProfileRepository(
+          a.db,
+        ).byId('profile-priya');
+        expect(profile?.displayName, 'Priya D');
+      },
+    );
+
     test('a rename by somebody else arrives on the next sync', () async {
       final server = FakeRemoteLedger();
       final db = AppDatabase(NativeDatabase.memory());

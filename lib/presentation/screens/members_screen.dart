@@ -231,7 +231,7 @@ class MembersScreen extends ConsumerWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Remove ${member.displayName}?'),
+        title: Text('Remove ${ledger.nameOfMember(member)}?'),
         content: Text(
           owes
               ? 'They still have an unsettled balance. Removing them keeps '

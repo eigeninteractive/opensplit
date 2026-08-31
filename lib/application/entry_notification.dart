@@ -2,6 +2,8 @@ import '../data/repositories/drift_activity_repository.dart';
 import '../data/repositories/drift_currency_repository.dart';
 import '../data/repositories/drift_entry_repository.dart';
 import '../data/repositories/drift_group_repository.dart';
+import '../data/repositories/drift_profile_repository.dart';
+import '../domain/member_identity.dart';
 import '../domain/money_format.dart';
 import '../domain/notification_text.dart';
 
@@ -26,6 +28,7 @@ import '../domain/notification_text.dart';
 Future<({String title, String body})?> composeEntryNotification({
   required DriftEntryRepository entries,
   required DriftGroupRepository groups,
+  required DriftProfileRepository profiles,
   required DriftCurrencyRepository currencies,
   required DriftActivityRepository activity,
   required String? myProfileId,
@@ -44,14 +47,14 @@ Future<({String title, String body})?> composeEntryNotification({
 
   final group = await groups.getGroup(groupId);
   final members = await groups.getMembers(groupId);
+  final knownProfiles = await profiles.all();
   final known = await currencies.all();
 
-  String nameOf(String memberId) =>
-      members
-          .where((m) => m.id == memberId)
-          .map((m) => m.displayName)
-          .firstOrNull ??
-      'Someone';
+  String nameOf(String memberId) {
+    final member = members.where((m) => m.id == memberId).firstOrNull;
+    if (member == null) return 'Someone';
+    return memberDisplayName(member, knownProfiles[member.profileId]);
+  }
 
   final myMemberId = members
       .where((m) => m.profileId == myProfileId)
@@ -82,10 +85,9 @@ Future<({String title, String body})?> composeEntryNotification({
   );
 }
 
-/// The route a notification about [entryId] should open.
+/// The group route a notification should open.
 ///
-/// Tapping a notification has to land on the thing it was about, not on the
-/// app's front door. Built here so the foreground and background paths cannot
-/// produce different links.
-String entryNotificationRoute(String groupId, String entryId) =>
-    '/g/$groupId/e/$entryId';
+/// The group owns refresh and renders saved data while it runs. Opening an
+/// editor before the notified entry has reached the foreground database can
+/// only produce an empty form, which falsely looks editable.
+String groupNotificationRoute(String groupId) => '/g/$groupId';

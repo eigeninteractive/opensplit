@@ -513,18 +513,42 @@ class SyncEngine {
   /// constraint and takes the whole sync down with it -- which, on a device
   /// seeing the group for the first time, is every row there is.
   ///
-  /// Deliberately does NOT pull rates or profiles -- see [pullShared], which the
-  /// callers run once per sync rather than once per group.
+  /// Rates and ordinary profile changes remain in [pullShared], which callers
+  /// run once per sync. The member pass does hydrate profiles referenced by a
+  /// newly changed member row, because an invite claim can make an older
+  /// profile newly visible behind the account-wide profile cursor.
   ///
   /// Counts entries only. It is the number the callers report and the only one
   /// that means "something happened to the money"; a renamed group is a change
   /// nobody needs counted.
   Future<int> pull(String groupId) async {
     await drain(GroupFeed(api, db, groupId));
-    await drain(MemberFeed(api, db, groupId));
+    final members = MemberFeed(api, db, groupId);
+    await drain(members);
+    await _hydrateProfiles(members.profileIdsToHydrate);
     final entries = await drain(EntryFeed(api, db, groupId));
     await drain(SnapshotFeed(api, db, groupId));
     return entries;
+  }
+
+  /// Loads profiles that became readable because a member row just changed.
+  ///
+  /// A cursor can order changes inside a stable result set; it cannot reveal a
+  /// pre-existing row that RLS only started returning after an invite claim.
+  /// The member feed is the authoritative signal for that visibility change.
+  Future<void> _hydrateProfiles(Set<String> profileIds) async {
+    if (profileIds.isEmpty) return;
+
+    await _assertActive();
+    final rows = await api
+        .pullProfilesByIds(profileIds.toList()..sort())
+        .timeout(requestTimeout);
+    if (rows.isEmpty) return;
+
+    await db.transaction(() async {
+      await _assertActive();
+      await ProfileFeed(api, db).applyInTransaction(rows);
+    });
   }
 
   /// Mirrors published exchange rates onto the device.

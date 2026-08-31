@@ -32,6 +32,12 @@ final class DriftProfileRepository {
       .watch()
       .map((rows) => {for (final row in rows) row.id: _toDomain(row)});
 
+  /// Every locally known profile as a point-in-time lookup.
+  Future<Map<String, Profile>> all() async {
+    final rows = await _db.select(_db.profiles).get();
+    return {for (final row in rows) row.id: _toDomain(row)};
+  }
+
   Future<void> upsert(Profile profile) => _db.transaction(() async {
     await _db
         .into(_db.profiles)

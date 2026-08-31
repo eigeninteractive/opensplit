@@ -343,6 +343,12 @@ class FakeRemoteLedger implements RemoteLedgerApi {
   }
 
   @override
+  Future<List<Profile>> pullProfilesByIds(List<String> profileIds) async => [
+    for (final id in profileIds)
+      if (_profiles[id] case final json?) profileFromJson(json),
+  ];
+
+  @override
   Future<Profile> pushProfile(Profile profile) async {
     final json = {
       ...?_profiles[profile.id],

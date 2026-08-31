@@ -50,6 +50,7 @@ class SyncController extends _$SyncController {
   /// Refreshes a group through the account-scoped coordinator.
   Future<void> syncGroup(String groupId) async {
     await _coordinator?.syncGroup(groupId);
+    _refreshExternalWrites();
   }
 
   /// Syncs every group this account belongs to, including ones this device has
@@ -65,6 +66,20 @@ class SyncController extends _$SyncController {
   /// the whole run rather than per group.
   Future<void> syncAll() async {
     await _coordinator?.syncAll();
+    _refreshExternalWrites();
+  }
+
+  /// Makes writes from an Android background isolate visible to this one.
+  ///
+  /// The database sync gate can make this run wait behind that isolate. If the
+  /// background run advanced the cursor first, this connection's pull then has
+  /// no rows to write and Drift has no local statement from which to infer
+  /// that its live queries are stale. Re-running them after the gate settles
+  /// closes that race for automatic, manual, and notification-triggered sync.
+  void _refreshExternalWrites() {
+    if (ref.read(currentAccountIdProvider) != null) {
+      ref.read(appDatabaseProvider).refreshAfterExternalSync();
+    }
   }
 
   /// Requeues everything the server previously refused and pushes again.

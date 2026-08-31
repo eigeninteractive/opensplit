@@ -5,7 +5,9 @@ import 'package:opensplit/data/repositories/drift_activity_repository.dart';
 import 'package:opensplit/data/repositories/drift_currency_repository.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';
+import 'package:opensplit/data/repositories/drift_profile_repository.dart';
 import 'package:opensplit/domain/entry_draft.dart';
+import 'package:opensplit/domain/models/profile.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:test/test.dart';
 
@@ -22,6 +24,7 @@ void main() {
   late DriftEntryRepository entries;
   late DriftCurrencyRepository currencies;
   late DriftActivityRepository activity;
+  late DriftProfileRepository profiles;
 
   setUp(() {
     db = AppDatabase(NativeDatabase.memory());
@@ -29,6 +32,7 @@ void main() {
     entries = DriftEntryRepository(db);
     currencies = DriftCurrencyRepository(db);
     activity = DriftActivityRepository(db);
+    profiles = DriftProfileRepository(db);
   });
 
   tearDown(() => db.close());
@@ -78,6 +82,7 @@ void main() {
     final text = await composeEntryNotification(
       entries: entries,
       groups: groups,
+      profiles: profiles,
       currencies: currencies,
       activity: activity,
       myProfileId: 'profile-priya',
@@ -94,6 +99,27 @@ void main() {
     expect(text.body, contains('₹1,200.00'));
   });
 
+  test('uses a claimed profile name instead of the placeholder', () async {
+    final g = await seed();
+    await profiles.upsert(
+      const Profile(id: 'profile-ravi', displayName: 'Ravi D'),
+    );
+    final entryId = await addExpense(g, description: 'Dinner');
+
+    final text = await composeEntryNotification(
+      entries: entries,
+      groups: groups,
+      profiles: profiles,
+      currencies: currencies,
+      activity: activity,
+      myProfileId: 'profile-priya',
+      groupId: g.groupId,
+      entryId: entryId,
+    );
+
+    expect(text?.body, contains('Ravi D'));
+  });
+
   test('the share shown is the reader own, not the author own', () async {
     final g = await seed();
     final entryId = await addExpense(g, description: 'Dinner');
@@ -101,6 +127,7 @@ void main() {
     final forRavi = await composeEntryNotification(
       entries: entries,
       groups: groups,
+      profiles: profiles,
       currencies: currencies,
       activity: activity,
       myProfileId: 'profile-ravi',
@@ -110,6 +137,7 @@ void main() {
     final forPriya = await composeEntryNotification(
       entries: entries,
       groups: groups,
+      profiles: profiles,
       currencies: currencies,
       activity: activity,
       myProfileId: 'profile-priya',
@@ -130,6 +158,7 @@ void main() {
     final text = await composeEntryNotification(
       entries: entries,
       groups: groups,
+      profiles: profiles,
       currencies: currencies,
       activity: activity,
       // Nobody this device knows: a member of the group who is not on the
@@ -153,6 +182,7 @@ void main() {
     final text = await composeEntryNotification(
       entries: entries,
       groups: groups,
+      profiles: profiles,
       currencies: currencies,
       activity: activity,
       myProfileId: 'profile-priya',
@@ -164,7 +194,7 @@ void main() {
     expect(text, isNull);
   });
 
-  test('the route opens the entry, not the app front door', () {
-    expect(entryNotificationRoute('g1', 'e1'), '/g/g1/e/e1');
+  test('the route opens the group, which owns refresh', () {
+    expect(groupNotificationRoute('g1'), '/g/g1');
   });
 }

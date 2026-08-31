@@ -291,6 +291,29 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
       );
 
   @override
+  Future<List<Profile>> pullProfilesByIds(List<String> profileIds) async {
+    if (profileIds.isEmpty) return const [];
+
+    try {
+      final profiles = <Profile>[];
+      // Keep the PostgREST URL comfortably bounded. The values are UUIDs, so
+      // 100 ids stays well below ordinary proxy request-line limits.
+      for (var start = 0; start < profileIds.length; start += 100) {
+        final end = (start + 100).clamp(0, profileIds.length);
+        final rows = await _client
+            .from('profiles')
+            .select()
+            .inFilter('id', profileIds.sublist(start, end))
+            .order('id', ascending: true);
+        profiles.addAll(rows.map(profileFromJson));
+      }
+      return profiles;
+    } on PostgrestException catch (e) {
+      throw _translate(e);
+    }
+  }
+
+  @override
   Future<Profile> pushProfile(Profile profile) async {
     try {
       final row = await _client

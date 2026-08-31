@@ -12,6 +12,7 @@ import '../repositories/drift_activity_repository.dart';
 import '../repositories/drift_currency_repository.dart';
 import '../repositories/drift_entry_repository.dart';
 import '../repositories/drift_group_repository.dart';
+import '../repositories/drift_profile_repository.dart';
 import '../sync/outbox_queue.dart';
 import '../sync/supabase_ledger_api.dart';
 import '../sync/sync_engine.dart';
@@ -102,6 +103,7 @@ Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
     final text = await composeEntryNotification(
       entries: DriftEntryRepository(db, outbox: outbox),
       groups: DriftGroupRepository(db, outbox: outbox),
+      profiles: DriftProfileRepository(db, outbox: outbox),
       currencies: DriftCurrencyRepository(db),
       activity: DriftActivityRepository(db),
       myProfileId: profileId,
@@ -138,7 +140,7 @@ Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
           channelDescription: activityChannelDescription,
         ),
       ),
-      payload: entryNotificationRoute(groupId, entryId),
+      payload: groupId,
     );
   } catch (_) {
     // Nothing to report to and nobody to report it to.

@@ -21,9 +21,8 @@ abstract class Profile with _$Profile {
     /// second is an answer to respect. A sentinel string cannot tell them
     /// apart, which is how the same name came to be asked for in three places.
     ///
-    /// Display sites do not need to handle it: a name is only ever rendered
-    /// through [GroupLedger.nameOfMember], which falls back to the member row —
-    /// and a member always has a name.
+    /// Display sites do not need to handle it: member-name resolution falls
+    /// back to the group member row, which always has a name.
     String? displayName,
     String? avatarUrl,
 

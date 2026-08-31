@@ -67,6 +67,15 @@ class AppDatabase extends _$AppDatabase {
   DriftDatabaseOptions get options =>
       const DriftDatabaseOptions(storeDateTimeAsText: true);
 
+  /// Re-runs live queries after the background isolate changed this file.
+  ///
+  /// Drift automatically invalidates streams for writes made through this
+  /// connection. It cannot observe writes from the separate connection used by
+  /// Android's push isolate, so the foreground explicitly marks its tables as
+  /// changed on resume or notification open. [markTablesUpdated] is Drift's
+  /// public API for this boundary.
+  void refreshAfterExternalSync() => markTablesUpdated(allTables);
+
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) async {
