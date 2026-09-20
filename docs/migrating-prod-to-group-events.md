@@ -12,6 +12,97 @@ hand. This document is that procedure.
 It assumes the state you actually have: the current schema, and a small number
 of closed-testing rows worth keeping.
 
+**If the rows are not worth keeping, skip to
+[Throwing it away instead](#throwing-it-away-instead).** It is four commands
+and two traps, and the rest of this document is unnecessary.
+
+---
+
+## Throwing it away instead
+
+Closed testing data is often worth exactly nothing, and a rebuild is far less
+risky than a transformation. The whole procedure:
+
+```bash
+# Drops `public` and replays supabase/migrations/ in order — the same thing a
+# fresh clone gets. Irreversible, and it will ask.
+supabase db reset --linked
+
+# The Edge Function was renamed, so the new one has to exist before anything
+# points at it.
+supabase functions deploy notify-event
+supabase secrets set FCM_PROJECT_ID=<project> \
+                     FCM_SERVICE_ACCOUNT="$(cat service-account.json)" \
+                     NOTIFY_WEBHOOK_SECRET="$(openssl rand -hex 32)"
+```
+
+```sql
+-- Secrets are not in the migrations, so a reset always loses these two rows
+-- whatever the database held before.
+insert into app_settings (key, value) values
+  ('notify_function_url',
+   'https://<ref>.supabase.co/functions/v1/notify-event'),
+  ('notify_webhook_secret', '<the same NOTIFY_WEBHOOK_SECRET>')
+on conflict (key) do update set value = excluded.value;
+```
+
+```bash
+supabase functions delete notify-entry   # once push is confirmed working
+supabase test db
+```
+
+### Trap 1: the accounts outlive the reset
+
+`db reset` drops `public`. It does **not** touch `auth`, so `auth.users` still
+holds every tester — while `public.profiles`, which is where their names live,
+is now empty. `handle_new_user` fires `after insert on auth.users` and will not
+retro-fire for accounts that already exist, so those testers end up with a valid
+session and no profile row, which nothing downstream expects.
+
+Pick one. Keep the accounts and give them their profiles back:
+
+```sql
+-- The same expression handle_new_user uses, so an account restored here is
+-- indistinguishable from one that had just signed up.
+insert into public.profiles (id, display_name)
+select u.id,
+       coalesce(
+         nullif(trim(u.raw_user_meta_data->>'display_name'), ''),
+         nullif(split_part(coalesce(u.email, ''), '@', 1), ''))
+  from auth.users u
+on conflict (id) do nothing;
+```
+
+Or throw those away too, which is cleaner if the testers are going to reinstall
+anyway — and see trap 2 for why they probably are:
+
+```sql
+delete from auth.users;
+```
+
+### Trap 2: the devices do not know anything happened
+
+This is the one that surprises people, and it is a direct consequence of the
+app being local-first rather than a bug.
+
+Wiping the server does not wipe the phones. A tester's app holds its own copy of
+every group and expense, renders entirely from it, and will go on showing groups
+the server has never heard of — indefinitely, because nothing in the app
+interprets "the server does not have this" as "delete it", and it must not: that
+is the same signal a permissions problem gives.
+
+Worse, their queued writes reference group ids that no longer exist. The server
+refuses those permanently — `23503` and `42501` are both in the client's
+permanent set — so they land in dead letters rather than retrying, and the
+person sees changes that look saved and never arrive.
+
+So after a wipe, testers need to start clean: **clear app storage, or
+uninstall and reinstall.** Deleting `auth.users` in trap 1 helps by invalidating
+their sessions, but do not rely on it alone — tell them.
+
+The in-app update in this release does not solve this. It replaces the binary,
+not the database.
+
 ---
 
 ## What changes
