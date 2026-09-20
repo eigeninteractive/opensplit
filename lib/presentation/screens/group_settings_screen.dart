@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../application/providers.dart';
 import '../../domain/models/member.dart';
 import '../format.dart';
+import '../feedback.dart';
 import '../navigation.dart';
 import '../widgets/export_button.dart';
 import '../widgets/page_body.dart';
@@ -124,7 +125,10 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
             child: const Text('Stay'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () {
+              confirmedIrreversibly();
+              Navigator.of(context).pop(true);
+            },
             child: const Text('Leave'),
           ),
         ],

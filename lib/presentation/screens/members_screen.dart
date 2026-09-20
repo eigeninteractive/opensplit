@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../feedback.dart';
 import '../navigation.dart';
 
 import '../widgets/page_body.dart';
@@ -246,7 +247,10 @@ class MembersScreen extends ConsumerWidget {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () {
+              confirmedIrreversibly();
+              Navigator.of(context).pop(true);
+            },
             child: const Text('Remove'),
           ),
         ],
@@ -259,42 +263,99 @@ class MembersScreen extends ConsumerWidget {
   }
 }
 
+/// Asks for a person's name, in a sheet rather than a dialog.
+///
+/// A bottom sheet because that is what every other piece of text entry in this
+/// app opens — creating a group is one — and because of what the dialog kept
+/// doing to the sentence underneath the field. `helperText` is one line by
+/// default and ellipsises in silence, so "They do not need the app" was being
+/// cut off mid-clause: the one line explaining that a placeholder is a real
+/// member, truncated inside the dialog that creates one. It was capped at three
+/// lines, which fixed that instance and left the shape that caused it.
+///
+/// A sheet is also the right surface on a phone for something with a keyboard
+/// attached. It rises with the keyboard instead of being squeezed by it, which
+/// is what `viewInsets` below is doing.
 Future<String?> _promptForName(
   BuildContext context, {
   required String title,
   required String hint,
   String? initial,
   String? helper,
-}) {
-  final controller = TextEditingController(text: initial);
-  return showDialog<String>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(title),
-      content: TextField(
-        controller: controller,
-        autofocus: true,
-        textCapitalization: TextCapitalization.words,
-        decoration: InputDecoration(
-          hintText: hint,
-          helperText: helper,
-          // Helper text is one line by default and ellipsises silently, which
-          // truncated the only sentence explaining that the person being added
-          // does not need the app. The same cap is already set on the long
-          // helper in settings_screen.dart.
-          helperMaxLines: 3,
+}) => showModalBottomSheet<String>(
+  context: context,
+  isScrollControlled: true,
+  showDragHandle: true,
+  builder: (context) =>
+      _NameSheet(title: title, hint: hint, initial: initial, helper: helper),
+);
+
+class _NameSheet extends StatefulWidget {
+  const _NameSheet({
+    required this.title,
+    required this.hint,
+    this.initial,
+    this.helper,
+  });
+
+  final String title;
+  final String hint;
+  final String? initial;
+  final String? helper;
+
+  @override
+  State<_NameSheet> createState() => _NameSheetState();
+}
+
+class _NameSheetState extends State<_NameSheet> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initial,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final name = _controller.text.trim();
+    if (name.isEmpty) return;
+    Navigator.of(context).pop(name);
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    // Lifts the sheet clear of the keyboard rather than letting it sit
+    // underneath one.
+    padding: EdgeInsets.fromLTRB(
+      24,
+      0,
+      24,
+      24 + MediaQuery.viewInsetsOf(context).bottom,
+    ),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(widget.title, style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          textInputAction: TextInputAction.done,
+          decoration: InputDecoration(
+            labelText: widget.hint,
+            // Room to say the whole thing. A sheet has the height for it, and
+            // this is the sentence that explains what a placeholder is.
+            helperText: widget.helper,
+            helperMaxLines: 3,
+          ),
+          onSubmitted: (_) => _submit(),
         ),
-        onSubmitted: (value) => Navigator.of(context).pop(value),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(controller.text),
-          child: const Text('Save'),
-        ),
+        const SizedBox(height: 24),
+        FilledButton(onPressed: _submit, child: const Text('Save')),
       ],
     ),
   );

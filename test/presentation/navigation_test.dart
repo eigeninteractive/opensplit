@@ -102,7 +102,11 @@ void main() {
 
       await _chooseDestination(tester, 'Settings');
 
-      expect(find.widgetWithText(AppBar, 'Settings'), findsOneWidget);
+      // At least one, not exactly one: Settings is under a Material 3 large
+      // top app bar, and SliverAppBar.large puts its headline in both the
+      // collapsed title slot and the expanded FlexibleSpaceBar, so the word
+      // legitimately appears twice while the bar is open.
+      expect(find.widgetWithText(AppBar, 'Settings'), findsAtLeastNWidgets(1));
       expect(find.byTooltip('Open navigation menu'), findsOneWidget);
       expect(
         find.byType(BackButton),

@@ -262,7 +262,23 @@ class _Summary extends StatelessWidget {
     );
     final net = ledger!.balanceOf(me.id, firstCode);
 
-    final words = '${net > 0 ? 'You are owed' : 'You owe'} ${owed.join(' + ')}';
+    final lead = net > 0 ? 'You are owed' : 'You owe';
+    final figures = owed.join(' + ');
+    final words = '$lead $figures';
+
+    // The words in the app's own face and the figures in its tabular one.
+    //
+    // This line is the most-read number in the app and was the one place not
+    // set in that face, so a column of group cards had its amounts wandering
+    // by a digit's width while every other screen held them still. Setting the
+    // whole string in JetBrains Mono would fix the figures by putting the
+    // sentence around them in a monospace too, which is why it is a span
+    // rather than a style on the Text.
+    final base = (style ?? const TextStyle()).copyWith(
+      color: balanceColor(scheme, net),
+      fontWeight: FontWeight.w600,
+    );
+
     return Semantics(
       label: words,
       child: ExcludeSemantics(
@@ -271,13 +287,15 @@ class _Summary extends StatelessWidget {
             BalanceArrow(balanceMinor: net, size: 15),
             const SizedBox(width: 2),
             Flexible(
-              child: Text(
-                words,
-                overflow: TextOverflow.ellipsis,
-                style: style?.copyWith(
-                  color: balanceColor(scheme, net),
-                  fontWeight: FontWeight.w600,
+              child: Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(text: '$lead '),
+                    TextSpan(text: figures, style: moneyStyle(base)),
+                  ],
                 ),
+                overflow: TextOverflow.ellipsis,
+                style: base,
               ),
             ),
           ],

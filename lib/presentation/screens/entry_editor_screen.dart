@@ -14,6 +14,7 @@ import '../../domain/models/entry.dart';
 import '../../domain/split/allocation.dart';
 import '../../domain/split/splitter.dart';
 import '../format.dart';
+import '../feedback.dart';
 import '../navigation.dart';
 import '../theme.dart';
 import '../widgets/category_icon.dart';
@@ -359,7 +360,10 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () {
+              confirmedIrreversibly();
+              Navigator.of(context).pop(true);
+            },
             child: const Text('Delete'),
           ),
         ],

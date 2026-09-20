@@ -4,9 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../application/providers.dart';
 import '../../domain/models/profile.dart';
 import '../../domain/settle/upi.dart';
+import '../feedback.dart';
 import '../widgets/account_section.dart';
 import '../widgets/page_body.dart';
-import '../router.dart';
 
 /// Who you are, in one place.
 ///
@@ -122,7 +122,10 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
             child: const Text('Stay'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () {
+              confirmedIrreversibly();
+              Navigator.of(context).pop(true);
+            },
             child: const Text('Sign out'),
           ),
         ],
@@ -191,7 +194,10 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
               backgroundColor: Theme.of(context).colorScheme.error,
               foregroundColor: Theme.of(context).colorScheme.onError,
             ),
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () {
+              confirmedIrreversibly();
+              Navigator.of(context).pop(true);
+            },
             child: const Text('Delete for good'),
           ),
         ],
@@ -221,12 +227,10 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     final theme = Theme.of(context);
     final account = ref.watch(accountProvider).value;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Account')),
-      drawer: AdaptiveNavigation.drawerFor(context),
-      body: PageBody(
-        child: ListView(
-          padding: const EdgeInsets.all(16),
+    return DestinationScaffold(
+      title: 'Account',
+      slivers: [
+        SliverList.list(
           children: [
             // The prompt to attach a real account, when there is not one yet.
             // Renders nothing once there is, rather than becoming a permanent
@@ -352,7 +356,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
             ],
           ],
         ),
-      ),
+      ],
     );
   }
 }
