@@ -142,15 +142,24 @@ EntrySnapshot snapshotFromPayload({
 /// the same change are compared by nothing, but they are rendered by the same
 /// code, and a key spelled differently here would surface as a feed line that
 /// changed its mind when the sync landed.
+///
+/// `deleted_at` is written in UTC with a trailing Z, matching what
+/// `snapshot_entry` renders. A local-time string would be the same instant said
+/// differently, which is exactly the ambiguity the server side canonicalises
+/// away.
+///
+/// `entry_date` is deliberately NOT converted: it is a calendar date rather
+/// than an instant, and pushing it through UTC would move it to the previous
+/// day for anybody east of Greenwich.
 Map<String, Object?> snapshotPayload(EntrySnapshot snapshot) => {
   'description': snapshot.description,
   'currency': snapshot.currency,
   'amount_minor': snapshot.amountMinor,
-  'entry_date': snapshot.entryDate.toIso8601String().split('T').first,
+  'entry_date': _calendarDate(snapshot.entryDate),
   'split_kind': snapshot.splitKind.name,
   'category_id': snapshot.categoryId,
   'notes': snapshot.notes,
-  'deleted_at': snapshot.deletedAt?.toIso8601String(),
+  'deleted_at': snapshot.deletedAt?.toUtc().toIso8601String(),
   'payers': [
     for (final row in snapshot.payers)
       {'member_id': row.memberId, 'amount_minor': row.amountMinor},
@@ -160,6 +169,12 @@ Map<String, Object?> snapshotPayload(EntrySnapshot snapshot) => {
       {'member_id': row.memberId, 'amount_minor': row.amountMinor},
   ],
 };
+
+/// `YYYY-MM-DD`, from the date's own fields rather than from any timezone.
+String _calendarDate(DateTime date) =>
+    '${date.year.toString().padLeft(4, '0')}-'
+    '${date.month.toString().padLeft(2, '0')}-'
+    '${date.day.toString().padLeft(2, '0')}';
 
 /// `[{"member_id": "...", "amount_minor": 40000}, ...]`.
 ///

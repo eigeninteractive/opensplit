@@ -1,7 +1,7 @@
 -- The activity log, and the dormancy jobs that eventually clear a group away.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(28);
+select plan(31);
 
 insert into auth.users (id, instance_id, aud, role, email, raw_user_meta_data,
                         created_at, updated_at)
@@ -154,15 +154,23 @@ select is(
 -- The invariant that makes the duplication safe
 -- ---------------------------------------------------------------------------
 select is(
+  -- Built exactly as snapshot_entry builds it, canonical renderings included:
+  -- comparing against raw date/timestamptz here would pass or fail depending
+  -- on the session's DateStyle and TimeZone rather than on the data.
   (select jsonb_build_object(
             'description',  e.description,
             'currency',     e.currency,
             'amount_minor', e.amount_minor,
-            'entry_date',   e.entry_date,
+            'entry_date',   to_char(e.entry_date, 'YYYY-MM-DD'),
             'split_kind',   e.split_kind,
             'category_id',  e.category_id,
             'notes',        e.notes,
-            'deleted_at',   e.deleted_at)
+            'deleted_at',   case
+                              when e.deleted_at is null then null
+                              else to_char(
+                                e.deleted_at at time zone 'UTC',
+                                'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+                            end)
      from entries e where e.id = '88888888-8888-4888-8888-888888888888'),
   (select v.payload - 'payers' - 'shares'
      from group_events v
@@ -417,6 +425,66 @@ select is(
     where id = '33333333-3333-4333-8333-333333333333'),
   0,
   'a settled group, archived and years silent, is collected');
+
+-- ---------------------------------------------------------------------------
+-- A group coming back by itself is not somebody restoring it
+--
+-- upsert_entry un-archives the group an expense lands on. Recording that as
+-- "Ravi restored the group" when Ravi added a dinner would put a false line in
+-- the one record whose entire value is being true.
+-- ---------------------------------------------------------------------------
+reset role;
+reset "request.jwt.claims";
+
+insert into groups (id, name, default_currency, created_by, archived_at)
+values ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'Goa 2024', 'INR',
+        '11111111-1111-4111-8111-111111111111', now() - interval '1 year');
+
+insert into members (id, group_id, profile_id, display_name) values
+  ('dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+   'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+   '11111111-1111-4111-8111-111111111111', 'Ravi');
+
+set local role authenticated;
+set local "request.jwt.claims" to
+  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated"}';
+
+set constraints all deferred;
+select upsert_entry(
+  'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+  'cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'INR', 10000,
+  '[{"member_id":"dddddddd-dddd-4ddd-8ddd-dddddddddddd","amount_minor":10000}]'::jsonb,
+  '[{"member_id":"dddddddd-dddd-4ddd-8ddd-dddddddddddd","amount_minor":10000}]'::jsonb,
+  'Dinner');
+set constraints all immediate;
+
+select is(
+  (select archived_at from groups
+    where id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'),
+  null,
+  'adding an expense brings an archived group back, with nothing to undo');
+
+select is(
+  (select count(*)::int from group_events
+    where group_id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+      and kind = 'group_restored'),
+  0,
+  'but nobody is said to have restored it -- the expense that revived it is '
+  'already on the record, with the same actor and the same timestamp');
+
+-- The deliberate case still is recorded, which is the half that would be lost
+-- by suppressing the transition outright rather than the side effect.
+update groups set archived_at = now()
+ where id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+update groups set archived_at = null
+ where id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+
+select is(
+  (select count(*)::int from group_events
+    where group_id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+      and kind = 'group_restored'),
+  1,
+  'somebody un-archiving it on purpose still goes on the record');
 
 select * from finish();
 rollback;

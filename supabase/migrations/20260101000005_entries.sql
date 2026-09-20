@@ -435,11 +435,25 @@ create type group_event_kind as enum (
   -- note above on why this table holds after-images.
   'entry',
 
-  -- Member life. The kind is set here rather than derived, and that asymmetry
-  -- is the point rather than an inconsistency: a member change is one row in
-  -- one statement, so an ordinary AFTER trigger has OLD and NEW and can simply
-  -- say what happened. Putting members through snapshot-and-diff as well would
-  -- be reproducing a workaround for a constraint that does not apply to them.
+  -- Member life. The kind is stated here rather than derived from a chain, and
+  -- the reason is not that the server cannot see an expense change -- it can,
+  -- since snapshot_entry holds the previous snapshot already and could name
+  -- created/edited/deleted/restored without help.
+  --
+  -- The real difference is what a reader needs. An expense feed has to say
+  -- "Ravi's share, from Rs.200 to Rs.300", which is a field-level diff; a chain
+  -- of after-images yields that for free, keeps the newest row identical to the
+  -- live expense so a mismatch is a tamper alarm, and covers any column added
+  -- to the payload later without being taught about it. An event log would have
+  -- to enumerate what changed and would silently omit whatever it had not been
+  -- told about.
+  --
+  -- None of that applies to a member joining. There is no field-level diff
+  -- worth rendering -- the kind IS the information -- so a chain would buy
+  -- nothing and cost a pairing step on every read.
+  --
+  -- Which is the rule for anything added here later: does this kind need a
+  -- field-level diff? Snapshot chain. Otherwise, an event.
   'member_added',      -- a placeholder, created by somebody already here
   'member_joined',     -- a slot claimed, or a stranger arriving on a link
   'member_left',       -- left, or was removed
@@ -571,18 +585,36 @@ begin
 
   -- Keys in a fixed order and built in one place, so that two snapshots of an
   -- unchanged expense compare equal with `=`. jsonb normalises key order on
-  -- storage, so this is belt and braces rather than load-bearing -- but the
-  -- comparison below is the whole dedup, and it should not depend on knowing
-  -- that.
+  -- storage, so that part is belt and braces -- but the comparison below is
+  -- the whole dedup, and it should not depend on knowing that.
+  --
+  -- The two date/time fields are rendered explicitly rather than handed to
+  -- jsonb_build_object as themselves, and that IS load-bearing. Postgres
+  -- serialises a date under DateStyle and a timestamptz under the session's
+  -- TimeZone, so the same instant written from two sessions configured
+  -- differently produces two different strings -- and the dedup below, which
+  -- compares this payload against the stored one, would read that as a change
+  -- and append "somebody edited nothing" to the feed. The typed columns this
+  -- table used to carry compared values rather than spellings and could not
+  -- have that problem; canonicalising here is what buys it back.
+  --
+  -- UTC with a trailing Z, which is also what the Dart side writes for a
+  -- provisional row, so the two are the same shape as well as the same
+  -- meaning.
   v_payload := jsonb_build_object(
     'description',  v_entry.description,
     'currency',     v_entry.currency,
     'amount_minor', v_entry.amount_minor,
-    'entry_date',   v_entry.entry_date,
+    'entry_date',   to_char(v_entry.entry_date, 'YYYY-MM-DD'),
     'split_kind',   v_entry.split_kind,
     'category_id',  v_entry.category_id,
     'notes',        v_entry.notes,
-    'deleted_at',   v_entry.deleted_at,
+    'deleted_at',   case
+                      when v_entry.deleted_at is null then null
+                      else to_char(
+                        v_entry.deleted_at at time zone 'UTC',
+                        'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+                    end,
     'payers',       v_payers,
     'shares',       v_shares
   );
@@ -798,6 +830,19 @@ begin
     v_payload := jsonb_build_object('name', new.name);
 
   elsif new.archived_at is null and old.archived_at is not null then
+    -- Somebody deliberately un-archived it, or an expense landed on it and
+    -- upsert_entry brought it back by itself. Only the first is something a
+    -- person did, and recording the second as "Ravi restored the group" when
+    -- Ravi added a dinner puts a false sentence in the one place whose whole
+    -- value is being true.
+    --
+    -- The revival is not lost by being unrecorded: the expense that caused it
+    -- is on the record, one line further down, with the same actor and the
+    -- same timestamp.
+    if coalesce(current_setting('opensplit.reviving', true), '') = '1' then
+      return null;
+    end if;
+
     v_kind := 'group_restored';
     v_payload := jsonb_build_object('name', new.name);
 

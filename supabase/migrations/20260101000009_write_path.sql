@@ -170,8 +170,17 @@ begin
   -- wrong about it costs nothing, and this is the line that makes it so:
   -- adding an expense brings the group back to the list by itself, with
   -- nothing for the user to find or undo.
+  -- Flagged for the duration of the statement so record_group_event can tell
+  -- this apart from somebody deliberately un-archiving the group. Without it
+  -- the feed says "Ravi restored the group" when Ravi added a dinner, which is
+  -- a false line in the one record whose whole value is being true.
+  --
+  -- Transaction-local, and cleared immediately after, so a deliberate restore
+  -- later in the same transaction is still recorded as one.
+  perform set_config('opensplit.reviving', '1', true);
   update groups set archived_at = null, updated_at = now()
    where id = p_group_id and archived_at is not null;
+  perform set_config('opensplit.reviving', '', true);
 
   -- Authorship is the caller's own member row. There is deliberately no
   -- parameter for it: a client cannot attribute an expense to someone else.
