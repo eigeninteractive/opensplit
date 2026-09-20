@@ -73,6 +73,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               title: 'Terms of service',
               url: termsUrl,
             ),
+            // Last, and a push rather than a link out: everything above leaves
+            // the app, and this is the one row that stays in it.
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.info_outline),
+              title: const Text('About OpenSplit'),
+              subtitle: const Text('Version, source code and licence.'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/about'),
+            ),
           ],
         ),
       ),

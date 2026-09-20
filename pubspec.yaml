@@ -55,6 +55,7 @@ dependencies:
   # the app uses Material widgets. Shipping the matching tree-shaken font
   # avoids missing glyphs in platform-adaptive framework surfaces.
   cupertino_icons: ^1.0.8
+  package_info_plus: ^10.2.1
 dev_dependencies:
   args: ^2.7.0
   flutter_test:
