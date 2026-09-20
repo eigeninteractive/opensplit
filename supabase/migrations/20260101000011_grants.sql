@@ -108,6 +108,11 @@ grant select on entry_shares to authenticated;
 -- there is no client-writable table here.
 grant select on group_events to authenticated;
 
+-- The group's own invite link, readable by the people it belongs to so the
+-- share sheet can show what is already live rather than minting a second one.
+-- No write grant: create_group_link and revoke_group_link are the only doors.
+grant select on group_links to authenticated;
+
 -- Deliberately no DELETE on entries, members or groups. None of the three has
 -- an RLS delete policy either; this is the second lock on the same door.
 --
@@ -141,6 +146,19 @@ grant execute on function redeem_invite(uuid) to authenticated;
 -- asked who they are, and at that moment they have no session. It redeems
 -- nothing and reveals only what the link already tells whoever is holding it.
 grant execute on function peek_invite(uuid) to anon, authenticated;
+
+-- The open-link half of the same flow.
+--
+-- peek_group_link joins anon for exactly the reason peek_invite does: it is
+-- read before the arrival has been asked who they are. list_link_placeholders
+-- deliberately does not -- it names everybody in the group who has not claimed
+-- a place, which is more than the token itself implies, and it is called after
+-- an account has been chosen rather than before.
+grant execute on function create_group_link(uuid, interval) to authenticated;
+grant execute on function revoke_group_link(uuid) to authenticated;
+grant execute on function peek_group_link(uuid) to anon, authenticated;
+grant execute on function list_link_placeholders(uuid) to authenticated;
+grant execute on function join_with_link(uuid, uuid, text) to authenticated;
 
 grant execute on function request_fx_backfill(date, char(3)) to authenticated;
 

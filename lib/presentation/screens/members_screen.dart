@@ -9,6 +9,7 @@ import '../widgets/page_body.dart';
 import '../../application/providers.dart';
 import '../../domain/models/member.dart';
 import '../../domain/settle/upi.dart';
+import '../widgets/group_link_sheet.dart';
 import '../widgets/invite_sheet.dart';
 
 class MembersScreen extends ConsumerWidget {
@@ -37,6 +38,19 @@ class MembersScreen extends ConsumerWidget {
             : ListView(
                 padding: const EdgeInsets.only(bottom: 96),
                 children: [
+                  // Above the list rather than in a menu, because it is what
+                  // somebody who has just made a group came here to do. The
+                  // per-member "Send invite link" below is still the right
+                  // thing when you know exactly who one place belongs to; this
+                  // is the one you paste into a chat.
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                    child: FilledButton.tonalIcon(
+                      onPressed: () => showGroupLinkSheet(context, groupId),
+                      icon: const Icon(Icons.link),
+                      label: const Text('Share an invite link'),
+                    ),
+                  ),
                   for (final member in ledger.members)
                     ListTile(
                       leading: CircleAvatar(

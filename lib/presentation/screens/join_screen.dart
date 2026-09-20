@@ -34,10 +34,21 @@ class JoinScreen extends ConsumerStatefulWidget {
 }
 
 class _JoinScreenState extends ConsumerState<JoinScreen> {
-  InvitePreview? _preview;
+  LinkTarget? _target;
   String? _error;
   bool _loading = true;
   bool _joining = false;
+
+  /// The unclaimed places an open link's group is holding.
+  ///
+  /// Null until asked for, which is deliberately not until there is a session:
+  /// these are other people's names, and the server refuses to list them to
+  /// somebody who has not said who they are.
+  List<LinkPlaceholder>? _places;
+  bool _loadingPlaces = false;
+
+  /// The place about to be claimed, or null for "I am not listed".
+  String? _chosenMemberId;
 
   @override
   void initState() {
@@ -58,13 +69,16 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
     }
 
     try {
-      final preview = await invites.peek(widget.token);
+      final target = await invites.peekLink(widget.token);
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _preview = preview;
-        if (preview == null) _error = 'This is not a link we recognise.';
+        _target = target;
+        if (target == null) _error = 'This is not a link we recognise.';
       });
+      // An open link with a session already in hand can go straight to the
+      // question that matters.
+      if (target is GroupLinkTarget) await _loadPlaces();
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -72,6 +86,26 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
           _error = 'Could not open this link. $e';
         });
       }
+    }
+  }
+
+  /// The unclaimed places, once there is somebody to show them to.
+  Future<void> _loadPlaces() async {
+    final invites = ref.read(inviteApiProvider);
+    if (invites == null || _places != null || _loadingPlaces) return;
+    if (ref.read(accountProvider).value == null) return;
+
+    setState(() => _loadingPlaces = true);
+    try {
+      final places = await invites.placeholdersFor(widget.token);
+      if (mounted) setState(() => _places = places);
+    } catch (_) {
+      // Not fatal, and not worth an error banner in front of the button that
+      // still works: without the list, joining simply adds a new member, which
+      // is what "I am not listed" does anyway.
+      if (mounted) setState(() => _places = const []);
+    } finally {
+      if (mounted) setState(() => _loadingPlaces = false);
     }
   }
 
@@ -85,7 +119,14 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
       _error = null;
     });
     try {
-      final member = await invites.redeem(widget.token);
+      final member = switch (_target) {
+        GroupLinkTarget() => await invites.joinWithLink(
+          widget.token,
+          memberId: _chosenMemberId,
+        ),
+        // A named invite names the place; there is nothing to choose.
+        _ => await invites.redeem(widget.token),
+      };
       // Pull the group down before showing it, so it is populated on arrival
       // rather than filling in underneath them.
       await ref.read(syncControllerProvider.notifier).syncGroup(member.groupId);
@@ -114,7 +155,14 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
   /// opened somebody else's invite while signed in as yourself.
   Future<void> _switchAccount() async {
     await ref.read(sessionControllerProvider.notifier).signOut();
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {
+        // The list came from the account that is now gone, and the server
+        // would refuse to give it to nobody.
+        _places = null;
+        _chosenMemberId = null;
+      });
+    }
   }
 
   @override
@@ -142,13 +190,21 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
     if (_loading) {
       return const Column(
         mainAxisSize: MainAxisSize.min,
-        children: [CircularProgressIndicator()],
+        children: [
+          CircularProgressIndicator(semanticsLabel: 'Opening this link'),
+        ],
       );
     }
 
-    final preview = _preview;
-    if (preview == null) return _Dead(message: _error ?? 'Unknown problem.');
+    return switch (_target) {
+      null => _Dead(message: _error ?? 'Unknown problem.'),
+      MemberInviteTarget(:final preview) => _invitation(theme, preview),
+      GroupLinkTarget(:final preview) => _openLink(theme, preview),
+    };
+  }
 
+  /// A link naming one place, for one person.
+  Widget _invitation(ThemeData theme, InvitePreview preview) {
     if (preview.isRedeemed) {
       return _Dead(
         message:
@@ -182,28 +238,215 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
         BrandHeader(
           title: '${preview.inviterName} invited you to ${preview.groupName}',
           subtitle:
-              'You would join as “${preview.memberName}”, alongside '
+              'You would join as \u201c${preview.memberName}\u201d, alongside '
               '${preview.memberCount} '
               '${preview.memberCount == 1 ? 'person' : 'people'}.',
         ),
         const SizedBox(height: 32),
-
-        if (_error != null) ...[
-          Text(
-            _error!,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.error,
-            ),
-          ),
-          const SizedBox(height: 16),
-        ],
-
+        ..._errorIfAny(theme),
         _Claim(
           preview: preview,
           joining: _joining,
           onJoin: _join,
           onSwitchAccount: _switchAccount,
+        ),
+      ],
+    );
+  }
+
+  /// A link anybody may use, which is the one posted in a group chat.
+  Widget _openLink(ThemeData theme, GroupLinkPreview preview) {
+    if (preview.isRevoked) {
+      return _Dead(
+        message:
+            'This link has been turned off. Ask ${preview.inviterName} for a '
+            'new one.',
+      );
+    }
+    if (preview.isExpired) {
+      return _Dead(
+        message:
+            'This link has expired. Ask ${preview.inviterName} for a new one.',
+      );
+    }
+    if (preview.isMember) {
+      return _Dead(
+        message:
+            'You are already in ${preview.groupName}, so there is nothing to '
+            'do here.',
+        action: FilledButton(
+          onPressed: () => context.go('/g/${preview.groupId}'),
+          child: const Text('Open the group'),
+        ),
+      );
+    }
+
+    final account = ref.watch(accountProvider).value;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        BrandHeader(
+          title: '${preview.inviterName} invited you to ${preview.groupName}',
+          subtitle:
+              '${preview.memberCount} '
+              '${preview.memberCount == 1 ? 'person is' : 'people are'} '
+              'already here.',
+        ),
+        const SizedBox(height: 32),
+        ..._errorIfAny(theme),
+
+        // Who you are comes first, exactly as it does for a named invite, and
+        // for the same reason: the list below is other people's names, and the
+        // server will not show it to somebody who has not said who they are.
+        if (account == null)
+          IdentityChoices(
+            onSignedIn: () async {
+              await _loadPlaces();
+              // Not joined yet, deliberately. An open link has a question
+              // after the account one -- which of these people are you -- and
+              // answering the first should not answer the second by default.
+              if (mounted) setState(() {});
+            },
+            guestNote:
+                'You will join straight away and the group will synchronize. '
+                'This device is the only way back into the guest account '
+                'until you add an email address or Google account.',
+          )
+        else
+          _ChoosePlace(
+            places: _places,
+            loading: _loadingPlaces,
+            chosen: _chosenMemberId,
+            joining: _joining,
+            onChoose: (memberId) => setState(() => _chosenMemberId = memberId),
+            onJoin: _join,
+            onSwitchAccount: _switchAccount,
+          ),
+      ],
+    );
+  }
+
+  List<Widget> _errorIfAny(ThemeData theme) => [
+    if (_error != null) ...[
+      Text(
+        _error!,
+        textAlign: TextAlign.center,
+        style: theme.textTheme.bodyMedium?.copyWith(
+          color: theme.colorScheme.error,
+        ),
+      ),
+      const SizedBox(height: 16),
+    ],
+  ];
+}
+
+/// "Are you one of these people?"
+///
+/// The whole reason an open link does not turn a group of six into a group of
+/// twelve. Somebody makes the group, types in everyone on the trip, and posts
+/// one link; without this, each arrival becomes a new member beside the
+/// placeholder that was already them, and somebody spends an evening merging
+/// rows by hand. Claiming one is the same single-column update a named invite
+/// performs, so no balance moves and no expense is rewritten.
+///
+/// "I'm not listed" is a real option and sits with the others rather than below
+/// them, because for a group that named nobody it is the only true answer.
+class _ChoosePlace extends StatelessWidget {
+  const _ChoosePlace({
+    required this.places,
+    required this.loading,
+    required this.chosen,
+    required this.joining,
+    required this.onChoose,
+    required this.onJoin,
+    required this.onSwitchAccount,
+  });
+
+  final List<LinkPlaceholder>? places;
+  final bool loading;
+  final String? chosen;
+  final bool joining;
+  final ValueChanged<String?> onChoose;
+  final Future<void> Function() onJoin;
+  final Future<void> Function() onSwitchAccount;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    if (loading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: CircularProgressIndicator(
+            semanticsLabel: 'Looking at who is in this group',
+          ),
+        ),
+      );
+    }
+
+    final waiting = places ?? const <LinkPlaceholder>[];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (waiting.isNotEmpty) ...[
+          Text(
+            'Are you one of these people?',
+            style: theme.textTheme.titleMedium,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Someone here has already added them. Picking yourself keeps the '
+            'expenses they are part of.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 8),
+          // One RadioGroup around the set rather than a groupValue on each
+          // tile: Material moved the selection to an ancestor after 3.32, so
+          // the group is stated once and the tiles only carry their own value.
+          RadioGroup<String?>(
+            groupValue: chosen,
+            // RadioGroup wants a handler rather than null while disabled, so
+            // the joining guard sits inside it: once the join is under way a
+            // tap changes nothing rather than being refused by the tile.
+            onChanged: (value) {
+              if (!joining) onChoose(value);
+            },
+            child: Column(
+              children: [
+                for (final place in waiting)
+                  RadioListTile<String?>(
+                    contentPadding: EdgeInsets.zero,
+                    value: place.memberId,
+                    title: Text(place.displayName),
+                  ),
+                const RadioListTile<String?>(
+                  contentPadding: EdgeInsets.zero,
+                  value: null,
+                  title: Text("I'm not listed — add me"),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+
+        FilledButton(
+          onPressed: joining ? null : onJoin,
+          child: Text(joining ? 'Joining…' : 'Join group'),
+        ),
+        TextButton(
+          onPressed: joining ? null : onSwitchAccount,
+          child: const Text('Use a different account'),
+        ),
+        TextButton(
+          onPressed: joining ? null : () => context.go('/'),
+          child: const Text('Not now'),
         ),
       ],
     );

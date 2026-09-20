@@ -970,4 +970,247 @@ void main() {
       },
     );
   });
+
+  /// The open link: one URL, any number of arrivals.
+  ///
+  /// These assertions are the ones that decide whether the feature is
+  /// acceptable rather than merely working: a stranger holding the token gets
+  /// in, the names of the people already there are NOT readable until they have
+  /// said who they are, and claiming a place somebody typed is the same
+  /// single-column update a named invite makes.
+  group('open group links, against a live instance', () {
+    late SupabaseClient host;
+    late SupabaseClient guest;
+    late SupabaseInviteApi hostInvites;
+    late SupabaseInviteApi guestInvites;
+    late AppDatabase hostDb;
+    late DriftGroupRepository hostGroups;
+    late String groupId;
+
+    setUp(() async {
+      if (!available) return;
+      host = SupabaseClient(_apiUrl, _anonKey);
+      guest = SupabaseClient(_apiUrl, _anonKey);
+      hostInvites = SupabaseInviteApi(host);
+      guestInvites = SupabaseInviteApi(guest);
+      hostDb = AppDatabase(NativeDatabase.memory());
+      hostGroups = DriftGroupRepository(hostDb, outbox: OutboxQueue(hostDb));
+    });
+
+    tearDown(() async {
+      if (!available) return;
+      await host.auth.signOut();
+      await guest.auth.signOut();
+      await host.dispose();
+      await guest.dispose();
+      await hostDb.close();
+    });
+
+    /// A group with [placeholders] typed in, and a live open link for it.
+    Future<String> linkedGroup(List<String> placeholders) async {
+      final me = (await host.auth.signInAnonymously()).user!;
+      await host
+          .from('profiles')
+          .update({'display_name': 'Priya'})
+          .eq('id', me.id);
+
+      final created = await hostGroups.createGroup(
+        name: 'Goa trip',
+        defaultCurrency: 'INR',
+        creatorDisplayName: 'Priya',
+        creatorProfileId: me.id,
+      );
+      groupId = created.group.id;
+      for (final name in placeholders) {
+        await hostGroups.addMember(groupId, displayName: name);
+      }
+      await SyncEngine(
+        db: hostDb,
+        api: SupabaseLedgerApi(host),
+        outbox: OutboxQueue(hostDb),
+      ).syncGroup(groupId);
+
+      return (await hostInvites.createGroupLink(groupId)).token;
+    }
+
+    test('describes itself to somebody with no session', () async {
+      if (!available) return;
+
+      final token = await linkedGroup(['Ravi']);
+      expect(guest.auth.currentUser, isNull);
+
+      final target = await guestInvites.peekLink(token);
+      expect(target, isA<GroupLinkTarget>());
+
+      final preview = (target! as GroupLinkTarget).preview;
+      expect(preview.groupName, 'Goa trip');
+      expect(preview.inviterName, 'Priya');
+      expect(preview.memberCount, 2);
+      expect(preview.isUsable, isTrue);
+    });
+
+    test('will not name the group members to a stranger', () async {
+      if (!available) return;
+
+      // The line between what the token implies and what it does not. Holding
+      // it tells you the group exists and how big it is; it does not entitle
+      // you to everybody's name before you have said who you are.
+      final token = await linkedGroup(['Ravi', 'Meera']);
+      expect(guest.auth.currentUser, isNull);
+
+      await expectLater(
+        guestInvites.placeholdersFor(token),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('offers the unclaimed places once there is a session', () async {
+      if (!available) return;
+
+      final token = await linkedGroup(['Ravi', 'Meera']);
+      await guest.auth.signInAnonymously();
+
+      final places = await guestInvites.placeholdersFor(token);
+      expect(places.map((p) => p.displayName), containsAll(['Ravi', 'Meera']));
+      expect(
+        places.map((p) => p.displayName),
+        isNot(contains('Priya')),
+        reason: 'Priya has an account; her place is not going spare',
+      );
+    });
+
+    test('claiming a place moves no money and adds no member', () async {
+      if (!available) return;
+
+      final token = await linkedGroup(['Ravi']);
+      final before = await host
+          .from('members')
+          .select('id')
+          .eq('group_id', groupId);
+
+      await guest.auth.signInAnonymously();
+      final places = await guestInvites.placeholdersFor(token);
+      final ravi = places.firstWhere((p) => p.displayName == 'Ravi');
+
+      final claimed = await guestInvites.joinWithLink(
+        token,
+        memberId: ravi.memberId,
+      );
+
+      expect(claimed.id, ravi.memberId, reason: 'the same row, not a new one');
+
+      final after = await host
+          .from('members')
+          .select('id')
+          .eq('group_id', groupId);
+      expect(
+        after,
+        hasLength(before.length),
+        reason: 'the whole point: no seventh member beside the placeholder',
+      );
+    });
+
+    test('somebody not on the list arrives as a new member', () async {
+      if (!available) return;
+
+      final token = await linkedGroup(['Ravi']);
+      await guest.auth.signInAnonymously();
+
+      final joined = await guestInvites.joinWithLink(token);
+      expect(joined.groupId, groupId);
+
+      final members = await host
+          .from('members')
+          .select('id')
+          .eq('group_id', groupId);
+      expect(members, hasLength(3), reason: 'Priya, the Ravi slot, and them');
+    });
+
+    test('one account cannot hold two places', () async {
+      if (!available) return;
+
+      final token = await linkedGroup(['Ravi']);
+      await guest.auth.signInAnonymously();
+      await guestInvites.joinWithLink(token);
+
+      await expectLater(
+        guestInvites.joinWithLink(token),
+        throwsA(isA<InviteRejected>()),
+      );
+    });
+
+    test('the link keeps working for the next person', () async {
+      if (!available) return;
+
+      // The difference from a named invite, stated as a test: a group link is
+      // not spent by being used.
+      final token = await linkedGroup(['Ravi']);
+
+      await guest.auth.signInAnonymously();
+      await guestInvites.joinWithLink(token);
+
+      final third = SupabaseClient(_apiUrl, _anonKey);
+      addTearDown(third.dispose);
+      await third.auth.signInAnonymously();
+      final joined = await SupabaseInviteApi(third).joinWithLink(token);
+      expect(joined.groupId, groupId);
+    });
+
+    test('revoking shuts the door without minting another', () async {
+      if (!available) return;
+
+      final token = await linkedGroup(['Ravi']);
+      await hostInvites.revokeGroupLink(groupId);
+
+      final target = await guestInvites.peekLink(token);
+      final preview = (target! as GroupLinkTarget).preview;
+      expect(preview.isRevoked, isTrue);
+      expect(preview.isUsable, isFalse);
+
+      await guest.auth.signInAnonymously();
+      await expectLater(
+        guestInvites.joinWithLink(token),
+        throwsA(isA<InviteRejected>()),
+      );
+
+      expect(await hostInvites.currentGroupLink(groupId), isNull);
+    });
+
+    test('minting again replaces the link left in a chat', () async {
+      if (!available) return;
+
+      final old = await linkedGroup(['Ravi']);
+      final fresh = await hostInvites.createGroupLink(groupId);
+      expect(fresh.token, isNot(old));
+
+      await guest.auth.signInAnonymously();
+      await expectLater(
+        guestInvites.joinWithLink(old),
+        throwsA(isA<InviteRejected>()),
+      );
+    });
+
+    test('the group is told the door was opened and closed', () async {
+      if (!available) return;
+
+      final token = await linkedGroup(['Ravi']);
+      await guest.auth.signInAnonymously();
+      await guestInvites.joinWithLink(token);
+      await hostInvites.revokeGroupLink(groupId);
+
+      final events = await host
+          .from('group_events')
+          .select('kind')
+          .eq('group_id', groupId);
+      final kinds = [for (final row in events) row['kind'] as String];
+
+      expect(kinds, contains('link_created'));
+      expect(kinds, contains('link_revoked'));
+      expect(
+        kinds,
+        contains('member_joined'),
+        reason: 'a group that cannot see who walked in cannot remove them',
+      );
+    });
+  });
 }
