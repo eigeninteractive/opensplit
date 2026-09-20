@@ -11,6 +11,7 @@ import '../../domain/fx/fx_quote.dart';
 import '../../domain/models/category.dart';
 import '../../domain/models/currency.dart';
 import '../../domain/models/entry.dart';
+import '../../domain/models/group_event.dart';
 import '../../domain/split/allocation.dart';
 import '../../domain/split/splitter.dart';
 import '../format.dart';
@@ -962,7 +963,10 @@ class _History extends ConsumerWidget {
       children: [
         Text('History', style: theme.textTheme.titleSmall),
         const SizedBox(height: 8),
-        for (final event in events)
+        // Narrowed rather than switched: watchEntry asks only for this
+        // expense's own snapshots, so anything else here would be a bug in the
+        // query rather than a kind to render.
+        for (final event in events.whereType<EntryChanged>())
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Column(

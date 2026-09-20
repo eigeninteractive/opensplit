@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import '../models/entry.dart';
-import '../models/entry_event.dart';
+import '../models/group_event.dart';
 import '../models/group.dart';
 import '../models/member.dart';
 import '../models/profile.dart';
@@ -32,7 +32,7 @@ String groupToJson({
   required List<Entry> entries,
   required Map<String, Profile> profiles,
   required String Function(Member) nameOf,
-  List<EntryEvent> activity = const [],
+  List<GroupEvent> activity = const [],
   Map<String, String> categoryNames = const {},
 }) {
   final export = {
@@ -115,23 +115,62 @@ String groupToJson({
           'deleted_at': entry.deletedAt?.toIso8601String(),
         },
     ],
-    'activity': [
-      for (final event in activity)
-        {
-          'id': event.id,
-          'entry_id': event.entryId,
-          'actor_id': event.actorId,
-          'kind': event.kind.name,
-          'at': event.createdAt.toIso8601String(),
-          'changes': {
-            for (final change in event.changes)
-              change.field: {'from': change.from, 'to': change.to},
-          },
-        },
-    ],
+    // The whole record, not just the expense half of it.
+    //
+    // It used to carry entry events alone, because those were the only ones
+    // there were. An export that promises "everything you can take with you"
+    // and silently drops who joined and when is a smaller promise than the one
+    // this project makes.
+    'activity': [for (final event in activity) _eventToJson(event)],
   };
 
   // Indented, because the first thing anybody does with an exported file is
   // open it.
   return const JsonEncoder.withIndent('  ').convert(export);
+}
+
+/// One line of the record, as JSON.
+///
+/// `kind` is the server's own spelling in every case, so a reader of the file
+/// and a reader of the database are looking at the same vocabulary. The entry
+/// kinds are the exception and are qualified -- `entry.created` rather than a
+/// bare `created` -- because "created" on its own does not say created what.
+Map<String, Object?> _eventToJson(GroupEvent event) {
+  final common = {
+    'id': event.id,
+    'actor_id': event.actorId,
+    'at': event.createdAt.toIso8601String(),
+  };
+
+  return switch (event) {
+    EntryChanged(:final entryId, :final kind, :final changes) => {
+      ...common,
+      'kind': 'entry.${kind.name}',
+      'entry_id': entryId,
+      'changes': {
+        for (final change in changes)
+          change.field: {'from': change.from, 'to': change.to},
+      },
+    },
+    MemberChanged(
+      :final memberId,
+      :final kind,
+      :final displayName,
+      :final previousName,
+    ) =>
+      {
+        ...common,
+        'kind': kind.wireName,
+        'member_id': memberId,
+        'display_name': displayName,
+        'previous_name': ?previousName,
+      },
+    GroupChanged(:final kind, :final name, :final previousName) => {
+      ...common,
+      'kind': kind.wireName,
+      'name': name,
+      'previous_name': ?previousName,
+    },
+    LinkChanged(:final kind) => {...common, 'kind': kind.wireName},
+  };
 }

@@ -92,9 +92,10 @@ grant select on entry_shares to authenticated;
 -- The record of what happened: readable by the group, written by nobody.
 --
 -- SELECT and nothing else -- no INSERT, no UPDATE, no DELETE, at either level.
--- `snapshot_entry` is SECURITY DEFINER and is the only writer there is, so the
--- absence of every other grant costs no functionality and closes the table to
--- clients completely.
+-- Every writer of this table -- snapshot_entry for expenses,
+-- record_member_event, record_group_event and record_link_event for the rest --
+-- is SECURITY DEFINER, so the absence of every other grant costs no
+-- functionality and closes the table to clients completely.
 --
 -- INSERT used to be granted, paired with a policy pinning the actor to the
 -- caller. Two things escaped through it. A client could describe its own edit
@@ -105,7 +106,7 @@ grant select on entry_shares to authenticated;
 --
 -- Neither is reachable now: there is no client-writable column here because
 -- there is no client-writable table here.
-grant select on entry_events to authenticated;
+grant select on group_events to authenticated;
 
 -- Deliberately no DELETE on entries, members or groups. None of the three has
 -- an RLS delete policy either; this is the second lock on the same door.
@@ -180,15 +181,15 @@ grant select, insert, update on fx_rates     to service_role;
 grant select, update         on fx_providers to service_role;
 grant execute on function fx_currencies_covered(date) to service_role;
 
--- notify-entry deletes registrations FCM has reported as dead. Without this the
+-- notify-event deletes registrations FCM has reported as dead. Without this the
 -- send succeeds, the cleanup fails, and stale tokens accumulate forever while
 -- every fan-out retries them — visible only in function logs.
 grant select, delete on device_tokens to service_role;
 
--- tokens_for_entry deliberately reads other people's tokens, which no
+-- tokens_for_group deliberately reads other people's tokens, which no
 -- user-facing policy allows. It is therefore service-role only.
-revoke execute on function tokens_for_entry(uuid, uuid) from public, anon, authenticated;
-grant  execute on function tokens_for_entry(uuid, uuid) to service_role;
+revoke execute on function tokens_for_group(uuid, uuid) from public, anon, authenticated;
+grant  execute on function tokens_for_group(uuid, uuid) to service_role;
 
 -- Operator-only: these drive outbound requests and delete accounts.
 revoke execute on function trigger_fx_fetch(jsonb) from public, anon, authenticated;

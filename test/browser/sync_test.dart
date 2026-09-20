@@ -164,7 +164,7 @@ void main() {
     expect(await browser.select(browser.groups).get(), hasLength(1));
     expect(await browser.select(browser.members).get(), hasLength(1));
     expect(await browser.select(browser.entries).get(), hasLength(1));
-    expect(await browser.select(browser.entrySnapshots).get(), hasLength(1));
+    expect(await browser.select(browser.groupEvents).get(), hasLength(1));
 
     await groups.createGroup(
       name: 'Later group',

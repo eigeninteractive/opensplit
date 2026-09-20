@@ -20,6 +20,7 @@ import 'package:opensplit/data/sync/sync_engine.dart';
 import 'package:opensplit/domain/balance/balance_fold.dart';
 import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/models/entry_event.dart';
+import 'package:opensplit/domain/models/group_event.dart';
 import 'package:opensplit/domain/repositories/auth_service.dart';
 import 'package:opensplit/domain/repositories/invite_api.dart';
 import 'package:opensplit/domain/split/splitter.dart';
@@ -252,7 +253,7 @@ void main() {
         other,
       ).watchGroup(created.group.id).first;
       expect(feed, hasLength(1));
-      expect(feed.single.kind, EntryEventKind.created);
+      expect((feed.single as EntryChanged).kind, EntryEventKind.created);
       expect(
         feed.single.isProvisional,
         isFalse,

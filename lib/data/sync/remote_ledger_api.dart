@@ -1,5 +1,5 @@
 import '../../domain/models/entry.dart';
-import '../../domain/models/entry_snapshot.dart';
+import '../../domain/models/group_event.dart';
 import '../../domain/models/group.dart';
 import '../../domain/models/member.dart';
 import '../../domain/models/profile.dart';
@@ -177,7 +177,7 @@ abstract interface class RemoteLedgerApi {
   /// Cursored on `(created_at, id)` rather than `(updated_at, id)`, and that is
   /// the only way this feed differs from the others: these rows are append-only
   /// and never revised, so there is no second write to order against the first.
-  Future<ChangePage<EntrySnapshot>> pullEntrySnapshots({
+  Future<ChangePage<GroupEventRow>> pullGroupEvents({
     required String groupId,
     SyncCursor? since,
     required int limit,

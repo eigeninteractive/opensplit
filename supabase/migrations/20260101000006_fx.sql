@@ -223,7 +223,7 @@ alter table app_settings enable row level security;
 -- No policy: service role only. Nothing here is any user's business.
 
 -- Shared by both Edge Functions rather than being about rates alone: the push
--- fan-out reaches notify-entry the same way and for the same reason, and reads
+-- fan-out reaches notify-event the same way and for the same reason, and reads
 -- notify_function_url and notify_webhook_secret from here. See
 -- notify_entry_created() in the push migration.
 comment on table app_settings is

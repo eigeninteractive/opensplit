@@ -5,6 +5,7 @@ import '../../domain/activity/snapshot_diff.dart';
 import '../../domain/entry_draft.dart';
 import '../../domain/models/entry.dart';
 import '../../domain/models/entry_snapshot.dart';
+import '../../domain/models/group_event.dart';
 import '../local/database.dart';
 import '../local/entry_writer.dart';
 import '../sync/outbox_queue.dart';
@@ -107,8 +108,12 @@ final class DriftEntryRepository {
   /// The most recent thing recorded about an entry, from either source.
   Future<EntrySnapshot?> _latestSnapshot(String entryId) async {
     final row =
-        await (_db.select(_db.entrySnapshots)
-              ..where((t) => t.entryId.equals(entryId))
+        await (_db.select(_db.groupEvents)
+              ..where(
+                (t) =>
+                    t.subjectId.equals(entryId) &
+                    t.kind.equals(GroupEventKind.entry.wireName),
+              )
               ..orderBy([
                 (t) => OrderingTerm(
                   expression: t.createdAt,
@@ -117,7 +122,7 @@ final class DriftEntryRepository {
               ])
               ..limit(1))
             .getSingleOrNull();
-    return row?.toDomain();
+    return row?.toDomain()?.snapshot;
   }
 
   /// How many live entries this device holds, across every group.

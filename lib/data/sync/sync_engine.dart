@@ -527,7 +527,7 @@ class SyncEngine {
     await drain(members);
     await _hydrateProfiles(members.profileIdsToHydrate);
     final entries = await drain(EntryFeed(api, db, groupId));
-    await drain(SnapshotFeed(api, db, groupId));
+    await drain(GroupEventFeed(api, db, groupId));
     return entries;
   }
 

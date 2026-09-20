@@ -6,6 +6,7 @@ import 'package:opensplit/domain/models/entry.dart';
 import 'package:opensplit/domain/models/group.dart';
 import 'package:opensplit/domain/activity/snapshot_diff.dart';
 import 'package:opensplit/domain/models/entry_snapshot.dart';
+import 'package:opensplit/domain/models/group_event.dart';
 import 'package:opensplit/domain/models/member.dart';
 import 'package:opensplit/domain/models/profile.dart';
 
@@ -431,22 +432,50 @@ class FakeRemoteLedger implements RemoteLedgerApi {
   }
 
   @override
-  Future<ChangePage<EntrySnapshot>> pullEntrySnapshots({
+  Future<ChangePage<GroupEventRow>> pullGroupEvents({
     required String groupId,
     SyncCursor? since,
     required int limit,
   }) async => _page(
     rows: [
-      for (final snapshot in _snapshots)
-        if (snapshot.groupId == groupId)
-          (cursor: SyncCursor(snapshot.createdAt, snapshot.id), row: snapshot),
+      for (final event in _events)
+        if (event.groupId == groupId)
+          (cursor: SyncCursor(event.createdAt, event.id), row: event),
     ],
     since: since,
     limit: limit,
   );
 
+  /// Every recorded event, expense snapshots included.
+  ///
+  /// Snapshots are held as [EntrySnapshot] above because that is what the fake
+  /// builds when an expense is written; they become rows on the way out, which
+  /// is the same direction the real server travels in.
+  List<GroupEventRow> get _events =>
+      [
+        for (final snapshot in _snapshots)
+          GroupEventRow(
+            id: snapshot.id,
+            groupId: snapshot.groupId,
+            actorId: snapshot.actorId,
+            createdAt: snapshot.createdAt,
+            kind: GroupEventKind.entry,
+            subjectId: snapshot.entryId,
+            payload: snapshotPayload(snapshot),
+          ),
+        ..._otherEvents,
+      ]..sort((a, b) {
+        final byTime = a.createdAt.compareTo(b.createdAt);
+        return byTime != 0 ? byTime : a.id.compareTo(b.id);
+      });
+
+  final List<GroupEventRow> _otherEvents = [];
+
   /// Records history that arrived from somebody else's device.
   void seedSnapshot(EntrySnapshot snapshot) => _snapshots.add(snapshot);
+
+  /// Records a non-expense event, as the member and group triggers would.
+  void seedEvent(GroupEventRow event) => _otherEvents.add(event);
 
   /// Puts a profile on the server without going through a push, for arranging
   /// "somebody else renamed themselves" in a test.

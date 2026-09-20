@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../../config.dart';
+import '../../domain/models/group_event.dart';
 import 'background_handler.dart';
 import 'notification_channel.dart';
 
@@ -39,9 +40,14 @@ class PushService {
   final Future<void> Function(String groupId) onWake;
 
   /// Produce the notification text, after the delta has landed.
+  ///
+  /// Null for an event this build has no sentence for, which is how a kind the
+  /// server has learned and this client has not ends up waking the device,
+  /// syncing it, and then quietly drawing nothing.
   final Future<({String title, String body})?> Function(
     String groupId,
-    String entryId,
+    GroupEventKind kind,
+    String subjectId,
   )
   describe;
 
@@ -211,8 +217,9 @@ class PushService {
   Future<void> _handle(RemoteMessage message) async {
     if (!isEnabled()) return;
     final groupId = message.data['group_id'];
-    final entryId = message.data['entry_id'];
-    if (groupId is! String || entryId is! String) return;
+    final subjectId = message.data['subject_id'];
+    final kind = GroupEventKind.parse(message.data['kind'] as String? ?? '');
+    if (groupId is! String || subjectId is! String || kind == null) return;
 
     // Sync first. The notification describes what is now on the device, not
     // what a server guessed the recipient's share would be.
@@ -221,11 +228,13 @@ class PushService {
     // Web messages wake the tab. Local notifications are Android-only.
     if (kIsWeb || !isEnabled()) return;
 
-    final text = await describe(groupId, entryId);
+    final text = await describe(groupId, kind, subjectId);
     if (text == null || !isEnabled()) return;
 
     await _local.show(
-      id: entryId.hashCode,
+      // Keyed on the subject, so five edits to one expense replace each other
+      // in the shade rather than stacking into five banners about one dinner.
+      id: subjectId.hashCode,
       title: text.title,
       body: text.body,
       notificationDetails: const NotificationDetails(

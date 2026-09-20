@@ -107,7 +107,7 @@ jobs:
         with:
           deno-version: v2.9.3
       - run: deno fmt --check supabase/functions
-      - run: deno check --config=supabase/functions/deno.json supabase/functions/fetch-fx/index.ts supabase/functions/notify-entry/index.ts
+      - run: deno check --config=supabase/functions/deno.json supabase/functions/fetch-fx/index.ts supabase/functions/notify-event/index.ts
       - name: Check tools did not mutate the checkout
         run: |
           git diff --exit-code

@@ -5,6 +5,7 @@ import '../../application/providers.dart';
 import '../../domain/activity/activity_text.dart';
 import '../../domain/models/currency.dart';
 import '../../domain/models/entry_event.dart';
+import '../../domain/models/group_event.dart';
 import '../navigation.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/page_body.dart';
@@ -64,10 +65,12 @@ class ActivityScreen extends ConsumerWidget {
                 actor: ledger?.nameOfActor(event.actorId) ?? 'Someone',
                 memberNames: ledger?.memberNames ?? const {},
                 pending: syncs && event.isProvisional,
-                description: ledger?.entries
-                    .where((e) => e.id == event.entryId)
-                    .firstOrNull
-                    ?.description,
+                description: event is EntryChanged
+                    ? ledger?.entries
+                          .where((e) => e.id == event.entryId)
+                          .firstOrNull
+                          ?.description
+                    : null,
                 currency: ledger == null
                     ? null
                     : ref
@@ -82,6 +85,13 @@ class ActivityScreen extends ConsumerWidget {
   }
 }
 
+/// One line of the record.
+///
+/// The switch over [GroupEvent] is exhaustive, which is the point of the type
+/// being sealed: a new kind cannot be added to the feed without this file
+/// failing to compile until somebody has written the sentence for it. The old
+/// version of this widget could only ever say something about an expense, and
+/// there was nowhere for "Priya joined" to go.
 class _Line extends StatelessWidget {
   const _Line({
     required this.event,
@@ -92,32 +102,80 @@ class _Line extends StatelessWidget {
     required this.currency,
   });
 
-  final EntryEvent event;
+  final GroupEvent event;
   final String actor;
   final Map<String, String> memberNames;
 
   /// This device's own account of a change the server has not confirmed.
   final bool pending;
+
+  /// The expense's description, for an entry line. Null for every other kind.
   final String? description;
+
   final Currency? currency;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final what = (description?.trim().isNotEmpty ?? false)
-        ? '“${description!.trim()}”'
-        : 'an expense';
+
+    final (icon, title) = switch (event) {
+      EntryChanged(:final kind) => (
+        _entryIcon(kind),
+        '$actor ${describeKind(kind)} ${_what()}',
+      ),
+
+      // The actor is left out of a join on purpose. Nobody does it to you --
+      // you arrive -- and naming whoever happened to hold the session would
+      // often name the person who sent the link rather than the person who
+      // walked through it.
+      MemberChanged(kind: GroupEventKind.memberJoined, :final displayName) => (
+        Icons.person_add_alt,
+        '$displayName joined',
+      ),
+      MemberChanged(kind: GroupEventKind.memberAdded, :final displayName) => (
+        Icons.person_outline,
+        '$actor added $displayName',
+      ),
+      MemberChanged(kind: GroupEventKind.memberLeft, :final displayName) => (
+        Icons.person_remove_outlined,
+        '$displayName left',
+      ),
+      MemberChanged(:final displayName, :final previousName) => (
+        Icons.badge_outlined,
+        previousName == null
+            ? '$actor renamed $displayName'
+            : '$actor renamed $previousName to $displayName',
+      ),
+
+      GroupChanged(kind: GroupEventKind.groupRenamed, :final name) => (
+        Icons.drive_file_rename_outline,
+        '$actor renamed the group to $name',
+      ),
+      GroupChanged(kind: GroupEventKind.groupArchived) => (
+        Icons.inventory_2_outlined,
+        '$actor archived the group',
+      ),
+      GroupChanged() => (Icons.unarchive_outlined, '$actor restored the group'),
+
+      LinkChanged(kind: GroupEventKind.linkCreated) => (
+        Icons.link,
+        '$actor created an invite link',
+      ),
+      LinkChanged() => (Icons.link_off, '$actor revoked the invite link'),
+    };
+
+    final changes = switch (event) {
+      EntryChanged(:final changes) => changes,
+      _ => const <FieldChange>[],
+    };
 
     return ListTile(
-      leading: Icon(_icon(event.kind), color: theme.colorScheme.primary),
-      title: Text(
-        '$actor ${describeKind(event.kind)} $what'
-        '${pending ? ' — not synced yet' : ''}',
-      ),
+      leading: Icon(icon, color: theme.colorScheme.primary),
+      title: Text('$title${pending ? ' — not synced yet' : ''}'),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final change in event.changes)
+          for (final change in changes)
             Text(
               describeChange(
                 change,
@@ -134,11 +192,15 @@ class _Line extends StatelessWidget {
           ),
         ],
       ),
-      isThreeLine: event.changes.isNotEmpty,
+      isThreeLine: changes.isNotEmpty,
     );
   }
 
-  static IconData _icon(EntryEventKind kind) => switch (kind) {
+  String _what() => (description?.trim().isNotEmpty ?? false)
+      ? '“${description!.trim()}”'
+      : 'an expense';
+
+  static IconData _entryIcon(EntryEventKind kind) => switch (kind) {
     EntryEventKind.created => Icons.add_circle_outline,
     EntryEventKind.edited => Icons.edit_outlined,
     EntryEventKind.deleted => Icons.remove_circle_outline,

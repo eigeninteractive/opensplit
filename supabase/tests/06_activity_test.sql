@@ -54,23 +54,26 @@ select lives_ok(
 set constraints all immediate;
 
 select is(
-  (select count(*)::int from entry_events
-    where entry_id = '88888888-8888-4888-8888-888888888888'),
+  (select count(*)::int from group_events
+    where subject_id = '88888888-8888-4888-8888-888888888888'
+      and kind = 'entry'),
   1,
   'and recording it writes exactly one snapshot -- not one per row touched, '
   'though the trigger fires once for the entry and once for every payer and '
   'share underneath it');
 
 select is(
-  (select actor_id from entry_events
-    where entry_id = '88888888-8888-4888-8888-888888888888'),
+  (select actor_id from group_events
+    where subject_id = '88888888-8888-4888-8888-888888888888'
+      and kind = 'entry'),
   '44444444-4444-4444-8444-444444444444'::uuid,
   'attributed to the caller''s own member row, read from auth.uid() rather '
   'than accepted as a parameter');
 
 select is(
-  (select shares from entry_events
-    where entry_id = '88888888-8888-4888-8888-888888888888'),
+  (select payload -> 'shares' from group_events
+    where subject_id = '88888888-8888-4888-8888-888888888888'
+      and kind = 'entry'),
   '[{"member_id": "44444444-4444-4444-8444-444444444444", "amount_minor": 20000},
     {"member_id": "55555555-5555-4555-8555-555555555555", "amount_minor": 20000}]'::jsonb,
   'carrying who owes what, which is the half the client-authored diff left '
@@ -101,22 +104,25 @@ select lives_ok(
 set constraints all immediate;
 
 select is(
-  (select count(*)::int from entry_events
-    where entry_id = '88888888-8888-4888-8888-888888888888'),
+  (select count(*)::int from group_events
+    where subject_id = '88888888-8888-4888-8888-888888888888'
+      and kind = 'entry'),
   2,
   'but it goes on the record -- a shares-only change is a change, and used to '
   'produce no history whatsoever');
 
 select is(
-  (select actor_id from entry_events
-    where entry_id = '88888888-8888-4888-8888-888888888888'
+  (select actor_id from group_events
+    where subject_id = '88888888-8888-4888-8888-888888888888'
+      and kind = 'entry'
     order by created_at desc limit 1),
   '55555555-5555-4555-8555-555555555555'::uuid,
   'in the name of whoever actually made it');
 
 select is(
-  (select shares from entry_events
-    where entry_id = '88888888-8888-4888-8888-888888888888'
+  (select payload -> 'shares' from group_events
+    where subject_id = '88888888-8888-4888-8888-888888888888'
+      and kind = 'entry'
     order by created_at desc limit 1),
   '[{"member_id": "44444444-4444-4444-8444-444444444444", "amount_minor": 30000},
     {"member_id": "55555555-5555-4555-8555-555555555555", "amount_minor": 10000}]'::jsonb,
@@ -137,8 +143,9 @@ select upsert_entry(
 set constraints all immediate;
 
 select is(
-  (select count(*)::int from entry_events
-    where entry_id = '88888888-8888-4888-8888-888888888888'),
+  (select count(*)::int from group_events
+    where subject_id = '88888888-8888-4888-8888-888888888888'
+      and kind = 'entry'),
   2,
   'a re-saved editor and a retried sync add nothing: a feed full of '
   '"Priya edited nothing" is worse than no feed');
@@ -147,13 +154,20 @@ select is(
 -- The invariant that makes the duplication safe
 -- ---------------------------------------------------------------------------
 select is(
-  (select (e.description, e.currency, e.amount_minor, e.entry_date,
-           e.split_kind, e.category_id, e.notes, e.deleted_at)::text
+  (select jsonb_build_object(
+            'description',  e.description,
+            'currency',     e.currency,
+            'amount_minor', e.amount_minor,
+            'entry_date',   e.entry_date,
+            'split_kind',   e.split_kind,
+            'category_id',  e.category_id,
+            'notes',        e.notes,
+            'deleted_at',   e.deleted_at)
      from entries e where e.id = '88888888-8888-4888-8888-888888888888'),
-  (select (v.description, v.currency, v.amount_minor, v.entry_date,
-           v.split_kind, v.category_id, v.notes, v.deleted_at)::text
-     from entry_events v
-    where v.entry_id = '88888888-8888-4888-8888-888888888888'
+  (select v.payload - 'payers' - 'shares'
+     from group_events v
+    where v.subject_id = '88888888-8888-4888-8888-888888888888'
+      and v.kind = 'entry'
     order by v.created_at desc limit 1),
   'the newest snapshot is identical to the live expense, which is what makes '
   'a mismatch a tamper alarm rather than a merge problem');
@@ -188,23 +202,23 @@ select throws_ok(
 -- The record is readable by the group and writable by nobody
 -- ---------------------------------------------------------------------------
 select throws_ok(
-  $$insert into entry_events (entry_id, group_id, actor_id, description,
-      currency, amount_minor, entry_date, split_kind, payers, shares)
-    values ('88888888-8888-4888-8888-888888888888',
-            '33333333-3333-4333-8333-333333333333',
+  $$insert into group_events (group_id, actor_id, kind, subject_id, payload)
+    values ('33333333-3333-4333-8333-333333333333',
             '55555555-5555-4555-8555-555555555555',
-            'Dinner', 'INR', 40000, current_date, 'equal', '[]', '[]')$$,
+            'entry',
+            '88888888-8888-4888-8888-888888888888',
+            '{"amount_minor": 1}'::jsonb)$$,
   '42501', null,
   'history cannot be fabricated: with no insert grant there is no '
   'client-authored line left to have to trust');
 
 select throws_ok(
-  $$update entry_events set amount_minor = 1$$,
+  $$update group_events set payload = '{}'::jsonb$$,
   '42501', null,
   'an audit trail somebody can revise is not one');
 
 select throws_ok(
-  $$delete from entry_events$$,
+  $$delete from group_events$$,
   '42501', null,
   'nor erase one');
 

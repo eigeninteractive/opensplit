@@ -429,12 +429,37 @@ having sum(delta) <> 0;
 -- problem, and it is what lets the history be read without joining against the
 -- mutable table it exists to audit.
 -- ============================================================================
-create table entry_events (
-  id         uuid primary key default gen_random_uuid(),
-  entry_id   uuid not null references entries(id) on delete cascade,
+create type group_event_kind as enum (
+  -- An expense snapshot. What changed is derived on the client by comparing
+  -- consecutive rows, because the server cannot see the transition -- see the
+  -- note above on why this table holds after-images.
+  'entry',
 
-  -- Denormalised from the entry so the group feed is one indexed read rather
-  -- than a join.
+  -- Member life. The kind is set here rather than derived, and that asymmetry
+  -- is the point rather than an inconsistency: a member change is one row in
+  -- one statement, so an ordinary AFTER trigger has OLD and NEW and can simply
+  -- say what happened. Putting members through snapshot-and-diff as well would
+  -- be reproducing a workaround for a constraint that does not apply to them.
+  'member_added',      -- a placeholder, created by somebody already here
+  'member_joined',     -- a slot claimed, or a stranger arriving on a link
+  'member_left',       -- left, or was removed
+  'member_renamed',
+
+  -- The group itself.
+  'group_renamed',
+  'group_archived',
+  'group_restored',
+
+  -- Bearer authority over membership, minted and destroyed. Recorded because
+  -- an open link is exactly the thing a group deserves to be told about: it is
+  -- the one object here that lets somebody who was never invited personally
+  -- walk in.
+  'link_created',
+  'link_revoked'
+);
+
+create table group_events (
+  id         uuid primary key default gen_random_uuid(),
   group_id   uuid not null references groups(id) on delete cascade,
 
   -- Who was holding the pen, as a member id -- group-scoped like
@@ -442,52 +467,50 @@ create table entry_events (
   -- account.
   --
   -- Nullable, and that is not laxness. A change made by something with no
-  -- member row -- a future job, an operator at a psql prompt -- must still be
-  -- recorded. "Something changed and we cannot say who" is a far better audit
-  -- line than silence, and silence is what a NOT NULL here would buy.
+  -- member row -- a future job, an operator at a psql prompt, or the very
+  -- insert that creates the member who caused it -- must still be recorded.
+  -- "Something changed and we cannot say who" is a far better audit line than
+  -- silence, and silence is what a NOT NULL here would buy.
   actor_id   uuid references members(id) on delete restrict,
 
   -- clock_timestamp(), not now(). now() is transaction time and is identical
-  -- for every statement in a transaction, so two snapshots written together
-  -- would tie and the feed would order them by a random uuid. This is a log; it
-  -- needs the wall clock.
+  -- for every statement in a transaction, so two events written together would
+  -- tie and the feed would order them by a random uuid. This is a log; it needs
+  -- the wall clock.
   created_at timestamptz not null default clock_timestamp(),
 
-  -- --------------------------------------------------------------------------
-  -- The snapshot: everything about the expense a reader would call a change.
+  kind       group_event_kind not null,
+
+  -- What the event is about: an entry, a member, an invite token. Null for the
+  -- kinds whose subject is the group itself, which `group_id` already names.
   --
-  -- `fx_rate` and friends are absent on purpose -- they move whenever the
-  -- currency does and would double every currency edit. `updated_at` is absent
-  -- because it moves on every write by definition, which would make a save that
-  -- altered nothing read as an edit.
-  -- --------------------------------------------------------------------------
-  description  text        not null,
-  currency     char(3)     not null,
-  amount_minor bigint      not null,
-  entry_date   date        not null,
-  split_kind   split_kind  not null,
+  -- Deliberately not a foreign key, and for the reason the old `category_id`
+  -- on this table was not one either: the record describes what was true at the
+  -- time, and a member or an expense disappearing must not rewrite what
+  -- happened. `actor_id` is the exception, and is RESTRICT precisely so that a
+  -- member carrying history cannot be deleted out from under it.
+  subject_id uuid,
 
-  -- Plain uuid, deliberately not a foreign key: a snapshot records the category
-  -- an expense had at the time, and deleting a category must not rewrite what
-  -- happened.
-  category_id  uuid,
-  notes        text,
-
-  -- Set once the expense is soft-deleted. What makes "deleted" and "restored"
-  -- readable off the chain rather than needing a column to assert them.
-  deleted_at   timestamptz,
-
-  -- [{"member_id": "...", "amount_minor": 40000}, ...], ordered by member id so
-  -- that two snapshots of an unchanged split compare equal with `=`.
+  -- The after-image, in whatever shape the kind calls for.
   --
-  -- This is the half that used to be missing entirely. Who owes what is where
-  -- the money actually lives, and a history that recorded only the total could
-  -- not see a split being quietly rewritten underneath it.
-  payers       jsonb not null,
-  shares       jsonb not null
+  -- For 'entry' this is everything a reader would call a change -- description,
+  -- currency, amount_minor, entry_date, split_kind, category_id, notes,
+  -- deleted_at, payers, shares. fx_rate and friends are absent on purpose: they
+  -- move whenever the currency does and would double every currency edit.
+  -- updated_at is absent because it moves on every write by definition, which
+  -- would make a save that altered nothing read as an edit.
+  --
+  -- jsonb rather than the typed columns this table used to carry. Three things
+  -- pay for that. The dedup below becomes one comparison instead of a
+  -- nine-column `is distinct from` chain. A new kind is an enum value rather
+  -- than another nullable column nothing else uses. And the money-critical
+  -- half -- who paid and who owes -- was already jsonb, so the typing that is
+  -- gone was never the typing that mattered. Nothing computes over these
+  -- columns: balances read `entries` and only `entries`.
+  payload    jsonb not null
 );
 
--- The feed is "this group, newest first"; an expense's history is "this entry,
+-- The feed is "this group, newest first"; a subject's history is "this entry,
 -- in order". Same trailing id as the entries cursor, and for the same reason: a
 -- batch written in one transaction can share a timestamp.
 -- Ascending, matching the order the activity feed is read in: the client asks
@@ -496,17 +519,17 @@ create table entry_events (
 -- to the query, so neither a forward nor a backward scan satisfies it and
 -- Postgres sorts instead -- on the one feed that a device seeing an active
 -- group for the first time reads in its entirety.
-create index idx_entry_events_group on entry_events (group_id, created_at, id);
-create index idx_entry_events_entry on entry_events (entry_id, created_at);
+create index idx_group_events_group on group_events (group_id, created_at, id);
+create index idx_group_events_subject on group_events (subject_id, created_at);
 
-alter table entry_events enable row level security;
+alter table group_events enable row level security;
 
 -- ----------------------------------------------------------------------------
 -- Taking the snapshot.
 --
 -- SECURITY DEFINER because no caller has -- or should have -- insert on
--- entry_events. This function is the only writer, which is exactly what makes
--- the record worth reading.
+-- group_events. This function is the only writer of 'entry' rows, which is
+-- exactly what makes the record worth reading.
 -- ----------------------------------------------------------------------------
 create or replace function snapshot_entry(p_entry uuid)
 returns void
@@ -515,11 +538,12 @@ security definer
 set search_path = public
 as $$
 declare
-  v_entry  entries;
-  v_payers jsonb;
-  v_shares jsonb;
-  v_actor  uuid;
-  v_last   entry_events;
+  v_entry   entries;
+  v_payers  jsonb;
+  v_shares  jsonb;
+  v_payload jsonb;
+  v_actor   uuid;
+  v_last    jsonb;
 begin
   select * into v_entry from entries where id = p_entry;
 
@@ -545,9 +569,27 @@ begin
     into v_shares
     from entry_shares where entry_id = p_entry;
 
-  select * into v_last
-    from entry_events
-   where entry_id = p_entry
+  -- Keys in a fixed order and built in one place, so that two snapshots of an
+  -- unchanged expense compare equal with `=`. jsonb normalises key order on
+  -- storage, so this is belt and braces rather than load-bearing -- but the
+  -- comparison below is the whole dedup, and it should not depend on knowing
+  -- that.
+  v_payload := jsonb_build_object(
+    'description',  v_entry.description,
+    'currency',     v_entry.currency,
+    'amount_minor', v_entry.amount_minor,
+    'entry_date',   v_entry.entry_date,
+    'split_kind',   v_entry.split_kind,
+    'category_id',  v_entry.category_id,
+    'notes',        v_entry.notes,
+    'deleted_at',   v_entry.deleted_at,
+    'payers',       v_payers,
+    'shares',       v_shares
+  );
+
+  select payload into v_last
+    from group_events
+   where subject_id = p_entry and kind = 'entry'
    order by created_at desc, id desc
    limit 1;
 
@@ -558,18 +600,11 @@ begin
   -- times -- so without this a single save would read as five separate events.
   -- It is also what makes a re-saved editor and a retried sync produce nothing,
   -- which is the behaviour a feed full of "Ravi edited nothing" needs.
-  if v_last.id is not null
-     and v_last.description  is not distinct from v_entry.description
-     and v_last.currency     is not distinct from v_entry.currency
-     and v_last.amount_minor is not distinct from v_entry.amount_minor
-     and v_last.entry_date   is not distinct from v_entry.entry_date
-     and v_last.split_kind   is not distinct from v_entry.split_kind
-     and v_last.category_id  is not distinct from v_entry.category_id
-     and v_last.notes        is not distinct from v_entry.notes
-     and v_last.deleted_at   is not distinct from v_entry.deleted_at
-     and v_last.payers       = v_payers
-     and v_last.shares       = v_shares
-  then
+  --
+  -- One comparison, where this used to be a nine-column `is distinct from`
+  -- chain that a new snapshot column could silently fall out of: a field added
+  -- to the payload above is compared here by construction.
+  if v_last is not null and v_last = v_payload then
     return;
   end if;
 
@@ -582,21 +617,14 @@ begin
      and profile_id = auth.uid()
      and left_at is null;
 
-  insert into entry_events (
-    entry_id, group_id, actor_id,
-    description, currency, amount_minor, entry_date, split_kind,
-    category_id, notes, deleted_at, payers, shares)
-  values (
-    v_entry.id, v_entry.group_id, v_actor,
-    v_entry.description, v_entry.currency, v_entry.amount_minor,
-    v_entry.entry_date, v_entry.split_kind, v_entry.category_id,
-    v_entry.notes, v_entry.deleted_at, v_payers, v_shares);
+  insert into group_events (group_id, actor_id, kind, subject_id, payload)
+  values (v_entry.group_id, v_actor, 'entry', v_entry.id, v_payload);
 end;
 $$;
 
 comment on function snapshot_entry is
-  'Appends what an expense now looks like to entry_events, unless that is '
-  'already what the newest row there says. The only writer of that table.';
+  'Appends what an expense now looks like to group_events, unless that is '
+  'already what the newest entry row there says. The only writer of those.';
 
 create or replace function snapshot_from_entry()
 returns trigger
@@ -646,6 +674,148 @@ create constraint trigger trg_shares_snapshot
   after insert or update or delete on entry_shares
   deferrable initially deferred
   for each row execute function snapshot_from_child();
+
+-- ============================================================================
+-- The rest of what happens in a group.
+--
+-- Everything above this line is an expense, and an expense is a hard case: one
+-- logical change spans three tables, so the only coherent moment to look is
+-- COMMIT, by which point the before-image is gone. That is why entries are
+-- recorded as after-images and the client works out what changed.
+--
+-- Nothing below has that problem. A member joining, a group being renamed, a
+-- link being minted -- each is one row in one statement, so an ordinary AFTER
+-- trigger holds OLD and NEW and can say plainly what happened. So it does.
+--
+-- Which gives the table one honest rule rather than two competing ones: the
+-- server records the kind wherever it can observe the transition, and the
+-- client derives detail only where the server cannot. Pushing members through
+-- snapshot-and-diff for symmetry's sake would be reproducing a workaround for
+-- a constraint they do not have.
+-- ============================================================================
+
+-- ----------------------------------------------------------------------------
+-- Who is holding the pen, for a change to something that is not an expense.
+--
+-- Null is a normal answer here and comes up constantly: the trigger that
+-- records somebody joining fires during the very statement that gives them a
+-- member row, and a link redeemed by a stranger has no member row to find until
+-- it commits. A join is therefore usually attributed to nobody, which is
+-- correct -- the feed line is "Priya joined", and there is no third party who
+-- did it to her.
+-- ----------------------------------------------------------------------------
+create or replace function acting_member(p_group uuid)
+returns uuid
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select id from members
+   where group_id = p_group and profile_id = auth.uid() and left_at is null
+   limit 1;
+$$;
+
+create or replace function record_member_event()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_kind    group_event_kind;
+  v_payload jsonb := jsonb_build_object('display_name', new.display_name);
+begin
+  if tg_op = 'INSERT' then
+    -- The group's first member is whoever made the group. "Ravi joined Ravi's
+    -- flat" is not news, and it would open every feed in the app with a line
+    -- nobody needs.
+    if not exists (
+      select 1 from members
+       where group_id = new.group_id and id <> new.id
+    ) then
+      return null;
+    end if;
+
+    v_kind := case when new.profile_id is null
+                   then 'member_added' else 'member_joined' end;
+
+  elsif new.left_at is not null and old.left_at is null then
+    v_kind := 'member_left';
+
+  -- A slot being claimed. This is the one redeem_invite and join_with_link
+  -- both produce, and the only column either of them sets.
+  elsif new.profile_id is not null and old.profile_id is null then
+    v_kind := 'member_joined';
+
+  elsif new.display_name is distinct from old.display_name then
+    v_kind := 'member_renamed';
+    -- The old name as well, because a rename is the one change whose meaning
+    -- is entirely in what it was before. Held here rather than reconstructed
+    -- from the previous event, which would be a diff over a kind that does not
+    -- need one.
+    v_payload := v_payload || jsonb_build_object(
+      'previous_name', old.display_name);
+
+  else
+    -- A UPI handle, a re-stamped updated_at, a rejoin. Nothing a feed should
+    -- narrate.
+    return null;
+  end if;
+
+  insert into group_events (group_id, actor_id, kind, subject_id, payload)
+  values (new.group_id, acting_member(new.group_id), v_kind, new.id, v_payload);
+
+  return null;
+end;
+$$;
+
+-- AFTER, so the member row exists for acting_member to find when somebody
+-- changes their own. Not deferred: unlike an expense there is no second table
+-- to wait for, and firing now keeps the event's clock_timestamp() honest about
+-- when it happened.
+create trigger trg_members_record
+  after insert or update on members
+  for each row execute function record_member_event();
+
+create or replace function record_group_event()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_kind    group_event_kind;
+  v_payload jsonb;
+begin
+  if new.name is distinct from old.name then
+    v_kind := 'group_renamed';
+    v_payload := jsonb_build_object(
+      'name', new.name, 'previous_name', old.name);
+
+  elsif new.archived_at is not null and old.archived_at is null then
+    v_kind := 'group_archived';
+    v_payload := jsonb_build_object('name', new.name);
+
+  elsif new.archived_at is null and old.archived_at is not null then
+    v_kind := 'group_restored';
+    v_payload := jsonb_build_object('name', new.name);
+
+  else
+    return null;
+  end if;
+
+  -- subject_id is null: the subject is the group, which group_id already names.
+  insert into group_events (group_id, actor_id, kind, payload)
+  values (new.id, acting_member(new.id), v_kind, v_payload);
+
+  return null;
+end;
+$$;
+
+create trigger trg_groups_record
+  after update on groups
+  for each row execute function record_group_event();
 
 -- ----------------------------------------------------------------------------
 -- A child moving is the entry moving.
@@ -771,12 +941,23 @@ begin
     return 0;
   end if;
 
-  -- entries first, taking payers, shares and events with it by cascade. Doing
-  -- it the other way — emptying the children while their entry still stands —
-  -- trips the deferred balance check, which quite correctly objects to an
-  -- expense that no longer adds up.
+  -- entries first, taking payers and shares with it by cascade. Doing it the
+  -- other way — emptying the children while their entry still stands — trips
+  -- the deferred balance check, which quite correctly objects to an expense
+  -- that no longer adds up.
   delete from entries where group_id = any(v_doomed);
   delete from invites where group_id = any(v_doomed);
+
+  -- The record, explicitly, and before the members it attributes things to.
+  --
+  -- It used to go by cascade from `entries`, which was true while the record
+  -- was only ever about an expense. group_events hangs off the group rather
+  -- than the entry — a member joining is not about any expense — so the only
+  -- cascade that reaches it is the one from `groups`, four lines below and too
+  -- late: `actor_id` is ON DELETE RESTRICT, so the member delete would be
+  -- refused by rows that are about to be deleted anyway.
+  delete from group_events where group_id = any(v_doomed);
+
   -- Only now can members go: entry_payers and entry_shares reference them with
   -- ON DELETE RESTRICT, which is what keeps a member who has paid for something
   -- from being deleted out from under it.

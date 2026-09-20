@@ -90,7 +90,7 @@ comment on function unregister_device_token is
   'Removes a device token only when it belongs to the calling account.';
 
 -- ---------------------------------------------------------------------------
--- Who should be woken for a change to an entry.
+-- Who should be woken for something that happened in a group.
 --
 -- SECURITY DEFINER and callable only by the service role: it deliberately reads
 -- tokens belonging to other people, which no user-facing policy allows.
@@ -104,9 +104,15 @@ comment on function unregister_device_token is
 -- corrects Ravi's expense, Ravi is precisely who needs to know, and excluding
 -- the creator would silence the one person the change is about while telling
 -- the person who made it. Null excludes nobody, which is right for a change
--- that cannot be attributed to a member at all.
+-- that cannot be attributed to a member at all — a stranger arriving on an
+-- open link being the ordinary case.
+--
+-- Takes the group directly. It used to take an entry and join through
+-- `entries` to find the group, which was the only way to ask the question when
+-- the only thing that could happen was an expense changing. A member joining
+-- has no entry to join through.
 -- ---------------------------------------------------------------------------
-create or replace function tokens_for_entry(p_entry_id uuid, p_actor_id uuid)
+create or replace function tokens_for_group(p_group_id uuid, p_actor_id uuid)
 returns table (token text, platform text)
 language sql
 security definer
@@ -114,10 +120,10 @@ set search_path = public
 stable
 as $$
   select dt.token, dt.platform
-    from entries e
-    join members m       on m.group_id = e.group_id and m.left_at is null
+    from members m
     join device_tokens dt on dt.profile_id = m.profile_id
-   where e.id = p_entry_id
+   where m.group_id = p_group_id
+     and m.left_at is null
      and m.profile_id is not null
      and m.id is distinct from p_actor_id;
 $$;
@@ -143,13 +149,14 @@ $$;
 --     the difference between a self-hosted port being a weekend and being a
 --     rewrite, which is a promise the README makes.
 --
--- It hangs off `entry_events` rather than `entries`, and that is what makes it
--- fire for edits and deletions as well as for creations.
+-- It hangs off `group_events` rather than `entries`, and that is what makes it
+-- fire for edits and deletions as well as for creations -- and now for people
+-- arriving and leaving, which is not an expense at all.
 --
 -- On `entries` it could not. `touch_parent_entry` restamps the parent row every
 -- time a payer or share moves, so one saved expense is several UPDATEs on
 -- `entries` — an `after update` trigger there would send a notification per
--- child row. `entry_events` already has exactly the property wanted: the
+-- child row. `group_events` already has exactly the property wanted: the
 -- snapshot trigger dedups, so there is precisely one row per change that
 -- actually changed something, and it already carries who did it.
 --
@@ -168,7 +175,7 @@ $$;
 -- The queue insert is transactional, so an entry that rolls back takes its
 -- notification with it.
 -- ---------------------------------------------------------------------------
-create or replace function notify_entry_change()
+create or replace function notify_group_event()
 returns trigger
 language plpgsql
 security definer
@@ -178,6 +185,24 @@ declare
   v_url    text;
   v_secret text;
 begin
+  -- Which kinds are worth a banner, decided here rather than in the Edge
+  -- Function or on the device.
+  --
+  -- Here because this is the cheapest place to say no: below this line the
+  -- group's every device is looked up and a request goes out over pg_net, and
+  -- a rename would spend all of that to have each recipient decide it had
+  -- nothing to draw. It is also the place a self-hosted deployment gets for
+  -- free — it arrives with `db reset`, unlike anything configured in a
+  -- dashboard.
+  --
+  -- Joins and leaves, because somebody arriving is the confirmation that an
+  -- invite link worked and somebody leaving changes who is in the arithmetic.
+  -- Not renames, not archives, not links: those belong in the feed, which is
+  -- read on purpose, rather than on a phone's lock screen.
+  if new.kind not in ('entry', 'member_joined', 'member_left') then
+    return null;
+  end if;
+
   select value into v_url
     from app_settings where key = 'notify_function_url';
   select value into v_secret
@@ -200,20 +225,26 @@ begin
       'Content-Type',     'application/json',
       'x-webhook-secret', v_secret
     ),
-    -- Ids and nothing else, exactly as the note at the top of this file
-    -- requires. Which expense, which group, and who to leave out of the
-    -- fan-out. What the notification actually SAYS is composed on each
-    -- recipient's device, after it has synced, from the same formatter the
-    -- screens use -- including whether this was an addition, an edit or a
-    -- deletion, which the device reads off the snapshot chain it has just
-    -- pulled. Nothing about the change travels in this payload.
+    -- Ids and a kind, and nothing else. What the notification actually SAYS is
+    -- composed on each recipient's device, after it has synced, from the same
+    -- formatter the screens use -- including whether an expense was added,
+    -- edited or deleted, which the device reads off the snapshot chain it has
+    -- just pulled. Nothing about the change itself travels in this payload: no
+    -- amount, no name, no description.
+    --
+    -- `kind` is not a description of the change, it is which of them this is.
+    -- The device needs it to know what to fetch and which formatter to reach
+    -- for before it has read anything, and it says no more than the enum's own
+    -- name -- "somebody joined this group" is already implied by the wake.
     body    := jsonb_build_object(
       'type',  'INSERT',
       'table', tg_table_name,
       'record', jsonb_build_object(
-        'id',       new.entry_id,
-        'group_id', new.group_id,
-        'actor_id', new.actor_id
+        'id',         new.id,
+        'kind',       new.kind,
+        'subject_id', new.subject_id,
+        'group_id',   new.group_id,
+        'actor_id',   new.actor_id
       )
     )
   );
@@ -222,13 +253,14 @@ begin
 end;
 $$;
 
-comment on function notify_entry_change is
-  'Posts the ids of a changed expense to the notify-entry Edge Function so '
-  'the other members'' devices wake and sync. Fires for every recorded change '
-  '-- added, edited, deleted or restored -- because entry_events holds one '
-  'row per change and no rows for a write that changed nothing. No-ops until '
-  'notify_function_url and notify_webhook_secret are set in app_settings.';
+comment on function notify_group_event is
+  'Posts the ids of a recorded group event to the notify-event Edge Function '
+  'so the other members'' devices wake and sync. Fires for expense changes -- '
+  'added, edited, deleted or restored -- and for people joining or leaving, '
+  'and for nothing else: the other kinds are recorded in the feed but are not '
+  'worth a banner. No-ops until notify_function_url and notify_webhook_secret '
+  'are set in app_settings.';
 
-create trigger trg_entry_events_notify
-  after insert on entry_events
-  for each row execute function notify_entry_change();
+create trigger trg_group_events_notify
+  after insert on group_events
+  for each row execute function notify_group_event();

@@ -432,7 +432,7 @@ Generate new private key gives you the JSON; unlike everything above, **it is a
 real secret**:
 
 ```
-supabase functions deploy notify-entry
+supabase functions deploy notify-event
 supabase secrets set FCM_PROJECT_ID=your-project \
                      FCM_SERVICE_ACCOUNT="$(cat service-account.json)" \
                      NOTIFY_WEBHOOK_SECRET="$(openssl rand -hex 32)"
@@ -440,7 +440,7 @@ supabase secrets set FCM_PROJECT_ID=your-project \
 # Point the trigger at the function, exactly as the rate fetch is pointed:
 insert into app_settings (key, value) values
   ('notify_function_url',
-   'https://<project>.supabase.co/functions/v1/notify-entry'),
+   'https://<project>.supabase.co/functions/v1/notify-event'),
   ('notify_webhook_secret', '<the same NOTIFY_WEBHOOK_SECRET>');
 ```
 
@@ -550,7 +550,7 @@ silently stop.
 To check the chain without a device:
 
 ```bash
-curl -s -X POST http://127.0.0.1:54321/functions/v1/notify-entry \
+curl -s -X POST http://127.0.0.1:54321/functions/v1/notify-event \
   -H 'Content-Type: application/json' \
   -H "x-webhook-secret: $(grep '^NOTIFY_WEBHOOK_SECRET=' supabase/functions/.env | cut -d= -f2-)" \
   -d '{"type":"UPDATE","table":"groups","record":null}'

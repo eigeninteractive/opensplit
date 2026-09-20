@@ -1,7 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../domain/models/entry.dart';
-import '../../domain/models/entry_snapshot.dart';
+import '../../domain/models/group_event.dart';
 import '../../domain/models/group.dart';
 import '../../domain/models/member.dart';
 import '../../domain/models/profile.dart';
@@ -328,18 +328,30 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
   }
 
   @override
-  Future<ChangePage<EntrySnapshot>> pullEntrySnapshots({
+  Future<ChangePage<GroupEventRow>> pullGroupEvents({
     required String groupId,
     SyncCursor? since,
     required int limit,
-  }) => _keyset(
-    table: 'entry_events',
-    timeColumn: 'created_at',
-    equals: {'group_id': groupId},
-    since: since,
-    limit: limit,
-    parse: entrySnapshotFromJson,
-  );
+  }) async {
+    final page = await _keyset<GroupEventRow?>(
+      table: 'group_events',
+      timeColumn: 'created_at',
+      equals: {'group_id': groupId},
+      since: since,
+      limit: limit,
+      parse: groupEventFromJson,
+    );
+
+    // Kinds this build has never heard of are dropped here rather than in the
+    // feed, and the cursor deliberately still advances past them: it is read
+    // off the raw page, so a row an old client cannot name is skipped once
+    // instead of being re-fetched forever as the page that never applies.
+    return ChangePage(
+      rows: page.rows.nonNulls.toList(),
+      cursor: page.cursor,
+      hasMore: page.hasMore,
+    );
+  }
 
   @override
   Future<List<RemoteFxRate>> pullFxRates({required String since}) async {

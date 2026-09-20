@@ -88,7 +88,7 @@ void main() {
       throwsStateError,
     );
     expect(await db.select(db.entries).get(), isEmpty);
-    expect(await db.select(db.entrySnapshots).get(), isEmpty);
+    expect(await db.select(db.groupEvents).get(), isEmpty);
   });
 
   test(

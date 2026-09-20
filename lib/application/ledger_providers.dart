@@ -7,8 +7,8 @@ import '../domain/member_identity.dart';
 import '../domain/models/category.dart';
 import '../domain/models/currency.dart';
 import '../domain/models/entry.dart';
-import '../domain/models/entry_event.dart';
 import '../domain/models/group.dart';
+import '../domain/models/group_event.dart';
 import '../domain/models/member.dart';
 import '../domain/models/profile.dart';
 import '../domain/analytics/analytics_query.dart';
@@ -18,12 +18,12 @@ part 'ledger_providers.g.dart';
 
 /// A group's activity feed, newest first.
 @riverpod
-Stream<List<EntryEvent>> groupActivity(Ref ref, String groupId) =>
+Stream<List<GroupEvent>> groupActivity(Ref ref, String groupId) =>
     ref.watch(activityRepositoryProvider).watchGroup(groupId);
 
 /// One expense's history, in the order it happened.
 @riverpod
-Stream<List<EntryEvent>> entryActivity(Ref ref, String entryId) =>
+Stream<List<GroupEvent>> entryActivity(Ref ref, String entryId) =>
     ref.watch(activityRepositoryProvider).watchEntry(entryId);
 
 @riverpod

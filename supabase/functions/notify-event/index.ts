@@ -1,7 +1,8 @@
-// Fan-out for entry inserts: wake the other members' devices.
+// Fan-out for recorded group events: wake the other members' devices.
 //
-// Triggered by a database webhook on `entries`. It sends a data-only FCM
-// message carrying nothing but ids — no amounts, no names, no description.
+// Triggered by a trigger on `group_events`. It sends a data-only FCM message
+// carrying nothing but ids and which kind of event this was — no amounts, no
+// names, no description.
 //
 // Two reasons for that. First, the client has to pull the delta anyway to stay
 // consistent, so anything included here would be a second source of truth.
@@ -10,23 +11,46 @@
 // drift from the app silently. The device already knows how to say it.
 //
 // Deploy:
-//   supabase functions deploy notify-entry
+//   supabase functions deploy notify-event
 //   supabase secrets set FCM_PROJECT_ID=... \
 //                        FCM_SERVICE_ACCOUNT="$(cat service-account.json)" \
 //                        NOTIFY_WEBHOOK_SECRET="$(openssl rand -hex 32)"
-// Then add a database webhook on entries (INSERT) pointing at this function,
-// with the header `x-webhook-secret` set to the same value.
+// The trigger that calls this is in the push migration rather than a dashboard
+// webhook, so there is nothing to click: set notify_function_url and
+// notify_webhook_secret in app_settings and it is wired.
 
 import { importPKCS8, SignJWT } from "npm:jose@6";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
+/// Which kinds of thing can arrive here. The trigger already refuses the rest,
+/// so this is the same list said twice on purpose: the filter in SQL is what
+/// saves the fan-out, and this one is what stops an unexpected kind being
+/// forwarded to every device as an unreadable wake.
+type NotifiableKind = "entry" | "member_joined" | "member_left";
+
+const NOTIFIABLE: readonly string[] = [
+  "entry",
+  "member_joined",
+  "member_left",
+];
+
 interface WebhookPayload {
   type: "INSERT" | "UPDATE" | "DELETE";
   table: string;
-  // `id` is the ENTRY's id, not the event's: what the recipient's device has
-  // to fetch and open is the expense. `actor_id` is a member id, and is null
-  // for a change no member can be attributed with.
-  record: { id: string; group_id: string; actor_id: string | null } | null;
+  // `id` is the EVENT's id. `subject_id` is what the event is about — an entry
+  // for 'entry', a member for the member kinds — and is what the device fetches
+  // and opens. `actor_id` is a member id, and is null for a change no member
+  // can be attributed with, which a stranger arriving on an open link always
+  // is.
+  record:
+    | {
+      id: string;
+      kind: NotifiableKind;
+      subject_id: string | null;
+      group_id: string;
+      actor_id: string | null;
+    }
+    | null;
 }
 
 const projectId = Deno.env.get("FCM_PROJECT_ID") ?? "";
@@ -146,19 +170,22 @@ Deno.serve(async (request) => {
   }
 
   const payload: WebhookPayload = await request.json();
-  // entry_events, not entries: one row per change that actually changed
-  // something, already deduped and already carrying who made it. Watching
-  // `entries` sent a notification per payer and share row, and only ever for
-  // creations.
+  // group_events, not entries: one row per thing that actually happened,
+  // already deduped and already carrying who did it. Watching `entries` sent a
+  // notification per payer and share row, and only ever for creations.
   if (
-    payload.type !== "INSERT" || payload.table !== "entry_events" ||
+    payload.type !== "INSERT" || payload.table !== "group_events" ||
     !payload.record
   ) {
     return new Response("ignored", { status: 200 });
   }
   const record = payload.record;
 
-  // Service role: tokens_for_entry reads other people's tokens, which no
+  if (!NOTIFIABLE.includes(record.kind)) {
+    return new Response("not a notifying kind", { status: 200 });
+  }
+
+  // Service role: tokens_for_group reads other people's tokens, which no
   // user-facing policy permits.
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -168,12 +195,12 @@ Deno.serve(async (request) => {
   // The actor is excluded rather than the author. On an edit they are usually
   // different people, and the author is precisely who needs to hear that
   // somebody changed their expense.
-  const { data: targets, error } = await supabase.rpc("tokens_for_entry", {
-    p_entry_id: record.id,
+  const { data: targets, error } = await supabase.rpc("tokens_for_group", {
+    p_group_id: record.group_id,
     p_actor_id: record.actor_id ?? null,
   });
   if (error) {
-    console.error("tokens_for_entry failed", error);
+    console.error("tokens_for_group failed", error);
     return new Response("error", { status: 500 });
   }
   if (!targets?.length) return new Response("nobody to wake", { status: 200 });
@@ -213,8 +240,9 @@ Deno.serve(async (request) => {
               // own banner from server-formatted text, which is the thing this
               // design exists to avoid.
               data: {
-                kind: "entry",
-                entry_id: record.id,
+                kind: record.kind,
+                event_id: record.id,
+                subject_id: record.subject_id ?? "",
                 group_id: record.group_id,
               },
               android: { priority: "high" },

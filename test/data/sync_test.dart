@@ -16,6 +16,7 @@ import 'package:opensplit/domain/balance/balance_fold.dart';
 import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/models/entry.dart';
 import 'package:opensplit/domain/models/entry_event.dart';
+import 'package:opensplit/domain/models/group_event.dart';
 import 'package:opensplit/domain/models/profile.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:test/test.dart';
@@ -63,8 +64,17 @@ class Device {
   Future<List<Entry>> ledger(String groupId) =>
       entries.getEntries(groupId, includeDeleted: true);
 
-  Future<List<EntryEvent>> feed(String groupId) =>
-      DriftActivityRepository(db).watchGroup(groupId).first;
+  /// The expense half of the record.
+  ///
+  /// Narrowed rather than returning every kind, because everything these tests
+  /// assert about the feed is about expenses -- and the fake server only ever
+  /// records those, since member and group events come from database triggers
+  /// that have no counterpart here. A member event appearing in these results
+  /// would be the fake inventing one.
+  Future<List<EntryChanged>> feed(String groupId) async =>
+      (await DriftActivityRepository(
+        db,
+      ).watchGroup(groupId).first).whereType<EntryChanged>().toList();
 }
 
 void main() {
@@ -1535,8 +1545,8 @@ void main() {
       // the local table instead, as it once was, and A would set its own cursor
       // into the future and never see another line of this group's history
       // from anybody.
-      await (a.db.update(a.db.entrySnapshots)).write(
-        EntrySnapshotsCompanion(createdAt: Value(DateTime.utc(2027, 8, 21))),
+      await (a.db.update(a.db.groupEvents)).write(
+        GroupEventsCompanion(createdAt: Value(DateTime.utc(2027, 8, 21))),
       );
 
       await a.sync.syncGroup(g.groupId);

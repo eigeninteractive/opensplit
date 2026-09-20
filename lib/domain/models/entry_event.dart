@@ -16,17 +16,13 @@ abstract class FieldChange with _$FieldChange {
       _FieldChange;
 }
 
-/// A line in a group's activity feed.
+/// What happened to an expense, in the terms the diff produces.
 ///
-/// Derived, never stored and never sent. What is stored is a chain of
-/// [EntrySnapshot]s, each recording what an expense looked like after a change;
-/// this is the difference between two of them, computed on read by
-/// `describeSnapshot`.
-///
-/// Keeping it as its own type is what let the storage change underneath the
-/// feed without the screens noticing: nothing that renders activity knows
-/// whether the line it is showing came from the server's record or from this
-/// device's provisional one.
+/// Kept as its own type because the entry path genuinely is different from
+/// every other kind: this is derived by comparing two stored rows, where the
+/// rest are read straight off one. `GroupEvent` in group_event.dart is what a
+/// screen renders; this is the intermediate the expense branch of it goes
+/// through.
 @freezed
 abstract class EntryEvent with _$EntryEvent {
   const factory EntryEvent({
