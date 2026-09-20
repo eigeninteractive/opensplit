@@ -556,12 +556,21 @@ begin
   end if;
 
   -- Nobody to claim: arrive as somebody new.
+  --
+  -- The name they gave, else the name already on their account, else a
+  -- placeholder for one. The final coalesce is outside the query on purpose:
+  -- `select into` over a profile row that does not exist leaves v_name null
+  -- rather than running the coalesce at all, and members.display_name is NOT
+  -- NULL with a non-empty check -- so the join would fail on a constraint
+  -- instead of on anything a person could act on.
   select coalesce(
            nullif(trim(coalesce(p_display_name, '')), ''),
-           nullif(trim(coalesce(display_name, '')), ''),
-           'Someone')
+           nullif(trim(coalesce(display_name, '')), ''))
     into v_name
     from profiles where id = v_uid;
+
+  v_name := coalesce(
+    v_name, nullif(trim(coalesce(p_display_name, '')), ''), 'Someone');
 
   insert into members (group_id, profile_id, display_name)
   values (v_link.group_id, v_uid, v_name)

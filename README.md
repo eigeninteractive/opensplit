@@ -380,9 +380,39 @@ The app deliberately does *not* create a session on startup. It used to, and
 that broke the arrival it was meant to protect: somebody who already had an
 account and tapped an invite link had the single-use token spent by a throwaway
 anonymous account, and no way into the group afterwards. `/join/:token` now
-reads the invite with `peek_invite` — the one function granted to `anon` —
-shows what the link is for, and redeems only after the identity question has an
-answer.
+reads the link with `peek_invite` or `peek_group_link` — the two functions
+granted to `anon` — shows what it is for, and joins only after the identity
+question has an answer.
+
+### Two kinds of link
+
+`/join/:token` serves both, so there is one URL shape, one App Links filter and
+one route; which kind a token names is the server's business.
+
+A **named invite** (`invites`) hands one unclaimed place to one person and is
+spent by being used. It is the right link when you know who is coming: they
+open it and become the "Priya" somebody already typed.
+
+A **group link** (`group_links`) lets anybody holding it join, until it expires
+after seven days or is revoked. It is the link you paste into the chat you
+already have, for a trip whose guest list does not exist yet. Possession is the
+whole authorisation, which is a larger claim than an invite makes, so:
+
+* there is one live link per group, enforced by a partial unique index, and
+  minting revokes whatever preceded it;
+* it can be turned off without minting another;
+* `link_created`, `link_revoked` and `member_joined` all land in
+  `group_events`, so the group can see the door open, close, and be walked
+  through. A group that can see who arrived has a better remedy than an
+  approval queue, which is why there is not one.
+
+Arriving on a group link asks which of the group's unclaimed placeholders you
+are, if any. Claiming one is the same single-column update a named invite
+performs — no expense is rewritten and no balance moves — and it is what stops
+one shared link turning a group of six into a group of twelve.
+`list_link_placeholders` is deliberately **not** granted to `anon`: those are
+other people's names, which is more than the token itself implies, and it is
+asked after an account has been chosen rather than before.
 
 **1. Allow manual linking.** *Authentication → Providers → Allow manual
 linking*, and `enable_manual_linking = true` in `supabase/config.toml` for
@@ -446,7 +476,7 @@ insert into app_settings (key, value) values
 
 There is deliberately **no Database Webhook to create in the dashboard**. A
 Supabase webhook is a row that creates a trigger calling
-`supabase_functions.http_request()`; `trg_entries_notify` is that trigger,
+`supabase_functions.http_request()`; `trg_group_events_notify` is that trigger,
 declared in `20260101000008_push.sql` and applied by `db push` like everything
 else. So it cannot be lost, the secret lives beside `fx_fetch_secret` rather
 than in dashboard config, and the chain works on any Postgres with pg_net.
