@@ -225,7 +225,7 @@ configuration, injects Firebase's public identifiers, and keys the offline cache
 to the commit being built. CI uses structurally valid inert identifiers to prove
 the release build. After every CI gate passes, pushes to `main` build with real
 production variables, deploy Firebase Hosting, and distribute a signed AAB to
-Play internal testing. Release reruns the same CI checks before publishing.
+Play closed testing. Release reruns the same CI checks before publishing.
 A manual **Release** run with **deploy unchecked** creates
 artifacts only, for first-upload bootstrap.
 
@@ -693,6 +693,9 @@ supabase/           migrations, organised by subject rather than by date:
 drift_schemas/      a snapshot of every shipped local schema, so a future
                     migration can be tested against a real old database
                     rather than a guess at one.
+docs/               procedures that are too long for a commit message and
+                    have to be followed exactly -- currently the one for
+                    moving production onto the group_events schema.
 ```
 
 The migrations are edited in place rather than appended to while the app is

@@ -1,8 +1,60 @@
 default_platform(:android)
 
 platform :android do
-  desc "Distribute the signed CI bundle to Google Play internal testers"
-  lane :internal do
+  # Which Play track a build goes to.
+  #
+  # "internal" is the one this project shipped to first: instant availability,
+  # no review, up to 100 testers. Closed testing is the next rung — it is
+  # reviewed, it is what Play's own progression asks you to graduate to, and it
+  # is where the app is now.
+  #
+  # Google's *default* closed track is still called "alpha" in the Publishing
+  # API, whatever the Play Console calls it on screen. A track created by hand
+  # carries whatever name it was given, so this is configurable rather than
+  # hardcoded: set PLAY_TRACK to that name and nothing else changes.
+  DEFAULT_TRACK = "alpha".freeze
+
+  # Tracks you can reach from here. Naming them is what turns a typo into a
+  # refusal before an upload rather than an HTTP 400 after one — and keeps
+  # "production" out of reach of a workflow that is not meant to publish.
+  KNOWN_TRACKS = %w[internal alpha beta].freeze
+
+  # How badly a release wants to be installed, on Play's 0-5 scale.
+  #
+  # This is a property of the release, not of the app, which is why it is set
+  # here and not in Dart: the same build is urgent for somebody on a client the
+  # server can no longer talk to and ordinary for somebody already current.
+  #
+  # 0 is the default and means "take it when you like" -- the app downloads it
+  # in the background and offers a restart. 4 and 5 are the two Google
+  # documents as warranting a blocking flow, and AppUpdateService treats
+  # anything from 4 up as immediate.
+  #
+  # Reach for 4 only when a stale client is actively harmful. For this app that
+  # means a sync change the server no longer accepts, where the symptom is an
+  # expense that looks saved and silently is not.
+  #
+  # It can only be set through the Publishing API -- there is no field for it in
+  # the Play Console -- and it applies to the release it is uploaded with. It
+  # cannot be added to a release after the fact, so a build that needed it and
+  # did not get it needs another build.
+  DEFAULT_PRIORITY = 0
+
+  desc "Distribute the signed CI bundle to Google Play closed testers"
+  lane :closed do
+    priority = Integer(ENV.fetch("PLAY_UPDATE_PRIORITY", DEFAULT_PRIORITY))
+    unless (0..5).cover?(priority)
+      UI.user_error!("PLAY_UPDATE_PRIORITY must be between 0 and 5")
+    end
+
+    track = ENV.fetch("PLAY_TRACK", DEFAULT_TRACK)
+    unless KNOWN_TRACKS.include?(track)
+      UI.user_error!(
+        "PLAY_TRACK must be one of #{KNOWN_TRACKS.join(', ')}, or the lane " \
+        "needs teaching about a custom track named #{track.inspect}"
+      )
+    end
+
     status = ENV.fetch("PLAY_RELEASE_STATUS", "completed")
     unless %w[completed draft].include?(status)
       UI.user_error!("PLAY_RELEASE_STATUS must be completed or draft")
@@ -19,9 +71,18 @@ platform :android do
     )
     UI.user_error!("Build the signed release AAB first") unless File.file?(bundle)
 
+    if priority >= 4
+      UI.important(
+        "in-app update priority #{priority}: this release will interrupt " \
+        "testers with a blocking update they cannot dismiss"
+      )
+    end
+    UI.message("Uploading to the #{track} track with status #{status}")
+
     upload_to_play_store(
-      track: "internal",
+      track: track,
       release_status: status,
+      in_app_update_priority: priority,
       json_key: credentials,
       aab: bundle,
       skip_upload_apk: true,
@@ -32,5 +93,14 @@ platform :android do
       # Fail visibly rather than silently changing review semantics on retry.
       rescue_changes_not_sent_for_review: false
     )
+  end
+
+  # Kept so a build can still be put in front of the internal testers without
+  # editing this file — useful for a smoke test that should not spend a closed
+  # testing review.
+  desc "Distribute the signed CI bundle to Google Play internal testers"
+  lane :internal do
+    ENV["PLAY_TRACK"] = "internal"
+    closed
   end
 end

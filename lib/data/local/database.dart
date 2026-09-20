@@ -55,7 +55,7 @@ class AppDatabase extends _$AppDatabase {
   final bool _resumeSession;
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   /// Timestamps are stored as ISO-8601 text rather than Unix seconds.
   ///
@@ -76,6 +76,62 @@ class AppDatabase extends _$AppDatabase {
   /// public API for this boundary.
   void refreshAfterExternalSync() => markTablesUpdated(allTables);
 
+  /// v1 -> v2: the expense history becomes a group history.
+  ///
+  /// `entry_snapshots` held one row per change to an expense, in typed
+  /// columns. `group_events` holds one row per thing that has happened in a
+  /// group, of which an expense snapshot is one kind, with the kind-specific
+  /// part as JSON. The server made the same move; this is the device
+  /// catching up.
+  ///
+  /// The old rows are carried across rather than dropped, and that is the
+  /// difference between a migration and a reset. Most would come back on the
+  /// next sync -- the new feed has its own cursor and re-pulls from the
+  /// beginning -- but not all: a provisional row describes a change this
+  /// device has not managed to push, and for an expense whose push was
+  /// refused it is the only record anywhere. Dropping the table would throw
+  /// those away silently, which is the one thing a local-first app must not
+  /// do.
+  ///
+  /// The old cursors go with it, because the feed they name no longer
+  /// exists.
+  Future<void> _entrySnapshotsBecomeGroupEvents(Migrator m) async {
+    await m.createTable(groupEvents);
+
+    // json(payers) rather than the raw text: those columns already hold a
+    // JSON array, and quoting one into the payload as a string would give a
+    // reader an escaped blob where an array belongs.
+    //
+    // substr for the date because timestamps are stored as ISO-8601 text
+    // here -- see storeDateTimeAsText -- so the first ten characters are the
+    // calendar date the server renders, without parsing anything.
+    await customStatement('''
+      insert into group_events (
+        id, group_id, actor_id, created_at, kind, subject_id, payload,
+        is_provisional)
+      select
+        id, group_id, actor_id, created_at, 'entry', entry_id,
+        json_object(
+          'description',  description,
+          'currency',     currency,
+          'amount_minor', amount_minor,
+          'entry_date',   substr(entry_date, 1, 10),
+          'split_kind',   split_kind,
+          'category_id',  category_id,
+          'notes',        notes,
+          'deleted_at',   deleted_at,
+          'payers',       json(payers),
+          'shares',       json(shares)),
+        is_provisional
+      from entry_snapshots
+    ''');
+
+    await customStatement('drop table entry_snapshots');
+    await customStatement(
+      "delete from sync_cursors where feed like 'snapshots:%'",
+    );
+  }
+
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) async {
@@ -84,9 +140,6 @@ class AppDatabase extends _$AppDatabase {
       await _seedReferenceData();
     },
 
-    // Empty because there is nothing to upgrade *from* yet, and spelled out
-    // rather than omitted because of what happens the first time there is.
-    //
     // A local-first app cannot drop and recreate: the device holds the only
     // copy of anything recorded offline and never pushed. So every schema
     // change from v1 onwards needs a step here, and the way to know a step is
@@ -100,6 +153,10 @@ class AppDatabase extends _$AppDatabase {
     //
     // See test/data/migration_test.dart.
     onUpgrade: (m, from, to) async {
+      if (from == 1 && to == 2) {
+        await _entrySnapshotsBecomeGroupEvents(m);
+        return;
+      }
       throw StateError(
         'No migration from schema v$from to v$to. Add a step in '
         'AppDatabase.migration and a case in test/data/migration_test.dart '
