@@ -21,7 +21,6 @@ import '../widgets/conflicting_edit_banner.dart';
 import '../widgets/unsynced_changes_banner.dart';
 import '../widgets/sync_status_notice.dart';
 import '../widgets/sync_refresh_button.dart';
-import '../router.dart';
 
 class GroupListScreen extends ConsumerWidget {
   const GroupListScreen({super.key});
@@ -57,41 +56,41 @@ class GroupListScreen extends ConsumerWidget {
     ];
     final archived = all.length - groups.length;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const BrandLockup(),
-        actions: [if (kIsWeb) const SyncRefreshButton.everything()],
-      ),
-      drawer: AdaptiveNavigation.drawerFor(context),
+    return DestinationScaffold(
+      titleWidget: const BrandLockup(),
+      actions: [if (kIsWeb) const SyncRefreshButton.everything()],
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => showCreateGroupSheet(context),
         icon: const Icon(Icons.group_add_outlined),
         label: const Text('New group'),
       ),
-      body: PageBody(
-        child: switch (groupsAsync) {
-          AsyncError(:final error) => _Message(
-            text: 'Could not load groups.\n$error',
+      // PullToSync wraps the scroll view rather than living inside it, so it
+      // goes around the whole destination -- which is why this one screen
+      // builds its own rather than handing slivers over.
+      wrap: (view) => PullToSync.everything(child: view),
+      slivers: switch (groupsAsync) {
+        AsyncError(:final error) => [
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: _Message(text: 'Could not load groups.\n$error'),
           ),
-          AsyncValue(hasValue: true) => _GroupList(
-            groups: groups,
-            archivedCount: archived,
-          ),
-          _ => const GroupListSkeleton(),
-        },
-      ),
+        ],
+        AsyncValue(hasValue: true) => _GroupList.slivers(
+          groups: groups,
+          archivedCount: archived,
+        ),
+        _ => const [GroupListSkeleton()],
+      },
     );
   }
 }
 
-class _GroupList extends StatelessWidget {
-  const _GroupList({required this.groups, required this.archivedCount});
-
-  final List<Group> groups;
-  final int archivedCount;
-
-  @override
-  Widget build(BuildContext context) {
+/// The list itself, as slivers under the destination's app bar.
+abstract final class _GroupList {
+  static List<Widget> slivers({
+    required List<Group> groups,
+    required int archivedCount,
+  }) {
     // Four leading slots, each of which renders as nothing until it has
     // something to say. The refused-write banner comes first: it is the one
     // that means data is already wrong somewhere. The overtaken-edit banner
@@ -102,37 +101,36 @@ class _GroupList extends StatelessWidget {
     final rows = empty ? 1 : groups.length;
     final trailing = archivedCount > 0 ? 1 : 0;
 
-    return PullToSync.everything(
-      child: ListView.separated(
-        // Always scrollable, so the gesture exists on a list too short to
-        // scroll — which is exactly the list a new device shows.
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-        itemCount: leading + rows + trailing,
-        separatorBuilder: (_, _) => const SizedBox(height: 8),
+    return [
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(0, 8, 0, 96),
         // Built lazily rather than assembled into a list, because every tile
         // subscribes to its own group's ledger: off-screen groups should not
         // be folding balances.
-        itemBuilder: (context, index) {
-          if (index == 0) return const UnsyncedChangesBanner();
-          if (index == 1) return const ConflictingEditBanner();
-          if (index == 2) return const LinkAccountPrompt();
-          if (index == 3) {
-            return empty ? const SizedBox.shrink() : const SyncStatusBanner();
-          }
+        sliver: SliverList.separated(
+          itemCount: leading + rows + trailing,
+          separatorBuilder: (_, _) => const SizedBox(height: 8),
+          itemBuilder: (context, index) {
+            if (index == 0) return const UnsyncedChangesBanner();
+            if (index == 1) return const ConflictingEditBanner();
+            if (index == 2) return const LinkAccountPrompt();
+            if (index == 3) {
+              return empty ? const SizedBox.shrink() : const SyncStatusBanner();
+            }
 
-          final row = index - leading;
-          if (empty) {
-            return row == 0
-                ? const InitialSyncGate(child: _EmptyState())
+            final row = index - leading;
+            if (empty) {
+              return row == 0
+                  ? const InitialSyncGate(child: _EmptyState())
+                  : _ArchivedRow(count: archivedCount);
+            }
+            return row < groups.length
+                ? _GroupTile(group: groups[row])
                 : _ArchivedRow(count: archivedCount);
-          }
-          return row < groups.length
-              ? _GroupTile(group: groups[row])
-              : _ArchivedRow(count: archivedCount);
-        },
+          },
+        ),
       ),
-    );
+    ];
   }
 }
 
@@ -170,41 +168,27 @@ class _GroupTile extends ConsumerWidget {
     final currencies = ref.watch(currenciesProvider).value ?? const {};
     final scheme = Theme.of(context).colorScheme;
 
+    // A real ListTile rather than a Row dressed as one. It used to be the
+    // latter, which meant re-deriving the leading gap, the vertical padding and
+    // the title-to-subtitle spacing by hand -- and getting the behaviour that
+    // is not a measurement at all: minimum touch target, density, and how a
+    // two-line tile grows under a large system font size.
     return Card.outlined(
-      child: InkWell(
+      clipBehavior: Clip.antiAlias,
+      child: ListTile(
         onTap: () => context.push('/g/${group.id}'),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              CircleAvatar(
-                backgroundColor: scheme.secondaryContainer,
-                child: Icon(
-                  group.isDirect ? Icons.person_outline : Icons.groups_outlined,
-                  color: scheme.onSecondaryContainer,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      group.name,
-                      style: Theme.of(context).textTheme.titleMedium,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    _Summary(
-                      ledger: ledger,
-                      currencies: currencies,
-                      memberCount: ledger?.members.length,
-                    ),
-                  ],
-                ),
-              ),
-            ],
+        leading: CircleAvatar(
+          backgroundColor: scheme.secondaryContainer,
+          child: Icon(
+            group.isDirect ? Icons.person_outline : Icons.groups_outlined,
+            color: scheme.onSecondaryContainer,
           ),
+        ),
+        title: Text(group.name, overflow: TextOverflow.ellipsis),
+        subtitle: _Summary(
+          ledger: ledger,
+          currencies: currencies,
+          memberCount: ledger?.members.length,
         ),
       ),
     );

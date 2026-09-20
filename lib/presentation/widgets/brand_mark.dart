@@ -74,20 +74,48 @@ class BrandLockup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Scaled with the text rather than fixed, so the pair still reads as a
-    // lockup for someone running a large font size instead of the mark
-    // shrinking against a word that grew.
-    final fontSize = Theme.of(context).textTheme.titleLarge?.fontSize ?? 22;
+    // Taken from the text style actually in force, not from a named one in the
+    // theme.
+    //
+    // It used to read `textTheme.titleLarge` directly, which was right in the
+    // only place it was used -- a small app bar -- and wrong the moment there
+    // was a second. A Material 3 large app bar animates its title between
+    // titleLarge collapsed and headlineMedium expanded, so a hardcoded size
+    // would have left the ring at its small-bar size while the word beside it
+    // grew by six points and then shrank back on every scroll.
+    //
+    // DefaultTextStyle is what AppBar and FlexibleSpaceBar both set, and what
+    // they animate, so reading it makes the lockup scale with whatever is
+    // rendering it and keeps the ratio the designer's at every size.
+    final fontSize = DefaultTextStyle.of(context).style.fontSize ?? 22;
     final size =
         MediaQuery.textScalerOf(context).scale(fontSize) * _boxPerFontSize;
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        BrandMark(size: size),
-        SizedBox(width: size * _gapPerBox),
-        const Flexible(child: Text('OpenSplit')),
-      ],
+    // Scaled to fit rather than allowed to wrap, and that is the one thing
+    // this widget cannot compromise on: a lockup is a mark and a word read as
+    // a single object, and "Open" above "Split" beside a ring is not the
+    // designer's drawing, it is two things that happen to be adjacent.
+    //
+    // It is also a correctness fix. In a Material 3 large app bar the expanded
+    // headline is laid out inside FlexibleSpaceBar, which measures the title
+    // and then paints it through a scale transform. A Flexible child that
+    // wraps changes height between those two steps, and RenderParagraph
+    // asserts on exactly that -- so at a 200% system font size the app bar did
+    // not merely look wrong, it threw during paint.
+    //
+    // scaleDown, so nothing is ever enlarged past the type scale: at ordinary
+    // sizes this is the identity and the lockup is set at its real size.
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: AlignmentDirectional.centerStart,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          BrandMark(size: size),
+          SizedBox(width: size * _gapPerBox),
+          const Text('OpenSplit', maxLines: 1, softWrap: false),
+        ],
+      ),
     );
   }
 }
