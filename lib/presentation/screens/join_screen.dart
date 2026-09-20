@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../application/providers.dart';
 import '../../domain/repositories/invite_api.dart';
+import '../widgets/brand_mark.dart';
 import '../widgets/identity_choices.dart';
 import '../widgets/page_body.dart';
 
@@ -121,13 +122,15 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      body: PageBody(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: _body(theme),
+      body: BrandWash(
+        child: PageBody(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: _body(theme),
+              ),
             ),
           ),
         ),
@@ -176,26 +179,12 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(
-          Icons.group_add_outlined,
-          size: 40,
-          color: theme.colorScheme.primary,
-        ),
-        const SizedBox(height: 16),
-        Text(
-          '${preview.inviterName} invited you to ${preview.groupName}',
-          textAlign: TextAlign.center,
-          style: theme.textTheme.titleLarge,
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'You would join as “${preview.memberName}”, alongside '
-          '${preview.memberCount} '
-          '${preview.memberCount == 1 ? 'person' : 'people'}.',
-          textAlign: TextAlign.center,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
+        BrandHeader(
+          title: '${preview.inviterName} invited you to ${preview.groupName}',
+          subtitle:
+              'You would join as “${preview.memberName}”, alongside '
+              '${preview.memberCount} '
+              '${preview.memberCount == 1 ? 'person' : 'people'}.',
         ),
         const SizedBox(height: 32),
 

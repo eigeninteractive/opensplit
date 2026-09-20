@@ -91,3 +91,104 @@ class BrandLockup extends StatelessWidget {
     );
   }
 }
+
+/// The mark, the name and a line of explanation, stacked — what an arrival
+/// sees before they are asked anything.
+///
+/// Used on the two screens somebody can reach without a session. Both used to
+/// open on a bare [Text] of the word "OpenSplit", which said the name and
+/// nothing else: the first screen of an app whose whole pitch is that it is not
+/// the incumbent looked like an untitled form.
+///
+/// The mark sits in a [ColorScheme.primaryContainer] disc rather than on the
+/// page. A knockout ring drawn straight onto `surface` reads as a stray glyph
+/// at this size, and the disc is also what keeps it legible once Material You
+/// has replaced the palette with somebody's wallpaper — the pair are a
+/// container role and its `on` colour, so they are contrast-correct together by
+/// construction rather than by having been checked once.
+class BrandHeader extends StatelessWidget {
+  const BrandHeader({super.key, required this.title, this.subtitle});
+
+  /// The heading beneath the mark. Carries the semantics for both: the mark
+  /// itself stays decorative, so a screen reader says the name once.
+  final String title;
+
+  final String? subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: scheme.primaryContainer,
+            shape: BoxShape.circle,
+          ),
+          child: BrandMark(size: 56, color: scheme.onPrimaryContainer),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          title,
+          textAlign: TextAlign.center,
+          style: theme.textTheme.headlineMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        if (subtitle != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            subtitle!,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// A soft wash of brand colour behind a page that is mostly empty.
+///
+/// The welcome and join screens are a short column in the middle of a large
+/// flat surface, which on a tablet or a desktop browser is a great deal of
+/// nothing. This puts a single radial gradient behind them, fading to
+/// transparent well before the edges so it never becomes a band with a visible
+/// end.
+///
+/// [ColorScheme.primaryContainer] at low opacity rather than a colour of its
+/// own: it follows the wallpaper palette with everything else, and at these
+/// alphas it cannot fail a contrast ratio because nothing is read against it
+/// that is not also on `surface`.
+class BrandWash extends StatelessWidget {
+  const BrandWash({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: RadialGradient(
+          // Above centre, where the mark is, rather than in the middle of the
+          // page — a glow centred on the form looks like a selection.
+          center: const Alignment(0, -0.6),
+          radius: 1.1,
+          colors: [
+            scheme.primaryContainer.withValues(alpha: 0.38),
+            scheme.primaryContainer.withValues(alpha: 0),
+          ],
+        ),
+      ),
+      child: child,
+    );
+  }
+}
