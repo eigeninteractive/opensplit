@@ -5,6 +5,13 @@ import 'package:flutter/widget_previews.dart';
 import '../../application/providers.dart';
 
 /// Indicates that the local database has not produced its first result yet.
+///
+/// The label is announced and not drawn. A spinner already says "wait"; the
+/// sentence under it said the same thing in words, and it was on screen for the
+/// few hundred milliseconds a local database takes to answer — long enough to
+/// register as a flash of text, never long enough to read. What it is genuinely
+/// needed for is a screen reader, which cannot see the spinner, so it moves to
+/// [CircularProgressIndicator.semanticsLabel] rather than being deleted.
 class SavedDataLoading extends StatelessWidget {
   const SavedDataLoading({super.key, required this.label});
 
@@ -15,14 +22,7 @@ class SavedDataLoading extends StatelessWidget {
   Widget build(BuildContext context) => Center(
     child: Padding(
       padding: const EdgeInsets.all(32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const CircularProgressIndicator(),
-          const SizedBox(height: 20),
-          Text(label, textAlign: TextAlign.center),
-        ],
-      ),
+      child: CircularProgressIndicator(semanticsLabel: label),
     ),
   );
 }
@@ -89,15 +89,12 @@ class _CheckingGroups extends StatelessWidget {
   const _CheckingGroups();
 
   @override
-  Widget build(BuildContext context) => const Padding(
-    padding: EdgeInsets.all(32),
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        CircularProgressIndicator(semanticsLabel: 'Checking for your groups'),
-        SizedBox(height: 20),
-        Text('Checking for your groups…', textAlign: TextAlign.center),
-      ],
+  Widget build(BuildContext context) => const Center(
+    child: Padding(
+      padding: EdgeInsets.all(32),
+      child: CircularProgressIndicator(
+        semanticsLabel: 'Checking for your groups',
+      ),
     ),
   );
 }
@@ -150,5 +147,5 @@ Widget syncFailurePreview() => MaterialApp(
 /// Previews the local database loading state before any saved rows are ready.
 @Preview(name: 'Opening saved groups', group: 'Sync', size: Size(360, 240))
 Widget savedDataLoadingPreview() => const MaterialApp(
-  home: Scaffold(body: SavedDataLoading(label: 'Loading saved groups…')),
+  home: Scaffold(body: SavedDataLoading(label: 'Loading saved groups')),
 );

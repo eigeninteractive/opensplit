@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../application/providers.dart';
 import '../../domain/models/group.dart';
 import '../navigation.dart';
+import '../widgets/empty_state.dart';
 import '../widgets/page_body.dart';
 
 /// Groups that have been put away, and the way back.
@@ -106,15 +107,11 @@ class _Empty extends StatelessWidget {
   const _Empty();
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(32),
-      child: Text(
-        'Nothing is archived.',
-        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-      ),
-    ),
+  Widget build(BuildContext context) => const EmptyState(
+    icon: Icons.inventory_2_outlined,
+    title: 'Nothing is archived',
+    message:
+        'Archiving a group puts it out of the way without deleting any of '
+        'it. Nothing here has been put away yet.',
   );
 }

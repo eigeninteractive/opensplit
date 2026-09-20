@@ -190,7 +190,7 @@ void main() {
       await tester.tap(find.text('Restore'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Nothing is archived.'), findsOneWidget);
+      expect(find.text('Nothing is archived'), findsOneWidget);
 
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();

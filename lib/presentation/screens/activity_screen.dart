@@ -6,6 +6,7 @@ import '../../domain/activity/activity_text.dart';
 import '../../domain/models/currency.dart';
 import '../../domain/models/entry_event.dart';
 import '../navigation.dart';
+import '../widgets/empty_state.dart';
 import '../widgets/page_body.dart';
 
 /// What has happened to this group's expenses, and who did it.
@@ -51,7 +52,7 @@ class ActivityScreen extends ConsumerWidget {
       body: PageBody(
         child: switch (events) {
           null => const Center(child: CircularProgressIndicator()),
-          [] => _Empty(),
+          [] => const _Empty(),
           _ => ListView.separated(
             padding: const EdgeInsets.symmetric(vertical: 8),
             itemCount: events.length,
@@ -157,38 +158,14 @@ class _Line extends StatelessWidget {
 }
 
 class _Empty extends StatelessWidget {
+  const _Empty();
+
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.history,
-              size: 40,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Nothing has happened here yet',
-              style: theme.textTheme.titleMedium,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Every expense added, edited or deleted in this group shows up '
-              'here, with who did it.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => const EmptyState(
+    icon: Icons.history,
+    title: 'Nothing has happened here yet',
+    message:
+        'Every expense added, edited or deleted in this group shows up '
+        'here, with who did it.',
+  );
 }

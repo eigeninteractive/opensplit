@@ -9,6 +9,7 @@ import 'package:opensplit/data/sync/sync_engine.dart';
 import 'package:opensplit/domain/models/group.dart';
 import 'package:opensplit/presentation/screens/group_detail_screen.dart';
 import 'package:opensplit/presentation/screens/group_list_screen.dart';
+import 'package:opensplit/presentation/widgets/group_skeleton.dart';
 import 'package:opensplit/presentation/widgets/pull_to_sync.dart';
 import 'package:opensplit/presentation/widgets/sync_refresh_button.dart';
 import 'package:opensplit/presentation/widgets/sync_status_notice.dart';
@@ -165,12 +166,16 @@ void main() {
       const GroupListScreen(),
       groups: groups.stream,
     );
-    expect(find.text('Loading saved groups…'), findsOneWidget);
+    // The skeleton, not a spinner and not a blank body: the point of the
+    // assertion is that something group-shaped is on screen before the
+    // database has answered, which is what the web loader has already been
+    // drawing for the whole of the engine download.
+    expect(find.byType(GroupListSkeleton), findsOneWidget);
     expect(find.text('No groups yet'), findsNothing);
     groups.add([_group]);
     await tester.pumpAndSettle();
     expect(find.text(_group.name), findsOneWidget);
-    expect(find.byType(SavedDataLoading), findsNothing);
+    expect(find.byType(GroupListSkeleton), findsNothing);
   });
 
   testWidgets('the group list keeps its saved rows through refresh and error', (

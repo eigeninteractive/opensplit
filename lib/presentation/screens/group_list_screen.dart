@@ -14,6 +14,8 @@ import '../theme.dart';
 import '../widgets/balance_arrow.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/create_group_sheet.dart';
+import '../widgets/empty_state.dart';
+import '../widgets/group_skeleton.dart';
 import '../widgets/link_account_prompt.dart';
 import '../widgets/conflicting_edit_banner.dart';
 import '../widgets/unsynced_changes_banner.dart';
@@ -75,7 +77,7 @@ class GroupListScreen extends ConsumerWidget {
             groups: groups,
             archivedCount: archived,
           ),
-          _ => const SavedDataLoading(label: 'Loading saved groups…'),
+          _ => const GroupListSkeleton(),
         },
       ),
     );
@@ -289,34 +291,13 @@ class _EmptyState extends StatelessWidget {
   const _EmptyState();
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const BrandMark(size: 56),
-            const SizedBox(height: 20),
-            Text(
-              'No groups yet',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Make one for a trip, a flat, or a single dinner. '
-              'You can add people who do not have the app.',
-              textAlign: TextAlign.center,
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => const EmptyState(
+    icon: Icons.groups_outlined,
+    title: 'No groups yet',
+    message:
+        'Make one for a trip, a flat, or a single dinner. '
+        'You can add people who do not have the app.',
+  );
 }
 
 class _Message extends StatelessWidget {

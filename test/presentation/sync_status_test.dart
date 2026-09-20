@@ -50,7 +50,7 @@ void main() {
   ) async {
     final controller = await mount(tester);
     expect(find.text('No groups yet'), findsNothing);
-    expect(find.text('Checking for your groups…'), findsOneWidget);
+    expect(find.bySemanticsLabel('Checking for your groups'), findsOneWidget);
 
     controller.show(SyncStatus(lastReport: _failure));
     await tester.pump();
@@ -61,7 +61,7 @@ void main() {
     await tester.tap(find.text('Try again'));
     await tester.pump();
     expect(controller.retries, 1);
-    expect(find.text('Checking for your groups…'), findsOneWidget);
+    expect(find.bySemanticsLabel('Checking for your groups'), findsOneWidget);
     expect(find.text('No groups yet'), findsNothing);
 
     controller.show(const SyncStatus(hasCompletedFullSync: true));
