@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 // in database.g.dart, and a part shares the imports of its parent library.
 import '../../domain/models/entry.dart';
 import '../../domain/split/splitter.dart';
-import 'reference_data.dart';
 import 'open_database.dart';
 import 'tables.dart';
 
@@ -92,14 +91,20 @@ class AppDatabase extends _$AppDatabase {
   /// public API for this boundary.
   void refreshAfterExternalSync() => markTablesUpdated(allTables);
 
-  /// Builds the schema from nothing: tables, search index, reference data.
+  /// Builds the schema from nothing: tables and the search index.
   ///
   /// Shared by the first launch and by [_rebuild], so the two cannot drift —
   /// a rebuilt database is the same database a new install gets.
+  ///
+  /// It seeds nothing. Currencies and categories used to be written here from
+  /// a hardcoded copy of the server's, which is a duplicate that has to be kept
+  /// in step by hand and meant a new currency needed an app release. They are
+  /// synced now — see `SyncEngine.pullReferenceData`, and
+  /// `referenceDataProvider`, which is what stops the app being usable before
+  /// they have arrived.
   Future<void> _createFromScratch(Migrator m) async {
     await m.createAll();
     await _createSearchIndex();
-    await _seedReferenceData();
   }
 
   /// Throws the local copy away and builds it again.
@@ -257,36 +262,5 @@ class AppDatabase extends _$AppDatabase {
         VALUES (new.rowid, new.description, new.notes);
       END
     ''');
-  }
-
-  /// Populates currencies and the global category presets.
-  ///
-  /// Run at creation rather than fetched on first launch: the app has to be
-  /// able to format an amount and categorise an expense before it has ever
-  /// reached the network, and Principle 1 says logging an expense is never
-  /// gated -- including on a connection. The category ids are fixed rather than
-  /// generated for the same reason: an expense can be categorised before the
-  /// device has synced once, and the id it gets has to be the one every other
-  /// device already means.
-  ///
-  /// A floor, not the source. `SyncEngine.pullReferenceData` refreshes both
-  /// tables from the server on every sweep, so a currency added there reaches
-  /// people without an app update -- which is what this seed used to require.
-  Future<void> _seedReferenceData() async {
-    await batch((batch) {
-      batch.insertAll(currencies, [
-        for (final c in presetCurrencies)
-          CurrenciesCompanion.insert(
-            code: c.code,
-            exponent: c.exponent,
-            symbol: Value(c.symbol),
-            name: c.name,
-          ),
-      ]);
-      batch.insertAll(categories, [
-        for (final c in presetCategories)
-          CategoriesCompanion.insert(id: c.id, name: c.name, icon: c.icon),
-      ]);
-    });
   }
 }

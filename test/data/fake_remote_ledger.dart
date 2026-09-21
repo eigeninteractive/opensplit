@@ -8,10 +8,11 @@ import 'package:opensplit/domain/activity/snapshot_diff.dart';
 import 'package:opensplit/domain/models/entry_snapshot.dart';
 import 'package:opensplit/domain/models/currency.dart';
 import 'package:opensplit/domain/models/category.dart';
-import 'package:opensplit/data/local/reference_data.dart';
 import 'package:opensplit/domain/models/group_event.dart';
 import 'package:opensplit/domain/models/member.dart';
 import 'package:opensplit/domain/models/profile.dart';
+
+import 'server_reference_data.dart';
 
 /// An in-memory stand-in for the server.
 ///
@@ -440,7 +441,7 @@ class FakeRemoteLedger implements RemoteLedgerApi {
   /// and mutable so a test can add a currency the client has never heard of --
   /// which is the case this feed exists for.
   final List<Currency> serverCurrencies = [
-    for (final c in presetCurrencies)
+    for (final c in defaultCurrencies)
       Currency(
         code: c.code,
         exponent: c.exponent,
@@ -449,7 +450,7 @@ class FakeRemoteLedger implements RemoteLedgerApi {
       ),
   ];
   final List<Category> serverCategories = [
-    for (final c in presetCategories)
+    for (final c in defaultCategories)
       Category(id: c.id, name: c.name, icon: c.icon),
   ];
 

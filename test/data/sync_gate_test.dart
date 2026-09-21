@@ -5,10 +5,16 @@ import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/sync/sync_gate_native.dart';
 import 'package:test/test.dart';
 
+import '../harness.dart';
+
 void main() {
   late AppDatabase database;
 
-  setUp(() => database = AppDatabase(NativeDatabase.memory()));
+  setUp(() async {
+    database = AppDatabase(NativeDatabase.memory());
+    await seedReferenceData(database);
+    await seedReferenceData(database);
+  });
   tearDown(() => database.close());
 
   test('separate native gates serialize through the database', () async {

@@ -12,6 +12,8 @@ import 'package:opensplit/domain/models/profile.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:test/test.dart';
 
+import '../harness.dart';
+
 /// The composer both push paths use.
 ///
 /// It exists as its own function so that the app and the background isolate —
@@ -27,8 +29,10 @@ void main() {
   late DriftActivityRepository activity;
   late DriftProfileRepository profiles;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase(NativeDatabase.memory());
+    await seedReferenceData(db);
+    await seedReferenceData(db);
     groups = DriftGroupRepository(db);
     entries = DriftEntryRepository(db);
     currencies = DriftCurrencyRepository(db);

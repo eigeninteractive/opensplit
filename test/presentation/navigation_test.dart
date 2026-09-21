@@ -63,7 +63,11 @@ Future<void> _seedGroup(AppDatabase db, {DateTime? archivedAt}) async {
 void main() {
   late AppDatabase db;
 
-  setUp(() => db = AppDatabase(NativeDatabase.memory()));
+  setUp(() async {
+    db = AppDatabase(NativeDatabase.memory());
+    await seedReferenceData(db);
+    await seedReferenceData(db);
+  });
   tearDown(() => db.close());
 
   // The rule the whole route table is built around: a screen either shows the

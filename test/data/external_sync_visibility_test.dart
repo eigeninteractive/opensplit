@@ -4,9 +4,12 @@ import 'package:drift/native.dart';
 import 'package:opensplit/data/local/database.dart';
 import 'package:test/test.dart';
 
+import '../harness.dart';
+
 void main() {
   test('external sync refresh re-runs live database queries', () async {
     final db = AppDatabase(NativeDatabase.memory());
+    await seedReferenceData(db);
     addTearDown(db.close);
 
     final rows = StreamIterator(db.select(db.groups).watch());

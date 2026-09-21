@@ -6,12 +6,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:opensplit/data/fx/drift_fx_repository.dart';
 import 'package:opensplit/data/local/database.dart';
 
+import '../harness.dart';
+
 void main() {
   late AppDatabase db;
   late DriftFxRepository repository;
 
   setUp(() async {
     db = AppDatabase(NativeDatabase.memory());
+    await seedReferenceData(db);
     repository = DriftFxRepository(db);
   });
 

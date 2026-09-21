@@ -24,11 +24,23 @@ import 'package:test/test.dart';
 
 import 'fake_remote_ledger.dart';
 
+import '../harness.dart';
+
 /// One simulated device: its own local database, outbox and sync engine, all
 /// talking to a shared server.
 class Device {
+  /// The reference data a real device has by the time it can do anything.
+  ///
+  /// Seeded here rather than at each of the eleven call sites, and awaited
+  /// through [ready]. A real device gets these on its first sweep and cannot
+  /// create a group until it has -- `groups.default_currency` references
+  /// `currencies` -- so a fake one that skipped them would be testing a state
+  /// no device is ever in.
+  late final Future<void> ready;
+
   Device(this.name, this._server, {this.profileId})
     : db = AppDatabase(NativeDatabase.memory()) {
+    ready = seedReferenceData(db);
     outbox = OutboxQueue(db);
     groups = DriftGroupRepository(db, outbox: outbox);
     entries = DriftEntryRepository(db, outbox: outbox);
@@ -87,6 +99,7 @@ void main() {
       // meant shipping a release for a row.
       final server = FakeRemoteLedger();
       final device = Device('solo', server);
+      await device.ready;
       addTearDown(device.close);
 
       server.serverCurrencies.add(
@@ -108,6 +121,7 @@ void main() {
       // it -- removing the row to tidy a list would break a foreign key.
       final server = FakeRemoteLedger();
       final device = Device('solo', server);
+      await device.ready;
       addTearDown(device.close);
 
       server.serverCurrencies.removeWhere((c) => c.code == 'INR');
@@ -120,6 +134,7 @@ void main() {
     test('a renamed currency is corrected in place', () async {
       final server = FakeRemoteLedger();
       final device = Device('solo', server);
+      await device.ready;
       addTearDown(device.close);
 
       final inr = server.serverCurrencies.firstWhere((c) => c.code == 'INR');
@@ -143,13 +158,15 @@ void main() {
   late Device a;
   late Device b;
 
-  setUp(() {
+  setUp(() async {
     server = FakeRemoteLedger();
     a = Device('A', server, profileId: 'profile-ravi');
+    await a.ready;
     // Priya is a placeholder in the shared fixture, so B holds a session that
     // is nobody's member row -- its writes are recorded with no actor, which is
     // exactly how the server treats a change it cannot attribute.
     b = Device('B', server, profileId: 'profile-priya');
+    await b.ready;
   });
 
   tearDown(() async {
@@ -1339,6 +1356,7 @@ void main() {
     test('a rename by somebody else arrives on the next sync', () async {
       final server = FakeRemoteLedger();
       final db = AppDatabase(NativeDatabase.memory());
+      await seedReferenceData(db);
       addTearDown(db.close);
       final engine = SyncEngine(db: db, api: server, outbox: OutboxQueue(db));
 
@@ -1370,6 +1388,7 @@ void main() {
     test('the cursor stops it re-fetching what it already has', () async {
       final server = FakeRemoteLedger();
       final db = AppDatabase(NativeDatabase.memory());
+      await seedReferenceData(db);
       addTearDown(db.close);
       final engine = SyncEngine(db: db, api: server, outbox: OutboxQueue(db));
 
@@ -1848,8 +1867,9 @@ void main() {
 
   group('one engine, five feeds', () {
     /// A third device, holding nothing, to pull onto.
-    Device freshDevice() {
+    Future<Device> freshDevice() async {
       final device = Device('paged', server, profileId: 'profile-arun');
+      await device.ready;
       addTearDown(device.close);
       return device;
     }
@@ -1878,7 +1898,7 @@ void main() {
       await addExpenses(g, 5);
       await a.sync.syncGroup(g.groupId);
 
-      final device = freshDevice();
+      final device = await freshDevice();
       final engine = SyncEngine(
         db: device.db,
         api: server,
@@ -1923,7 +1943,7 @@ void main() {
         }
       });
 
-      final device = freshDevice();
+      final device = await freshDevice();
       final engine = SyncEngine(
         db: device.db,
         api: server,
@@ -1947,7 +1967,7 @@ void main() {
       await addExpenses(g, 1);
       await a.sync.syncGroup(g.groupId);
 
-      final device = freshDevice();
+      final device = await freshDevice();
       await device.sync.syncGroup(g.groupId);
 
       // Members used to be refetched whole on every sync, with a SELECT per

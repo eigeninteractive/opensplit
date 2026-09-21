@@ -16,7 +16,7 @@ final class DriftCategoryRepository {
   final AppDatabase _db;
 
   /// Rowid order, which is insertion order, which is the order in
-  /// [presetCategories] — sorted by how often a thing is actually shared
+  /// the server's preset list — sorted by how often a thing is actually shared
   /// rather than alphabetically. Sorting by name here would undo that.
   SimpleSelectStatement<$CategoriesTable, CategoryRow> get _query =>
       _db.select(_db.categories);

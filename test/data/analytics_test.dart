@@ -9,6 +9,8 @@ import 'package:opensplit/domain/analytics/analytics_query.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:test/test.dart';
 
+import '../harness.dart';
+
 void main() {
   late AppDatabase db;
   late DriftGroupRepository groups;
@@ -24,6 +26,7 @@ void main() {
 
   setUp(() async {
     db = AppDatabase(NativeDatabase.memory());
+    await seedReferenceData(db);
     groups = DriftGroupRepository(db);
     entries = DriftEntryRepository(db);
     categories = DriftCategoryRepository(db);

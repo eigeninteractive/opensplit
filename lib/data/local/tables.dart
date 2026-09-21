@@ -188,7 +188,7 @@ class Members extends Table {
 
 @DataClassName('CategoryRow')
 /// The fixed, global category list. Mirrors the server's, seeded from
-/// [presetCategories] and never written to at runtime.
+/// the server's preset list, and never written to at runtime.
 class Categories extends Table {
   TextColumn get id => text()();
   TextColumn get name => text()();

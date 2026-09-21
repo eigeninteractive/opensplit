@@ -1,4 +1,3 @@
-
 import 'package:drift/native.dart';
 import 'package:drift_dev/api/migrations_native.dart';
 import 'package:opensplit/data/local/database.dart';
@@ -6,6 +5,8 @@ import 'package:opensplit/data/sync/sync_session.dart';
 import 'package:test/test.dart';
 
 import 'generated_migrations/schema.dart';
+
+import '../harness.dart';
 
 /// Guards the one thing a local-first app cannot recover from.
 ///
@@ -152,9 +153,8 @@ void main() {
   test('a rebuilt database is the one a new install gets', () async {
     // The rebuild goes through the same path as onCreate, and this is what
     // holds it there. Dropping the tables and calling createAll would pass a
-    // column comparison and still leave a device with no search index and no
-    // currencies -- neither of which is a drift table, and both of which the
-    // app needs before it can do anything.
+    // column comparison and still leave a device with no search index, which
+    // is not a drift table and so is invisible to one.
     final schema = await verifier.schemaAt(1);
     final rebuilt = AppDatabase(schema.newConnection());
     addTearDown(rebuilt.close);
@@ -163,15 +163,16 @@ void main() {
 
     expect(await _columnsByTable(rebuilt), await _columnsByTable(fresh));
 
-    final seeded = await rebuilt.select(rebuilt.currencies).get();
-    expect(seeded, isNotEmpty, reason: 'reference data was seeded again');
-
+    // Deliberately no assertion about currencies. Neither database has any:
+    // they are the server's now, and a rebuilt device gets them from its next
+    // sweep exactly as a new install does -- which is the same answer, and the
+    // point of the comparison above.
     final index = await rebuilt
         .customSelect(
           "select name from sqlite_master where name = 'entries_fts'",
         )
         .get();
-    expect(index, hasLength(1), reason: 'and the search index rebuilt with it');
+    expect(index, hasLength(1), reason: 'and the search index rebuilt');
   });
 
   test('the committed snapshot still matches the schema in code', () async {
@@ -188,6 +189,7 @@ void main() {
     final snapshot = AppDatabase(await verifier.startAt(2));
     addTearDown(snapshot.close);
     final code = AppDatabase(NativeDatabase.memory());
+    await seedReferenceData(code);
     addTearDown(code.close);
 
     expect(

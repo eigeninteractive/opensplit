@@ -10,6 +10,8 @@ import 'package:opensplit/domain/repositories/auth_service.dart';
 import 'package:opensplit/presentation/app.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../harness.dart';
+
 /// What signing in looks like, frame by frame.
 ///
 /// The handover from the welcome screen to the app is not a navigation and must
@@ -29,6 +31,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
     final db = AppDatabase(NativeDatabase.memory());
+    await seedReferenceData(db);
     final auth = _BecomesGuest();
     addTearDown(() => tester.runAsync(db.close));
     addTearDown(auth.events.close);
@@ -78,6 +81,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
     final db = AppDatabase(NativeDatabase.memory());
+    await seedReferenceData(db);
     final auth = _BecomesGuest();
     addTearDown(() => tester.runAsync(db.close));
     addTearDown(auth.events.close);

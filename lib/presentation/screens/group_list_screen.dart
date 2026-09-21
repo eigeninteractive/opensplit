@@ -59,8 +59,16 @@ class GroupListScreen extends ConsumerWidget {
     return DestinationScaffold(
       titleWidget: const BrandLockup(),
       actions: [if (kIsWeb) const SyncRefreshButton.everything()],
+      // Disabled until the device has learned what a currency is, which is
+      // only ever true during a brand-new install's first sweep or on a
+      // rebuilt device with no connection. A group has to name a currency and
+      // `groups.default_currency` references the table, so offering this
+      // earlier would not create a group -- it would fail a foreign key
+      // underneath somebody who had done nothing wrong.
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => showCreateGroupSheet(context),
+        onPressed: ref.watch(referenceDataProvider).value ?? false
+            ? () => showCreateGroupSheet(context)
+            : null,
         icon: const Icon(Icons.group_add_outlined),
         label: const Text('New group'),
       ),

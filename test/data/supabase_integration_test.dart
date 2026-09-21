@@ -26,6 +26,8 @@ import 'package:opensplit/domain/repositories/invite_api.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../harness.dart';
+
 /// Exercises the real adapter against a local `supabase start` instance.
 ///
 /// This is the only test that can catch a wrong RPC signature, a PostgREST
@@ -218,6 +220,7 @@ void main() {
 
       // Read it back through a second, empty device.
       final other = AppDatabase(NativeDatabase.memory());
+      await seedReferenceData(other);
       addTearDown(other.close);
       final otherSync = SyncEngine(
         db: other,
@@ -423,6 +426,8 @@ void main() {
         await sync.syncGroup(created.group.id);
 
         final other = AppDatabase(NativeDatabase.memory());
+
+        await seedReferenceData(other);
         addTearDown(other.close);
         // A page size below the row count forces the cursor to actually page.
         final paging = SyncEngine(
@@ -494,6 +499,8 @@ void main() {
       expect(claimed.isPlaceholder, isFalse);
 
       final herDb = AppDatabase(NativeDatabase.memory());
+
+      await seedReferenceData(herDb);
       addTearDown(herDb.close);
       await SyncEngine(
         db: herDb,
@@ -590,6 +597,8 @@ void main() {
       expect(await api.pullMyGroupIds(), contains(created.group.id));
 
       final other = AppDatabase(NativeDatabase.memory());
+
+      await seedReferenceData(other);
       addTearDown(other.close);
       final otherSync = SyncEngine(
         db: other,

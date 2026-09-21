@@ -1,8 +1,6 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:opensplit/data/local/database.dart';
-import 'package:opensplit/data/local/reference_data.dart';
-import 'package:opensplit/data/repositories/drift_currency_repository.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';
 import 'package:opensplit/data/repositories/mappers.dart';
@@ -11,57 +9,22 @@ import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:test/test.dart';
 
+import '../harness.dart';
+
 void main() {
   late AppDatabase db;
   late DriftGroupRepository groups;
   late DriftEntryRepository entries;
-  late DriftCurrencyRepository currencies;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase(NativeDatabase.memory());
+    await seedReferenceData(db);
+    await seedReferenceData(db);
     groups = DriftGroupRepository(db);
     entries = DriftEntryRepository(db);
-    currencies = DriftCurrencyRepository(db);
   });
 
   tearDown(() => db.close());
-
-  group('reference data', () {
-    test('is seeded on creation so the app works before any network', () async {
-      final all = await currencies.all();
-      expect(all, hasLength(16));
-
-      final inr = await currencies.byCode('INR');
-      expect(inr!.exponent, 2);
-      expect((await currencies.byCode('JPY'))!.exponent, 0);
-      expect((await currencies.byCode('KWD'))!.exponent, 3);
-    });
-
-    test('ships the category list with ids fixed to the server', () async {
-      final rows = await db.select(db.categories).get();
-      expect(rows, hasLength(presetCategories.length));
-
-      // Real v4 uuids. The ids are written onto entries and have to be the
-      // same on the server, so they are generated once and pinned here — a
-      // sequential placeholder is easy to retype wrongly and impossible to
-      // tell apart from a legitimate id at a glance.
-      final uuid = RegExp(
-        r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}'
-        r'-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
-      );
-      expect(rows.every((r) => uuid.hasMatch(r.id)), isTrue);
-      expect(rows.map((r) => r.id).toSet(), hasLength(rows.length));
-
-      // Every category has an icon, and the picker can resolve all of them.
-      expect(rows.every((r) => r.icon.isNotEmpty), isTrue);
-
-      // The backstop. Without one, anything the list does not name has to go
-      // in as uncategorised, which is indistinguishable from not having
-      // bothered — and makes "by category" analytics quietly lossy.
-      expect(rows.map((r) => r.name), contains('Other'));
-      expect(rows.last.name, 'Other', reason: 'it reads last in the picker');
-    });
-  });
 
   group('groups and members', () {
     test(

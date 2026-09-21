@@ -7,6 +7,8 @@ import 'package:opensplit/domain/models/entry.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:test/test.dart';
 
+import '../harness.dart';
+
 /// Signing out has to actually clear the device.
 ///
 /// This exists because it did not. `entry_events` was missing from the list,
@@ -22,7 +24,11 @@ void main() {
   late AppDatabase db;
   final now = DateTime.utc(2026, 8, 26);
 
-  setUp(() => db = AppDatabase(NativeDatabase.memory()));
+  setUp(() async {
+    db = AppDatabase(NativeDatabase.memory());
+    await seedReferenceData(db);
+    await seedReferenceData(db);
+  });
   tearDown(() => db.close());
 
   /// Everything a device holds after a sync: a group, a member, an expense

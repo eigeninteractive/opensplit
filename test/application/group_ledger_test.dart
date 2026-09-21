@@ -21,7 +21,11 @@ void main() {
   final now = DateTime.utc(2026, 8, 27);
   late AppDatabase db;
 
-  setUp(() => db = AppDatabase(NativeDatabase.memory()));
+  setUp(() async {
+    db = AppDatabase(NativeDatabase.memory());
+    await seedReferenceData(db);
+    await seedReferenceData(db);
+  });
   tearDown(() => db.close());
 
   Future<GroupLedger> ledger() async {

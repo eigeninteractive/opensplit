@@ -233,13 +233,18 @@ class SyncEngine {
     await drain(ProfileFeed(api, db));
   }
 
-  /// Currencies and categories, from the server rather than only from the seed.
+  /// Currencies and categories, from the server.
   ///
-  /// The device ships with a copy -- see `_seedReferenceData`, which is what
-  /// lets somebody record an expense before they have ever reached the network,
-  /// and is not going anywhere. But a seed is a floor, not a source: a currency
-  /// added on the server used to need an app update to reach anybody, which is
-  /// a release for a row.
+  /// The only source. The device used to ship a hardcoded copy of both and
+  /// write it at creation, which is a duplicate of server data that had to be
+  /// kept in step by hand -- and it meant a currency added on the server
+  /// reached nobody without an app release.
+  ///
+  /// Which leaves an ordering requirement rather than an optional refresh:
+  /// `groups.default_currency` references `currencies`, so a device that has
+  /// not learned what a currency is cannot create a group. That is why this
+  /// runs first in [pullShared], and why `referenceDataProvider` awaits it
+  /// before the app is usable at all.
   ///
   /// Upsert, never delete, and that is the whole of the merge rule. A category
   /// withdrawn on the server is still on the entries that used it, and
@@ -292,8 +297,22 @@ class SyncEngine {
         }
       });
     } catch (_) {
-      // See above: nothing here is worth failing a sync over.
+      // Swallowed here, where this is a refresh of something the device
+      // already has, and taking a whole sweep down because a currency name
+      // could not be updated would be the tail wagging the dog.
+      //
+      // Not swallowed on the path that matters: `referenceDataProvider` calls
+      // this directly and does look at whether it worked, because there the
+      // device may have nothing at all.
     }
+  }
+
+  /// Whether this device knows what a currency is yet.
+  Future<bool> hasReferenceData() async {
+    final row = await db
+        .customSelect('select count(*) as n from currencies')
+        .getSingle();
+    return row.read<int>('n') > 0;
   }
 
   /// Runs one feed to exhaustion.
