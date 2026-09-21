@@ -16,6 +16,12 @@ of closed-testing rows worth keeping.
 [Throwing it away instead](#throwing-it-away-instead).** It is four commands
 and two traps, and the rest of this document is unnecessary.
 
+Either way, read
+[Which goes first, the server or the client?](#which-goes-first-the-server-or-the-client)
+before you start. The answer changed when the local database started rebuilding
+itself, and doing it in the wrong order is how testers end up staring at an
+empty app.
+
 ---
 
 ## Throwing it away instead
@@ -96,12 +102,15 @@ refuses those permanently — `23503` and `42501` are both in the client's
 permanent set — so they land in dead letters rather than retrying, and the
 person sees changes that look saved and never arrive.
 
-So after a wipe, testers need to start clean: **clear app storage, or
-uninstall and reinstall.** Deleting `auth.users` in trap 1 helps by invalidating
-their sessions, but do not rely on it alone — tell them.
+So after a wipe, testers need to start clean — and in this particular release
+they get that for free, because `schemaVersion` went to 2 and the v1 → v2 step
+drops every local table. Installing the update **is** clearing app storage.
 
-The in-app update in this release does not solve this. It replaces the binary,
-not the database.
+That holds only for this release, and only for devices that take it. For a
+device that stays on the old build, or a future server wipe that ships no schema
+change, the manual answer is the real one: **clear app storage, or uninstall and
+reinstall.** Deleting `auth.users` in trap 1 helps by invalidating their
+sessions, but do not rely on it alone — tell them.
 
 ---
 
@@ -422,15 +431,26 @@ migration that table does not exist, so an older client's sync fails — and it
 fails in the worst available way: writes queue in the outbox and look saved to
 the person who made them.
 
-Two things follow.
+**The local database throws itself away.** `AppDatabase.schemaVersion` is 2, and
+the v1 → v2 step is drift's own `destructiveFallback`: every local table is
+dropped and recreated empty, including the outbox and every sync cursor. The
+device then re-pulls each feed from the beginning. `test/data/migration_test.dart`
+runs that against a real v1 database and asserts the emptiness rather than
+hoping for it.
 
-**The local database migrates itself.** `AppDatabase.schemaVersion` is 2, and
-the v1 → v2 step carries `entry_snapshots` across into `group_events` rather
-than dropping it. That matters for exactly one reason: a provisional row
-describes a change the device has not pushed, and for an expense whose push was
-refused it is the only copy that exists anywhere. See
-`test/data/migration_test.dart`, which runs the step against a real v1 database
-and checks the rows arrive.
+That is the whole of the local migration, and it decides the order below. An
+updated client is not a client with stale data — it is a client with **no**
+data, which is fine exactly as long as the server it re-pulls from is the new
+one.
+
+Two consequences worth stating plainly:
+
+- **Anything queued and unpushed at update time is gone.** Not carried across,
+  not recoverable. On a closed test that is acceptable; it is the reason the
+  window below wants to be short.
+- **Testers no longer need to clear app storage by hand.** The schema bump does
+  it for them, which retires most of [trap 2](#trap-2-the-devices-do-not-know-anything-happened)
+  — for the devices that actually take the update.
 
 **The update is marked urgent.** This release is the case `AppUpdateService`
 reserves a blocking update for, so it goes out with Play's in-app update
@@ -445,9 +465,49 @@ release it ships with — there is no field for it in the Play Console and it
 cannot be added afterwards. A build that needed it and did not get it needs
 another build.
 
-Order matters: **publish the client first and give it time to roll out**, then
-migrate the server. The reverse leaves every tester on a broken client for
-however long Play takes.
+Note that **merging to `main` does not set it.** `release.yml` runs on every
+push to `main`, and on a push `inputs.update_priority` is empty, so priority
+falls back to `vars.PLAY_UPDATE_PRIORITY` or `0`. Either set that repository
+variable before merging, or merge with deployment disabled and dispatch the
+workflow by hand with `-f update_priority=4`.
+
+---
+
+## Which goes first, the server or the client?
+
+**The server.** Then the client, as promptly as Play allows.
+
+This reverses the advice an earlier draft of this document gave, and the reason
+it reverses is the local migration above. That advice existed to get the new
+client onto devices early so it could carry pending local work across the schema
+change. It no longer carries anything: it drops the lot and re-pulls. So there
+is nothing left to publish early *for*, and the calculation is now only about
+which mismatch you would rather have, and for how long.
+
+| | What breaks | How long you control it |
+| --- | --- | --- |
+| Server first | Old clients fail to sync. They keep showing their local copy, so the app still looks fine, and writes queue in an outbox the update will discard. | Until each tester updates — Play's timing, not yours. Priority 4 shortens it. |
+| Client first | Updated clients have already wiped themselves and find a server that cannot answer. **The app is empty, with a refresh error.** | Until you run the migration — minutes, entirely yours. |
+
+Client-first has the shorter window on paper and the worse failure in practice:
+every tester who opens the app in that window sees an empty one. "I lost all my
+groups" is a support conversation; "it says it could not refresh" is not. And
+you cannot choose when they open it.
+
+Server-first breaks old clients, which is what you want — they are displaying a
+history the server no longer has.
+
+**The best available version is neither, quite:** run the release, let Play
+accept the upload, and migrate the server while the release is still processing
+and before rollout completes. Play does not make a closed-testing build
+installable the instant the upload finishes. Do the migration in that gap and no
+tester is ever running a new client against an old server, nor an old client
+against a new one for more than that gap. Watch the track in the Play Console
+rather than assuming a duration.
+
+If you are on the [throwing it away](#throwing-it-away-instead) path, this is
+simpler than it sounds: there is no data to lose on either side, so migrate the
+server whenever you like and make sure it is done before testers update.
 
 ---
 
