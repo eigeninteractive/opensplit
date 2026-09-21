@@ -63,6 +63,39 @@ supabase functions delete notify-entry  # only once push is confirmed working
 `notify-entry` is the old name and is not in this repo any more, so it will sit
 deployed and orphaned in the project until it is deleted by hand.
 
+### Check that it came back
+
+The migrations replay, so most of this is automatic. These three are worth
+looking at anyway, because each fails quietly rather than loudly:
+
+```sql
+-- Reference data. Not a nicety: the client learns currencies and categories
+-- from the server and `groups.default_currency` references `currencies`, so an
+-- empty table here means nobody can create a group at all.
+select (select count(*) from currencies) as currencies,
+       (select count(*) from categories) as categories;
+
+-- Scheduled jobs. `create extension pg_cron` is wrapped in an exception
+-- handler that downgrades to `raise notice`, by design, so a project without
+-- pg_cron still migrates -- and a project that failed to install it looks
+-- identical to one that never had jobs.
+select jobname, schedule, active from cron.job order by jobname;
+
+-- Operator configuration, which no migration can restore.
+select key from app_settings order by key;
+```
+
+Four job names (`opensplit-fetch-fx`, `opensplit-cleanup-anon`,
+`opensplit-archive-dormant`, `opensplit-purge-settled`) and four settings keys.
+
+### `seed.sql` runs against production
+
+`[db.seed] enabled = true` in `config.toml`, so `db reset --linked` applies
+`supabase/seed.sql` after the migrations — to whatever is linked. It is empty
+today, and the comment at the top of it says why: reference data belongs in the
+migrations because production needs it too. Keep it that way, or check it before
+every reset.
+
 ---
 
 ## The reset takes the accounts with it
