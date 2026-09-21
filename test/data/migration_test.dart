@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/native.dart';
 import 'package:drift_dev/api/migrations_native.dart';
 import 'package:opensplit/data/local/database.dart';
+import 'package:opensplit/data/sync/sync_session.dart';
 import 'package:test/test.dart';
 
 import 'generated_migrations/schema.dart';
@@ -60,6 +61,11 @@ void main() {
       "shares) values ('ev1', 'e1', 'g1', $at, 'Dinner', 'INR', 40000, $at, "
       "'equal', '[]', '[]')",
     );
+    // A device that had already synced everything: without this the re-pull
+    // below would be trivially true.
+    schema.rawDatabase.execute(
+      "insert into sync_cursors (feed, cursor) values ('entries:g1', $at)",
+    );
 
     final db = AppDatabase(schema.newConnection());
     addTearDown(db.close);
@@ -81,6 +87,20 @@ void main() {
         )
         .get();
     expect(old, isEmpty, reason: 'and nothing of the old shape is left behind');
+
+    // How the device gets its data back, which is the other half of the
+    // policy. Every feed's cursor is gone, so the next sync asks each one from
+    // the beginning rather than from where this device had got to -- and
+    // groups come from the server's own list, so even one this device never
+    // held arrives.
+    final cursors = await db.select(db.syncCursors).get();
+    expect(cursors, isEmpty, reason: 'every feed re-pulls from the beginning');
+
+    // And it is allowed to. sync_sessions is emptied with everything else, and
+    // a missing row reads as enabled -- so a rebuilt device syncs rather than
+    // sitting there suspended.
+    final session = await readSyncSession(db);
+    expect(session.enabled, isTrue);
   });
 
   test('a rebuilt database is the one a new install gets', () async {

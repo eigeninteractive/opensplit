@@ -172,12 +172,16 @@ class AppDatabase extends _$AppDatabase {
     // before anybody who is not a tester installs the app. See the note on
     // [schemaVersion].
     //
-    // Deliberately not `destructiveFallback`, drift's own version of this. That
-    // drops the tables it knows about and calls `createAll`, which would leave
-    // the FTS index and the reference-data seed behind -- the two things this
-    // database needs at creation that are not drift tables. Going through the
-    // same [_createFromScratch] the first launch uses is what makes a rebuilt
-    // database indistinguishable from a fresh one.
+    // Deliberately not `destructiveFallback`, drift's own version of this,
+    // which looks like exactly this and is wrong here twice. It drops
+    // `allSchemaEntities` -- the tables the *current code* declares, so a table
+    // the new code no longer knows about is never dropped at all. And it calls
+    // `createAll` rather than onCreate, and replaces onCreate with a default
+    // that does the same, so the FTS index and the reference-data seed would be
+    // skipped on every path. A device would come back with no search and no
+    // currencies, holding whatever tables the old schema had.
+    //
+    // See [_rebuild] for the first, and [_createFromScratch] for the second.
     // Drift routes a downgrade here too, so a tester moved back to an older
     // build by Play recovers the same way rather than opening a database from
     // the future.
