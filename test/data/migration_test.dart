@@ -81,12 +81,44 @@ void main() {
       reason: 'the local copy is a cache; the server still has this group',
     );
 
-    final old = await db
+    // The old table is still there, and that is accepted rather than missed.
+    //
+    // The rebuild drops what the schema declares, and the schema has not
+    // declared entry_snapshots since it became group_events -- so a device that
+    // upgrades keeps an empty copy of it forever, while a fresh install never
+    // has one. The cost is a few kilobytes on a handful of testers' phones.
+    //
+    // The rule that keeps it harmless is in docs/local-database.md: never reuse
+    // the name of a removed table. createAll issues CREATE TABLE IF NOT EXISTS,
+    // so a reused name would bind to this orphan instead of failing.
+    final orphan = await db
         .customSelect(
           "select name from sqlite_master where name = 'entry_snapshots'",
         )
         .get();
-    expect(old, isEmpty, reason: 'and nothing of the old shape is left behind');
+    expect(
+      orphan,
+      hasLength(1),
+      reason: 'documenting the trade, not endorsing it -- see the doc',
+    );
+
+    // And it keeps its rows, which is the part of the trade worth stating
+    // outright rather than discovering later. Nothing reads them -- no code
+    // names this table any more, and forgetLocalLedger deletes by name so it
+    // does not clear them on sign-out either.
+    //
+    // Tolerable because the database file is keyed per account, so these are
+    // the same person's rows in a file only they open. It would not be
+    // tolerable in a shared file, and it is the reason the rule in
+    // docs/local-database.md is about names rather than about tidiness.
+    final rows = await db
+        .customSelect('select count(*) as n from entry_snapshots')
+        .getSingle();
+    expect(
+      rows.read<int>('n'),
+      1,
+      reason: 'the old rows are still sitting there',
+    );
 
     // How the device gets its data back, which is the other half of the
     // policy. Every feed's cursor is gone, so the next sync asks each one from
@@ -161,7 +193,23 @@ void main() {
     final fresh = AppDatabase(NativeDatabase.memory());
     addTearDown(fresh.close);
 
-    expect(await _columnsByTable(rebuilt), await _columnsByTable(fresh));
+    final rebuiltTables = await _columnsByTable(rebuilt);
+    final freshTables = await _columnsByTable(fresh);
+
+    // Every table a new install has, the rebuilt one has, with the same
+    // columns. The reverse does not hold: a rebuilt device also carries
+    // whatever the schema has since stopped declaring, which for a v1 database
+    // is entry_snapshots. See the note in the test above.
+    for (final table in freshTables.keys) {
+      expect(
+        rebuiltTables[table],
+        freshTables[table],
+        reason: '$table differs between a rebuilt device and a new install',
+      );
+    }
+    expect(rebuiltTables.keys.toSet().difference(freshTables.keys.toSet()), {
+      'entry_snapshots',
+    }, reason: 'exactly one known orphan, and no others sneaking in');
 
     // Deliberately no assertion about currencies. Neither database has any:
     // they are the server's now, and a rebuilt device gets them from its next

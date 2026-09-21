@@ -73,73 +73,6 @@
     },
     {
       "id": 1,
-      "references": [],
-      "type": "table",
-      "data": {
-        "name": "profiles",
-        "was_declared_in_moor": false,
-        "columns": [
-          {
-            "name": "id",
-            "getter_name": "id",
-            "moor_type": "string",
-            "nullable": false,
-            "customConstraints": null,
-            "default_dart": null,
-            "default_client_dart": null,
-            "dsl_features": []
-          },
-          {
-            "name": "display_name",
-            "getter_name": "displayName",
-            "moor_type": "string",
-            "nullable": true,
-            "customConstraints": null,
-            "default_dart": null,
-            "default_client_dart": null,
-            "dsl_features": []
-          },
-          {
-            "name": "avatar_url",
-            "getter_name": "avatarUrl",
-            "moor_type": "string",
-            "nullable": true,
-            "customConstraints": null,
-            "default_dart": null,
-            "default_client_dart": null,
-            "dsl_features": []
-          },
-          {
-            "name": "upi_vpa",
-            "getter_name": "upiVpa",
-            "moor_type": "string",
-            "nullable": true,
-            "customConstraints": null,
-            "default_dart": null,
-            "default_client_dart": null,
-            "dsl_features": []
-          },
-          {
-            "name": "updated_at",
-            "getter_name": "updatedAt",
-            "moor_type": "dateTime",
-            "nullable": true,
-            "customConstraints": null,
-            "default_dart": null,
-            "default_client_dart": null,
-            "dsl_features": []
-          }
-        ],
-        "is_virtual": false,
-        "without_rowid": false,
-        "constraints": [],
-        "explicit_pk": [
-          "id"
-        ]
-      }
-    },
-    {
-      "id": 2,
       "references": [
         0
       ],
@@ -272,171 +205,9 @@
       }
     },
     {
-      "id": 3,
+      "id": 2,
       "references": [
-        2
-      ],
-      "type": "table",
-      "data": {
-        "name": "members",
-        "was_declared_in_moor": false,
-        "columns": [
-          {
-            "name": "id",
-            "getter_name": "id",
-            "moor_type": "string",
-            "nullable": false,
-            "customConstraints": null,
-            "default_dart": null,
-            "default_client_dart": null,
-            "dsl_features": []
-          },
-          {
-            "name": "group_id",
-            "getter_name": "groupId",
-            "moor_type": "string",
-            "nullable": false,
-            "customConstraints": null,
-            "defaultConstraints": "REFERENCES \"groups\" (id) ON DELETE CASCADE",
-            "dialectAwareDefaultConstraints": {
-              "sqlite": "REFERENCES \"groups\" (id) ON DELETE CASCADE"
-            },
-            "default_dart": null,
-            "default_client_dart": null,
-            "dsl_features": [
-              {
-                "foreign_key": {
-                  "to": {
-                    "table": "groups",
-                    "column": "id"
-                  },
-                  "initially_deferred": false,
-                  "on_update": null,
-                  "on_delete": "cascade"
-                }
-              }
-            ]
-          },
-          {
-            "name": "profile_id",
-            "getter_name": "profileId",
-            "moor_type": "string",
-            "nullable": true,
-            "customConstraints": null,
-            "default_dart": null,
-            "default_client_dart": null,
-            "dsl_features": []
-          },
-          {
-            "name": "display_name",
-            "getter_name": "displayName",
-            "moor_type": "string",
-            "nullable": false,
-            "customConstraints": null,
-            "default_dart": null,
-            "default_client_dart": null,
-            "dsl_features": []
-          },
-          {
-            "name": "joined_at",
-            "getter_name": "joinedAt",
-            "moor_type": "dateTime",
-            "nullable": false,
-            "customConstraints": null,
-            "default_dart": null,
-            "default_client_dart": null,
-            "dsl_features": []
-          },
-          {
-            "name": "left_at",
-            "getter_name": "leftAt",
-            "moor_type": "dateTime",
-            "nullable": true,
-            "customConstraints": null,
-            "default_dart": null,
-            "default_client_dart": null,
-            "dsl_features": []
-          },
-          {
-            "name": "upi_vpa",
-            "getter_name": "upiVpa",
-            "moor_type": "string",
-            "nullable": true,
-            "customConstraints": null,
-            "default_dart": null,
-            "default_client_dart": null,
-            "dsl_features": []
-          },
-          {
-            "name": "updated_at",
-            "getter_name": "updatedAt",
-            "moor_type": "dateTime",
-            "nullable": false,
-            "customConstraints": null,
-            "default_dart": "const CustomExpression('CAST(strftime(\\'%s\\', CURRENT_TIMESTAMP) AS INTEGER)')",
-            "default_client_dart": null,
-            "dsl_features": []
-          }
-        ],
-        "is_virtual": false,
-        "without_rowid": false,
-        "constraints": [],
-        "explicit_pk": [
-          "id"
-        ]
-      }
-    },
-    {
-      "id": 4,
-      "references": [],
-      "type": "table",
-      "data": {
-        "name": "categories",
-        "was_declared_in_moor": false,
-        "columns": [
-          {
-            "name": "id",
-            "getter_name": "id",
-            "moor_type": "string",
-            "nullable": false,
-            "customConstraints": null,
-            "default_dart": null,
-            "default_client_dart": null,
-            "dsl_features": []
-          },
-          {
-            "name": "name",
-            "getter_name": "name",
-            "moor_type": "string",
-            "nullable": false,
-            "customConstraints": null,
-            "default_dart": null,
-            "default_client_dart": null,
-            "dsl_features": []
-          },
-          {
-            "name": "icon",
-            "getter_name": "icon",
-            "moor_type": "string",
-            "nullable": false,
-            "customConstraints": null,
-            "default_dart": null,
-            "default_client_dart": null,
-            "dsl_features": []
-          }
-        ],
-        "is_virtual": false,
-        "without_rowid": false,
-        "constraints": [],
-        "explicit_pk": [
-          "id"
-        ]
-      }
-    },
-    {
-      "id": 5,
-      "references": [
-        2
+        1
       ],
       "type": "table",
       "data": {
@@ -667,10 +438,327 @@
       }
     },
     {
+      "id": 3,
+      "references": [
+        2
+      ],
+      "type": "table",
+      "data": {
+        "name": "entries_fts",
+        "was_declared_in_moor": true,
+        "columns": [
+          {
+            "name": "description",
+            "getter_name": "description",
+            "moor_type": "string",
+            "nullable": false,
+            "customConstraints": "",
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": []
+          },
+          {
+            "name": "notes",
+            "getter_name": "notes",
+            "moor_type": "string",
+            "nullable": false,
+            "customConstraints": "",
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": []
+          }
+        ],
+        "is_virtual": true,
+        "create_virtual_stmt": "CREATE VIRTUAL TABLE \"entries_fts\" USING fts5(description, notes, content=entries, content_rowid=rowid)",
+        "without_rowid": false,
+        "constraints": []
+      }
+    },
+    {
+      "id": 4,
+      "references": [
+        2,
+        3
+      ],
+      "type": "trigger",
+      "data": {
+        "on": 2,
+        "references_in_body": [
+          2,
+          3
+        ],
+        "name": "entries_fts_insert",
+        "sql": "CREATE TRIGGER entries_fts_insert AFTER INSERT ON entries BEGIN\n  INSERT INTO entries_fts(rowid, description, notes)\n  VALUES (new.rowid, new.description, new.notes);\nEND;"
+      }
+    },
+    {
+      "id": 5,
+      "references": [
+        2,
+        3
+      ],
+      "type": "trigger",
+      "data": {
+        "on": 2,
+        "references_in_body": [
+          2,
+          3
+        ],
+        "name": "entries_fts_delete",
+        "sql": "CREATE TRIGGER entries_fts_delete AFTER DELETE ON entries BEGIN\n  INSERT INTO entries_fts(entries_fts, rowid, description, notes)\n  VALUES ('delete', old.rowid, old.description, old.notes);\nEND;"
+      }
+    },
+    {
       "id": 6,
       "references": [
-        5,
+        2,
         3
+      ],
+      "type": "trigger",
+      "data": {
+        "on": 2,
+        "references_in_body": [
+          2,
+          3
+        ],
+        "name": "entries_fts_update",
+        "sql": "CREATE TRIGGER entries_fts_update AFTER UPDATE ON entries BEGIN\n  INSERT INTO entries_fts(entries_fts, rowid, description, notes)\n  VALUES ('delete', old.rowid, old.description, old.notes);\n  INSERT INTO entries_fts(rowid, description, notes)\n  VALUES (new.rowid, new.description, new.notes);\nEND;"
+      }
+    },
+    {
+      "id": 7,
+      "references": [],
+      "type": "table",
+      "data": {
+        "name": "profiles",
+        "was_declared_in_moor": false,
+        "columns": [
+          {
+            "name": "id",
+            "getter_name": "id",
+            "moor_type": "string",
+            "nullable": false,
+            "customConstraints": null,
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": []
+          },
+          {
+            "name": "display_name",
+            "getter_name": "displayName",
+            "moor_type": "string",
+            "nullable": true,
+            "customConstraints": null,
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": []
+          },
+          {
+            "name": "avatar_url",
+            "getter_name": "avatarUrl",
+            "moor_type": "string",
+            "nullable": true,
+            "customConstraints": null,
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": []
+          },
+          {
+            "name": "upi_vpa",
+            "getter_name": "upiVpa",
+            "moor_type": "string",
+            "nullable": true,
+            "customConstraints": null,
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": []
+          },
+          {
+            "name": "updated_at",
+            "getter_name": "updatedAt",
+            "moor_type": "dateTime",
+            "nullable": true,
+            "customConstraints": null,
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": []
+          }
+        ],
+        "is_virtual": false,
+        "without_rowid": false,
+        "constraints": [],
+        "explicit_pk": [
+          "id"
+        ]
+      }
+    },
+    {
+      "id": 8,
+      "references": [
+        1
+      ],
+      "type": "table",
+      "data": {
+        "name": "members",
+        "was_declared_in_moor": false,
+        "columns": [
+          {
+            "name": "id",
+            "getter_name": "id",
+            "moor_type": "string",
+            "nullable": false,
+            "customConstraints": null,
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": []
+          },
+          {
+            "name": "group_id",
+            "getter_name": "groupId",
+            "moor_type": "string",
+            "nullable": false,
+            "customConstraints": null,
+            "defaultConstraints": "REFERENCES \"groups\" (id) ON DELETE CASCADE",
+            "dialectAwareDefaultConstraints": {
+              "sqlite": "REFERENCES \"groups\" (id) ON DELETE CASCADE"
+            },
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": [
+              {
+                "foreign_key": {
+                  "to": {
+                    "table": "groups",
+                    "column": "id"
+                  },
+                  "initially_deferred": false,
+                  "on_update": null,
+                  "on_delete": "cascade"
+                }
+              }
+            ]
+          },
+          {
+            "name": "profile_id",
+            "getter_name": "profileId",
+            "moor_type": "string",
+            "nullable": true,
+            "customConstraints": null,
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": []
+          },
+          {
+            "name": "display_name",
+            "getter_name": "displayName",
+            "moor_type": "string",
+            "nullable": false,
+            "customConstraints": null,
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": []
+          },
+          {
+            "name": "joined_at",
+            "getter_name": "joinedAt",
+            "moor_type": "dateTime",
+            "nullable": false,
+            "customConstraints": null,
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": []
+          },
+          {
+            "name": "left_at",
+            "getter_name": "leftAt",
+            "moor_type": "dateTime",
+            "nullable": true,
+            "customConstraints": null,
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": []
+          },
+          {
+            "name": "upi_vpa",
+            "getter_name": "upiVpa",
+            "moor_type": "string",
+            "nullable": true,
+            "customConstraints": null,
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": []
+          },
+          {
+            "name": "updated_at",
+            "getter_name": "updatedAt",
+            "moor_type": "dateTime",
+            "nullable": false,
+            "customConstraints": null,
+            "default_dart": "const CustomExpression('CAST(strftime(\\'%s\\', CURRENT_TIMESTAMP) AS INTEGER)')",
+            "default_client_dart": null,
+            "dsl_features": []
+          }
+        ],
+        "is_virtual": false,
+        "without_rowid": false,
+        "constraints": [],
+        "explicit_pk": [
+          "id"
+        ]
+      }
+    },
+    {
+      "id": 9,
+      "references": [],
+      "type": "table",
+      "data": {
+        "name": "categories",
+        "was_declared_in_moor": false,
+        "columns": [
+          {
+            "name": "id",
+            "getter_name": "id",
+            "moor_type": "string",
+            "nullable": false,
+            "customConstraints": null,
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": []
+          },
+          {
+            "name": "name",
+            "getter_name": "name",
+            "moor_type": "string",
+            "nullable": false,
+            "customConstraints": null,
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": []
+          },
+          {
+            "name": "icon",
+            "getter_name": "icon",
+            "moor_type": "string",
+            "nullable": false,
+            "customConstraints": null,
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": []
+          }
+        ],
+        "is_virtual": false,
+        "without_rowid": false,
+        "constraints": [],
+        "explicit_pk": [
+          "id"
+        ]
+      }
+    },
+    {
+      "id": 10,
+      "references": [
+        2,
+        8
       ],
       "type": "table",
       "data": {
@@ -750,10 +838,10 @@
       }
     },
     {
-      "id": 7,
+      "id": 11,
       "references": [
-        5,
-        3
+        2,
+        8
       ],
       "type": "table",
       "data": {
@@ -843,10 +931,10 @@
       }
     },
     {
-      "id": 8,
+      "id": 12,
       "references": [
-        2,
-        3
+        1,
+        8
       ],
       "type": "table",
       "data": {
@@ -979,10 +1067,10 @@
       }
     },
     {
-      "id": 9,
+      "id": 13,
       "references": [
-        5,
-        2
+        2,
+        1
       ],
       "type": "table",
       "data": {
@@ -1071,7 +1159,7 @@
       }
     },
     {
-      "id": 10,
+      "id": 14,
       "references": [],
       "type": "table",
       "data": {
@@ -1129,7 +1217,7 @@
       }
     },
     {
-      "id": 11,
+      "id": 15,
       "references": [],
       "type": "table",
       "data": {
@@ -1246,7 +1334,7 @@
       }
     },
     {
-      "id": 12,
+      "id": 16,
       "references": [],
       "type": "table",
       "data": {
@@ -1303,7 +1391,7 @@
       }
     },
     {
-      "id": 13,
+      "id": 17,
       "references": [],
       "type": "table",
       "data": {
@@ -1350,7 +1438,7 @@
       }
     },
     {
-      "id": 14,
+      "id": 18,
       "references": [],
       "type": "table",
       "data": {
@@ -1412,20 +1500,65 @@
       ]
     },
     {
-      "name": "profiles",
-      "sql": [
-        {
-          "dialect": "sqlite",
-          "sql": "CREATE TABLE IF NOT EXISTS \"profiles\" (\"id\" TEXT NOT NULL, \"display_name\" TEXT NULL, \"avatar_url\" TEXT NULL, \"upi_vpa\" TEXT NULL, \"updated_at\" INTEGER NULL, PRIMARY KEY (\"id\"));"
-        }
-      ]
-    },
-    {
       "name": "groups",
       "sql": [
         {
           "dialect": "sqlite",
           "sql": "CREATE TABLE IF NOT EXISTS \"groups\" (\"id\" TEXT NOT NULL, \"name\" TEXT NOT NULL, \"default_currency\" TEXT NOT NULL REFERENCES currencies (code), \"is_direct\" INTEGER NOT NULL DEFAULT 0 CHECK (\"is_direct\" IN (0, 1)), \"simplify_debts\" INTEGER NOT NULL DEFAULT 1 CHECK (\"simplify_debts\" IN (0, 1)), \"created_by\" TEXT NULL, \"created_at\" INTEGER NOT NULL, \"archived_at\" INTEGER NULL, \"updated_at\" INTEGER NOT NULL DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)), PRIMARY KEY (\"id\"));"
+        }
+      ]
+    },
+    {
+      "name": "entries",
+      "sql": [
+        {
+          "dialect": "sqlite",
+          "sql": "CREATE TABLE IF NOT EXISTS \"entries\" (\"id\" TEXT NOT NULL, \"group_id\" TEXT NOT NULL REFERENCES \"groups\" (id) ON DELETE CASCADE, \"kind\" TEXT NOT NULL, \"description\" TEXT NOT NULL DEFAULT '', \"category_id\" TEXT NULL, \"currency\" TEXT NOT NULL, \"amount_minor\" INTEGER NOT NULL, \"entry_date\" INTEGER NOT NULL, \"split_kind\" TEXT NOT NULL, \"fx_rate\" REAL NULL, \"fx_source\" TEXT NULL, \"fx_at\" INTEGER NULL, \"notes\" TEXT NULL, \"created_by\" TEXT NOT NULL, \"created_at\" INTEGER NOT NULL, \"updated_at\" INTEGER NOT NULL, \"base_updated_at\" INTEGER NULL, \"deleted_at\" INTEGER NULL, \"client_key\" TEXT NULL, PRIMARY KEY (\"id\"));"
+        }
+      ]
+    },
+    {
+      "name": "entries_fts",
+      "sql": [
+        {
+          "dialect": "sqlite",
+          "sql": "CREATE VIRTUAL TABLE IF NOT EXISTS \"entries_fts\" USING fts5(description, notes, content=entries, content_rowid=rowid);"
+        }
+      ]
+    },
+    {
+      "name": "entries_fts_insert",
+      "sql": [
+        {
+          "dialect": "sqlite",
+          "sql": "CREATE TRIGGER entries_fts_insert AFTER INSERT ON entries BEGIN INSERT INTO entries_fts (\"rowid\", description, notes) VALUES (new.\"rowid\", new.description, new.notes);END"
+        }
+      ]
+    },
+    {
+      "name": "entries_fts_delete",
+      "sql": [
+        {
+          "dialect": "sqlite",
+          "sql": "CREATE TRIGGER entries_fts_delete AFTER DELETE ON entries BEGIN INSERT INTO entries_fts (entries_fts, \"rowid\", description, notes) VALUES ('delete', old.\"rowid\", old.description, old.notes);END"
+        }
+      ]
+    },
+    {
+      "name": "entries_fts_update",
+      "sql": [
+        {
+          "dialect": "sqlite",
+          "sql": "CREATE TRIGGER entries_fts_update AFTER UPDATE ON entries BEGIN INSERT INTO entries_fts (entries_fts, \"rowid\", description, notes) VALUES ('delete', old.\"rowid\", old.description, old.notes);INSERT INTO entries_fts (\"rowid\", description, notes) VALUES (new.\"rowid\", new.description, new.notes);END"
+        }
+      ]
+    },
+    {
+      "name": "profiles",
+      "sql": [
+        {
+          "dialect": "sqlite",
+          "sql": "CREATE TABLE IF NOT EXISTS \"profiles\" (\"id\" TEXT NOT NULL, \"display_name\" TEXT NULL, \"avatar_url\" TEXT NULL, \"upi_vpa\" TEXT NULL, \"updated_at\" INTEGER NULL, PRIMARY KEY (\"id\"));"
         }
       ]
     },
@@ -1444,15 +1577,6 @@
         {
           "dialect": "sqlite",
           "sql": "CREATE TABLE IF NOT EXISTS \"categories\" (\"id\" TEXT NOT NULL, \"name\" TEXT NOT NULL, \"icon\" TEXT NOT NULL, PRIMARY KEY (\"id\"));"
-        }
-      ]
-    },
-    {
-      "name": "entries",
-      "sql": [
-        {
-          "dialect": "sqlite",
-          "sql": "CREATE TABLE IF NOT EXISTS \"entries\" (\"id\" TEXT NOT NULL, \"group_id\" TEXT NOT NULL REFERENCES \"groups\" (id) ON DELETE CASCADE, \"kind\" TEXT NOT NULL, \"description\" TEXT NOT NULL DEFAULT '', \"category_id\" TEXT NULL, \"currency\" TEXT NOT NULL, \"amount_minor\" INTEGER NOT NULL, \"entry_date\" INTEGER NOT NULL, \"split_kind\" TEXT NOT NULL, \"fx_rate\" REAL NULL, \"fx_source\" TEXT NULL, \"fx_at\" INTEGER NULL, \"notes\" TEXT NULL, \"created_by\" TEXT NOT NULL, \"created_at\" INTEGER NOT NULL, \"updated_at\" INTEGER NOT NULL, \"base_updated_at\" INTEGER NULL, \"deleted_at\" INTEGER NULL, \"client_key\" TEXT NULL, PRIMARY KEY (\"id\"));"
         }
       ]
     },

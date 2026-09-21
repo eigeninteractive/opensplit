@@ -693,9 +693,10 @@ supabase/           migrations, organised by subject rather than by date:
 drift_schemas/      a snapshot of every shipped local schema, so a future
                     migration can be tested against a real old database
                     rather than a guess at one.
-docs/               procedures that are too long for a commit message and
-                    have to be followed exactly -- currently the one for
-                    moving production onto the group_events schema.
+docs/               procedures and rules that are too long for a commit
+                    message and have to be followed exactly: moving
+                    production onto the group_events schema, and what to
+                    know before changing the local database.
 ```
 
 The migrations are edited in place rather than appended to while the app is

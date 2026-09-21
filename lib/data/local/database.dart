@@ -23,6 +23,7 @@ part 'database.g.dart';
 /// `sqlite3.wasm` over OPFS on the web. No layer above this one branches on
 /// platform.
 @DriftDatabase(
+  include: {'search.drift'},
   tables: [
     Currencies,
     Profiles,
@@ -69,6 +70,9 @@ class AppDatabase extends _$AppDatabase {
   /// longer matches the tables in code, which catches the change you forgot to
   /// record; it cannot catch a snapshot re-dumped at the same version, so that
   /// is the one thing to be careful about.
+  ///
+  /// See `docs/local-database.md`, which also carries the rule this file cannot
+  /// enforce: never reuse the name of a removed table.
   @override
   int get schemaVersion => 2;
 
@@ -91,106 +95,42 @@ class AppDatabase extends _$AppDatabase {
   /// public API for this boundary.
   void refreshAfterExternalSync() => markTablesUpdated(allTables);
 
-  /// Builds the schema from nothing: tables and the search index.
-  ///
-  /// Shared by the first launch and by [_rebuild], so the two cannot drift —
-  /// a rebuilt database is the same database a new install gets.
-  ///
-  /// It seeds nothing. Currencies and categories used to be written here from
-  /// a hardcoded copy of the server's, which is a duplicate that has to be kept
-  /// in step by hand and meant a new currency needed an app release. They are
-  /// synced now — see `SyncEngine.pullReferenceData`, and
-  /// `referenceDataProvider`, which is what stops the app being usable before
-  /// they have arrived.
-  Future<void> _createFromScratch(Migrator m) async {
-    await m.createAll();
-    await _createSearchIndex();
-  }
-
-  /// Throws the local copy away and builds it again.
-  ///
-  /// What gets dropped is read out of `sqlite_master` rather than taken from
-  /// `allSchemaEntities`, and that distinction is the whole of this method. The
-  /// entities are what the *current code* declares; what has to go is whatever
-  /// this *file* happens to hold, and after a schema change those are different
-  /// sets by definition. Dropping the declared ones leaves every table the new
-  /// code no longer knows about sitting there — which is exactly how
-  /// `entry_snapshots` survived a rebuild that was supposed to remove it.
-  Future<void> _rebuild(Migrator m) async {
-    await customStatement('PRAGMA foreign_keys = OFF');
-    try {
-      Future<List<String>> named(String type) async => [
-        for (final row in await customSelect(
-          "select name from sqlite_master where type = ? "
-          "and name not like 'sqlite_%'",
-          variables: [Variable<String>(type)],
-        ).get())
-          row.read<String>('name'),
-      ];
-
-      // Triggers first: one referencing a table that has already gone is an
-      // error on the way out, not a no-op.
-      for (final trigger in await named('trigger')) {
-        await customStatement('DROP TRIGGER IF EXISTS "$trigger"');
-      }
-      for (final view in await named('view')) {
-        await customStatement('DROP VIEW IF EXISTS "$view"');
-      }
-
-      // fts5 virtual tables next, because dropping one also removes the four
-      // or five shadow tables it keeps beside itself — and dropping one of
-      // those directly is an error rather than a tidy-up.
-      for (final table in await named('table')) {
-        if (table.endsWith('_fts')) {
-          await customStatement('DROP TABLE IF EXISTS "$table"');
-        }
-      }
-
-      // Re-read, because the shadows are gone now and listing them again would
-      // be listing tables that no longer exist.
-      for (final table in await named('table')) {
-        await customStatement('DROP TABLE IF EXISTS "$table"');
-      }
-
-      await _createFromScratch(m);
-    } finally {
-      await customStatement('PRAGMA foreign_keys = ON');
-    }
-  }
-
   @override
   MigrationStrategy get migration => MigrationStrategy(
-    onCreate: _createFromScratch,
+    onCreate: (m) => m.createAll(),
 
     // Every schema change rebuilds the local database from empty, and the
     // device re-syncs.
     //
     // This is a pre-release policy, not a permanent one, and it is written down
-    // here because it is the kind of thing that quietly stops being acceptable.
-    // It is fine exactly while the only installs are testers who can lose their
-    // local copy without losing anything: the ledger lives on the server too,
-    // so a rebuild costs a sync rather than data.
+    // because it is the kind of thing that quietly stops being acceptable. It
+    // is fine exactly while the only installs are testers who can lose their
+    // local copy without losing anything: the ledger is on the server too, so a
+    // rebuild costs a sync.
     //
-    // The one thing it does throw away is the outbox -- writes made offline and
-    // never pushed, which by definition exist nowhere else. That is the cost,
-    // it is real, and it is the reason this has to become a real migration
-    // before anybody who is not a tester installs the app. See the note on
-    // [schemaVersion].
+    // What it does throw away is the outbox -- writes made offline and never
+    // pushed, which by definition exist nowhere else. That is the cost, it is
+    // real, and it is why this has to become a set of ordinary migrations
+    // before anybody who is not a tester installs the app. See [schemaVersion].
     //
-    // Deliberately not `destructiveFallback`, drift's own version of this,
-    // which looks like exactly this and is wrong here twice. It drops
-    // `allSchemaEntities` -- the tables the *current code* declares, so a table
-    // the new code no longer knows about is never dropped at all. And it calls
-    // `createAll` rather than onCreate, and replaces onCreate with a default
-    // that does the same, so the FTS index and the reference-data seed would be
-    // skipped on every path. A device would come back with no search and no
-    // currencies, holding whatever tables the old schema had.
+    // This is drift's `destructiveFallback`, written out rather than used: that
+    // getter returns a whole MigrationStrategy and would take `beforeOpen` with
+    // it, which is where foreign keys, WAL and the session resume are set.
     //
-    // See [_rebuild] for the first, and [_createFromScratch] for the second.
-    // Drift routes a downgrade here too, so a tester moved back to an older
-    // build by Play recovers the same way rather than opening a database from
-    // the future.
-    onUpgrade: (m, from, to) async => _rebuild(m),
+    // It drops what the schema *declares*, so a table removed from
+    // `tables.dart` is left behind on devices that upgrade rather than
+    // reinstall. Accepted deliberately, and the one rule that keeps it harmless
+    // is written down in docs/local-database.md: never reuse the name of a
+    // table that has been removed. `createAll` issues CREATE TABLE IF NOT
+    // EXISTS, so a reused name would silently bind to the old table rather than
+    // fail.
+    onUpgrade: (m, from, to) async {
+      // Reversed, so a table goes before whatever it references.
+      for (final entity in allSchemaEntities.toList().reversed) {
+        await m.drop(entity);
+      }
+      await m.createAll();
+    },
 
     beforeOpen: (details) async {
       if (_resumeSession) {
@@ -217,50 +157,4 @@ class AppDatabase extends _$AppDatabase {
       }
     },
   );
-
-  /// Creates the FTS5 index and the triggers that keep it in step.
-  ///
-  /// Search is local and instant, over data already on the device — no
-  /// endpoint, no query cost, and it works with no connection. Searching your
-  /// own expense history is not a feature worth charging for.
-  ///
-  /// An external-content table (`content='entries'`) stores only the index, not
-  /// a second copy of the text, so this costs very little space.
-  Future<void> _createSearchIndex() async {
-    await customStatement('''
-      CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts USING fts5(
-        description,
-        notes,
-        content='entries',
-        content_rowid='rowid'
-      )
-    ''');
-
-    // External-content FTS5 tables are not updated automatically; without
-    // these the index silently drifts from the table and search starts
-    // returning stale or missing rows.
-    await customStatement('''
-      CREATE TRIGGER IF NOT EXISTS entries_fts_insert AFTER INSERT ON entries
-      BEGIN
-        INSERT INTO entries_fts(rowid, description, notes)
-        VALUES (new.rowid, new.description, new.notes);
-      END
-    ''');
-    await customStatement('''
-      CREATE TRIGGER IF NOT EXISTS entries_fts_delete AFTER DELETE ON entries
-      BEGIN
-        INSERT INTO entries_fts(entries_fts, rowid, description, notes)
-        VALUES ('delete', old.rowid, old.description, old.notes);
-      END
-    ''');
-    await customStatement('''
-      CREATE TRIGGER IF NOT EXISTS entries_fts_update AFTER UPDATE ON entries
-      BEGIN
-        INSERT INTO entries_fts(entries_fts, rowid, description, notes)
-        VALUES ('delete', old.rowid, old.description, old.notes);
-        INSERT INTO entries_fts(rowid, description, notes)
-        VALUES (new.rowid, new.description, new.notes);
-      END
-    ''');
-  }
 }

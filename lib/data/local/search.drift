@@ -1,0 +1,48 @@
+import 'tables.dart';
+
+-- Local full-text search over expense descriptions and notes.
+--
+-- Search is local and instant, over data already on the device — no endpoint,
+-- no query cost, and it works with no connection. Searching your own expense
+-- history is not a feature worth charging for.
+--
+-- An external-content table (`content=entries`) stores only the index, not a
+-- second copy of the text, so this costs very little space.
+--
+-- Declared here rather than as raw SQL in database.dart, which is where it used
+-- to live. Drift cannot express an fts5 table in the Dart table DSL — the
+-- documentation is explicit that it is not possible — so a .drift file is the
+-- only way for it to be a real schema entity. Being one is the point: it lands
+-- in `allSchemaEntities` and in the committed schema snapshot, which means the
+-- migration drops and recreates it like anything else instead of needing to
+-- know it exists.
+--
+-- There is no Postgres counterpart to keep this in step with. Server-side full
+-- text search is a `tsvector` column and a GIN index rather than a table, and
+-- this app does not use it: search never leaves the device.
+CREATE VIRTUAL TABLE entries_fts USING fts5(
+  description,
+  notes,
+  content=entries,
+  content_rowid=rowid
+);
+
+-- External-content fts5 tables are not updated automatically; without these the
+-- index silently drifts from the table and search starts returning stale or
+-- missing rows.
+CREATE TRIGGER entries_fts_insert AFTER INSERT ON entries BEGIN
+  INSERT INTO entries_fts(rowid, description, notes)
+  VALUES (new.rowid, new.description, new.notes);
+END;
+
+CREATE TRIGGER entries_fts_delete AFTER DELETE ON entries BEGIN
+  INSERT INTO entries_fts(entries_fts, rowid, description, notes)
+  VALUES ('delete', old.rowid, old.description, old.notes);
+END;
+
+CREATE TRIGGER entries_fts_update AFTER UPDATE ON entries BEGIN
+  INSERT INTO entries_fts(entries_fts, rowid, description, notes)
+  VALUES ('delete', old.rowid, old.description, old.notes);
+  INSERT INTO entries_fts(rowid, description, notes)
+  VALUES (new.rowid, new.description, new.notes);
+END;
