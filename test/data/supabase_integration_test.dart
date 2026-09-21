@@ -144,6 +144,8 @@ void main() {
       api = SupabaseLedgerApi(client);
 
       db = AppDatabase(NativeDatabase.memory());
+
+      await seedReferenceData(db);
       outbox = OutboxQueue(db);
       groups = DriftGroupRepository(db, outbox: outbox);
       entries = DriftEntryRepository(db, outbox: outbox);
@@ -867,6 +869,7 @@ void main() {
       hostInvites = SupabaseInviteApi(host);
       guestInvites = SupabaseInviteApi(guest);
       hostDb = AppDatabase(NativeDatabase.memory());
+      await seedReferenceData(hostDb);
       hostGroups = DriftGroupRepository(hostDb, outbox: OutboxQueue(hostDb));
     });
 
@@ -1016,6 +1019,7 @@ void main() {
       hostInvites = SupabaseInviteApi(host);
       guestInvites = SupabaseInviteApi(guest);
       hostDb = AppDatabase(NativeDatabase.memory());
+      await seedReferenceData(hostDb);
       hostGroups = DriftGroupRepository(hostDb, outbox: OutboxQueue(hostDb));
     });
 
