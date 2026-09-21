@@ -472,12 +472,17 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
       'P0002', // no_data_found
     };
 
-    // serialization_failure, raised by upsert_entry when an edit was composed
-    // against a version somebody has since changed. Standard, and semantically
-    // exact -- but it must be named here, because the default for an unlisted
-    // code is "transient", and retrying this one resends the same stale base
-    // forever.
-    if (e.code == '40001') {
+    // An edit composed against a version somebody has since changed. Named
+    // here because the default for an unlisted code is "transient", and
+    // retrying this one resends the same stale base forever.
+    //
+    // PT409 rather than 40001, which is what the server used to raise.
+    // serialization_failure reads as "conflict, try again", and PostgREST acts
+    // on it: it re-ran the request until the gateway timed out at sixty
+    // seconds, so the client saw a 504 and reported a network problem instead
+    // of a conflict. 40001 is still accepted in case an older server is on the
+    // other end, which for a link-shaped deployment is worth a line.
+    if (e.code == 'PT409' || e.code == '40001') {
       return RemoteRejected(e.message, kind: RejectionKind.stale);
     }
 

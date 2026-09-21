@@ -271,7 +271,7 @@ select throws_ok($$
       {"member_id":"55555555-5555-4555-8555-555555555555","amount_minor":45000,"weight":1}]'::jsonb,
     'Bigger', 'expense', 'equal', current_date, null, null, null, null,
     null, '2020-01-01T00:00:00Z'::timestamptz)
-$$, '40001', null,
+$$, 'PT409', null,
   'an edit that would move money away from where the server has it, composed '
   'against a version somebody has since changed, is refused rather than '
   'silently overwriting them');
@@ -294,7 +294,7 @@ select throws_ok($$
       {"member_id":"55555555-5555-4555-8555-555555555555","amount_minor":25000,"weight":1}]'::jsonb,
     'Only the words changed', 'expense', 'equal', current_date, null, null,
     null, null, null, '2020-01-01T00:00:00Z'::timestamptz)
-$$, '40001', null,
+$$, 'PT409', null,
   'a description-only edit is still refused when it carries a stale amount: '
   'the RPC writes the whole row, so "I only changed the words" would have '
   'reverted the amount somebody else had just corrected');
@@ -312,7 +312,7 @@ select throws_ok($$
       {"member_id":"55555555-5555-4555-8555-555555555555","amount_minor":50000,"weight":5}]'::jsonb,
     'Re-split', 'expense', 'equal', current_date, null, null, null, null,
     null, '2020-01-01T00:00:00Z'::timestamptz)
-$$, '40001', null,
+$$, 'PT409', null,
   'and so is a re-split that leaves the total alone: the money is the shares, '
   'not just the amount');
 
@@ -321,7 +321,7 @@ select throws_ok(
   $$select delete_entry(
       '88888888-8888-4888-8888-888888888888',
       '2020-01-01T00:00:00Z')$$,
-  '40001', null,
+  'PT409', null,
   'a stale deletion is refused because deleting always moves money');
 
 select lives_ok(format(

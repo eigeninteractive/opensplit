@@ -154,13 +154,24 @@ begin
         into v_incoming;
 
       if v_stored is distinct from v_incoming then
-        -- serialization_failure, which is what this is: a write composed
-        -- against a version that no longer exists. Nothing in this stack
-        -- retries the code automatically, and the client maps it to its own
-        -- third outcome -- neither a backoff nor a dead letter.
+        -- PT409, not 40001.
+        --
+        -- 40001 is serialization_failure, which is what this looks like and is
+        -- exactly the wrong thing to say. That code means "the transaction hit
+        -- a concurrency conflict, run it again" -- and PostgREST believes it,
+        -- re-executing the request. The base version never changes between
+        -- attempts, so every retry raises again and the request hangs until the
+        -- gateway gives up: sixty seconds, then a 504 the client can only read
+        -- as a network problem. The conflict UI never fires, and the person is
+        -- told their connection failed.
+        --
+        -- This is not a retryable conflict. It is a decision that this edit is
+        -- refused, and it will be refused identically forever. PostgREST reads
+        -- a PTnnn SQLSTATE as "return HTTP nnn", so PT409 says Conflict, which
+        -- is both true and final.
         raise exception
           'Entry % changed since this edit was composed', p_id
-          using errcode = '40001';
+          using errcode = 'PT409';
       end if;
     end if;
   end if;
@@ -287,9 +298,12 @@ begin
   -- against the exact server version the device last observed.
   if p_base_updated_at is null
      or v_row.updated_at is distinct from p_base_updated_at then
+    -- PT409 for the same reason as upsert_entry: a refusal that will be
+    -- identical on every retry must not be dressed as a serialization failure,
+    -- which PostgREST retries until the gateway times out.
     raise exception
       'Entry % changed since this deletion was composed', p_entry_id
-      using errcode = '40001';
+      using errcode = 'PT409';
   end if;
 
   update entries
