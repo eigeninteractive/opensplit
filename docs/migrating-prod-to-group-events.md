@@ -30,8 +30,9 @@ Closed testing data is often worth exactly nothing, and a rebuild is far less
 risky than a transformation. The whole procedure:
 
 ```bash
-# Drops `public` and replays supabase/migrations/ in order — the same thing a
-# fresh clone gets. Irreversible, and it will ask.
+# Drops every user schema, drops everything in `public`, truncates `auth`, and
+# replays supabase/migrations/ in order. Close to what a fresh clone gets, minus
+# the accounts — see trap 1. Irreversible, and it will ask.
 supabase db reset --linked
 
 # The Edge Function was renamed, so the new one has to exist before anything
@@ -57,34 +58,47 @@ supabase functions delete notify-entry   # once push is confirmed working
 supabase test db
 ```
 
-### Trap 1: the accounts outlive the reset
+### Trap 1: the accounts go too
 
-`db reset` drops `public`. It does **not** touch `auth`, so `auth.users` still
-holds every tester — while `public.profiles`, which is where their names live,
-is now empty. `handle_new_user` fires `after insert on auth.users` and will not
-retro-fire for accounts that already exist, so those testers end up with a valid
-session and no profile row, which nothing downstream expects.
-
-Pick one. Keep the accounts and give them their profiles back:
+**`supabase db reset --linked` does wipe `auth`.** This is worth stating plainly
+because the name says `db reset` and the obvious guess is that it leaves the
+platform's own schemas alone. It does not:
 
 ```sql
--- The same expression handle_new_user uses, so an account restored here is
--- indistinguishable from one that had just signed up.
-insert into public.profiles (id, display_name)
-select u.id,
-       coalesce(
-         nullif(trim(u.raw_user_meta_data->>'display_name'), ''),
-         nullif(split_part(coalesce(u.email, ''), '@', 1), ''))
-  from auth.users u
-on conflict (id) do nothing;
+-- pkg/migration/queries/drop.sql, run by reset against the linked project
+for rec in
+  select * from pg_class c
+  where (c.relnamespace::regnamespace::name = 'auth'
+         and c.relname != 'schema_migrations' or ...)
+    and c.relkind = 'r'
+loop
+  execute format('truncate %I.%I cascade', ...);
+end loop;
 ```
 
-Or throw those away too, which is cleaner if the testers are going to reinstall
-anyway — and see trap 2 for why they probably are:
+Every table in `auth` is truncated except `auth.schema_migrations` — so
+`auth.users`, `auth.identities`, `auth.sessions`, `auth.refresh_tokens`, the
+lot. The schema and its structure survive, so GoTrue keeps working; the accounts
+in it do not.
 
-```sql
-delete from auth.users;
-```
+For this path that is a feature, and it means there is nothing to do. Testers
+lose their accounts along with their data and sign in fresh, and because
+`handle_new_user` fires on the new `auth.users` insert they get a profile
+automatically. No profile-restoring SQL is needed.
+
+Two details worth knowing rather than discovering:
+
+- **Access tokens outlive the truncate.** A JWT is verified by signature, not by
+  a lookup, so a tester holding an unexpired one keeps making requests as a user
+  that no longer exists for up to its lifetime — an hour by default. Their
+  writes fail on `profiles` foreign keys rather than on authentication, which
+  reads as a sync error. It resolves itself when the token expires and the
+  refresh fails.
+- **Signing in again gives them a new `id`.** It is a fresh account that happens
+  to share an email address, so nothing keyed to the old uuid finds them. That
+  is fine here because the old rows are being discarded anyway, and it is
+  exactly what makes this trap a problem on the preserve-data path, where the
+  dump has to put `auth` back.
 
 ### Trap 2: the devices do not know anything happened
 
@@ -109,8 +123,9 @@ drops every local table. Installing the update **is** clearing app storage.
 That holds only for this release, and only for devices that take it. For a
 device that stays on the old build, or a future server wipe that ships no schema
 change, the manual answer is the real one: **clear app storage, or uninstall and
-reinstall.** Deleting `auth.users` in trap 1 helps by invalidating their
-sessions, but do not rely on it alone — tell them.
+reinstall.** The truncated `auth` in trap 1 helps a little, by making their
+refresh fail once the access token expires, but it is not a wipe of anything on
+the device — tell them.
 
 ---
 
@@ -141,59 +156,62 @@ destructive by design.
 
 ```bash
 supabase link --project-ref <ref>
+
+# Insurance. Not read by this procedure — the thing that gets you back.
 supabase db dump --file backup-schema.sql
-supabase db dump --file backup-data.sql --data-only
+
+# Everything the new schema still has a home for, the old history excluded.
+supabase db dump --data-only --file backup-data.sql -x public.entry_events
+
+# The old history, on its own, because it is the one thing that has to be
+# transformed rather than restored.
+pg_dump "$DATABASE_URL" --data-only --column-inserts \
+        --quote-all-identifiers --table=public.entry_events \
+        -f entry-events.sql
 ```
 
-Keep both. The second is the one this procedure reads from; the first is the
-one that gets you back if it goes wrong.
+Three files, and the split matters: `backup-data.sql` gets loaded as-is in step
+2, and a dump containing `INSERT INTO "public"."entry_events"` would hit a table
+that no longer exists in the middle of it.
 
-**Check what you are about to move.** A handful of rows behaves differently
-from a million, and knowing which you have decides whether the direct route
-below is acceptable:
+**`backup-data.sql` contains `auth`, and that is the point.** `supabase db dump`
+passes `--schema '*'` and excludes only platform-maintained schemas; `auth` is
+not among them, and only `auth.schema_migrations` is excluded by table. So the
+dump holds `auth.users` and friends, which is what lets step 2 put the testers
+back after the reset truncates them. Check before you rely on it:
 
-```sql
-select
-  (select count(*) from groups)       as groups,
-  (select count(*) from members)      as members,
-  (select count(*) from entries)      as entries,
-  (select count(*) from entry_events) as events;
+```bash
+grep -c 'INSERT INTO "auth"."users"' backup-data.sql
 ```
 
-**Take the app out of the way.** There is a window here where the schema is
-half-built, and a client syncing into it will get errors it interprets as
-network failures and retry. Either do this when nobody is using it, or turn
-sync off at the server for the duration.
+**Nobody has to stop using the app.** This is a closed test on a handful of
+devices, so there is no meaningful window to protect and no need to disable
+sync. A client that happens to sync into a half-built schema gets errors it
+treats as network failures and retries; that is the behaviour it is designed
+for, and once the server is whole the next sweep succeeds. Just do not do this
+while somebody is mid-expense and expecting it to land.
 
 ---
 
-## Step 1 — Park the old history
-
-`group_events` is not a rename of `entry_events`; the columns are different.
-Copy the old rows somewhere the rebuild will not touch, before the rebuild
-drops them.
-
-```sql
-create schema if not exists migration_scratch;
-
-create table migration_scratch.entry_events as
-  select * from public.entry_events;
-
-select count(*) from migration_scratch.entry_events;
-```
-
-A schema outside `public`, because the rebuild in step 2 drops `public` whole.
-
----
-
-## Step 2 — Rebuild the schema
+## Step 1 — Rebuild the schema
 
 ```bash
 supabase db reset --linked
 ```
 
-This drops `public` and replays `supabase/migrations/` in order, which is
-exactly what a fresh clone gets. `migration_scratch` survives it.
+This drops every user schema and every object in `public`, truncates `auth`, and
+then replays `supabase/migrations/` in order — the same state a fresh clone
+gets, minus the accounts.
+
+**Do not park the old rows in a scratch schema to survive this.** An earlier
+version of this document said to copy them into `migration_scratch` first, and
+that does not work: the reset drops user schemas by owner, and a schema you
+created is owned by `postgres` rather than `supabase_admin`, so it goes with the
+rest. The exclusion list is `information_schema`, `pg_*`, `_analytics`,
+`_realtime`, `_supavisor`, `pgbouncer`, `pgmq`, `pgsodium`, `pgtle`,
+`supabase_migrations`, `vault`, `extensions` and `public` — and nothing you can
+add yourself. The old history rides this out in `entry-events.sql`, outside the
+database entirely, which is why it was dumped separately.
 
 If your Supabase plan or setup refuses `db reset --linked`, the equivalent by
 hand is:
@@ -204,11 +222,14 @@ create schema public;
 grant usage on schema public to anon, authenticated, service_role;
 ```
 
-followed by `supabase db push`.
+followed by `supabase db push`. Note that this really does leave `auth` alone,
+unlike the reset — so on this route the testers keep their accounts and step 2
+will try to insert `auth.users` rows that already exist. Add `truncate
+auth.users cascade;` if you want the two routes to behave the same.
 
 ---
 
-## Step 3 — Put the unchanged rows back
+## Step 2 — Put the rows back, accounts included
 
 Load the data-only dump, **with triggers off**.
 
@@ -219,28 +240,83 @@ manufacture a fictional past: every member would appear to have joined at the
 moment of the restore, every expense would get a fresh "created" snapshot dated
 today, and the balance check would run against a half-loaded ledger.
 
-```sql
-set session_replication_role = replica;  -- triggers and FK checks off
-```
-
 ```bash
-psql "$DATABASE_URL" \
-  -c "set session_replication_role = replica;" \
-  -f backup-data.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backup-data.sql
 ```
 
-`session_replication_role = replica` has to be set in the **same session** as
-the load, which is why it is passed with `-c` rather than run separately.
+**The dump turns the triggers off itself.** `supabase db dump` emits
+`SET session_replication_role = replica;` as its first line and `RESET ALL;` as
+its last, so there is nothing to pass on the command line here — and nothing
+still in effect afterwards, which is why step 3 sets it again.
 
-Skip `entry_events` if your dump contains it — that table no longer exists and
-its rows are in `migration_scratch`.
+`ON_ERROR_STOP=1` because psql otherwise carries on past a failed statement and
+exits 0, which on a restore means finding out later and from the wrong symptom.
+
+This is also where the testers come back. `auth.users` is in the dump, so the
+accounts truncated by the reset are restored with their original ids — which is
+what keeps `public.profiles` pointing at real users and lets people carry on in
+the app without signing in again. Confirm it before moving on:
+
+```sql
+select
+  (select count(*) from auth.users)      as accounts,
+  (select count(*) from public.profiles) as profiles;
+```
+
+Those two should agree, and not because a trigger made them: `handle_new_user`
+is inert during the load like every other trigger, so both counts come from the
+dump. If `profiles` is short, the restore dropped rows. If `accounts` is zero,
+the dump did not contain `auth` at all, and every tester will get a new uuid on
+next sign-in with their old rows stranded.
 
 ---
 
-## Step 4 — Transform the history
+## Step 3 — Transform the history
 
 The one real transformation. Each old row becomes a `group_events` row of kind
 `entry`, with its typed columns folded into the payload.
+
+First give the old rows somewhere to land. The reset dropped `entry_events`, and
+`entry-events.sql` inserts into that exact name, so recreate it — same columns
+and types as before, but with none of the foreign keys or defaults, because this
+exists to be read once and dropped in step 6:
+
+```sql
+create table public.entry_events (
+  id           uuid primary key,
+  entry_id     uuid        not null,
+  group_id     uuid        not null,
+  actor_id     uuid,
+  created_at   timestamptz not null,
+  description  text        not null,
+  currency     char(3)     not null,
+  amount_minor bigint      not null,
+  entry_date   date        not null,
+  split_kind   split_kind  not null,
+  category_id  uuid,
+  notes        text,
+  deleted_at   timestamptz,
+  payers       jsonb       not null,
+  shares       jsonb       not null
+);
+```
+
+The types are the originals rather than approximations, which matters in two
+places: `currency` is `char(3)` and `split_kind` is the enum, not text. The enum
+survives because `entries.split_kind` still uses it, so it is recreated by the
+migrations before this runs.
+
+If you would rather not take this document's word for the shape — and you
+should not, it is the old schema and git is its source of truth:
+
+```bash
+git show main:supabase/migrations/20260101000005_entries.sql \
+  | sed -n '/create table entry_events/,/^);/p'
+```
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f entry-events.sql
+```
 
 ```sql
 set session_replication_role = replica;
@@ -269,7 +345,7 @@ select
                     end,
     'payers',       e.payers,
     'shares',       e.shares)
-from migration_scratch.entry_events e
+from public.entry_events e
 -- Only for expenses that survived the restore. An orphan would fail nothing
 -- here, since subject_id is deliberately not a foreign key, but it would show
 -- up in the feed as a change to an expense nobody can open.
@@ -320,7 +396,7 @@ also defensible; a history that starts when the history started is not a lie.
 
 ---
 
-## Step 5 — Turn the triggers back on and check
+## Step 4 — Turn the triggers back on and check
 
 ```sql
 set session_replication_role = origin;
@@ -331,7 +407,7 @@ Then verify, in this order:
 ```sql
 -- Every old row arrived, or you know why it did not.
 select
-  (select count(*) from migration_scratch.entry_events) as before,
+  (select count(*) from public.entry_events) as before,
   (select count(*) from public.group_events where kind = 'entry') as after;
 
 -- The tamper property holds: the newest snapshot of each expense still
@@ -366,7 +442,7 @@ Then the behaviour, rather than the data:
 
 ```sql
 -- Balances are computed from entries and have nothing to do with any of the
--- above, so this is a check that step 3 restored the ledger, not step 4.
+-- above, so this is a check that step 2 restored the ledger, not step 3.
 select * from v_member_balances limit 20;
 ```
 
@@ -378,7 +454,7 @@ supabase test db
 
 ---
 
-## Step 6 — Redeploy the Edge Function
+## Step 5 — Redeploy the Edge Function
 
 The function was renamed, so the old one keeps running until it is removed and
 `app_settings` still points at it.
@@ -411,14 +487,18 @@ supabase functions delete notify-entry
 
 ---
 
-## Step 7 — Drop the scratch schema
+## Step 6 — Drop the old table
 
 Only after everything above has passed, and after the app has been exercised
 against the migrated database.
 
 ```sql
-drop schema migration_scratch cascade;
+drop table public.entry_events;
 ```
+
+Leaving it is not harmless the way an orphaned table on a phone is. PostgREST
+reads the schema to decide what it exposes, so a stray `entry_events` in
+`public` is a live endpoint with no RLS policy on it.
 
 ---
 
@@ -434,9 +514,9 @@ the person who made them.
 **The local database throws itself away.** `AppDatabase.schemaVersion` is 2, and
 the v1 → v2 step is drift's own `destructiveFallback`: every local table is
 dropped and recreated empty, including the outbox and every sync cursor. The
-device then re-pulls each feed from the beginning. `test/data/migration_test.dart`
-runs that against a real v1 database and asserts the emptiness rather than
-hoping for it.
+device then re-pulls each feed from the beginning.
+`test/data/migration_test.dart` runs that against a real v1 database and asserts
+the emptiness rather than hoping for it.
 
 That is the whole of the local migration, and it decides the order below. An
 updated client is not a client with stale data — it is a client with **no**
@@ -497,17 +577,13 @@ you cannot choose when they open it.
 Server-first breaks old clients, which is what you want — they are displaying a
 history the server no longer has.
 
-**The best available version is neither, quite:** run the release, let Play
-accept the upload, and migrate the server while the release is still processing
-and before rollout completes. Play does not make a closed-testing build
-installable the instant the upload finishes. Do the migration in that gap and no
-tester is ever running a new client against an old server, nor an old client
-against a new one for more than that gap. Watch the track in the Play Console
-rather than assuming a duration.
-
-If you are on the [throwing it away](#throwing-it-away-instead) path, this is
-simpler than it sounds: there is no data to lose on either side, so migrate the
-server whenever you like and make sure it is done before testers update.
+**Do not over-engineer the gap.** This is a closed test on a handful of devices
+that nobody is actively using. Migrate the server, confirm it with the checks in
+step 4, then ship the client. The queued-writes problem in the table above is
+real but needs somebody adding an expense in the interval to bite, and on a
+tester install that is a thing you can simply ask about rather than design
+around. On a live app with real traffic the calculation would be different, and
+so would this document.
 
 ---
 
@@ -517,12 +593,23 @@ Restore, in this order:
 
 ```bash
 psql "$DATABASE_URL" -c "drop schema public cascade; create schema public;"
-psql "$DATABASE_URL" -f backup-schema.sql
-psql "$DATABASE_URL" -c "set session_replication_role = replica;" -f backup-data.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backup-schema.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backup-data.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f entry-events.sql
 ```
+
+Both data files, because the dumps were split: `backup-data.sql` was taken with
+`-x public.entry_events`, so the old history only comes back from the second.
+`backup-schema.sql` recreates `entry_events` for it to land in.
+
+The accounts come back with `backup-data.sql` too. If you are rolling back after
+the reset has already truncated `auth`, that restore is the only thing that puts
+the testers' original ids back — so do not skip it on the grounds that "the
+accounts were fine".
 
 Then put `app_settings.notify_function_url` back to `notify-entry` and redeploy
 the old function if you had already deleted it.
 
-This is why step 7 is last: while `migration_scratch` exists you can redo step 4
-without restoring anything.
+This is why step 6 is last: while `public.entry_events` is still there you can
+redo step 3 without restoring anything. And `entry-events.sql` is still on disk
+either way, so the worst case is reloading it.
