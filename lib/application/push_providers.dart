@@ -129,6 +129,11 @@ class NotificationPreference extends _$NotificationPreference {
   ///
   /// Distinct from the stored value being false, which means they were asked
   /// and said no — a state that must not be re-prompted unbidden.
+  ///
+  /// riverpod_lint would rather every public answer came through `state`, and
+  /// normally it is right. This one cannot: `state` is what the user chose, and
+  /// this is whether they were ever asked. Folding the second into the first is
+  /// exactly the conflation the paragraph above exists to prevent.
   bool get hasBeenAsked =>
       ref.read(sharedPreferencesProvider).containsKey(_key);
 

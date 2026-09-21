@@ -42,7 +42,11 @@ jobs:
           for directory in lib test tool; do dart fix --apply "$directory"; done
           git diff --exit-code
           test -z "$(git status --porcelain --untracked-files=all)"
-      - run: flutter analyze --fatal-infos --no-pub
+      # `dart analyze`, not `flutter analyze`. They are the same analyzer, but
+      # only the former loads the plugins named in analysis_options.yaml -- so
+      # every riverpod_lint rule was being skipped here while passing locally
+      # in an IDE that does load them.
+      - run: dart analyze --fatal-infos
       - run: flutter test --exclude-tags integration
       - name: Test domain logic and refresh UI in Chrome
         run: >-
