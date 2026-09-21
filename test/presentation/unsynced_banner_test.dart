@@ -11,6 +11,8 @@ import 'package:opensplit/domain/split/splitter.dart';
 import 'package:opensplit/presentation/widgets/unsynced_changes_banner.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../harness.dart';
+
 /// The banner is the only thing that tells anyone a write never reached the
 /// server. Everything upstream of it — the dead letter, the recorded reason —
 /// already existed and told nobody, which is exactly the failure these tests
@@ -100,7 +102,11 @@ Future<void> _deadLetter(
 void main() {
   late AppDatabase db;
 
-  setUp(() => db = AppDatabase(NativeDatabase.memory()));
+  setUp(() async {
+    db = AppDatabase(NativeDatabase.memory());
+    await seedReferenceData(db);
+    await seedReferenceData(db);
+  });
   tearDown(() => db.close());
 
   testWidgets('nothing is shown when every write has landed', (tester) async {

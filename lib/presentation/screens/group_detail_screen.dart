@@ -13,6 +13,7 @@ import '../theme.dart';
 import '../widgets/balance_arrow.dart';
 import '../widgets/balances_panel.dart';
 import '../widgets/link_account_prompt.dart';
+import '../widgets/empty_state.dart';
 import '../widgets/page_body.dart';
 import '../widgets/pull_to_sync.dart';
 import '../widgets/conflicting_edit_banner.dart';
@@ -316,28 +317,9 @@ class _EmptyEntries extends StatelessWidget {
   final String groupId;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.add_card_outlined, size: 48, color: scheme.primary),
-            const SizedBox(height: 16),
-            Text('Nothing yet', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text(
-              'Add the first expense and balances appear straight away.',
-              textAlign: TextAlign.center,
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => const EmptyState(
+    icon: Icons.receipt_long_outlined,
+    title: 'Nothing yet',
+    message: 'Add the first expense and balances appear straight away.',
+  );
 }

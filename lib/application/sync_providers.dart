@@ -23,6 +23,34 @@ SyncEngine? syncEngine(Ref ref) {
   return engine;
 }
 
+/// Whether this device knows what a currency is, fetching them if it does not.
+///
+/// The app ships with no currencies or categories. They are the server's, and
+/// the device learns them on its first sweep — which removes a hardcoded
+/// duplicate that had to be kept in step by hand, and means a currency added on
+/// the server reaches people without an app release.
+///
+/// What that costs is an ordering requirement, and this is where it is paid.
+/// `groups.default_currency` references `currencies`, so a device that has not
+/// learned them cannot create a group — and a fresh install reaches this point
+/// having just made a network call to sign in, so waiting for one more is
+/// honest rather than a new demand.
+///
+/// Returns false rather than throwing when the fetch fails. Somebody offline on
+/// a rebuilt device should still see the groups they already have; they simply
+/// cannot start a new one until this succeeds, which the group list says by
+/// disabling the action rather than by failing a foreign key underneath them.
+@Riverpod(keepAlive: true)
+Future<bool> referenceData(Ref ref) async {
+  final engine = ref.watch(syncEngineProvider);
+  // No backend configured at all: nothing to fetch and nothing to wait for.
+  if (engine == null) return true;
+
+  if (await engine.hasReferenceData()) return true;
+  await engine.pullReferenceData();
+  return engine.hasReferenceData();
+}
+
 /// Exposes the account's sync coordinator and its observable status.
 ///
 /// Ledger queries remain the source of screen data. Sync status says whether

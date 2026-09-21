@@ -63,7 +63,11 @@ Future<void> _seedGroup(AppDatabase db, {DateTime? archivedAt}) async {
 void main() {
   late AppDatabase db;
 
-  setUp(() => db = AppDatabase(NativeDatabase.memory()));
+  setUp(() async {
+    db = AppDatabase(NativeDatabase.memory());
+    await seedReferenceData(db);
+    await seedReferenceData(db);
+  });
   tearDown(() => db.close());
 
   // The rule the whole route table is built around: a screen either shows the
@@ -102,7 +106,11 @@ void main() {
 
       await _chooseDestination(tester, 'Settings');
 
-      expect(find.widgetWithText(AppBar, 'Settings'), findsOneWidget);
+      // At least one, not exactly one: Settings is under a Material 3 large
+      // top app bar, and SliverAppBar.large puts its headline in both the
+      // collapsed title slot and the expanded FlexibleSpaceBar, so the word
+      // legitimately appears twice while the bar is open.
+      expect(find.widgetWithText(AppBar, 'Settings'), findsAtLeastNWidgets(1));
       expect(find.byTooltip('Open navigation menu'), findsOneWidget);
       expect(
         find.byType(BackButton),
@@ -190,7 +198,7 @@ void main() {
       await tester.tap(find.text('Restore'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Nothing is archived.'), findsOneWidget);
+      expect(find.text('Nothing is archived'), findsOneWidget);
 
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();

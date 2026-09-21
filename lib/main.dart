@@ -71,7 +71,12 @@ Future<void> main() async {
       name: 'opensplit.startup',
       level: 1000, // SEVERE
     );
-    runApp(_Misconfigured(problem));
+    // Scoped like the real launch below, though this screen reads nothing from
+    // a provider. It costs an empty container and buys an invariant with no
+    // exceptions in it: every runApp in this app is inside a ProviderScope,
+    // which is a cheaper thing to hold in your head than one that is true
+    // apart from the error path.
+    runApp(ProviderScope(child: _Misconfigured(problem)));
     return;
   }
 

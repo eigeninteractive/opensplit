@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:opensplit/domain/export/json_export.dart';
 import 'package:opensplit/domain/models/entry.dart';
 import 'package:opensplit/domain/models/entry_event.dart';
+import 'package:opensplit/domain/models/group_event.dart';
 import 'package:opensplit/domain/models/group.dart';
 import 'package:opensplit/domain/models/member.dart';
 import 'package:opensplit/domain/models/profile.dart';
@@ -72,7 +73,7 @@ void main() {
     ],
   );
 
-  Map<String, dynamic> export({List<EntryEvent> activity = const []}) =>
+  Map<String, dynamic> export({List<GroupEvent> activity = const []}) =>
       jsonDecode(
             groupToJson(
               group: group,
@@ -145,7 +146,7 @@ void main() {
     final events =
         export(
               activity: [
-                EntryEvent(
+                EntryChanged(
                   id: 'ev1',
                   entryId: 'e1',
                   groupId: 'g1',
@@ -165,12 +166,54 @@ void main() {
             as List;
 
     final event = events.single as Map<String, dynamic>;
-    expect(event['kind'], 'edited');
+    // Qualified, because "edited" on its own does not say edited what -- the
+    // log now carries member and group lines beside the expense ones.
+    expect(event['kind'], 'entry.edited');
     expect(event['actor_id'], 'm-priya');
     expect((event['changes'] as Map)['amount_minor'], {
       'from': '40000',
       'to': '30000',
     });
+  });
+
+  test('carries the lines that are not about expenses', () {
+    // The half an export used to drop on the floor. "Everything you can take
+    // with you" has to include who joined the group and when.
+    final events =
+        export(
+              activity: [
+                MemberChanged(
+                  id: 'ev2',
+                  groupId: 'g1',
+                  actorId: null,
+                  createdAt: DateTime.utc(2026, 6, 13),
+                  memberId: 'm-ravi',
+                  kind: GroupEventKind.memberJoined,
+                  displayName: 'Ravi',
+                ),
+                GroupChanged(
+                  id: 'ev3',
+                  groupId: 'g1',
+                  actorId: 'm-priya',
+                  createdAt: DateTime.utc(2026, 6, 14),
+                  kind: GroupEventKind.groupRenamed,
+                  name: 'Goa 2026',
+                  previousName: 'Goa',
+                ),
+              ],
+            )['activity']
+            as List;
+
+    expect((events.first as Map)['kind'], 'member_joined');
+    expect((events.first as Map)['display_name'], 'Ravi');
+    expect(
+      (events.first as Map)['actor_id'],
+      isNull,
+      reason: 'nobody joins you to a group; you arrive',
+    );
+
+    expect((events.last as Map)['kind'], 'group_renamed');
+    expect((events.last as Map)['previous_name'], 'Goa');
   });
 
   test('is valid JSON that round trips', () {

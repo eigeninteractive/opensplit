@@ -213,14 +213,28 @@ begin
 
   delete from entries where group_id = any(v_orphans);
   delete from invites where group_id = any(v_orphans);
+
+  -- The record, before the members it attributes things to. `actor_id` is
+  -- ON DELETE RESTRICT so that a member carrying history cannot be deleted out
+  -- from under it, which is right everywhere except here and in the dormancy
+  -- reaper -- the two places that are deleting the history as well.
+  delete from group_events where group_id = any(v_orphans);
+
   delete from members where group_id = any(v_orphans);
   delete from groups  where id       = any(v_orphans);
 
-  -- Invites reference profiles with no ON DELETE action of their own, so they
-  -- hold the profile row hostage. An invite this account minted is spent or
-  -- worthless either way; one it redeemed only records who redeemed it.
+  -- Invites and group links reference profiles with no ON DELETE action of
+  -- their own, so they hold the profile row hostage. An invite this account
+  -- minted is spent or worthless either way; one it redeemed only records who
+  -- redeemed it.
   delete from invites where created_by = v_uid;
   update invites set redeemed_by = null where redeemed_by = v_uid;
+
+  -- A group link outlives its minter otherwise, which is the one piece of
+  -- bearer authority in this schema: whoever holds that URL could still walk
+  -- into the group after the account that opened the door is gone. The group
+  -- can mint another.
+  delete from group_links where created_by = v_uid;
 
   delete from device_tokens where profile_id = v_uid;
 

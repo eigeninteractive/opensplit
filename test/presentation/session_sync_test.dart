@@ -17,6 +17,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/fake_remote_ledger.dart';
 
+import '../harness.dart';
+
 const _account = Account(id: 'account', isAnonymous: false);
 const _otherAccount = Account(id: 'other-account', isAnonymous: false);
 
@@ -74,6 +76,8 @@ void main() {
         appDatabaseProvider.overrideWith((ref) {
           ref.watch(currentAccountIdProvider);
           final db = AppDatabase(NativeDatabase.memory());
+          // Not seeded: this test never creates a group, so it never touches
+          // the currency foreign key -- and the override has to be synchronous.
           databases.add(db);
           return db;
         }),
@@ -133,6 +137,7 @@ void main() {
       ..signedInProfileId = _account.id;
     final reports = <SyncReport>[];
     final db = AppDatabase(NativeDatabase.memory());
+    await seedReferenceData(db);
     final container = ProviderContainer(
       overrides: [
         authServiceProvider.overrideWithValue(auth),
@@ -209,6 +214,8 @@ void main() {
         appDatabaseProvider.overrideWith((ref) {
           ref.watch(currentAccountIdProvider);
           final db = AppDatabase(NativeDatabase.memory());
+          // Not seeded: this test never creates a group, so it never touches
+          // the currency foreign key -- and the override has to be synchronous.
           databases.add(db);
           return db;
         }),

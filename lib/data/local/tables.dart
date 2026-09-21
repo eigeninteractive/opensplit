@@ -66,14 +66,12 @@ class Profiles extends Table {
 /// server. There, `actor_id` is ON DELETE RESTRICT so a member with history can
 /// never be deleted out from under the record -- but the record it protects is
 /// the server's, and this is a mirror. Locally there is nothing to protect and
-/// something to break: with no action declared, a snapshot refuses the delete
-/// of the very entry it describes, and clearing the ledger on sign-out failed
-/// on a foreign key.
-@DataClassName('EntrySnapshotRow')
-class EntrySnapshots extends Table {
+/// something to break: with no action declared, an event refuses the delete of
+/// the very member it names, and clearing the ledger on sign-out failed on a
+/// foreign key.
+@DataClassName('GroupEventRowData')
+class GroupEvents extends Table {
   TextColumn get id => text()();
-  TextColumn get entryId =>
-      text().references(Entries, #id, onDelete: KeyAction.cascade)();
   TextColumn get groupId =>
       text().references(Groups, #id, onDelete: KeyAction.cascade)();
 
@@ -81,37 +79,38 @@ class EntrySnapshots extends Table {
   /// placeholder's edits survive them claiming an account.
   ///
   /// Nullable, matching the server: a change made by something with no member
-  /// row still belongs on the record.
+  /// row still belongs on the record, and somebody arriving on a link is
+  /// exactly that until the statement creating them commits.
   TextColumn get actorId =>
       text().nullable().references(Members, #id, onDelete: KeyAction.cascade)();
 
   DateTimeColumn get createdAt => dateTime()();
 
-  /// The snapshot itself.
-  TextColumn get description => text()();
-  TextColumn get currency => text()();
-  IntColumn get amountMinor => integer()();
-  DateTimeColumn get entryDate => dateTime()();
-  TextColumn get splitKind => textEnum<SplitKind>()();
-  TextColumn get categoryId => text().nullable()();
-  TextColumn get notes => text().nullable()();
-
-  /// Set once the expense is soft-deleted, which is what makes "deleted" and
-  /// "restored" readable off the chain rather than asserted by a column.
-  DateTimeColumn get deletedAt => dateTime().nullable()();
-
-  /// `[{"member_id": "...", "amount_minor": 40000}, ...]`, ordered by member so
-  /// that two snapshots of an unchanged split compare equal.
+  /// The server's `group_event_kind`, stored by its wire name.
   ///
-  /// Who owes what is where the money actually lives, and its absence here is
-  /// what let a re-split go entirely unrecorded.
-  TextColumn get payers => text()();
-  TextColumn get shares => text()();
+  /// Text rather than a Drift enum column, and that is the one place this
+  /// mirror deliberately loses type safety. A `textEnum` throws on a value it
+  /// cannot parse, so a server that learns a new kind would break the sync of
+  /// every older client that met one — on the feed, which is the least
+  /// important thing in the app to be right about and a very bad thing to take
+  /// the whole pull down with. Kept as text, an unknown kind is a row that
+  /// stores fine and renders as nothing.
+  TextColumn get kind => text()();
+
+  /// The entry, member or invite token this is about. Null when the subject is
+  /// the group itself.
+  ///
+  /// Deliberately not a foreign key even locally: the record describes what was
+  /// true at the time, and it outlives what it describes.
+  TextColumn get subjectId => text().nullable()();
+
+  /// The after-image as JSON, in whatever shape the kind calls for.
+  TextColumn get payload => text()();
 
   /// Written by this device, describing a change the server has not confirmed.
   ///
   /// The whole reason the feed works offline and as a guest. Dropped the moment
-  /// the server's account of the same expense arrives, so it is a placeholder
+  /// the server's account of the same subject arrives, so it is a placeholder
   /// for a record rather than a second opinion about one. Local only -- there
   /// is no such column on the server, and this row is never pushed.
   BoolColumn get isProvisional =>
@@ -189,7 +188,7 @@ class Members extends Table {
 
 @DataClassName('CategoryRow')
 /// The fixed, global category list. Mirrors the server's, seeded from
-/// [presetCategories] and never written to at runtime.
+/// the server's preset list, and never written to at runtime.
 class Categories extends Table {
   TextColumn get id => text()();
   TextColumn get name => text()();

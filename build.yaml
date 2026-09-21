@@ -1,0 +1,26 @@
+# Drift's own configuration, and it exists for exactly one reason.
+#
+# The sqlite module list is empty by default, so drift_dev cannot parse a
+# `CREATE VIRTUAL TABLE ... USING fts5` at all — it reports the table as an
+# element it could not find, which reads like a syntax error and is not one.
+# That is very likely why the search index used to be raw SQL in database.dart
+# rather than a declared table.
+#
+# The shape matters as much as the contents. `sqlite: modules:` is accepted by
+# build_runner and then rejected outright by `drift_dev schema dump`, which
+# refuses the `sqlite` field beside `sql` — so the two tools disagree about the
+# same file unless everything goes under `sql.options`, as it does here.
+targets:
+  $default:
+    builders:
+      drift_dev:
+        options:
+          sql:
+            dialect: sqlite
+            options:
+              # The floor for the syntax drift is allowed to generate, not a
+              # requirement on the device: sqlite3_flutter_libs ships its own
+              # newer library, and the browser gets one from the wasm bundle.
+              version: "3.45"
+              modules:
+                - fts5

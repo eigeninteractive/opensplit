@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:opensplit/presentation/theme.dart';
+import 'package:opensplit/presentation/widgets/group_skeleton.dart';
 
 /// Relative luminance, per WCAG 2.1.
 double _luminance(Color c) {
@@ -104,17 +105,98 @@ void main() {
 
       final css = File('web/index.html').readAsStringSync();
 
-      // The app bar title. A skeleton whose title is a different size or
-      // weight than the real one visibly jumps at the swap, which is the whole
-      // thing this skeleton exists to prevent.
-      final title = resolved.titleLarge!;
-      expect(css, contains('font-size: ${title.fontSize!.round()}px'));
-      expect(css, contains('font-weight: ${title.fontWeight!.value}'));
+      // The app bar headline. All three destinations use a Material 3 large
+      // top app bar, whose expanded title is set in headlineMedium — so that
+      // is what the skeleton has to draw. A skeleton whose headline is a
+      // different size or weight than the real one visibly jumps at the swap,
+      // which is the whole thing this skeleton exists to prevent.
+      final headline = resolved.headlineMedium!;
+      expect(css, contains('font-size: ${headline.fontSize!.round()}px'));
+      expect(css, contains('font-weight: ${headline.fontWeight!.value}'));
 
       // The extended FAB's label.
       final label = resolved.labelLarge!;
       expect(css, contains('font-size: ${label.fontSize!.round()}px'));
       expect(css, contains('font-weight: ${label.fontWeight!.value}'));
+    });
+
+    testWidgets('draws a card the size of the card that replaces it', (
+      tester,
+    ) async {
+      // Measured, not compared.
+      //
+      // Every other number in this stylesheet is derived from something the
+      // app publishes — a colour role, a text style, a breakpoint — and could
+      // be checked by reading that thing. A card's height is not published
+      // anywhere: it is whatever ListTile works out from its own padding, the
+      // type scale and the density in force. So the test renders the real
+      // skeleton card, measures it, and requires the stylesheet to carry
+      // exactly that.
+      //
+      // Which puts the causation the right way round. The app decides what a
+      // group card is; this fails until the stylesheet has been brought to it.
+      // The previous arrangement had the numbers hand-derived in a comment,
+      // and it quietly became a reason not to improve the real card.
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildTheme(Brightness.light),
+          home: const Scaffold(
+            body: CustomScrollView(slivers: [GroupListSkeleton()]),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+
+      final card = tester.getSize(find.byType(SkeletonGroupCard).first);
+      final css = File('web/index.html').readAsStringSync();
+
+      expect(
+        css,
+        contains('height: ${card.height.round()}px'),
+        reason:
+            'web/index.html must draw a ${card.height.round()}dp card, which '
+            'is what a two-line ListTile inside Card.outlined comes to',
+      );
+    });
+
+    testWidgets('gives its app bar the height the app gives one', (
+      tester,
+    ) async {
+      // The other number with no published source. A large app bar's expanded
+      // height is Flutter's, not ours, so it is read off a rendered one rather
+      // than copied from the framework's source.
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildTheme(Brightness.light),
+          home: const Scaffold(
+            body: CustomScrollView(
+              slivers: [
+                SliverAppBar.large(title: Text('Groups'), pinned: true),
+                SliverToBoxAdapter(
+                  child: SizedBox(key: Key('below'), height: 2000),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Read off where the content starts rather than off the bar's own box:
+      // SliverAppBar.large has no single widget whose size is the expanded
+      // height, and the number that matters is exactly how far down the page
+      // the first card begins.
+      final barHeight = tester
+          .getTopLeft(find.byKey(const Key('below')))
+          .dy
+          .round();
+      final css = File('web/index.html').readAsStringSync();
+
+      expect(
+        css,
+        contains('height: ${barHeight}px'),
+        reason: 'the skeleton bar must be as tall as an expanded large one',
+      );
     });
 
     test('agrees with the app on every boot-hint key', () {

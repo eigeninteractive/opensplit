@@ -4,7 +4,7 @@ import 'package:drift/drift.dart';
 
 import '../../domain/models/entry.dart';
 import '../../domain/models/entry_snapshot.dart';
-import '../sync/wire.dart' show memberAmountsToJson;
+import '../../domain/models/group_event.dart';
 import 'database.dart';
 
 /// Writes an entry and its children inside the caller's transaction.
@@ -118,29 +118,21 @@ Future<void> writeEntryInTransaction(
 /// Records what the expense now looks like, as this device sees it.
 ///
 /// insertOrIgnore because the same id can be offered twice -- a retried write,
-/// or a re-entrant path -- and a snapshot is never revised, so a row already
+/// or a re-entrant path -- and an event is never revised, so a row already
 /// present is the same row.
 Future<void> _writeSnapshot(AppDatabase db, EntrySnapshot snapshot) async {
   await db
-      .into(db.entrySnapshots)
+      .into(db.groupEvents)
       .insert(
-        EntrySnapshotsCompanion.insert(
+        GroupEventsCompanion.insert(
           id: snapshot.id,
-          entryId: snapshot.entryId,
           groupId: snapshot.groupId,
           actorId: Value(snapshot.actorId),
           createdAt: snapshot.createdAt,
-          description: snapshot.description,
-          currency: snapshot.currency,
-          amountMinor: snapshot.amountMinor,
-          entryDate: snapshot.entryDate,
-          splitKind: snapshot.splitKind,
-          categoryId: Value(snapshot.categoryId),
-          notes: Value(snapshot.notes),
-          deletedAt: Value(snapshot.deletedAt),
-          payers: jsonEncode(memberAmountsToJson(snapshot.payers)),
-          shares: jsonEncode(memberAmountsToJson(snapshot.shares)),
-          isProvisional: Value(snapshot.isProvisional),
+          kind: GroupEventKind.entry.wireName,
+          subjectId: Value(snapshot.entryId),
+          payload: jsonEncode(snapshotPayload(snapshot)),
+          isProvisional: const Value(true),
         ),
         mode: InsertMode.insertOrIgnore,
       );

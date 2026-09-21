@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 // in database.g.dart, and a part shares the imports of its parent library.
 import '../../domain/models/entry.dart';
 import '../../domain/split/splitter.dart';
-import 'reference_data.dart';
 import 'open_database.dart';
 import 'tables.dart';
 
@@ -24,6 +23,7 @@ part 'database.g.dart';
 /// `sqlite3.wasm` over OPFS on the web. No layer above this one branches on
 /// platform.
 @DriftDatabase(
+  include: {'search.drift'},
   tables: [
     Currencies,
     Profiles,
@@ -33,7 +33,7 @@ part 'database.g.dart';
     Entries,
     EntryPayers,
     EntryShares,
-    EntrySnapshots,
+    GroupEvents,
     EntryConflicts,
     FxRates,
     Outbox,
@@ -54,8 +54,27 @@ class AppDatabase extends _$AppDatabase {
 
   final bool _resumeSession;
 
+  /// Bump this on **any** change to a table in `tables.dart`.
+  ///
+  /// It is not bookkeeping and it is not backward compatibility: SQLite keeps
+  /// this number in the file, drift compares it to this one, and if the two
+  /// agree no migration hook runs at all. An install whose schema changed
+  /// underneath it without a bump therefore opens its old database, is told
+  /// nothing is wrong, and fails on the first query against a table that is not
+  /// there. That is the whole failure mode, and this integer is the only thing
+  /// that prevents it.
+  ///
+  /// While this is what it is -- see [migration] -- bumping costs a tester one
+  /// re-sync and nothing else, so the right instinct is to bump on any doubt.
+  /// `test/data/migration_test.dart` fails if the committed schema snapshot no
+  /// longer matches the tables in code, which catches the change you forgot to
+  /// record; it cannot catch a snapshot re-dumped at the same version, so that
+  /// is the one thing to be careful about.
+  ///
+  /// See `docs/local-database.md`, which also carries the rule this file cannot
+  /// enforce: never reuse the name of a removed table.
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   /// Timestamps are stored as ISO-8601 text rather than Unix seconds.
   ///
@@ -78,34 +97,37 @@ class AppDatabase extends _$AppDatabase {
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-    onCreate: (m) async {
-      await m.createAll();
-      await _createSearchIndex();
-      await _seedReferenceData();
-    },
+    onCreate: (m) => m.createAll(),
 
-    // Empty because there is nothing to upgrade *from* yet, and spelled out
-    // rather than omitted because of what happens the first time there is.
+    // Every schema change rebuilds the local database from empty, and the
+    // device re-syncs.
     //
-    // A local-first app cannot drop and recreate: the device holds the only
-    // copy of anything recorded offline and never pushed. So every schema
-    // change from v1 onwards needs a step here, and the way to know a step is
-    // right is to run it against a real v1 database — which is what the
-    // committed snapshot in `drift_schemas/` is for, and why it is committed
-    // now rather than reconstructed later from a schemaVersion bump nobody
-    // wrote down.
+    // This is a pre-release policy, not a permanent one, and it is written down
+    // because it is the kind of thing that quietly stops being acceptable. It
+    // is fine exactly while the only installs are testers who can lose their
+    // local copy without losing anything: the ledger is on the server too, so a
+    // rebuild costs a sync.
     //
-    //   dart run drift_dev schema dump lib/data/local/database.dart drift_schemas/
-    //   dart run drift_dev schema generate drift_schemas/ test/data/generated_migrations/
+    // What it does throw away is the outbox -- writes made offline and never
+    // pushed, which by definition exist nowhere else. That is the cost, it is
+    // real, and it is why this has to become a set of ordinary migrations
+    // before anybody who is not a tester installs the app. See [schemaVersion].
     //
-    // See test/data/migration_test.dart.
-    onUpgrade: (m, from, to) async {
-      throw StateError(
-        'No migration from schema v$from to v$to. Add a step in '
-        'AppDatabase.migration and a case in test/data/migration_test.dart '
-        'before shipping a schemaVersion bump.',
-      );
-    },
+    // Drift's own `destructiveFallback`, delegated to rather than
+    // reimplemented. The getter returns a whole MigrationStrategy, and using it
+    // wholesale would replace `beforeOpen` too -- which is where foreign keys,
+    // WAL and the session resume are set, none of which this policy has an
+    // opinion about. So its upgrade step is borrowed and the rest is ours.
+    //
+    // It drops what the schema *declares*, so a table removed from
+    // `tables.dart` is left behind on devices that upgrade rather than
+    // reinstall. Accepted deliberately, and the one rule that keeps it harmless
+    // is written down in docs/local-database.md: never reuse the name of a
+    // table that has been removed. `createAll` issues CREATE TABLE IF NOT
+    // EXISTS, so a reused name would silently bind to the old table rather than
+    // fail.
+    onUpgrade: (m, from, to) => destructiveFallback.onUpgrade(m, from, to),
+
     beforeOpen: (details) async {
       if (_resumeSession) {
         await (update(syncSessions)..where((t) => t.id.equals('account')))
@@ -131,73 +153,4 @@ class AppDatabase extends _$AppDatabase {
       }
     },
   );
-
-  /// Creates the FTS5 index and the triggers that keep it in step.
-  ///
-  /// Search is local and instant, over data already on the device — no
-  /// endpoint, no query cost, and it works with no connection. Searching your
-  /// own expense history is not a feature worth charging for.
-  ///
-  /// An external-content table (`content='entries'`) stores only the index, not
-  /// a second copy of the text, so this costs very little space.
-  Future<void> _createSearchIndex() async {
-    await customStatement('''
-      CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts USING fts5(
-        description,
-        notes,
-        content='entries',
-        content_rowid='rowid'
-      )
-    ''');
-
-    // External-content FTS5 tables are not updated automatically; without
-    // these the index silently drifts from the table and search starts
-    // returning stale or missing rows.
-    await customStatement('''
-      CREATE TRIGGER IF NOT EXISTS entries_fts_insert AFTER INSERT ON entries
-      BEGIN
-        INSERT INTO entries_fts(rowid, description, notes)
-        VALUES (new.rowid, new.description, new.notes);
-      END
-    ''');
-    await customStatement('''
-      CREATE TRIGGER IF NOT EXISTS entries_fts_delete AFTER DELETE ON entries
-      BEGIN
-        INSERT INTO entries_fts(entries_fts, rowid, description, notes)
-        VALUES ('delete', old.rowid, old.description, old.notes);
-      END
-    ''');
-    await customStatement('''
-      CREATE TRIGGER IF NOT EXISTS entries_fts_update AFTER UPDATE ON entries
-      BEGIN
-        INSERT INTO entries_fts(entries_fts, rowid, description, notes)
-        VALUES ('delete', old.rowid, old.description, old.notes);
-        INSERT INTO entries_fts(rowid, description, notes)
-        VALUES (new.rowid, new.description, new.notes);
-      END
-    ''');
-  }
-
-  /// Populates currencies and the global category presets.
-  ///
-  /// Run at creation rather than fetched on first launch: the app has to be
-  /// able to format an amount and categorise an expense before it has ever
-  /// reached the network.
-  Future<void> _seedReferenceData() async {
-    await batch((batch) {
-      batch.insertAll(currencies, [
-        for (final c in presetCurrencies)
-          CurrenciesCompanion.insert(
-            code: c.code,
-            exponent: c.exponent,
-            symbol: Value(c.symbol),
-            name: c.name,
-          ),
-      ]);
-      batch.insertAll(categories, [
-        for (final c in presetCategories)
-          CategoriesCompanion.insert(id: c.id, name: c.name, icon: c.icon),
-      ]);
-    });
-  }
 }

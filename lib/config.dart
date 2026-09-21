@@ -64,6 +64,22 @@ String get privacyPolicyUrl => 'https://$linkHost/privacy';
 String get termsUrl => 'https://$linkHost/terms';
 String get deleteAccountUrl => 'https://$linkHost/delete-account';
 
+/// Where the source lives, and the pages that hang off it.
+///
+/// Named here rather than typed into the About screen because the licence
+/// obliges the app to be able to point at its own source: AGPL-3.0 is chosen
+/// precisely so that a hosted fork cannot close this work, and a user running
+/// somebody's modified OpenSplit is entitled to that somebody's changes. A fork
+/// that repoints these three constants has met that obligation in the one place
+/// it is stated.
+const String repositoryUrl = String.fromEnvironment(
+  'REPOSITORY_URL',
+  defaultValue: 'https://github.com/eigeninteractive/opensplit',
+);
+
+String get issuesUrl => '$repositoryUrl/issues';
+String get licenseUrl => '$repositoryUrl/blob/main/LICENSE';
+
 /// Whether a backend is configured at all.
 ///
 /// The app is fully usable without one — everything is computed locally — so

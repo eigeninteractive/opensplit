@@ -34,7 +34,11 @@ Future<void> _unmount(WidgetTester tester) async {
 void main() {
   late AppDatabase db;
 
-  setUp(() => db = AppDatabase(NativeDatabase.memory()));
+  setUp(() async {
+    db = AppDatabase(NativeDatabase.memory());
+    await seedReferenceData(db);
+    await seedReferenceData(db);
+  });
   tearDown(() => db.close());
 
   group('PageBody', () {

@@ -335,7 +335,8 @@ create policy entries_read on entries
 -- Readable by the group. Writable by nobody, at all, by any verb.
 --
 -- SELECT is the only policy here because SELECT is the only thing a client ever
--- does to this table. `snapshot_entry` is the sole writer and it is SECURITY
+-- does to this table. Its writers -- snapshot_entry, record_member_event,
+-- record_group_event, record_link_event -- are all SECURITY
 -- DEFINER, so it does not consult these policies -- which is the design, not a
 -- loophole in it.
 --
@@ -351,7 +352,7 @@ create policy entries_read on entries
 -- Deriving the record on the server removes the claim from the wire. There is
 -- nothing left for a client to assert, so there is nothing left to check.
 -- ----------------------------------------------------------------------------
-create policy entry_events_read on entry_events
+create policy group_events_read on group_events
   for select to authenticated using (is_group_member(group_id));
 
 -- Payers and shares inherit read access from the parent entry. They have no

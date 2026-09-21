@@ -1,7 +1,7 @@
 -- Row-level security, and the invite claim flow.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(26);
+select plan(40);
 
 -- ---------------------------------------------------------------------------
 -- Fixtures: Ravi owns a group with a placeholder for Priya. Zara is a stranger.
@@ -234,6 +234,137 @@ select throws_ok(
   $$select redeem_invite('00000000-0000-4000-8000-0000000000aa')$$,
   '23505', null,
   'someone already in the group cannot claim a second place');
+
+-- ---------------------------------------------------------------------------
+-- Open group links
+--
+-- The named invite above hands one place to one person. This hands the group
+-- to whoever holds the token, which is a bigger claim -- so what is tested here
+-- is mostly what it refuses to do.
+-- ---------------------------------------------------------------------------
+reset role;
+reset "request.jwt.claims";
+
+set local role authenticated;
+set local "request.jwt.claims" to
+  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated"}';
+
+select lives_ok(
+  $$select create_group_link('33333333-3333-4333-8333-333333333333')$$,
+  'a member can mint their group''s open link');
+
+select is(
+  (select count(*)::int from group_links
+    where group_id = '33333333-3333-4333-8333-333333333333'
+      and revoked_at is null),
+  1,
+  'exactly one live link');
+
+-- Minting again revokes rather than accumulates, so the link in a chat is
+-- always the current one or none.
+select lives_ok(
+  $$select create_group_link('33333333-3333-4333-8333-333333333333')$$,
+  'minting again is allowed');
+
+select is(
+  (select count(*)::int from group_links
+    where group_id = '33333333-3333-4333-8333-333333333333'
+      and revoked_at is null),
+  1,
+  'and still leaves exactly one live link, not two open doors');
+
+select is(
+  (select count(*)::int from group_events
+    where group_id = '33333333-3333-4333-8333-333333333333'
+      and kind = 'link_created'),
+  2,
+  'both mintings are on the record: a door only its opener can see is the '
+  'thing worth refusing');
+
+select is(
+  (select count(*)::int from group_events
+    where group_id = '33333333-3333-4333-8333-333333333333'
+      and kind = 'link_revoked'),
+  1,
+  'and so is the one that was closed');
+
+-- A stranger holding the token.
+--
+-- The token is stashed first, as superuser. Reading it back as Zara would not
+-- work, and that is the group_links_read policy doing its job rather than a
+-- problem: she is not a member, so she cannot enumerate the group's links. What
+-- she has is the URL somebody sent her, which is a literal she already holds --
+-- so the test has to hold one too.
+reset role;
+reset "request.jwt.claims";
+
+-- A place of her own to claim. The Priya slot above has been spent by the
+-- redeem_invite tests, and reusing it here made this section depend on how far
+-- the one before it got.
+insert into members (id, group_id, profile_id, display_name)
+values ('77777777-7777-4777-8777-777777777777',
+        '33333333-3333-4333-8333-333333333333', null, 'Meera');
+
+create temp table held_link as
+  select token from group_links
+   where group_id = '33333333-3333-4333-8333-333333333333'
+     and revoked_at is null;
+
+-- Owned by postgres, so the role the tests run as has to be let in. A temp
+-- table is not subject to RLS, which is the point: it stands in for the URL
+-- Zara was sent rather than for anything she could look up.
+grant select on held_link to authenticated;
+
+set local role authenticated;
+set local "request.jwt.claims" to
+  '{"sub":"99999999-9999-4999-8999-999999999999","role":"authenticated"}';
+
+select throws_ok(
+  $$select create_group_link('33333333-3333-4333-8333-333333333333')$$,
+  '42501', null,
+  'a stranger cannot mint a link to a group they are not in');
+
+select is(
+  (select group_name from peek_group_link((select token from held_link))),
+  'Goa Trip',
+  'but may read what the link they hold is for');
+
+select is(
+  (select count(*)::int from list_link_placeholders((select token from held_link))
+    where display_name = 'Meera'),
+  1,
+  'and, once signed in, which places are going spare');
+
+select is(
+  (select count(*)::int from list_link_placeholders((select token from held_link))
+    where display_name = 'Ravi'),
+  0,
+  'but only the places going spare: Ravi has an account and his is not one');
+
+select lives_ok(
+  $$select join_with_link(
+      (select token from held_link),
+      '77777777-7777-4777-8777-777777777777')$$,
+  'Zara claims the place labelled Meera, which is hers to claim: a '
+  'placeholder is only ever what a friend happened to type');
+
+select is(
+  (select count(*)::int from members
+    where group_id = '33333333-3333-4333-8333-333333333333'),
+  4,
+  'claiming adds no row -- Ravi, Priya, Arun and Meera, as before she arrived, '
+  'which is the whole reason members are group-scoped');
+
+select is(
+  (select profile_id from members
+    where id = '77777777-7777-4777-8777-777777777777'),
+  '99999999-9999-4999-8999-999999999999'::uuid,
+  'it sets exactly one column, which is what leaves every balance alone');
+
+select throws_ok(
+  $$select join_with_link((select token from held_link))$$,
+  '23505', null,
+  'and one account cannot then take a second place');
 
 select * from finish();
 rollback;

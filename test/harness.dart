@@ -1,8 +1,12 @@
+import 'package:drift/drift.dart';
+import 'package:drift/native.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:opensplit/application/providers.dart';
 import 'package:opensplit/data/local/database.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'data/server_reference_data.dart';
 
 /// The account a widget test is signed in as.
 ///
@@ -39,3 +43,40 @@ Widget signedInApp({
   ],
   child: child,
 );
+
+/// Gives [db] the reference data a real device gets from its first sync.
+///
+/// The app no longer ships a hardcoded copy of the server's currencies and
+/// categories — it learns them, so that adding a currency does not need a
+/// release. Which means a test database starts genuinely empty, and
+/// `groups.default_currency` references `currencies`: creating a group without
+/// this fails a foreign key.
+///
+/// That is the production ordering rather than a quirk of the tests. A real
+/// device cannot create a group before its first sweep either, which is why
+/// `referenceDataProvider` makes the app wait for one. This is the same
+/// precondition, arranged directly.
+Future<void> seedReferenceData(AppDatabase db) async {
+  await db.batch((batch) {
+    batch.insertAll(db.currencies, [
+      for (final c in defaultCurrencies)
+        CurrenciesCompanion.insert(
+          code: c.code,
+          exponent: c.exponent,
+          symbol: Value(c.symbol),
+          name: c.name,
+        ),
+    ], mode: InsertMode.insertOrIgnore);
+    batch.insertAll(db.categories, [
+      for (final c in defaultCategories)
+        CategoriesCompanion.insert(id: c.id, name: c.name, icon: c.icon),
+    ], mode: InsertMode.insertOrIgnore);
+  });
+}
+
+/// An in-memory database that already knows what a currency is.
+Future<AppDatabase> testDatabase([QueryExecutor? executor]) async {
+  final db = AppDatabase(executor ?? NativeDatabase.memory());
+  await seedReferenceData(db);
+  return db;
+}

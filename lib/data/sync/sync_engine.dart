@@ -228,8 +228,91 @@ class SyncEngine {
   /// a person in three of your groups was fetched three times and the rate
   /// table was swept three times, to no effect after the first.
   Future<void> pullShared() async {
+    await pullReferenceData();
     await pullFxRates();
     await drain(ProfileFeed(api, db));
+  }
+
+  /// Currencies and categories, from the server.
+  ///
+  /// The only source. The device used to ship a hardcoded copy of both and
+  /// write it at creation, which is a duplicate of server data that had to be
+  /// kept in step by hand -- and it meant a currency added on the server
+  /// reached nobody without an app release.
+  ///
+  /// Which leaves an ordering requirement rather than an optional refresh:
+  /// `groups.default_currency` references `currencies`, so a device that has
+  /// not learned what a currency is cannot create a group. That is why this
+  /// runs first in [pullShared], and why `referenceDataProvider` awaits it
+  /// before the app is usable at all.
+  ///
+  /// Upsert, never delete, and that is the whole of the merge rule. A category
+  /// withdrawn on the server is still on the entries that used it, and
+  /// `entries.category_id` references it; removing the row locally would break
+  /// a foreign key to make a list tidier. Reference data grows.
+  ///
+  /// Failures are swallowed. Everything here is already on the device, this
+  /// runs before the pull that actually matters, and taking the whole sweep
+  /// down because a currency name could not be refreshed would be the tail
+  /// wagging the dog.
+  Future<void> pullReferenceData() async {
+    try {
+      final currencies = await api.pullCurrencies();
+      final categories = await api.pullCategories();
+
+      await db.batch((batch) {
+        for (final currency in currencies) {
+          batch.insert(
+            db.currencies,
+            CurrenciesCompanion.insert(
+              code: currency.code,
+              exponent: currency.exponent,
+              symbol: Value(currency.symbol),
+              name: currency.name,
+            ),
+            onConflict: DoUpdate(
+              (_) => CurrenciesCompanion.custom(
+                exponent: Constant(currency.exponent),
+                symbol: Constant(currency.symbol),
+                name: Constant(currency.name),
+              ),
+            ),
+          );
+        }
+        for (final category in categories) {
+          batch.insert(
+            db.categories,
+            CategoriesCompanion.insert(
+              id: category.id,
+              name: category.name,
+              icon: category.icon,
+            ),
+            onConflict: DoUpdate(
+              (_) => CategoriesCompanion.custom(
+                name: Constant(category.name),
+                icon: Constant(category.icon),
+              ),
+            ),
+          );
+        }
+      });
+    } catch (_) {
+      // Swallowed here, where this is a refresh of something the device
+      // already has, and taking a whole sweep down because a currency name
+      // could not be updated would be the tail wagging the dog.
+      //
+      // Not swallowed on the path that matters: `referenceDataProvider` calls
+      // this directly and does look at whether it worked, because there the
+      // device may have nothing at all.
+    }
+  }
+
+  /// Whether this device knows what a currency is yet.
+  Future<bool> hasReferenceData() async {
+    final row = await db
+        .customSelect('select count(*) as n from currencies')
+        .getSingle();
+    return row.read<int>('n') > 0;
   }
 
   /// Runs one feed to exhaustion.
@@ -527,7 +610,7 @@ class SyncEngine {
     await drain(members);
     await _hydrateProfiles(members.profileIdsToHydrate);
     final entries = await drain(EntryFeed(api, db, groupId));
-    await drain(SnapshotFeed(api, db, groupId));
+    await drain(GroupEventFeed(api, db, groupId));
     return entries;
   }
 

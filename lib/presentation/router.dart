@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../l10n/app_localizations.dart';
 import 'navigation.dart';
+import 'screens/about_screen.dart';
 import 'screens/account_screen.dart';
 import 'screens/activity_screen.dart';
 import 'screens/archived_groups_screen.dart';
@@ -141,6 +142,13 @@ GoRouter buildRouter({
         GoRoute(
           path: '/archived',
           builder: (context, state) => const ArchivedGroupsScreen(),
+        ),
+        // Above the shell rather than inside Settings' branch, so it arrives
+        // with a back arrow instead of a menu button -- it is a screen reached
+        // from a destination, not a destination.
+        GoRoute(
+          path: '/about',
+          builder: (context, state) => const AboutScreen(),
         ),
         GoRoute(
           path: '/g/:groupId',

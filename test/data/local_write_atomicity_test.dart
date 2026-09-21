@@ -11,9 +11,15 @@ import 'package:opensplit/domain/models/profile.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:test/test.dart';
 
+import '../harness.dart';
+
 void main() {
   late AppDatabase db;
-  setUp(() => db = AppDatabase(NativeDatabase.memory()));
+  setUp(() async {
+    db = AppDatabase(NativeDatabase.memory());
+    await seedReferenceData(db);
+    await seedReferenceData(db);
+  });
   tearDown(() => db.close());
 
   test(
@@ -88,7 +94,7 @@ void main() {
       throwsStateError,
     );
     expect(await db.select(db.entries).get(), isEmpty);
-    expect(await db.select(db.entrySnapshots).get(), isEmpty);
+    expect(await db.select(db.groupEvents).get(), isEmpty);
   });
 
   test(

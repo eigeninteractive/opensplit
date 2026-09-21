@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:in_app_update/in_app_update.dart';
 
 import '../application/providers.dart';
+import '../data/platform/app_update_service.dart';
 import '../domain/repositories/auth_service.dart';
 import '../data/web/boot_hint.dart';
 import '../l10n/app_localizations.dart';
@@ -109,12 +110,15 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
     super.dispose();
   }
 
-  /// Downloads a waiting update in the background and offers to restart.
+  /// Takes a waiting update, in whichever of the two ways the release asked
+  /// for.
   ///
-  /// Nothing here blocks and nothing here is a wall — the download runs while
-  /// the app stays usable, and declining costs nothing. See [AppUpdateService]
-  /// for why flexible rather than immediate, and for why this reports nothing
-  /// at all on a build Play did not install.
+  /// Normally nothing here blocks and nothing is a wall: the download runs
+  /// while the app stays usable and declining costs nothing. A release marked
+  /// urgent at upload time gets the blocking flow instead, and that is reserved
+  /// for a client the server can no longer talk to — see [AppUpdateService] for
+  /// where the decision is actually made, and for why this reports nothing at
+  /// all on a build Play did not install.
   Future<void> _offerUpdate() async {
     final service = ref.read(appUpdateServiceProvider);
     if (!service.isSupported || _busy) return;
@@ -125,7 +129,19 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
 
     _busy = true;
     try {
-      if (!await service.isUpdateAvailable()) return;
+      switch (await service.check()) {
+        case UpdateUrgency.none:
+          return;
+        case UpdateUrgency.immediate:
+          // Hands the screen to Play, which restarts the app itself once the
+          // update lands. Nothing follows, and nothing needs to: if the person
+          // backs out, the next check comes round again.
+          await service.installNow();
+          return;
+        case UpdateUrgency.flexible:
+          break;
+      }
+
       if (await service.download() != AppUpdateResult.success) return;
       if (!mounted) return;
 

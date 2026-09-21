@@ -77,16 +77,16 @@ select throws_ok(
 -- Fan-out
 -- ---------------------------------------------------------------------------
 select throws_ok(
-  $$select * from tokens_for_entry(
-      '88888888-8888-4888-8888-888888888888',
+  $$select * from tokens_for_group(
+      '33333333-3333-4333-8333-333333333333',
       '44444444-4444-4444-8444-444444444444')$$,
   '42501', null,
   'ordinary users cannot enumerate tokens — only the service role can');
 
 set local role service_role;
 select results_eq(
-  $$select token from tokens_for_entry(
-      '88888888-8888-4888-8888-888888888888',
+  $$select token from tokens_for_group(
+      '33333333-3333-4333-8333-333333333333',
       '44444444-4444-4444-8444-444444444444')$$,
   $$values ('token-priya')$$,
   'only the other members are woken: never the person who just did it');
@@ -97,15 +97,15 @@ select results_eq(
 -- keying the exclusion off the author would have silenced exactly him while
 -- notifying the person who made the change.
 select results_eq(
-  $$select token from tokens_for_entry(
-      '88888888-8888-4888-8888-888888888888',
+  $$select token from tokens_for_group(
+      '33333333-3333-4333-8333-333333333333',
       '55555555-5555-4555-8555-555555555555')$$,
   $$values ('token-ravi')$$,
   'and on an edit that is the editor, not the author');
 
 select results_eq(
-  $$select token from tokens_for_entry(
-      '88888888-8888-4888-8888-888888888888', null)
+  $$select token from tokens_for_group(
+      '33333333-3333-4333-8333-333333333333', null)
      order by token$$,
   $$values ('token-priya'), ('token-ravi')$$,
   'a change nobody can be attributed to wakes everybody, which is better '
@@ -189,7 +189,7 @@ set local role postgres;
 set local "request.jwt.claims" to
   '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated"}';
 
-select has_trigger('public', 'entry_events', 'trg_entry_events_notify',
+select has_trigger('public', 'group_events', 'trg_group_events_notify',
   'the record of a change carries its own notify trigger, so a deployment '
   'fans out without '
   'anybody clicking anything');
@@ -203,7 +203,7 @@ select is(
   'with no notify_function_url set, saving an expense queues nothing');
 
 insert into app_settings (key, value) values
-  ('notify_function_url',   'http://example.test/functions/v1/notify-entry'),
+  ('notify_function_url',   'http://example.test/functions/v1/notify-event'),
   ('notify_webhook_secret', 'a-test-secret');
 
 insert into entries (id, group_id, currency, amount_minor, created_by)
@@ -221,13 +221,13 @@ set constraints all deferred;
 
 select is(
   (select count(*)::int from net.http_request_queue
-    where url = 'http://example.test/functions/v1/notify-entry'),
+    where url = 'http://example.test/functions/v1/notify-event'),
   1,
   'once configured, an expense queues exactly one request');
 
 select is(
   (select headers->>'x-webhook-secret' from net.http_request_queue
-    where url = 'http://example.test/functions/v1/notify-entry'),
+    where url = 'http://example.test/functions/v1/notify-event'),
   'a-test-secret',
   'carrying the secret the function compares in constant time');
 
@@ -237,19 +237,26 @@ select is(
 select is(
   (select convert_from(body, 'utf8')::jsonb -> 'record'
      from net.http_request_queue
-    where url = 'http://example.test/functions/v1/notify-entry'),
+    where url = 'http://example.test/functions/v1/notify-event'),
   jsonb_build_object(
-    'id',       '99999999-9999-4999-8999-999999999999',
-    'group_id', '33333333-3333-4333-8333-333333333333',
-    'actor_id', '44444444-4444-4444-8444-444444444444'
+    -- The EVENT's id, not the expense's. `subject_id` is what the expense is,
+    -- and the device needs both: one to recognise a wake it has already
+    -- handled, the other to know what to open.
+    'id',         (select v.id::text from group_events v
+                    where v.subject_id = '99999999-9999-4999-8999-999999999999'
+                      and v.kind = 'entry'),
+    'kind',       'entry',
+    'subject_id', '99999999-9999-4999-8999-999999999999',
+    'group_id',   '33333333-3333-4333-8333-333333333333',
+    'actor_id',   '44444444-4444-4444-8444-444444444444'
   ),
-  'and three ids, not the row -- including who to leave out, resolved by the '
+  'and ids and a kind, not the row -- including who to leave out, resolved by '
   'server from the session rather than read off the expense');
 
 -- ---------------------------------------------------------------------------
 -- Editing and deleting wake people too
 --
--- The trigger hangs off entry_events rather than entries, which is what makes
+-- The trigger hangs off group_events rather than entries, which is what makes
 -- this possible at all. On `entries` it could not: touch_parent_entry restamps
 -- the parent on every payer and share write, so one save is several UPDATEs and
 -- an `after update` trigger there would have sent a notification per child row.
@@ -265,7 +272,7 @@ set constraints all deferred;
 
 select is(
   (select count(*)::int from net.http_request_queue
-    where url = 'http://example.test/functions/v1/notify-entry'),
+    where url = 'http://example.test/functions/v1/notify-event'),
   2,
   'an edit queues one request — one, not one per row it touched');
 
@@ -276,7 +283,7 @@ set constraints all deferred;
 
 select is(
   (select count(*)::int from net.http_request_queue
-    where url = 'http://example.test/functions/v1/notify-entry'),
+    where url = 'http://example.test/functions/v1/notify-event'),
   3,
   'and so does a deletion, which used to pass in silence and move '
   'everybody''s balance');
@@ -289,7 +296,7 @@ set constraints all immediate;
 
 select is(
   (select count(*)::int from net.http_request_queue
-    where url = 'http://example.test/functions/v1/notify-entry'),
+    where url = 'http://example.test/functions/v1/notify-event'),
   3,
   'a write that changes nothing wakes nobody');
 

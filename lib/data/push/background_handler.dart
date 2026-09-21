@@ -5,6 +5,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../application/entry_notification.dart';
+import '../../domain/models/group_event.dart';
 import '../../config.dart';
 import '../auth/session_storage.dart';
 import '../local/database.dart';
@@ -49,8 +50,9 @@ bool _firebaseReady = false;
 @pragma('vm:entry-point')
 Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
   final groupId = message.data['group_id'];
-  final entryId = message.data['entry_id'];
-  if (groupId is! String || entryId is! String) return;
+  final subjectId = message.data['subject_id'];
+  final kind = GroupEventKind.parse(message.data['kind'] as String? ?? '');
+  if (groupId is! String || subjectId is! String || kind == null) return;
   if (!hasPush || !hasBackend) return;
 
   // Platform channels are available in this isolate, but only once the binding
@@ -100,7 +102,7 @@ Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
     final report = await engine.syncGroup(groupId);
     if (!report.isClean) return;
 
-    final text = await composeEntryNotification(
+    final text = await composeEventNotification(
       entries: DriftEntryRepository(db, outbox: outbox),
       groups: DriftGroupRepository(db, outbox: outbox),
       profiles: DriftProfileRepository(db, outbox: outbox),
@@ -108,7 +110,8 @@ Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
       activity: DriftActivityRepository(db),
       myProfileId: profileId,
       groupId: groupId,
-      entryId: entryId,
+      kind: kind,
+      subjectId: subjectId,
     );
     if (text == null) return;
     final after = await readSyncSession(db);
@@ -130,7 +133,9 @@ Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
         ?.createNotificationChannel(activityChannel);
 
     await local.show(
-      id: entryId.hashCode,
+      // Keyed on the subject, so five edits to one expense replace each other
+      // in the shade rather than stacking into five banners about one dinner.
+      id: subjectId.hashCode,
       title: text.title,
       body: text.body,
       notificationDetails: const NotificationDetails(

@@ -98,3 +98,98 @@ EntrySnapshot snapshotOf(
   ]..sort((a, b) => a.memberId.compareTo(b.memberId)),
   isProvisional: true,
 );
+
+/// Reads an `entry` event's payload back into a snapshot.
+///
+/// The inverse of [snapshotPayload], and the two are deliberately adjacent: a
+/// field added to one and forgotten in the other is the bug this pairing exists
+/// to make obvious. The keys are the server's, spelled exactly as
+/// `snapshot_entry` builds them.
+EntrySnapshot snapshotFromPayload({
+  required String id,
+  required String entryId,
+  required String groupId,
+  required String? actorId,
+  required DateTime createdAt,
+  required Map<String, Object?> payload,
+  bool isProvisional = false,
+}) => EntrySnapshot(
+  id: id,
+  entryId: entryId,
+  groupId: groupId,
+  actorId: actorId,
+  createdAt: createdAt,
+  description: payload['description'] as String? ?? '',
+  currency: payload['currency'] as String? ?? '',
+  amountMinor: (payload['amount_minor'] as num?)?.toInt() ?? 0,
+  entryDate: DateTime.parse(payload['entry_date'] as String),
+  splitKind: SplitKind.values.byName(payload['split_kind'] as String),
+  categoryId: payload['category_id'] as String?,
+  notes: payload['notes'] as String?,
+  deletedAt: payload['deleted_at'] == null
+      ? null
+      : DateTime.parse(payload['deleted_at'] as String),
+  payers: _amounts(payload['payers']),
+  shares: _amounts(payload['shares']),
+  isProvisional: isProvisional,
+);
+
+/// The payload this device would write for [snapshot].
+///
+/// Used for the provisional row only. The authoritative one is built by
+/// `snapshot_entry` in the same transaction as the change, and this has to
+/// produce the identical shape — a provisional row and the server's account of
+/// the same change are compared by nothing, but they are rendered by the same
+/// code, and a key spelled differently here would surface as a feed line that
+/// changed its mind when the sync landed.
+///
+/// `deleted_at` is written in UTC with a trailing Z, matching what
+/// `snapshot_entry` renders. A local-time string would be the same instant said
+/// differently, which is exactly the ambiguity the server side canonicalises
+/// away.
+///
+/// `entry_date` is deliberately NOT converted: it is a calendar date rather
+/// than an instant, and pushing it through UTC would move it to the previous
+/// day for anybody east of Greenwich.
+Map<String, Object?> snapshotPayload(EntrySnapshot snapshot) => {
+  'description': snapshot.description,
+  'currency': snapshot.currency,
+  'amount_minor': snapshot.amountMinor,
+  'entry_date': _calendarDate(snapshot.entryDate),
+  'split_kind': snapshot.splitKind.name,
+  'category_id': snapshot.categoryId,
+  'notes': snapshot.notes,
+  'deleted_at': snapshot.deletedAt?.toUtc().toIso8601String(),
+  'payers': [
+    for (final row in snapshot.payers)
+      {'member_id': row.memberId, 'amount_minor': row.amountMinor},
+  ],
+  'shares': [
+    for (final row in snapshot.shares)
+      {'member_id': row.memberId, 'amount_minor': row.amountMinor},
+  ],
+};
+
+/// `YYYY-MM-DD`, from the date's own fields rather than from any timezone.
+String _calendarDate(DateTime date) =>
+    '${date.year.toString().padLeft(4, '0')}-'
+    '${date.month.toString().padLeft(2, '0')}-'
+    '${date.day.toString().padLeft(2, '0')}';
+
+/// `[{"member_id": "...", "amount_minor": 40000}, ...]`.
+///
+/// Sorted on the way in as well as out. The server orders by member id when it
+/// builds the array so two snapshots of an unchanged split compare equal there;
+/// sorting here too means a locally written provisional row and the server's
+/// account of the same change diff identically.
+List<MemberAmount> _amounts(Object? raw) {
+  if (raw is! List) return const [];
+  return [
+    for (final row in raw)
+      if (row is Map)
+        MemberAmount(
+          memberId: row['member_id'] as String,
+          amountMinor: (row['amount_minor'] as num).toInt(),
+        ),
+  ]..sort((a, b) => a.memberId.compareTo(b.memberId));
+}

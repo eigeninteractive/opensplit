@@ -145,43 +145,66 @@
       font-weight: 400;
     }
 
-    /* The small top app bar: 56dp, on `surface`, and flat. M3 gave up the
+    /* SliverAppBar.large, expanded. On `surface`, and flat: M3 gave up the
      * bottom rule and the drop shadow — an app bar only separates itself from
      * the content when something scrolls under it, and then by changing tone,
-     * not by drawing a line. */
+     * not by drawing a line.
+     *
+     * 152dp tall with the headline on its own line at the bottom, which is
+     * Material 3's large top app bar and what all three destinations use. The
+     * toolbar row across the top holds the navigation menu button; the
+     * headline sits 16dp from the left and 28dp up from the bottom, which is
+     * where the running app measures it.
+     *
+     * It used to draw the 56dp small bar, because that is what the app used to
+     * have. The app changed first and this followed it — the stylesheet is
+     * never the reason a screen keeps a shape. */
     .bar {
-      height: 56px;
-      display: flex;
-      align-items: center;
-      padding: 0 12px 0 16px;
+      height: 152px;
+      position: relative;
       background: var(--surface);
     }
-    /* textTheme.titleLarge: Roboto 22/28, regular, no tracking. */
+    /* The navigation menu button, which the app grows from its Scaffold's
+     * drawer. Only the glyph stands in. */
+    .bar .menu {
+      position: absolute; left: 16px; top: 20px;
+      width: 24px; height: 24px; border-radius: 4px;
+      background: var(--placeholder);
+    }
+    /* textTheme.headlineMedium, which is what a large bar sets its expanded
+     * headline in. 16dp from the left and 28dp up from the bottom. */
     .bar h1 {
+      position: absolute;
+      left: 16px; right: 16px; bottom: 28px;
       margin: 0;
-      flex: 1;
-      font-size: 22px;
-      line-height: 28px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      font-size: 28px;
+      line-height: 36px;
       font-weight: 400;
       letter-spacing: 0;
     }
-    /* The mark, at the size BrandLockup works out: titleLarge is 22px, the
+    /* The mark, at the size BrandLockup works out: headlineMedium is 28px, the
      * mark's box is a little over 1.5x that, and the clear space beside it is
      * the ratio measured off the designer's horizontal lockup. Inlined rather
      * than linked so it paints on the first round trip, like everything else
      * here — an <img> would also be a second request, and could not be tinted.
      * See lib/presentation/widgets/brand_mark.dart. */
-    .bar .mark { width: 35px; height: 35px; flex: none; margin-right: 7.5px; color: var(--primary); }
+    .bar .mark { width: 44.7px; height: 44.7px; flex: none; margin-right: 9.55px; color: var(--primary); }
 
-    /* ListView(padding: fromLTRB(16, 8, 16, 96)) inside PageBody(maxWidth: 760).
+    /* DestinationScaffold insets the content by max(16, (width - 760) / 2) on
+     * each side, so the cards are 760 wide once there is room and 16 from each
+     * edge before that.
      *
-     * border-box because PageBody caps the whole scroll view at 760, padding
-     * included — the default content-box would cap the cards at 760 and hand
-     * them 32 more, which is only visible once the screen is wide enough for
-     * the cap to bind at all. */
+     * 792 rather than 760 because the padding is inside the cap: border-box
+     * plus 16 either side leaves exactly 760 of card at every width above it,
+     * which is what the app lays out. Capping at 760 here would have left the
+     * cards 32 narrower than the ones replacing them, visible only on a screen
+     * wide enough for the cap to bind at all. */
     .list {
       box-sizing: border-box;
-      max-width: 760px;
+      max-width: 792px;
       margin: 0 auto;
       padding: 8px 16px;
       display: flex;
@@ -192,20 +215,22 @@
      * attribute needs saying again here to actually hide anything. */
     .list[hidden] { display: none; }
 
-    /* Card.outlined: elevation 0, 12dp radius, a hairline in outlineVariant,
-     * and a container the same colour as the page — the outline is the whole
-     * boundary. Contents are Padding(all: 16) around a Row with a 16dp gap.
+    /* Card.outlined wrapping a two-line ListTile: elevation 0, 12dp radius, a
+     * hairline in outlineVariant, and a container the same colour as the page
+     * — the outline is the whole boundary.
      *
-     * The padding is 15 rather than 16 because Flutter strokes a shape's
-     * border on the inside — an 80dp card stays 80dp — whereas CSS lays the
-     * border outside the padding box. 1 + 15 puts the contents at the same
-     * 16dp inset and keeps the card the same height, which matters by the
-     * third row, where two pixels a card have become six. */
+     * 72dp is ListTile's own height for a tile with a title and a subtitle,
+     * and it is not a number chosen here: a widget test renders the real
+     * skeleton card and asserts this stylesheet carries whatever it measured,
+     * so the two cannot drift. box-sizing because Flutter strokes a border
+     * inside the box and CSS lays it outside. */
     .card {
+      box-sizing: border-box;
+      height: 72px;
       background: var(--surface);
       border: 1px solid var(--outline-variant);
       border-radius: 12px;
-      padding: 15px;
+      padding: 0 16px;
       display: flex;
       align-items: center;
       gap: 16px;
@@ -216,12 +241,14 @@
       width: 40px; height: 40px; border-radius: 50%;
       background: var(--secondary-container); flex: none;
     }
-    /* 48dp: a titleMedium line box (24) + 4 + a bodyMedium one (20). The bars
-     * sit where the text will, so the card does not resize under the swap. */
-    .lines { flex: 1; height: 48px; }
+    /* 44dp: a titleMedium line box (24) plus a bodyMedium one (20), which is
+     * the block ListTile centres between its 16dp of vertical padding. Each
+     * bar is centred in its own line box, so the bars sit where the text will
+     * and the card does not resize under the swap. */
+    .lines { flex: 1; height: 44px; }
     .line { border-radius: 4px; background: var(--placeholder); }
     .line.title { height: 16px; margin-top: 4px; width: 62%; }
-    .line.detail { height: 12px; margin-top: 11px; width: 40%; }
+    .line.detail { height: 12px; margin-top: 8px; width: 40%; }
     .card:nth-child(2) .line.title { width: 44%; }
     .card:nth-child(2) .line.detail { width: 56%; }
     .card:nth-child(3) .line.title { width: 55%; }
@@ -362,14 +389,17 @@
       <div class="label u2">Settings</div>
     </div>
     <div class="bar">
-      <svg class="mark" viewBox="0 0 48 48" aria-hidden="true">
-        <mask id="slash">
-          <rect width="48" height="48" fill="#fff"></rect>
-          <rect x="20.75" y="-4" width="6.5" height="56" fill="#000" transform="rotate(24 24 24)"></rect>
-        </mask>
-        <circle cx="24" cy="24" r="17" fill="none" stroke="currentColor" stroke-width="6.5" mask="url(#slash)"></circle>
-      </svg>
-      <h1>OpenSplit</h1>
+      <div class="menu"></div>
+      <h1>
+        <svg class="mark" viewBox="0 0 48 48" aria-hidden="true">
+          <mask id="slash">
+            <rect width="48" height="48" fill="#fff"></rect>
+            <rect x="20.75" y="-4" width="6.5" height="56" fill="#000" transform="rotate(24 24 24)"></rect>
+          </mask>
+          <circle cx="24" cy="24" r="17" fill="none" stroke="currentColor" stroke-width="6.5" mask="url(#slash)"></circle>
+        </svg>
+        <span>OpenSplit</span>
+      </h1>
     </div>
     <div class="list" id="cards" hidden>
       <div class="card">

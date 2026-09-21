@@ -53,22 +53,33 @@ void main() {
         await tester.tap(find.text('Verify code'));
         await tester.pumpAndSettle();
 
-        expect(controller.email, 'person@example.com');
-        expect(controller.code, '01234567');
-        expect(controller.verifiedFlow, controller.flow);
+        expect(controller.recorded.email, 'person@example.com');
+        expect(controller.recorded.code, '01234567');
+        expect(controller.recorded.verifiedFlow, controller.flow);
         expect(tester.takeException(), isNull);
       },
     );
   }
 }
 
+/// What [_EmailController] was asked to do, kept off the notifier itself.
+///
+/// A notifier's public surface is supposed to be `state` and nothing else, and
+/// a spy's recorded calls are the one thing that cannot go there — they are
+/// what the test asserts on, not what the app renders. Holding them in a plain
+/// object beside it satisfies both: the notifier exposes one final field, and
+/// the recording stays readable.
+class _Recorded {
+  String? email;
+  String? code;
+  EmailFlow? verifiedFlow;
+}
+
 class _EmailController extends AccountController {
   _EmailController(this.flow);
 
   final EmailFlow flow;
-  String? email;
-  String? code;
-  EmailFlow? verifiedFlow;
+  final _Recorded recorded = _Recorded();
 
   @override
   Future<EmailFlow> sendEmailCode(String email) async => flow;
@@ -79,9 +90,10 @@ class _EmailController extends AccountController {
     required String code,
     required EmailFlow flow,
   }) async {
-    this.email = email;
-    this.code = code;
-    verifiedFlow = flow;
+    recorded
+      ..email = email
+      ..code = code
+      ..verifiedFlow = flow;
     return const SessionKept(account: _guest);
   }
 }

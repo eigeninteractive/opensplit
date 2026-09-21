@@ -22,7 +22,7 @@ Future<void> offerNotifications(BuildContext context, WidgetRef ref) async {
   final preference = ref.read(notificationPreferenceProvider.notifier);
   // Already on, or already asked and declined. Neither is worth re-raising:
   // Settings has a switch for anyone who changes their mind.
-  if (preference.hasBeenAsked) return;
+  if (preference.hasBeenAsked()) return;
 
   final wanted = await showDialog<bool>(
     context: context,

@@ -1,9 +1,12 @@
 import 'package:drift/native.dart';
 import 'package:drift_dev/api/migrations_native.dart';
 import 'package:opensplit/data/local/database.dart';
+import 'package:opensplit/data/sync/sync_session.dart';
 import 'package:test/test.dart';
 
 import 'generated_migrations/schema.dart';
+
+import '../harness.dart';
 
 /// Guards the one thing a local-first app cannot recover from.
 ///
@@ -30,11 +33,194 @@ void main() {
   });
 
   test('the committed snapshot still opens', () async {
-    final connection = await verifier.startAt(1);
+    final connection = await verifier.startAt(2);
     final db = AppDatabase(connection);
     addTearDown(db.close);
 
-    await verifier.migrateAndValidate(db, 1);
+    await verifier.migrateAndValidate(db, 2);
+  });
+
+  test('a v1 install comes back empty rather than broken', () async {
+    // The question this file exists to answer: what happens to somebody who
+    // already had the app when the schema changed underneath them.
+    //
+    // A v1 database is seeded with real rows, opened by the current code, and
+    // then used. Before the rebuild existed, the first query here failed with
+    // "no such table: group_events" -- not at open, which is why nothing
+    // earlier in a launch would have caught it.
+    final schema = await verifier.schemaAt(1);
+    const at = "'2026-01-01T00:00:00.000Z'";
+
+    schema.rawDatabase.execute(
+      'insert into groups (id, name, default_currency, created_at, updated_at) '
+      "values ('g1', 'Flat 4B', 'INR', $at, $at)",
+    );
+    schema.rawDatabase.execute(
+      'insert into entry_snapshots (id, entry_id, group_id, created_at, '
+      'description, currency, amount_minor, entry_date, split_kind, payers, '
+      "shares) values ('ev1', 'e1', 'g1', $at, 'Dinner', 'INR', 40000, $at, "
+      "'equal', '[]', '[]')",
+    );
+    // A device that had already synced everything: without this the re-pull
+    // below would be trivially true.
+    schema.rawDatabase.execute(
+      "insert into sync_cursors (feed, cursor) values ('entries:g1', $at)",
+    );
+
+    final db = AppDatabase(schema.newConnection());
+    addTearDown(db.close);
+
+    // Drift runs the rebuild on the first statement, not at open.
+    final events = await db.customSelect('select * from group_events').get();
+    expect(events, isEmpty, reason: 'rebuilt, not migrated');
+
+    final groups = await db.select(db.groups).get();
+    expect(
+      groups,
+      isEmpty,
+      reason: 'the local copy is a cache; the server still has this group',
+    );
+
+    // The old table is still there, and that is accepted rather than missed.
+    //
+    // The rebuild drops what the schema declares, and the schema has not
+    // declared entry_snapshots since it became group_events -- so a device that
+    // upgrades keeps an empty copy of it forever, while a fresh install never
+    // has one. The cost is a few kilobytes on a handful of testers' phones.
+    //
+    // The rule that keeps it harmless is in docs/local-database.md: never reuse
+    // the name of a removed table. createAll issues CREATE TABLE IF NOT EXISTS,
+    // so a reused name would bind to this orphan instead of failing.
+    final orphan = await db
+        .customSelect(
+          "select name from sqlite_master where name = 'entry_snapshots'",
+        )
+        .get();
+    expect(
+      orphan,
+      hasLength(1),
+      reason: 'documenting the trade, not endorsing it -- see the doc',
+    );
+
+    // And it keeps its rows, which is the part of the trade worth stating
+    // outright rather than discovering later. Nothing reads them -- no code
+    // names this table any more, and forgetLocalLedger deletes by name so it
+    // does not clear them on sign-out either.
+    //
+    // Tolerable because the database file is keyed per account, so these are
+    // the same person's rows in a file only they open. It would not be
+    // tolerable in a shared file, and it is the reason the rule in
+    // docs/local-database.md is about names rather than about tidiness.
+    final rows = await db
+        .customSelect('select count(*) as n from entry_snapshots')
+        .getSingle();
+    expect(
+      rows.read<int>('n'),
+      1,
+      reason: 'the old rows are still sitting there',
+    );
+
+    // How the device gets its data back, which is the other half of the
+    // policy. Every feed's cursor is gone, so the next sync asks each one from
+    // the beginning rather than from where this device had got to -- and
+    // groups come from the server's own list, so even one this device never
+    // held arrives.
+    final cursors = await db.select(db.syncCursors).get();
+    expect(cursors, isEmpty, reason: 'every feed re-pulls from the beginning');
+
+    // And it is allowed to. sync_sessions is emptied with everything else, and
+    // a missing row reads as enabled -- so a rebuilt device syncs rather than
+    // sitting there suspended.
+    final session = await readSyncSession(db);
+    expect(session.enabled, isTrue);
+  });
+
+  test('the search index does not survive the rebuild', () async {
+    // The subtle half, and the reason the rebuild reads sqlite_master rather
+    // than dropping the entities the current code declares.
+    //
+    // entries_fts is an external-content fts5 table: it stores terms against
+    // `entries` rowids and reads the text back through them. Drop and recreate
+    // `entries` underneath it and every rowid it holds points at nothing --
+    // and because it is created with IF NOT EXISTS, a surviving index is never
+    // replaced. Searching then returns hits for expenses that are not there,
+    // which was measured rather than assumed: one hit against an empty table.
+    //
+    // It is also the one orphan that could not simply be left behind. A table
+    // the new schema no longer knows about is dead weight; a stale search
+    // index is a wrong answer.
+    final schema = await verifier.schemaAt(1);
+    const at = "'2026-01-01T00:00:00.000Z'";
+
+    schema.rawDatabase.execute(
+      'insert into groups (id, name, default_currency, created_at, updated_at) '
+      "values ('g1', 'Flat 4B', 'INR', $at, $at)",
+    );
+    schema.rawDatabase.execute(
+      'insert into members (id, group_id, display_name, joined_at, updated_at) '
+      "values ('m1', 'g1', 'Ravi', $at, $at)",
+    );
+    schema.rawDatabase.execute(
+      'insert into entries (id, group_id, kind, description, currency, '
+      'amount_minor, entry_date, split_kind, created_by, created_at, '
+      "updated_at) values ('e1', 'g1', 'expense', 'Zanzibar', 'INR', 100, "
+      "$at, 'equal', 'm1', $at, $at)",
+    );
+
+    final db = AppDatabase(schema.newConnection());
+    addTearDown(db.close);
+
+    final hits = await db
+        .customSelect(
+          "select rowid from entries_fts where entries_fts match 'Zanzibar'",
+        )
+        .get();
+    expect(
+      hits,
+      isEmpty,
+      reason: 'a rebuilt index cannot still be answering for the old rows',
+    );
+  });
+
+  test('a rebuilt database is the one a new install gets', () async {
+    // The rebuild goes through the same path as onCreate, and this is what
+    // holds it there. Dropping the tables and calling createAll would pass a
+    // column comparison and still leave a device with no search index, which
+    // is not a drift table and so is invisible to one.
+    final schema = await verifier.schemaAt(1);
+    final rebuilt = AppDatabase(schema.newConnection());
+    addTearDown(rebuilt.close);
+    final fresh = AppDatabase(NativeDatabase.memory());
+    addTearDown(fresh.close);
+
+    final rebuiltTables = await _columnsByTable(rebuilt);
+    final freshTables = await _columnsByTable(fresh);
+
+    // Every table a new install has, the rebuilt one has, with the same
+    // columns. The reverse does not hold: a rebuilt device also carries
+    // whatever the schema has since stopped declaring, which for a v1 database
+    // is entry_snapshots. See the note in the test above.
+    for (final table in freshTables.keys) {
+      expect(
+        rebuiltTables[table],
+        freshTables[table],
+        reason: '$table differs between a rebuilt device and a new install',
+      );
+    }
+    expect(rebuiltTables.keys.toSet().difference(freshTables.keys.toSet()), {
+      'entry_snapshots',
+    }, reason: 'exactly one known orphan, and no others sneaking in');
+
+    // Deliberately no assertion about currencies. Neither database has any:
+    // they are the server's now, and a rebuilt device gets them from its next
+    // sweep exactly as a new install does -- which is the same answer, and the
+    // point of the comparison above.
+    final index = await rebuilt
+        .customSelect(
+          "select name from sqlite_master where name = 'entries_fts'",
+        )
+        .get();
+    expect(index, hasLength(1), reason: 'and the search index rebuilt');
   });
 
   test('the committed snapshot still matches the schema in code', () async {
@@ -48,9 +234,10 @@ void main() {
     // so comparing `sqlite_master` compares two spellings of the same schema
     // and reports a difference on every table, forever. Names are the part
     // that actually owes a migration when it changes.
-    final snapshot = AppDatabase(await verifier.startAt(1));
+    final snapshot = AppDatabase(await verifier.startAt(2));
     addTearDown(snapshot.close);
     final code = AppDatabase(NativeDatabase.memory());
+    await seedReferenceData(code);
     addTearDown(code.close);
 
     expect(

@@ -476,5 +476,5 @@ enabled = true
 [functions.fetch-fx]
 verify_jwt = false
 
-[functions.notify-entry]
+[functions.notify-event]
 verify_jwt = false

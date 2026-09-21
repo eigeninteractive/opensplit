@@ -1,5 +1,6 @@
 import '../../domain/models/entry.dart';
 import '../../domain/models/entry_snapshot.dart';
+import '../../domain/models/group_event.dart';
 import '../../domain/models/group.dart';
 import '../../domain/models/member.dart';
 import '../../domain/models/profile.dart';
@@ -195,25 +196,27 @@ Profile profileFromJson(Map<String, dynamic> json) => Profile(
 /// the expense -- and could re-split a bill so somebody else owed more while
 /// writing no history at all. Neither is expressible now. There is no claim on
 /// the wire, only the expense's own shape as the server committed it.
-EntrySnapshot entrySnapshotFromJson(Map<String, dynamic> json) => EntrySnapshot(
-  id: json['id'] as String,
-  entryId: json['entry_id'] as String,
-  groupId: json['group_id'] as String,
-  actorId: json['actor_id'] as String?,
-  createdAt: DateTime.parse(json['created_at'] as String),
-  description: json['description'] as String? ?? '',
-  currency: json['currency'] as String,
-  amountMinor: (json['amount_minor'] as num).toInt(),
-  entryDate: DateTime.parse(json['entry_date'] as String),
-  splitKind: SplitKind.values.byName(json['split_kind'] as String),
-  categoryId: json['category_id'] as String?,
-  notes: json['notes'] as String?,
-  deletedAt: json['deleted_at'] == null
-      ? null
-      : DateTime.parse(json['deleted_at'] as String),
-  payers: memberAmountsFromJson(json['payers']),
-  shares: memberAmountsFromJson(json['shares']),
-);
+/// One row of the record, off the wire.
+///
+/// Returns null for a kind this build does not know. A server that has learned
+/// a new one will send it to clients that have not, and the right answer for an
+/// old build is to leave that line out of the feed rather than to fail the
+/// whole sync page it arrived in — which would stop the feed updating at all,
+/// permanently, over a line it merely could not name.
+GroupEventRow? groupEventFromJson(Map<String, dynamic> json) {
+  final kind = GroupEventKind.parse(json['kind'] as String);
+  if (kind == null) return null;
+
+  return GroupEventRow(
+    id: json['id'] as String,
+    groupId: json['group_id'] as String,
+    actorId: json['actor_id'] as String?,
+    createdAt: DateTime.parse(json['created_at'] as String),
+    kind: kind,
+    subjectId: json['subject_id'] as String?,
+    payload: Map<String, Object?>.from(json['payload'] as Map? ?? const {}),
+  );
+}
 
 /// `[{"member_id": "...", "amount_minor": 40000}, ...]`, in both directions.
 ///

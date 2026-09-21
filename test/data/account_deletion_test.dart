@@ -4,6 +4,8 @@ import 'package:opensplit/data/repositories/drift_group_repository.dart';
 import 'package:opensplit/data/sync/wire.dart';
 import 'package:test/test.dart';
 
+import '../harness.dart';
+
 /// What the confirmation dialog tells somebody before they delete an account.
 ///
 /// The distinction it is drawing is the one people get wrong: a group nobody
@@ -17,8 +19,10 @@ void main() {
   const ravi = 'ravi-account';
   const priya = 'priya-account';
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase(NativeDatabase.memory());
+    await seedReferenceData(db);
+    await seedReferenceData(db);
     groups = DriftGroupRepository(db);
   });
   tearDown(() => db.close());

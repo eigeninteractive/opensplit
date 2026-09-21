@@ -27,7 +27,7 @@ PushService pushService(Ref ref) {
         ref.read(syncControllerProvider.notifier).syncGroup(groupId),
     // The same composer the background isolate calls, so a notification says
     // the same thing whether the app was open when it arrived or not.
-    describe: (groupId, entryId) => composeEntryNotification(
+    describe: (groupId, kind, subjectId) => composeEventNotification(
       entries: ref.read(entryRepositoryProvider),
       groups: ref.read(groupRepositoryProvider),
       profiles: ref.read(profileRepositoryProvider),
@@ -35,7 +35,8 @@ PushService pushService(Ref ref) {
       activity: ref.read(activityRepositoryProvider),
       myProfileId: ref.read(currentAccountIdProvider),
       groupId: groupId,
-      entryId: entryId,
+      kind: kind,
+      subjectId: subjectId,
     ),
     onOpenGroup: (groupId) {
       // The background isolate writes through another Drift connection. Tell
@@ -128,8 +129,12 @@ class NotificationPreference extends _$NotificationPreference {
   ///
   /// Distinct from the stored value being false, which means they were asked
   /// and said no — a state that must not be re-prompted unbidden.
-  bool get hasBeenAsked =>
-      ref.read(sharedPreferencesProvider).containsKey(_key);
+  ///
+  /// A method rather than a getter, which is both what riverpod_lint asks for
+  /// and the more honest signature: it reads storage, and a getter promises
+  /// property access. `state` cannot answer this — that is what the user chose,
+  /// and this is whether they were ever asked.
+  bool hasBeenAsked() => ref.read(sharedPreferencesProvider).containsKey(_key);
 
   /// Records a refusal made in the app, before the OS is ever involved.
   Future<void> markDeclined() => _remember(false);

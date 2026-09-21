@@ -1,7 +1,9 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../domain/models/entry.dart';
-import '../../domain/models/entry_snapshot.dart';
+import '../../domain/models/currency.dart';
+import '../../domain/models/category.dart';
+import '../../domain/models/group_event.dart';
 import '../../domain/models/group.dart';
 import '../../domain/models/member.dart';
 import '../../domain/models/profile.dart';
@@ -328,18 +330,65 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
   }
 
   @override
-  Future<ChangePage<EntrySnapshot>> pullEntrySnapshots({
+  Future<List<Currency>> pullCurrencies() async {
+    try {
+      final rows = await _client.from('currencies').select();
+      return [
+        for (final row in rows)
+          Currency(
+            code: row['code'] as String,
+            exponent: (row['exponent'] as num).toInt(),
+            symbol: row['symbol'] as String?,
+            name: row['name'] as String,
+          ),
+      ];
+    } on PostgrestException catch (e) {
+      throw _translate(e);
+    }
+  }
+
+  @override
+  Future<List<Category>> pullCategories() async {
+    try {
+      final rows = await _client.from('categories').select();
+      return [
+        for (final row in rows)
+          Category(
+            id: row['id'] as String,
+            name: row['name'] as String,
+            icon: row['icon'] as String,
+          ),
+      ];
+    } on PostgrestException catch (e) {
+      throw _translate(e);
+    }
+  }
+
+  @override
+  Future<ChangePage<GroupEventRow>> pullGroupEvents({
     required String groupId,
     SyncCursor? since,
     required int limit,
-  }) => _keyset(
-    table: 'entry_events',
-    timeColumn: 'created_at',
-    equals: {'group_id': groupId},
-    since: since,
-    limit: limit,
-    parse: entrySnapshotFromJson,
-  );
+  }) async {
+    final page = await _keyset<GroupEventRow?>(
+      table: 'group_events',
+      timeColumn: 'created_at',
+      equals: {'group_id': groupId},
+      since: since,
+      limit: limit,
+      parse: groupEventFromJson,
+    );
+
+    // Kinds this build has never heard of are dropped here rather than in the
+    // feed, and the cursor deliberately still advances past them: it is read
+    // off the raw page, so a row an old client cannot name is skipped once
+    // instead of being re-fetched forever as the page that never applies.
+    return ChangePage(
+      rows: page.rows.nonNulls.toList(),
+      cursor: page.cursor,
+      hasMore: page.hasMore,
+    );
+  }
 
   @override
   Future<List<RemoteFxRate>> pullFxRates({required String since}) async {
@@ -423,12 +472,17 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
       'P0002', // no_data_found
     };
 
-    // serialization_failure, raised by upsert_entry when an edit was composed
-    // against a version somebody has since changed. Standard, and semantically
-    // exact -- but it must be named here, because the default for an unlisted
-    // code is "transient", and retrying this one resends the same stale base
-    // forever.
-    if (e.code == '40001') {
+    // An edit composed against a version somebody has since changed. Named
+    // here because the default for an unlisted code is "transient", and
+    // retrying this one resends the same stale base forever.
+    //
+    // PT409 rather than 40001, which is what the server used to raise.
+    // serialization_failure reads as "conflict, try again", and PostgREST acts
+    // on it: it re-ran the request until the gateway timed out at sixty
+    // seconds, so the client saw a 504 and reported a network problem instead
+    // of a conflict. 40001 is still accepted in case an older server is on the
+    // other end, which for a link-shaped deployment is worth a line.
+    if (e.code == 'PT409' || e.code == '40001') {
       return RemoteRejected(e.message, kind: RejectionKind.stale);
     }
 

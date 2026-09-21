@@ -16,17 +16,31 @@ import 'package:opensplit/domain/balance/balance_fold.dart';
 import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/models/entry.dart';
 import 'package:opensplit/domain/models/entry_event.dart';
+import 'package:opensplit/domain/models/group_event.dart';
+import 'package:opensplit/domain/models/currency.dart';
 import 'package:opensplit/domain/models/profile.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:test/test.dart';
 
 import 'fake_remote_ledger.dart';
 
+import '../harness.dart';
+
 /// One simulated device: its own local database, outbox and sync engine, all
 /// talking to a shared server.
 class Device {
+  /// The reference data a real device has by the time it can do anything.
+  ///
+  /// Seeded here rather than at each of the eleven call sites, and awaited
+  /// through [ready]. A real device gets these on its first sweep and cannot
+  /// create a group until it has -- `groups.default_currency` references
+  /// `currencies` -- so a fake one that skipped them would be testing a state
+  /// no device is ever in.
+  late final Future<void> ready;
+
   Device(this.name, this._server, {this.profileId})
     : db = AppDatabase(NativeDatabase.memory()) {
+    ready = seedReferenceData(db);
     outbox = OutboxQueue(db);
     groups = DriftGroupRepository(db, outbox: outbox);
     entries = DriftEntryRepository(db, outbox: outbox);
@@ -63,11 +77,79 @@ class Device {
   Future<List<Entry>> ledger(String groupId) =>
       entries.getEntries(groupId, includeDeleted: true);
 
-  Future<List<EntryEvent>> feed(String groupId) =>
-      DriftActivityRepository(db).watchGroup(groupId).first;
+  /// The expense half of the record.
+  ///
+  /// Narrowed rather than returning every kind, because everything these tests
+  /// assert about the feed is about expenses -- and the fake server only ever
+  /// records those, since member and group events come from database triggers
+  /// that have no counterpart here. A member event appearing in these results
+  /// would be the fake inventing one.
+  Future<List<EntryChanged>> feed(String groupId) async =>
+      (await DriftActivityRepository(
+        db,
+      ).watchGroup(groupId).first).whereType<EntryChanged>().toList();
 }
 
 void main() {
+  group('reference data', () {
+    test('a currency added on the server reaches a device', () async {
+      // The point of syncing these at all. The app ships with a preset list so
+      // it can format an amount before it has ever reached the network, but a
+      // seed is a floor rather than a source -- without this, adding a currency
+      // meant shipping a release for a row.
+      final server = FakeRemoteLedger();
+      final device = Device('solo', server);
+      await device.ready;
+      addTearDown(device.close);
+
+      server.serverCurrencies.add(
+        const Currency(code: 'XCD', exponent: 2, symbol: r'$', name: 'Test'),
+      );
+      await device.sync.syncEverything();
+
+      final held = await device.db.select(device.db.currencies).get();
+      expect(
+        held.map((c) => c.code),
+        contains('XCD'),
+        reason: 'no app update required',
+      );
+    });
+
+    test('a currency withdrawn on the server stays on the device', () async {
+      // Upsert, never delete. A category or currency taken off the server is
+      // still on the expenses that used it, and entries.category_id references
+      // it -- removing the row to tidy a list would break a foreign key.
+      final server = FakeRemoteLedger();
+      final device = Device('solo', server);
+      await device.ready;
+      addTearDown(device.close);
+
+      server.serverCurrencies.removeWhere((c) => c.code == 'INR');
+      await device.sync.syncEverything();
+
+      final held = await device.db.select(device.db.currencies).get();
+      expect(held.map((c) => c.code), contains('INR'));
+    });
+
+    test('a renamed currency is corrected in place', () async {
+      final server = FakeRemoteLedger();
+      final device = Device('solo', server);
+      await device.ready;
+      addTearDown(device.close);
+
+      final inr = server.serverCurrencies.firstWhere((c) => c.code == 'INR');
+      server.serverCurrencies
+        ..remove(inr)
+        ..add(inr.copyWith(name: 'Indian Rupee (renamed)'));
+      await device.sync.syncEverything();
+
+      final held = await (device.db.select(
+        device.db.currencies,
+      )..where((t) => t.code.equals('INR'))).getSingle();
+      expect(held.name, 'Indian Rupee (renamed)');
+    });
+  });
+
   // Two devices means two AppDatabase instances in one process. They are
   // separate in-memory databases, so the usual warning does not apply.
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
@@ -76,13 +158,15 @@ void main() {
   late Device a;
   late Device b;
 
-  setUp(() {
+  setUp(() async {
     server = FakeRemoteLedger();
     a = Device('A', server, profileId: 'profile-ravi');
+    await a.ready;
     // Priya is a placeholder in the shared fixture, so B holds a session that
     // is nobody's member row -- its writes are recorded with no actor, which is
     // exactly how the server treats a change it cannot attribute.
     b = Device('B', server, profileId: 'profile-priya');
+    await b.ready;
   });
 
   tearDown(() async {
@@ -1272,6 +1356,7 @@ void main() {
     test('a rename by somebody else arrives on the next sync', () async {
       final server = FakeRemoteLedger();
       final db = AppDatabase(NativeDatabase.memory());
+      await seedReferenceData(db);
       addTearDown(db.close);
       final engine = SyncEngine(db: db, api: server, outbox: OutboxQueue(db));
 
@@ -1303,6 +1388,7 @@ void main() {
     test('the cursor stops it re-fetching what it already has', () async {
       final server = FakeRemoteLedger();
       final db = AppDatabase(NativeDatabase.memory());
+      await seedReferenceData(db);
       addTearDown(db.close);
       final engine = SyncEngine(db: db, api: server, outbox: OutboxQueue(db));
 
@@ -1535,8 +1621,8 @@ void main() {
       // the local table instead, as it once was, and A would set its own cursor
       // into the future and never see another line of this group's history
       // from anybody.
-      await (a.db.update(a.db.entrySnapshots)).write(
-        EntrySnapshotsCompanion(createdAt: Value(DateTime.utc(2027, 8, 21))),
+      await (a.db.update(a.db.groupEvents)).write(
+        GroupEventsCompanion(createdAt: Value(DateTime.utc(2027, 8, 21))),
       );
 
       await a.sync.syncGroup(g.groupId);
@@ -1781,8 +1867,9 @@ void main() {
 
   group('one engine, five feeds', () {
     /// A third device, holding nothing, to pull onto.
-    Device freshDevice() {
+    Future<Device> freshDevice() async {
       final device = Device('paged', server, profileId: 'profile-arun');
+      await device.ready;
       addTearDown(device.close);
       return device;
     }
@@ -1811,7 +1898,7 @@ void main() {
       await addExpenses(g, 5);
       await a.sync.syncGroup(g.groupId);
 
-      final device = freshDevice();
+      final device = await freshDevice();
       final engine = SyncEngine(
         db: device.db,
         api: server,
@@ -1856,7 +1943,7 @@ void main() {
         }
       });
 
-      final device = freshDevice();
+      final device = await freshDevice();
       final engine = SyncEngine(
         db: device.db,
         api: server,
@@ -1880,7 +1967,7 @@ void main() {
       await addExpenses(g, 1);
       await a.sync.syncGroup(g.groupId);
 
-      final device = freshDevice();
+      final device = await freshDevice();
       await device.sync.syncGroup(g.groupId);
 
       // Members used to be refetched whole on every sync, with a SELECT per

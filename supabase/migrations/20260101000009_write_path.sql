@@ -154,13 +154,24 @@ begin
         into v_incoming;
 
       if v_stored is distinct from v_incoming then
-        -- serialization_failure, which is what this is: a write composed
-        -- against a version that no longer exists. Nothing in this stack
-        -- retries the code automatically, and the client maps it to its own
-        -- third outcome -- neither a backoff nor a dead letter.
+        -- PT409, not 40001.
+        --
+        -- 40001 is serialization_failure, which is what this looks like and is
+        -- exactly the wrong thing to say. That code means "the transaction hit
+        -- a concurrency conflict, run it again" -- and PostgREST believes it,
+        -- re-executing the request. The base version never changes between
+        -- attempts, so every retry raises again and the request hangs until the
+        -- gateway gives up: sixty seconds, then a 504 the client can only read
+        -- as a network problem. The conflict UI never fires, and the person is
+        -- told their connection failed.
+        --
+        -- This is not a retryable conflict. It is a decision that this edit is
+        -- refused, and it will be refused identically forever. PostgREST reads
+        -- a PTnnn SQLSTATE as "return HTTP nnn", so PT409 says Conflict, which
+        -- is both true and final.
         raise exception
           'Entry % changed since this edit was composed', p_id
-          using errcode = '40001';
+          using errcode = 'PT409';
       end if;
     end if;
   end if;
@@ -170,8 +181,17 @@ begin
   -- wrong about it costs nothing, and this is the line that makes it so:
   -- adding an expense brings the group back to the list by itself, with
   -- nothing for the user to find or undo.
+  -- Flagged for the duration of the statement so record_group_event can tell
+  -- this apart from somebody deliberately un-archiving the group. Without it
+  -- the feed says "Ravi restored the group" when Ravi added a dinner, which is
+  -- a false line in the one record whose whole value is being true.
+  --
+  -- Transaction-local, and cleared immediately after, so a deliberate restore
+  -- later in the same transaction is still recorded as one.
+  perform set_config('opensplit.reviving', '1', true);
   update groups set archived_at = null, updated_at = now()
    where id = p_group_id and archived_at is not null;
+  perform set_config('opensplit.reviving', '', true);
 
   -- Authorship is the caller's own member row. There is deliberately no
   -- parameter for it: a client cannot attribute an expense to someone else.
@@ -278,9 +298,12 @@ begin
   -- against the exact server version the device last observed.
   if p_base_updated_at is null
      or v_row.updated_at is distinct from p_base_updated_at then
+    -- PT409 for the same reason as upsert_entry: a refusal that will be
+    -- identical on every retry must not be dressed as a serialization failure,
+    -- which PostgREST retries until the gateway times out.
     raise exception
       'Entry % changed since this deletion was composed', p_entry_id
-      using errcode = '40001';
+      using errcode = 'PT409';
   end if;
 
   update entries

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Points a LOCAL Supabase stack's push fan-out at the local notify-entry.
+# Points a LOCAL Supabase stack's push fan-out at the local notify-event.
 #
 # The trigger itself is in supabase/migrations/20260101000008_push.sql and is
 # always there. What this writes is the two app_settings rows it reads — the
@@ -31,9 +31,9 @@ container="supabase_db_$(basename "$PWD")"
 docker exec -i "$container" psql -U postgres -v ON_ERROR_STOP=1 <<SQL
 insert into app_settings (key, value) values
   ('notify_function_url',
-   'http://host.docker.internal:54321/functions/v1/notify-entry'),
+   'http://host.docker.internal:54321/functions/v1/notify-event'),
   ('notify_webhook_secret', '$secret')
 on conflict (key) do update set value = excluded.value;
 SQL
 
-echo "notify-entry is configured for local pushes."
+echo "notify-event is configured for local pushes."

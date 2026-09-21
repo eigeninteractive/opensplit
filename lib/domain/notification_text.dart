@@ -1,6 +1,7 @@
 import 'models/currency.dart';
 import 'models/entry_event.dart';
 import 'models/entry.dart';
+import 'models/group_event.dart';
 import 'money_format.dart';
 
 /// Builds the text for a local notification about an entry.
@@ -74,3 +75,32 @@ import 'money_format.dart';
     },
   );
 }
+
+/// The text for a notification about somebody arriving or leaving.
+///
+/// Composed on the device like every other banner in this app, from the member
+/// row that has just synced. The server sent an id and a kind; the wording is
+/// ours, and so is the decision not to send one.
+///
+/// Returns null for the kinds that belong in the feed rather than on a lock
+/// screen. The SQL trigger already refuses to fan those out, so reaching this
+/// branch means a server ahead of this build sent something new — in which case
+/// saying nothing is the right answer, not guessing at a sentence for it.
+({String title, String body})? describeMemberEvent({
+  required String groupName,
+  required String memberName,
+  required GroupEventKind kind,
+}) => switch (kind) {
+  GroupEventKind.memberJoined => (
+    title: groupName,
+    body: '$memberName joined the group.',
+  ),
+  // No actor named, deliberately. Leaving is usually your own doing, and a
+  // banner that says somebody removed somebody else invites a reading of the
+  // group's politics that the record on the activity screen can give properly.
+  GroupEventKind.memberLeft => (
+    title: groupName,
+    body: '$memberName is no longer in the group.',
+  ),
+  _ => null,
+};

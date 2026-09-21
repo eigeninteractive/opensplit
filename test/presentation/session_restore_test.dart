@@ -10,6 +10,8 @@ import 'package:opensplit/domain/repositories/auth_service.dart';
 import 'package:opensplit/presentation/app.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../harness.dart';
+
 /// What a reload shows somebody who is already signed in.
 ///
 /// The answer has to be "their groups", on the first frame and every frame
@@ -24,6 +26,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
     final db = AppDatabase(NativeDatabase.memory());
+    await seedReferenceData(db);
     addTearDown(() => tester.runAsync(db.close));
 
     await tester.pumpWidget(

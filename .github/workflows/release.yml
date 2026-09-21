@@ -9,6 +9,15 @@ on:
         description: Deploy to Firebase and Play (uncheck for first-upload artifacts only)
         type: boolean
         default: false
+      update_priority:
+        description: >-
+          Play in-app update priority, 0-5. 0 updates quietly in the
+          background; 4 and up interrupt testers with a blocking update they
+          cannot dismiss. Use 4 only when the server can no longer talk to the
+          version being replaced.
+        type: choice
+        default: "0"
+        options: ["0", "1", "2", "3", "4", "5"]
 
 permissions:
   contents: read
@@ -144,11 +153,20 @@ jobs:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.PLAY_DEPLOY_SERVICE_ACCOUNT }}
           project_id: ${{ vars.FIREBASE_PROJECT_ID }}
-      - name: Distribute to Play internal testing
+      - name: Distribute to Play closed testing
         if: github.event_name == 'push' || inputs.deploy
         env:
           PLAY_RELEASE_STATUS: ${{ vars.PLAY_RELEASE_STATUS || 'completed' }}
-        run: bundle exec fastlane android internal
+          # Google's default closed track is still called "alpha" in the
+          # Publishing API. Set the PLAY_TRACK repository variable if this
+          # project's closed track was created by hand and carries its own name.
+          PLAY_TRACK: ${{ vars.PLAY_TRACK || 'alpha' }}
+          # Play's 0-5 in-app update priority, set per release and only
+          # settable through the Publishing API. 0 is an ordinary background
+          # update; 4 and up interrupt testers with a blocking flow, which is
+          # for a build the server can no longer talk to an older client from.
+          PLAY_UPDATE_PRIORITY: ${{ inputs.update_priority || vars.PLAY_UPDATE_PRIORITY || '0' }}
+        run: bundle exec fastlane android closed
       - name: Remove temporary upload key
         if: always()
         run: rm -f -- "${RUNNER_TEMP:?}/opensplit-upload.jks"

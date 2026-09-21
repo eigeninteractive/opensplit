@@ -248,3 +248,395 @@ begin
   return v_member;
 end;
 $$;
+
+-- ============================================================================
+-- Group links: one link, any number of arrivals.
+--
+-- The invites above hand over one named slot to one person, and that is the
+-- right shape when you know who is coming: your friend opens it and becomes the
+-- "Priya" somebody already typed. It is the wrong shape for the case people
+-- actually have, which is a trip whose WhatsApp group already exists and whose
+-- guest list does not. Naming six placeholders in order to mint six links, and
+-- then working out which link belongs to whom in a chat of twelve people, is a
+-- worse version of just posting one link.
+--
+-- So this is bearer authority over membership: whoever holds the token may join
+-- the group. That is a genuinely bigger claim than an invite makes, and the
+-- design answers it in three ways rather than by adding a wall.
+--
+--   * One live link per group. Minting revokes the previous one, so the link in
+--     a chat is always the current link or no link.
+--   * It expires, and it can be revoked outright without minting another.
+--   * Creating and revoking are both recorded in group_events, so the group can
+--     see the door being opened and closed. An invite that only the person
+--     holding it knows about is the thing worth refusing.
+--
+-- What it deliberately does NOT do is ask anybody to approve an arrival. The
+-- moment somebody has decided to join is the moment they are most likely to
+-- give up, and a group whose members can all see who walked in has a better
+-- remedy than a queue: remove them.
+-- ============================================================================
+
+create table group_links (
+  token      uuid primary key default gen_random_uuid(),
+  group_id   uuid not null references groups(id) on delete cascade,
+  created_by uuid not null references profiles(id),
+  created_at timestamptz not null default now(),
+
+  -- Shorter than an invite's fourteen days. A named invite is for one person
+  -- who may well open it next week; an open link is for a group forming now,
+  -- and the longer it lives the longer a forwarded copy keeps working.
+  expires_at timestamptz not null default now() + interval '7 days',
+
+  revoked_at timestamptz
+);
+
+create index idx_group_links_group on group_links (group_id);
+
+-- One live link per group, enforced rather than merely maintained by
+-- create_group_link. Two members tapping "share" at the same moment would
+-- otherwise both insert, and the group would have two live doors when everyone
+-- involved believes there is one.
+create unique index idx_group_links_one_live
+  on group_links (group_id)
+  where revoked_at is null;
+
+alter table group_links enable row level security;
+
+-- Members can see their group's link rows. There is deliberately no insert,
+-- update or delete policy: everything below is SECURITY DEFINER or INVOKER with
+-- its own checks, and the table is closed to direct DML for the same reason
+-- invites is.
+create policy group_links_read on group_links
+  for select to authenticated using (is_group_member(group_id));
+
+-- ---------------------------------------------------------------------------
+-- Minting one.
+-- ---------------------------------------------------------------------------
+-- SECURITY DEFINER, unlike create_invite beside it, and the difference is
+-- deliberate. `invites` grants DML to authenticated and leans on RLS; this
+-- table grants SELECT and nothing else, so the only way in is through here.
+--
+-- That is worth the asymmetry because of what a client could otherwise write.
+-- An INSERT of its own would set its own expires_at, which is the whole of the
+-- protection a bearer token has, and could leave a second live row for a group
+-- if it beat the partial unique index to it. The membership check this function
+-- opens with is the same one RLS would have applied.
+create or replace function create_group_link(
+  p_group_id uuid,
+  p_ttl interval default interval '7 days'
+)
+returns group_links
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_link group_links;
+begin
+  if not is_group_member(p_group_id) then
+    raise exception 'Not a member of that group'
+      using errcode = 'insufficient_privilege';
+  end if;
+
+  -- Revoked rather than deleted: the previous link's existence is part of the
+  -- record, and group_events has a row saying it was created.
+  update group_links
+     set revoked_at = now()
+   where group_id = p_group_id and revoked_at is null;
+
+  -- Clamped for the same reason create_invite clamps: p_ttl comes from the
+  -- caller, `authenticated` holds execute, and the expiry is the only thing
+  -- stopping a token outliving the reason it was sent.
+  insert into group_links (group_id, created_by, expires_at)
+  values (p_group_id, auth.uid(), now() + least(p_ttl, interval '30 days'))
+  returning * into v_link;
+
+  return v_link;
+end;
+$$;
+
+comment on function create_group_link is
+  'Mints the group''s one live invite link, revoking whatever preceded it.';
+
+-- SECURITY DEFINER for the same reason as create_group_link: the table is
+-- closed to direct DML, and this checks membership itself.
+create or replace function revoke_group_link(p_group_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not is_group_member(p_group_id) then
+    raise exception 'Not a member of that group'
+      using errcode = 'insufficient_privilege';
+  end if;
+
+  update group_links
+     set revoked_at = now()
+   where group_id = p_group_id and revoked_at is null;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Reading one without spending it.
+--
+-- SECURITY DEFINER and callable with no session, exactly like peek_invite and
+-- for the same reason: whoever just tapped the link has not been asked who they
+-- are yet, and asking before showing them what they are being asked about is
+-- how people end up joining as the wrong account.
+--
+-- It returns the group's name, its size and who minted the link, and
+-- deliberately not the member list. That is the next function, and it needs a
+-- session.
+-- ---------------------------------------------------------------------------
+create or replace function peek_group_link(p_token uuid)
+returns table (
+  group_id     uuid,
+  group_name   text,
+  inviter_name text,
+  member_count integer,
+  is_expired   boolean,
+  is_revoked   boolean,
+  is_member    boolean
+)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select g.id,
+         g.name,
+         p.display_name,
+         (select count(*)::int from members
+           where group_id = g.id and left_at is null),
+         l.expires_at < now(),
+         l.revoked_at is not null,
+         exists (
+           select 1 from members mine
+            where mine.group_id = g.id
+              and mine.profile_id = auth.uid()
+              and mine.left_at is null
+         )
+    from group_links l
+    join groups   g on g.id = l.group_id
+    join profiles p on p.id = l.created_by
+   where l.token = p_token;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- The unclaimed places, for somebody deciding whether they are one of them.
+--
+-- The case this exists for: Priya makes the group and types in the six people
+-- on the trip, then posts one link. Without this, everybody who arrives becomes
+-- a seventh, eighth and ninth member beside the placeholder that is already
+-- them, and somebody has to clean up twelve rows by hand afterwards. With it,
+-- arriving asks "are you one of these?" and claiming is the same single-column
+-- update redeem_invite performs.
+--
+-- SECURITY DEFINER, but unlike peek it REQUIRES a session. The names of
+-- everybody in a group are more than the link already implies to whoever holds
+-- it, and this is called after the arrival has chosen an account rather than
+-- before -- which they have to do to join in any case, so it costs the flow
+-- nothing.
+-- ---------------------------------------------------------------------------
+create or replace function list_link_placeholders(p_token uuid)
+returns table (member_id uuid, display_name text)
+language plpgsql
+security definer
+set search_path = public
+stable
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Sign in first'
+      using errcode = 'insufficient_privilege';
+  end if;
+
+  return query
+    select m.id, m.display_name
+      from group_links l
+      join members m on m.group_id = l.group_id
+     where l.token = p_token
+       and l.revoked_at is null
+       and l.expires_at >= now()
+       and m.profile_id is null
+       and m.left_at is null
+     order by m.display_name;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Walking in.
+--
+-- SECURITY DEFINER because the caller is by definition not yet a member and so
+-- cannot read the group, its members, or the link. The token is the
+-- authorisation.
+--
+-- Two ways through, and they differ by exactly one statement. With a member id
+-- it claims that unclaimed placeholder -- the same single-column update
+-- redeem_invite makes, and the same payoff: no entry, payer or share row is
+-- rewritten and no balance moves, because the person was already fully
+-- participating. Without one it inserts a new member row, which is what
+-- members_insert RLS refuses to let a non-member do and is the whole reason
+-- this has to be a function rather than an insert from the client.
+-- ---------------------------------------------------------------------------
+create or replace function join_with_link(
+  p_token uuid,
+
+  -- The placeholder being claimed, or null to arrive as somebody new.
+  p_member_id uuid default null,
+
+  -- Only consulted when p_member_id is null. Falls back to the profile's own
+  -- name, which is what somebody who already had an account will have.
+  p_display_name text default null
+)
+returns members
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_link   group_links;
+  v_member members;
+  v_uid    uuid := auth.uid();
+  v_name   text;
+begin
+  if v_uid is null then
+    raise exception 'Sign in first'
+      using errcode = 'insufficient_privilege';
+  end if;
+
+  -- Locked, so two taps on one link cannot both pass the checks below.
+  select * into v_link from group_links where token = p_token for update;
+
+  if v_link.token is null then
+    raise exception 'This invite link is not valid'
+      using errcode = 'no_data_found';
+  end if;
+  if v_link.revoked_at is not null then
+    raise exception 'This invite link has been turned off'
+      using errcode = 'check_violation';
+  end if;
+  if v_link.expires_at < now() then
+    raise exception 'This invite link has expired'
+      using errcode = 'check_violation';
+  end if;
+
+  -- One person, one place. Two would be two balances for the same human that
+  -- can never be reconciled.
+  if exists (
+    select 1 from members
+     where group_id = v_link.group_id and profile_id = v_uid
+  ) then
+    raise exception 'You are already in this group'
+      using errcode = 'unique_violation';
+  end if;
+
+  if p_member_id is not null then
+    select * into v_member from members where id = p_member_id for update;
+
+    if v_member.id is null or v_member.group_id <> v_link.group_id then
+      raise exception 'That person is not in this group'
+        using errcode = 'no_data_found';
+    end if;
+    if v_member.profile_id is not null then
+      raise exception 'Someone has already claimed that place'
+        using errcode = 'check_violation';
+    end if;
+    if v_member.left_at is not null then
+      raise exception 'That person has left this group'
+        using errcode = 'check_violation';
+    end if;
+
+    update members
+       set profile_id = v_uid
+     where id = v_member.id
+    returning * into v_member;
+
+    -- Adopt the name your friends wrote on the placeholder, if you have not
+    -- chosen one yourself. Same reasoning as redeem_invite: somebody arriving
+    -- on a link is signed in anonymously a moment earlier and has no name at
+    -- all, while the group already knows them as whatever was typed.
+    update profiles
+       set display_name = v_member.display_name
+     where id = v_uid and display_name is null;
+
+    return v_member;
+  end if;
+
+  -- Nobody to claim: arrive as somebody new.
+  --
+  -- The name they gave, else the name already on their account, else a
+  -- placeholder for one. The final coalesce is outside the query on purpose:
+  -- `select into` over a profile row that does not exist leaves v_name null
+  -- rather than running the coalesce at all, and members.display_name is NOT
+  -- NULL with a non-empty check -- so the join would fail on a constraint
+  -- instead of on anything a person could act on.
+  select coalesce(
+           nullif(trim(coalesce(p_display_name, '')), ''),
+           nullif(trim(coalesce(display_name, '')), ''))
+    into v_name
+    from profiles where id = v_uid;
+
+  v_name := coalesce(
+    v_name, nullif(trim(coalesce(p_display_name, '')), ''), 'Someone');
+
+  insert into members (group_id, profile_id, display_name)
+  values (v_link.group_id, v_uid, v_name)
+  returning * into v_member;
+
+  update profiles
+     set display_name = v_name
+   where id = v_uid and display_name is null;
+
+  return v_member;
+end;
+$$;
+
+comment on function join_with_link is
+  'Spends a group link: claims an unclaimed placeholder, or adds the caller as '
+  'a new member. Never both, and never a second place for one account.';
+
+-- ---------------------------------------------------------------------------
+-- The door being opened and closed, on the record.
+--
+-- The argument for recording this is the argument for the whole feature being
+-- acceptable. An open link is the one object in this schema that lets somebody
+-- nobody invited personally walk into a group's finances, and a group that
+-- cannot see it exists has no way to decide it should not.
+-- ---------------------------------------------------------------------------
+create or replace function record_link_event()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_kind group_event_kind;
+begin
+  if tg_op = 'INSERT' then
+    v_kind := 'link_created';
+  elsif new.revoked_at is not null and old.revoked_at is null then
+    v_kind := 'link_revoked';
+  else
+    return null;
+  end if;
+
+  insert into group_events (group_id, actor_id, kind, subject_id, payload)
+  values (
+    new.group_id,
+    acting_member(new.group_id),
+    v_kind,
+    new.token,
+    jsonb_build_object('expires_at', new.expires_at)
+  );
+
+  return null;
+end;
+$$;
+
+create trigger trg_group_links_record
+  after insert or update on group_links
+  for each row execute function record_link_event();

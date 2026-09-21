@@ -92,9 +92,10 @@ grant select on entry_shares to authenticated;
 -- The record of what happened: readable by the group, written by nobody.
 --
 -- SELECT and nothing else -- no INSERT, no UPDATE, no DELETE, at either level.
--- `snapshot_entry` is SECURITY DEFINER and is the only writer there is, so the
--- absence of every other grant costs no functionality and closes the table to
--- clients completely.
+-- Every writer of this table -- snapshot_entry for expenses,
+-- record_member_event, record_group_event and record_link_event for the rest --
+-- is SECURITY DEFINER, so the absence of every other grant costs no
+-- functionality and closes the table to clients completely.
 --
 -- INSERT used to be granted, paired with a policy pinning the actor to the
 -- caller. Two things escaped through it. A client could describe its own edit
@@ -105,7 +106,12 @@ grant select on entry_shares to authenticated;
 --
 -- Neither is reachable now: there is no client-writable column here because
 -- there is no client-writable table here.
-grant select on entry_events to authenticated;
+grant select on group_events to authenticated;
+
+-- The group's own invite link, readable by the people it belongs to so the
+-- share sheet can show what is already live rather than minting a second one.
+-- No write grant: create_group_link and revoke_group_link are the only doors.
+grant select on group_links to authenticated;
 
 -- Deliberately no DELETE on entries, members or groups. None of the three has
 -- an RLS delete policy either; this is the second lock on the same door.
@@ -140,6 +146,19 @@ grant execute on function redeem_invite(uuid) to authenticated;
 -- asked who they are, and at that moment they have no session. It redeems
 -- nothing and reveals only what the link already tells whoever is holding it.
 grant execute on function peek_invite(uuid) to anon, authenticated;
+
+-- The open-link half of the same flow.
+--
+-- peek_group_link joins anon for exactly the reason peek_invite does: it is
+-- read before the arrival has been asked who they are. list_link_placeholders
+-- deliberately does not -- it names everybody in the group who has not claimed
+-- a place, which is more than the token itself implies, and it is called after
+-- an account has been chosen rather than before.
+grant execute on function create_group_link(uuid, interval) to authenticated;
+grant execute on function revoke_group_link(uuid) to authenticated;
+grant execute on function peek_group_link(uuid) to anon, authenticated;
+grant execute on function list_link_placeholders(uuid) to authenticated;
+grant execute on function join_with_link(uuid, uuid, text) to authenticated;
 
 grant execute on function request_fx_backfill(date, char(3)) to authenticated;
 
@@ -180,15 +199,15 @@ grant select, insert, update on fx_rates     to service_role;
 grant select, update         on fx_providers to service_role;
 grant execute on function fx_currencies_covered(date) to service_role;
 
--- notify-entry deletes registrations FCM has reported as dead. Without this the
+-- notify-event deletes registrations FCM has reported as dead. Without this the
 -- send succeeds, the cleanup fails, and stale tokens accumulate forever while
 -- every fan-out retries them — visible only in function logs.
 grant select, delete on device_tokens to service_role;
 
--- tokens_for_entry deliberately reads other people's tokens, which no
+-- tokens_for_group deliberately reads other people's tokens, which no
 -- user-facing policy allows. It is therefore service-role only.
-revoke execute on function tokens_for_entry(uuid, uuid) from public, anon, authenticated;
-grant  execute on function tokens_for_entry(uuid, uuid) to service_role;
+revoke execute on function tokens_for_group(uuid, uuid) from public, anon, authenticated;
+grant  execute on function tokens_for_group(uuid, uuid) to service_role;
 
 -- Operator-only: these drive outbound requests and delete accounts.
 revoke execute on function trigger_fx_fetch(jsonb) from public, anon, authenticated;

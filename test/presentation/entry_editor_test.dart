@@ -127,7 +127,11 @@ Future<void> _type(
 void main() {
   late AppDatabase db;
 
-  setUp(() => db = AppDatabase(NativeDatabase.memory()));
+  setUp(() async {
+    db = AppDatabase(NativeDatabase.memory());
+    await seedReferenceData(db);
+    await seedReferenceData(db);
+  });
   tearDown(() => db.close());
 
   testWidgets('a new expense starts with everyone in the split', (

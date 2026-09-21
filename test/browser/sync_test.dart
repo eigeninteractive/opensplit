@@ -144,6 +144,12 @@ void main() {
     final browserSync = sync(browser);
     final groups = DriftGroupRepository(phone, outbox: phoneSync.outbox);
     final entries = DriftEntryRepository(phone, outbox: phoneSync.outbox);
+    // Before anything can be created, not as a warm-up. Currencies and
+    // categories only come from the server now, and `groups.default_currency`
+    // references `currencies` -- so a device that has never swept cannot make
+    // a group at all. That is the production ordering, which is why the app
+    // waits on `referenceDataProvider` before it is usable.
+    await synchronize(phoneSync);
     final first = await groups.createGroup(
       name: 'First group',
       defaultCurrency: 'INR',
@@ -164,7 +170,7 @@ void main() {
     expect(await browser.select(browser.groups).get(), hasLength(1));
     expect(await browser.select(browser.members).get(), hasLength(1));
     expect(await browser.select(browser.entries).get(), hasLength(1));
-    expect(await browser.select(browser.entrySnapshots).get(), hasLength(1));
+    expect(await browser.select(browser.groupEvents).get(), hasLength(1));
 
     await groups.createGroup(
       name: 'Later group',

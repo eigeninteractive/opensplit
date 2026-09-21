@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../../domain/models/entry.dart';
-import '../../domain/models/entry_snapshot.dart';
+import '../../domain/models/group_event.dart';
 import '../../domain/models/group.dart';
 import '../../domain/models/member.dart';
 import '../../domain/models/profile.dart';
@@ -13,7 +13,6 @@ import 'change_feed.dart';
 import 'outbox_queue.dart';
 import 'remote_ledger_api.dart';
 import 'sync_cursor.dart';
-import 'wire.dart' show memberAmountsToJson;
 
 /// Whether a remote row should replace the local one.
 ///
@@ -216,73 +215,86 @@ class EntryFeed implements ChangeFeed<Entry> {
 }
 
 /// One group's activity: what each expense looked like after each change.
-class SnapshotFeed implements ChangeFeed<EntrySnapshot> {
-  const SnapshotFeed(this._api, this._db, this.groupId);
+class GroupEventFeed implements ChangeFeed<GroupEventRow> {
+  const GroupEventFeed(this._api, this._db, this.groupId);
 
   final RemoteLedgerApi _api;
   final AppDatabase _db;
   final String groupId;
 
   /// Its own cursor row, rather than `max(created_at)` over the local table.
-  /// That table also holds this device's provisional snapshots, stamped with a
+  /// That table also holds this device's provisional events, stamped with a
   /// device clock — often a little ahead of the server's — so asking for
   /// everything after the newest local row would skip whatever a co-member
   /// recorded in between, permanently.
   @override
-  String get key => 'snapshots:$groupId';
+  String get key => 'events:$groupId';
 
   @override
-  Future<ChangePage<EntrySnapshot>> fetch({
+  Future<ChangePage<GroupEventRow>> fetch({
     SyncCursor? since,
     required int limit,
-  }) => _api.pullEntrySnapshots(groupId: groupId, since: since, limit: limit);
+  }) => _api.pullGroupEvents(groupId: groupId, since: since, limit: limit);
 
   @override
-  Future<int> applyInTransaction(List<EntrySnapshot> rows) async {
+  Future<int> applyInTransaction(List<GroupEventRow> rows) async {
     await _db.batch((batch) {
-      for (final snapshot in rows) {
+      for (final event in rows) {
         batch.insert(
-          _db.entrySnapshots,
-          EntrySnapshotsCompanion.insert(
-            id: snapshot.id,
-            entryId: snapshot.entryId,
-            groupId: snapshot.groupId,
-            actorId: Value(snapshot.actorId),
-            createdAt: snapshot.createdAt,
-            description: snapshot.description,
-            currency: snapshot.currency,
-            amountMinor: snapshot.amountMinor,
-            entryDate: snapshot.entryDate,
-            splitKind: snapshot.splitKind,
-            categoryId: Value(snapshot.categoryId),
-            notes: Value(snapshot.notes),
-            deletedAt: Value(snapshot.deletedAt),
-            payers: jsonEncode(memberAmountsToJson(snapshot.payers)),
-            shares: jsonEncode(memberAmountsToJson(snapshot.shares)),
+          _db.groupEvents,
+          GroupEventsCompanion.insert(
+            id: event.id,
+            groupId: event.groupId,
+            actorId: Value(event.actorId),
+            createdAt: event.createdAt,
+            kind: event.kind.wireName,
+            subjectId: Value(event.subjectId),
+            payload: jsonEncode(event.payload),
           ),
-          // A snapshot is never revised, so a row already here is the same
-          // row arriving twice.
+          // An event is never revised, so a row already here is the same row
+          // arriving twice.
           mode: InsertMode.insertOrIgnore,
         );
       }
     });
 
-    // The server's account of these expenses has arrived, so this device's
+    // The server's account of these subjects has arrived, so this device's
     // guesses about them are spent.
     //
-    // Superseded rather than merged, and per entry rather than per row: five
-    // edits made offline are five provisional lines here and one snapshot on
-    // the server, which deduped them. Keeping ours alongside would show the
-    // same edit twice, in two voices, one of which nobody else can see.
+    // Superseded rather than merged, and per subject rather than per row: five
+    // edits made offline are five provisional lines here and one event on the
+    // server, which deduped them. Keeping ours alongside would show the same
+    // change twice, in two voices, one of which nobody else can see.
     //
-    // Scoped to the entries actually pulled, so a provisional line for an
+    // Scoped to the subjects actually pulled, so a provisional line for an
     // expense whose push was refused outright stays exactly where it is --
     // which is the one case where it is the only record there is.
-    final touched = {for (final snapshot in rows) snapshot.entryId};
+    final touched = {
+      for (final event in rows) event.subjectId,
+    }.nonNulls.toSet();
     touched.removeAll(await _dirtyIds(_db, OutboxTarget.entry));
     await (_db.delete(
-      _db.entrySnapshots,
-    )..where((t) => t.entryId.isIn(touched) & t.isProvisional)).go();
+      _db.groupEvents,
+    )..where((t) => t.subjectId.isIn(touched) & t.isProvisional)).go();
+
+    // Events whose subject is the group itself -- a rename, an archive -- have
+    // no subject id to match on, so they are superseded by kind instead. There
+    // is at most one provisional row per kind in practice, because the local
+    // write that produced it is the same write the server is now confirming.
+    final groupKinds = {
+      for (final event in rows)
+        if (event.subjectId == null) event.kind.wireName,
+    };
+    if (groupKinds.isNotEmpty) {
+      await (_db.delete(_db.groupEvents)..where(
+            (t) =>
+                t.groupId.equals(groupId) &
+                t.kind.isIn(groupKinds) &
+                t.isProvisional,
+          ))
+          .go();
+    }
+
     return rows.length;
   }
 }

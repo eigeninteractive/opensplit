@@ -1,5 +1,6 @@
 import 'package:drift/native.dart';
 import 'package:opensplit/application/entry_notification.dart';
+import 'package:opensplit/domain/models/group_event.dart';
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/repositories/drift_activity_repository.dart';
 import 'package:opensplit/data/repositories/drift_currency_repository.dart';
@@ -10,6 +11,8 @@ import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/models/profile.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:test/test.dart';
+
+import '../harness.dart';
 
 /// The composer both push paths use.
 ///
@@ -26,8 +29,10 @@ void main() {
   late DriftActivityRepository activity;
   late DriftProfileRepository profiles;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase(NativeDatabase.memory());
+    await seedReferenceData(db);
+    await seedReferenceData(db);
     groups = DriftGroupRepository(db);
     entries = DriftEntryRepository(db);
     currencies = DriftCurrencyRepository(db);
@@ -79,7 +84,7 @@ void main() {
     final g = await seed();
     final entryId = await addExpense(g, description: 'Dinner at Toit');
 
-    final text = await composeEntryNotification(
+    final text = await composeEventNotification(
       entries: entries,
       groups: groups,
       profiles: profiles,
@@ -87,7 +92,8 @@ void main() {
       activity: activity,
       myProfileId: 'profile-priya',
       groupId: g.groupId,
-      entryId: entryId,
+      kind: GroupEventKind.entry,
+      subjectId: entryId,
     );
 
     expect(text, isNotNull);
@@ -106,7 +112,7 @@ void main() {
     );
     final entryId = await addExpense(g, description: 'Dinner');
 
-    final text = await composeEntryNotification(
+    final text = await composeEventNotification(
       entries: entries,
       groups: groups,
       profiles: profiles,
@@ -114,7 +120,8 @@ void main() {
       activity: activity,
       myProfileId: 'profile-priya',
       groupId: g.groupId,
-      entryId: entryId,
+      kind: GroupEventKind.entry,
+      subjectId: entryId,
     );
 
     expect(text?.body, contains('Ravi D'));
@@ -124,7 +131,7 @@ void main() {
     final g = await seed();
     final entryId = await addExpense(g, description: 'Dinner');
 
-    final forRavi = await composeEntryNotification(
+    final forRavi = await composeEventNotification(
       entries: entries,
       groups: groups,
       profiles: profiles,
@@ -132,9 +139,10 @@ void main() {
       activity: activity,
       myProfileId: 'profile-ravi',
       groupId: g.groupId,
-      entryId: entryId,
+      kind: GroupEventKind.entry,
+      subjectId: entryId,
     );
-    final forPriya = await composeEntryNotification(
+    final forPriya = await composeEventNotification(
       entries: entries,
       groups: groups,
       profiles: profiles,
@@ -142,7 +150,8 @@ void main() {
       activity: activity,
       myProfileId: 'profile-priya',
       groupId: g.groupId,
-      entryId: entryId,
+      kind: GroupEventKind.entry,
+      subjectId: entryId,
     );
 
     // Same expense, same total, and both are told their own half.
@@ -155,7 +164,7 @@ void main() {
     final g = await seed();
     final entryId = await addExpense(g, description: 'Dinner');
 
-    final text = await composeEntryNotification(
+    final text = await composeEventNotification(
       entries: entries,
       groups: groups,
       profiles: profiles,
@@ -165,7 +174,8 @@ void main() {
       // expense, or a profile that has not been reconciled yet.
       myProfileId: 'profile-nobody',
       groupId: g.groupId,
-      entryId: entryId,
+      kind: GroupEventKind.entry,
+      subjectId: entryId,
     );
 
     expect(text!.body, contains('₹2,400.00'));
@@ -179,7 +189,7 @@ void main() {
   test('an entry the sync could not fetch produces nothing at all', () async {
     final g = await seed();
 
-    final text = await composeEntryNotification(
+    final text = await composeEventNotification(
       entries: entries,
       groups: groups,
       profiles: profiles,
@@ -187,7 +197,8 @@ void main() {
       activity: activity,
       myProfileId: 'profile-priya',
       groupId: g.groupId,
-      entryId: 'an-id-this-device-has-never-seen',
+      kind: GroupEventKind.entry,
+      subjectId: 'an-id-this-device-has-never-seen',
     );
 
     // Rather than a banner about an expense nobody can open.

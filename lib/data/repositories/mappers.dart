@@ -4,12 +4,11 @@ import '../../domain/balance/member_balance.dart';
 import '../../domain/models/category.dart';
 import '../../domain/models/currency.dart';
 import '../../domain/models/entry.dart';
-import '../../domain/models/entry_snapshot.dart';
+import '../../domain/models/group_event.dart';
 import '../../domain/models/group.dart';
 import '../../domain/models/member.dart';
 import '../../domain/models/profile.dart';
 import '../local/database.dart';
-import '../sync/wire.dart' show memberAmountsFromJson;
 
 /// Translations between Drift row classes and domain models.
 ///
@@ -117,23 +116,27 @@ extension MemberBalanceLookup on List<MemberBalance> {
   }
 }
 
-extension EntrySnapshotRowMapper on EntrySnapshotRow {
-  EntrySnapshot toDomain() => EntrySnapshot(
-    id: id,
-    entryId: entryId,
-    groupId: groupId,
-    actorId: actorId,
-    createdAt: createdAt,
-    description: description,
-    currency: currency,
-    amountMinor: amountMinor,
-    entryDate: entryDate,
-    splitKind: splitKind,
-    categoryId: categoryId,
-    notes: notes,
-    deletedAt: deletedAt,
-    payers: memberAmountsFromJson(jsonDecode(payers)),
-    shares: memberAmountsFromJson(jsonDecode(shares)),
-    isProvisional: isProvisional,
-  );
+extension GroupEventRowMapper on GroupEventRowData {
+  /// Null for a kind this build has never heard of.
+  ///
+  /// The row is stored regardless -- the local column is text rather than a
+  /// Drift enum precisely so an unknown kind cannot fail a sync -- and it is
+  /// here, on the way out, that it simply declines to become a feed line.
+  GroupEventRow? toDomain() {
+    final parsed = GroupEventKind.parse(kind);
+    if (parsed == null) return null;
+
+    return GroupEventRow(
+      id: id,
+      groupId: groupId,
+      actorId: actorId,
+      createdAt: createdAt,
+      kind: parsed,
+      subjectId: subjectId,
+      payload: Map<String, Object?>.from(
+        jsonDecode(payload) as Map? ?? const {},
+      ),
+      isProvisional: isProvisional,
+    );
+  }
 }

@@ -10,7 +10,6 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../dynamic_colors.dart';
 import '../theme_mode.dart';
-import '../router.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -22,12 +21,10 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
-      drawer: AdaptiveNavigation.drawerFor(context),
-      body: PageBody(
-        child: ListView(
-          padding: const EdgeInsets.all(16),
+    return DestinationScaffold(
+      title: 'Settings',
+      slivers: [
+        SliverList.list(
           children: [
             const _AccountRow(),
             const SizedBox(height: 24),
@@ -73,9 +70,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               title: 'Terms of service',
               url: termsUrl,
             ),
+            // Last, and a push rather than a link out: everything above leaves
+            // the app, and this is the one row that stays in it.
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.info_outline),
+              title: const Text('About OpenSplit'),
+              subtitle: const Text('Version, source code and licence.'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/about'),
+            ),
           ],
         ),
-      ),
+      ],
     );
   }
 }

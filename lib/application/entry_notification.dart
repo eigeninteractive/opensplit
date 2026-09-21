@@ -5,9 +5,10 @@ import '../data/repositories/drift_group_repository.dart';
 import '../data/repositories/drift_profile_repository.dart';
 import '../domain/member_identity.dart';
 import '../domain/money_format.dart';
+import '../domain/models/group_event.dart';
 import '../domain/notification_text.dart';
 
-/// Turns an entry that has just landed on this device into notification text.
+/// Turns an event that has just landed on this device into notification text.
 ///
 /// Takes its repositories rather than a `Ref` on purpose. It runs in two very
 /// different places — the app, with Riverpod holding everything, and the push
@@ -25,7 +26,7 @@ import '../domain/notification_text.dart';
 /// by the trigger that writes the record, so the two arrive together or the
 /// sync did not complete, and a banner assembled from half a pull would be
 /// describing something it cannot see.
-Future<({String title, String body})?> composeEntryNotification({
+Future<({String title, String body})?> composeEventNotification({
   required DriftEntryRepository entries,
   required DriftGroupRepository groups,
   required DriftProfileRepository profiles,
@@ -33,16 +34,22 @@ Future<({String title, String body})?> composeEntryNotification({
   required DriftActivityRepository activity,
   required String? myProfileId,
   required String groupId,
-  required String entryId,
+
+  /// What the wake said this was. Used to decide whether to look at all; the
+  /// wording comes from the record on this device, which is the copy that has
+  /// actually been synced.
+  required GroupEventKind kind,
+
+  /// The entry or member the event is about.
+  required String subjectId,
 }) async {
-  final entry = await entries.getEntry(entryId);
-  if (entry == null) return null;
+  if (!_worthABanner.contains(kind)) return null;
 
   // What happened, and who did it -- read off the record rather than inferred
-  // from the entry. `created_by` is who first typed the expense, which on an
-  // edit is usually the person being told about it rather than the person who
-  // caused the message.
-  final change = await activity.latestFor(entryId);
+  // from the row it describes. For an expense, `created_by` is who first typed
+  // it, which on an edit is usually the person being told about it rather than
+  // the person who caused the message.
+  final change = await activity.latestFor(subjectId);
   if (change == null) return null;
 
   final group = await groups.getGroup(groupId);
@@ -55,6 +62,24 @@ Future<({String title, String body})?> composeEntryNotification({
     if (member == null) return 'Someone';
     return memberDisplayName(member, knownProfiles[member.profileId]);
   }
+
+  // Somebody arriving or leaving. Named from the member row that has just
+  // synced rather than from anything the server sent, which is the same rule
+  // the expense branch below follows.
+  if (change is MemberChanged) {
+    return describeMemberEvent(
+      groupName: group?.name ?? 'OpenSplit',
+      memberName: nameOf(change.memberId),
+      kind: change.kind,
+    );
+  }
+
+  // Nothing else is worth a banner. The trigger does not fan the other kinds
+  // out at all, so this is the belt to its braces.
+  if (change is! EntryChanged) return null;
+
+  final entry = await entries.getEntry(subjectId);
+  if (entry == null) return null;
 
   final myMemberId = members
       .where((m) => m.profileId == myProfileId)
@@ -84,6 +109,18 @@ Future<({String title, String body})?> composeEntryNotification({
     format: (minor) => formatMoney(currency, minor),
   );
 }
+
+/// The kinds that produce a banner at all.
+///
+/// The same list the SQL trigger holds, said again on the receiving end. The
+/// one in the migration is what saves the fan-out; this one is what stops a
+/// server ahead of this build waking a device for something it has no sentence
+/// for.
+const _worthABanner = {
+  GroupEventKind.entry,
+  GroupEventKind.memberJoined,
+  GroupEventKind.memberLeft,
+};
 
 /// The group route a notification should open.
 ///

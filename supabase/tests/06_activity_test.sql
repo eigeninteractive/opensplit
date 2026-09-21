@@ -1,7 +1,7 @@
 -- The activity log, and the dormancy jobs that eventually clear a group away.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(28);
+select plan(31);
 
 insert into auth.users (id, instance_id, aud, role, email, raw_user_meta_data,
                         created_at, updated_at)
@@ -54,23 +54,26 @@ select lives_ok(
 set constraints all immediate;
 
 select is(
-  (select count(*)::int from entry_events
-    where entry_id = '88888888-8888-4888-8888-888888888888'),
+  (select count(*)::int from group_events
+    where subject_id = '88888888-8888-4888-8888-888888888888'
+      and kind = 'entry'),
   1,
   'and recording it writes exactly one snapshot -- not one per row touched, '
   'though the trigger fires once for the entry and once for every payer and '
   'share underneath it');
 
 select is(
-  (select actor_id from entry_events
-    where entry_id = '88888888-8888-4888-8888-888888888888'),
+  (select actor_id from group_events
+    where subject_id = '88888888-8888-4888-8888-888888888888'
+      and kind = 'entry'),
   '44444444-4444-4444-8444-444444444444'::uuid,
   'attributed to the caller''s own member row, read from auth.uid() rather '
   'than accepted as a parameter');
 
 select is(
-  (select shares from entry_events
-    where entry_id = '88888888-8888-4888-8888-888888888888'),
+  (select payload -> 'shares' from group_events
+    where subject_id = '88888888-8888-4888-8888-888888888888'
+      and kind = 'entry'),
   '[{"member_id": "44444444-4444-4444-8444-444444444444", "amount_minor": 20000},
     {"member_id": "55555555-5555-4555-8555-555555555555", "amount_minor": 20000}]'::jsonb,
   'carrying who owes what, which is the half the client-authored diff left '
@@ -101,22 +104,25 @@ select lives_ok(
 set constraints all immediate;
 
 select is(
-  (select count(*)::int from entry_events
-    where entry_id = '88888888-8888-4888-8888-888888888888'),
+  (select count(*)::int from group_events
+    where subject_id = '88888888-8888-4888-8888-888888888888'
+      and kind = 'entry'),
   2,
   'but it goes on the record -- a shares-only change is a change, and used to '
   'produce no history whatsoever');
 
 select is(
-  (select actor_id from entry_events
-    where entry_id = '88888888-8888-4888-8888-888888888888'
+  (select actor_id from group_events
+    where subject_id = '88888888-8888-4888-8888-888888888888'
+      and kind = 'entry'
     order by created_at desc limit 1),
   '55555555-5555-4555-8555-555555555555'::uuid,
   'in the name of whoever actually made it');
 
 select is(
-  (select shares from entry_events
-    where entry_id = '88888888-8888-4888-8888-888888888888'
+  (select payload -> 'shares' from group_events
+    where subject_id = '88888888-8888-4888-8888-888888888888'
+      and kind = 'entry'
     order by created_at desc limit 1),
   '[{"member_id": "44444444-4444-4444-8444-444444444444", "amount_minor": 30000},
     {"member_id": "55555555-5555-4555-8555-555555555555", "amount_minor": 10000}]'::jsonb,
@@ -137,8 +143,9 @@ select upsert_entry(
 set constraints all immediate;
 
 select is(
-  (select count(*)::int from entry_events
-    where entry_id = '88888888-8888-4888-8888-888888888888'),
+  (select count(*)::int from group_events
+    where subject_id = '88888888-8888-4888-8888-888888888888'
+      and kind = 'entry'),
   2,
   'a re-saved editor and a retried sync add nothing: a feed full of '
   '"Priya edited nothing" is worse than no feed');
@@ -147,13 +154,28 @@ select is(
 -- The invariant that makes the duplication safe
 -- ---------------------------------------------------------------------------
 select is(
-  (select (e.description, e.currency, e.amount_minor, e.entry_date,
-           e.split_kind, e.category_id, e.notes, e.deleted_at)::text
+  -- Built exactly as snapshot_entry builds it, canonical renderings included:
+  -- comparing against raw date/timestamptz here would pass or fail depending
+  -- on the session's DateStyle and TimeZone rather than on the data.
+  (select jsonb_build_object(
+            'description',  e.description,
+            'currency',     e.currency,
+            'amount_minor', e.amount_minor,
+            'entry_date',   to_char(e.entry_date, 'YYYY-MM-DD'),
+            'split_kind',   e.split_kind,
+            'category_id',  e.category_id,
+            'notes',        e.notes,
+            'deleted_at',   case
+                              when e.deleted_at is null then null
+                              else to_char(
+                                e.deleted_at at time zone 'UTC',
+                                'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+                            end)
      from entries e where e.id = '88888888-8888-4888-8888-888888888888'),
-  (select (v.description, v.currency, v.amount_minor, v.entry_date,
-           v.split_kind, v.category_id, v.notes, v.deleted_at)::text
-     from entry_events v
-    where v.entry_id = '88888888-8888-4888-8888-888888888888'
+  (select v.payload - 'payers' - 'shares'
+     from group_events v
+    where v.subject_id = '88888888-8888-4888-8888-888888888888'
+      and v.kind = 'entry'
     order by v.created_at desc limit 1),
   'the newest snapshot is identical to the live expense, which is what makes '
   'a mismatch a tamper alarm rather than a merge problem');
@@ -188,23 +210,23 @@ select throws_ok(
 -- The record is readable by the group and writable by nobody
 -- ---------------------------------------------------------------------------
 select throws_ok(
-  $$insert into entry_events (entry_id, group_id, actor_id, description,
-      currency, amount_minor, entry_date, split_kind, payers, shares)
-    values ('88888888-8888-4888-8888-888888888888',
-            '33333333-3333-4333-8333-333333333333',
+  $$insert into group_events (group_id, actor_id, kind, subject_id, payload)
+    values ('33333333-3333-4333-8333-333333333333',
             '55555555-5555-4555-8555-555555555555',
-            'Dinner', 'INR', 40000, current_date, 'equal', '[]', '[]')$$,
+            'entry',
+            '88888888-8888-4888-8888-888888888888',
+            '{"amount_minor": 1}'::jsonb)$$,
   '42501', null,
   'history cannot be fabricated: with no insert grant there is no '
   'client-authored line left to have to trust');
 
 select throws_ok(
-  $$update entry_events set amount_minor = 1$$,
+  $$update group_events set payload = '{}'::jsonb$$,
   '42501', null,
   'an audit trail somebody can revise is not one');
 
 select throws_ok(
-  $$delete from entry_events$$,
+  $$delete from group_events$$,
   '42501', null,
   'nor erase one');
 
@@ -403,6 +425,66 @@ select is(
     where id = '33333333-3333-4333-8333-333333333333'),
   0,
   'a settled group, archived and years silent, is collected');
+
+-- ---------------------------------------------------------------------------
+-- A group coming back by itself is not somebody restoring it
+--
+-- upsert_entry un-archives the group an expense lands on. Recording that as
+-- "Ravi restored the group" when Ravi added a dinner would put a false line in
+-- the one record whose entire value is being true.
+-- ---------------------------------------------------------------------------
+reset role;
+reset "request.jwt.claims";
+
+insert into groups (id, name, default_currency, created_by, archived_at)
+values ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'Goa 2024', 'INR',
+        '11111111-1111-4111-8111-111111111111', now() - interval '1 year');
+
+insert into members (id, group_id, profile_id, display_name) values
+  ('dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+   'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+   '11111111-1111-4111-8111-111111111111', 'Ravi');
+
+set local role authenticated;
+set local "request.jwt.claims" to
+  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated"}';
+
+set constraints all deferred;
+select upsert_entry(
+  'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+  'cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'INR', 10000,
+  '[{"member_id":"dddddddd-dddd-4ddd-8ddd-dddddddddddd","amount_minor":10000}]'::jsonb,
+  '[{"member_id":"dddddddd-dddd-4ddd-8ddd-dddddddddddd","amount_minor":10000}]'::jsonb,
+  'Dinner');
+set constraints all immediate;
+
+select is(
+  (select archived_at from groups
+    where id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'),
+  null,
+  'adding an expense brings an archived group back, with nothing to undo');
+
+select is(
+  (select count(*)::int from group_events
+    where group_id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+      and kind = 'group_restored'),
+  0,
+  'but nobody is said to have restored it -- the expense that revived it is '
+  'already on the record, with the same actor and the same timestamp');
+
+-- The deliberate case still is recorded, which is the half that would be lost
+-- by suppressing the transition outright rather than the side effect.
+update groups set archived_at = now()
+ where id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+update groups set archived_at = null
+ where id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+
+select is(
+  (select count(*)::int from group_events
+    where group_id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+      and kind = 'group_restored'),
+  1,
+  'somebody un-archiving it on purpose still goes on the record');
 
 select * from finish();
 rollback;
