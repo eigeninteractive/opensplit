@@ -141,10 +141,20 @@ Two things about how the client actually ships:
   its deploy steps are gated on `github.event_name == 'push' || inputs.deploy`,
   so a merge deploys web to Firebase Hosting and uploads to Play closed testing
   with no further action. Reset the database before merging, not after.
-- **A merge cannot set the update priority.** `PLAY_UPDATE_PRIORITY` resolves as
+- **A merge cannot set the update priority from the workflow input.**
+  `PLAY_UPDATE_PRIORITY` resolves as
   `inputs.update_priority || vars.PLAY_UPDATE_PRIORITY || '0'`, and on a push
-  the input is empty — so a merge ships at 0. Priority is settable only through
-  the Publishing API at upload time, on the release it ships with, so a build
-  that needed a blocking update and did not get one needs another build. Set the
-  `PLAY_UPDATE_PRIORITY` repository variable before merging, and put it back
-  afterwards so the next ordinary release does not interrupt anyone.
+  the input is empty, so only the variable decides. It lives on the `production`
+  environment rather than at repository level, which matters because a
+  repository-level variable of the same name is shadowed by it and would look
+  set while doing nothing:
+
+  ```bash
+  gh variable list -e production
+  gh variable set PLAY_UPDATE_PRIORITY -e production -b 4
+  ```
+
+  Priority is settable only through the Publishing API, at upload time, on the
+  release it ships with — a build that needed a blocking update and did not get
+  one needs another build. The variable persists, so put it back to 0 once the
+  release that needed it is out, or every subsequent merge interrupts testers.
