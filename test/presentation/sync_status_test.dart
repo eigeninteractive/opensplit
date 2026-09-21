@@ -60,7 +60,7 @@ void main() {
 
     await tester.tap(find.text('Try again'));
     await tester.pump();
-    expect(controller.retries, 1);
+    expect(controller.calls.retries, 1);
     expect(find.bySemanticsLabel('Checking for your groups'), findsOneWidget);
     expect(find.text('No groups yet'), findsNothing);
 
@@ -87,7 +87,7 @@ void main() {
     expect(find.textContaining('Showing saved data'), findsOneWidget);
     await tester.tap(find.text('Try again'));
     await tester.pump();
-    expect(controller.retries, 1);
+    expect(controller.calls.retries, 1);
     expect(find.text('Saved home group'), findsOneWidget);
     expect(find.text('Retrying…'), findsOneWidget);
   });
@@ -119,11 +119,21 @@ void main() {
   });
 }
 
+/// How many times [_StatusController] was asked to retry.
+///
+/// Off the notifier for the reason riverpod_lint gives: its public surface is
+/// meant to be `state`, and a spy's tally is not state anything renders -- it
+/// is what the test asserts on. A final field holding a mutable counter is
+/// both what the rule permits and a clearer separation.
+class _Calls {
+  int retries = 0;
+}
+
 class _StatusController extends SyncController {
   _StatusController(this.initial);
 
   final SyncStatus initial;
-  int retries = 0;
+  final _Calls calls = _Calls();
 
   @override
   SyncStatus build() => initial;
@@ -132,7 +142,7 @@ class _StatusController extends SyncController {
 
   @override
   Future<void> syncAll() async {
-    retries++;
+    calls.retries++;
     state = SyncStatus(
       isSyncing: true,
       hasCompletedFullSync: state.hasCompletedFullSync,

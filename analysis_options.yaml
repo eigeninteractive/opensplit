@@ -41,21 +41,21 @@ plugins:
     # adding them. It is all or nothing per rule, so each of these is a
     # project-wide decision rather than a local exemption.
     diagnostics:
-      # Every public answer should come through `state`. Right in general, and
-      # wrong for the two shapes this project has: NotificationPreference
-      # exposes whether the user was ever *asked*, which is a different question
-      # from what they chose, and the test doubles expose the calls they
-      # recorded, which is the thing the tests assert on. Neither can be routed
-      # through `state` without hiding what it is for.
+      # Off because it cannot be satisfied here, not because it is unwelcome.
       #
-      # The cost of switching it off is real: a notifier that genuinely leaks
-      # mutable state will not be caught.
-      avoid_public_notifier_properties: false
-
-      # Aimed at production scoping, where a provider overridden in a nested
-      # scope must declare its dependencies or the override silently does
-      # nothing. The only scoping here is `signedInApp` in the test harness,
-      # which overrides at the root: there is no outer scope to be shadowed by,
-      # and declaring dependencies would describe a relationship that does not
-      # exist.
+      # The rule exempts a ProviderScope written directly inside `runApp(...)`
+      # or `pumpWidget(...)` -- it is a syntactic check on that adjacency, not a
+      # judgement about whether anything is really scoped. Every widget test
+      # here gets its scope from `signedInApp` in the test harness, so the
+      # ProviderScope is one function call away from `pumpWidget` and the rule
+      # sees a nested scope.
+      #
+      # Satisfying it would mean writing the override list out at every
+      # pumpWidget in the suite, or declaring four app providers as scoped and
+      # threading `dependencies` through the graph that reads them -- which
+      # would describe a production scoping relationship that does not exist,
+      # to quiet a warning about tests.
+      #
+      # What that costs: if this app ever does scope a provider for real, the
+      # rule will not be there to ask for its dependencies.
       scoped_providers_should_specify_dependencies: false

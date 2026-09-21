@@ -32,8 +32,11 @@ watch.
 
 ### Why a bump is safe right now
 
-`onUpgrade` drops every declared entity and recreates it — the device starts
-empty and re-syncs. That is a **pre-release policy**, and it is fine only while
+`onUpgrade` delegates to Drift's own `destructiveFallback`: every declared
+entity is dropped and recreated, so the device starts empty and re-syncs. Only
+its upgrade step is borrowed, because that getter returns a whole
+`MigrationStrategy` and using it wholesale would replace `beforeOpen` too —
+which is where foreign keys, WAL and the session resume are set. That is a **pre-release policy**, and it is fine only while
 the installs are testers who can lose their local copy without losing anything:
 the ledger is on the server too.
 

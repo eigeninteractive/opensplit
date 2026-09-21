@@ -113,9 +113,11 @@ class AppDatabase extends _$AppDatabase {
     // real, and it is why this has to become a set of ordinary migrations
     // before anybody who is not a tester installs the app. See [schemaVersion].
     //
-    // This is drift's `destructiveFallback`, written out rather than used: that
-    // getter returns a whole MigrationStrategy and would take `beforeOpen` with
-    // it, which is where foreign keys, WAL and the session resume are set.
+    // Drift's own `destructiveFallback`, delegated to rather than
+    // reimplemented. The getter returns a whole MigrationStrategy, and using it
+    // wholesale would replace `beforeOpen` too -- which is where foreign keys,
+    // WAL and the session resume are set, none of which this policy has an
+    // opinion about. So its upgrade step is borrowed and the rest is ours.
     //
     // It drops what the schema *declares*, so a table removed from
     // `tables.dart` is left behind on devices that upgrade rather than
@@ -124,13 +126,7 @@ class AppDatabase extends _$AppDatabase {
     // table that has been removed. `createAll` issues CREATE TABLE IF NOT
     // EXISTS, so a reused name would silently bind to the old table rather than
     // fail.
-    onUpgrade: (m, from, to) async {
-      // Reversed, so a table goes before whatever it references.
-      for (final entity in allSchemaEntities.toList().reversed) {
-        await m.drop(entity);
-      }
-      await m.createAll();
-    },
+    onUpgrade: (m, from, to) => destructiveFallback.onUpgrade(m, from, to),
 
     beforeOpen: (details) async {
       if (_resumeSession) {
