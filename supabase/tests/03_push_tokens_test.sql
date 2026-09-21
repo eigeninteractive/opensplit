@@ -239,11 +239,18 @@ select is(
      from net.http_request_queue
     where url = 'http://example.test/functions/v1/notify-event'),
   jsonb_build_object(
-    'id',       '99999999-9999-4999-8999-999999999999',
-    'group_id', '33333333-3333-4333-8333-333333333333',
-    'actor_id', '44444444-4444-4444-8444-444444444444'
+    -- The EVENT's id, not the expense's. `subject_id` is what the expense is,
+    -- and the device needs both: one to recognise a wake it has already
+    -- handled, the other to know what to open.
+    'id',         (select v.id::text from group_events v
+                    where v.subject_id = '99999999-9999-4999-8999-999999999999'
+                      and v.kind = 'entry'),
+    'kind',       'entry',
+    'subject_id', '99999999-9999-4999-8999-999999999999',
+    'group_id',   '33333333-3333-4333-8333-333333333333',
+    'actor_id',   '44444444-4444-4444-8444-444444444444'
   ),
-  'and three ids, not the row -- including who to leave out, resolved by the '
+  'and ids and a kind, not the row -- including who to leave out, resolved by '
   'server from the session rather than read off the expense');
 
 -- ---------------------------------------------------------------------------

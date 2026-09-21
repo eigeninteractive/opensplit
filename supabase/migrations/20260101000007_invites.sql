@@ -313,13 +313,22 @@ create policy group_links_read on group_links
 -- ---------------------------------------------------------------------------
 -- Minting one.
 -- ---------------------------------------------------------------------------
+-- SECURITY DEFINER, unlike create_invite beside it, and the difference is
+-- deliberate. `invites` grants DML to authenticated and leans on RLS; this
+-- table grants SELECT and nothing else, so the only way in is through here.
+--
+-- That is worth the asymmetry because of what a client could otherwise write.
+-- An INSERT of its own would set its own expires_at, which is the whole of the
+-- protection a bearer token has, and could leave a second live row for a group
+-- if it beat the partial unique index to it. The membership check this function
+-- opens with is the same one RLS would have applied.
 create or replace function create_group_link(
   p_group_id uuid,
   p_ttl interval default interval '7 days'
 )
 returns group_links
 language plpgsql
-security invoker
+security definer
 set search_path = public
 as $$
 declare
@@ -350,10 +359,12 @@ $$;
 comment on function create_group_link is
   'Mints the group''s one live invite link, revoking whatever preceded it.';
 
+-- SECURITY DEFINER for the same reason as create_group_link: the table is
+-- closed to direct DML, and this checks membership itself.
 create or replace function revoke_group_link(p_group_id uuid)
 returns void
 language plpgsql
-security invoker
+security definer
 set search_path = public
 as $$
 begin

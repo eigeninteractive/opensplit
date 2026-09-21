@@ -39,100 +39,73 @@ void main() {
     await verifier.migrateAndValidate(db, 2);
   });
 
-  test('and brings its history with it', () async {
-    // The half a schema check cannot see: the shape would be right too if the
-    // migration created the new table and dropped the old one, and that would
-    // lose everything the device had not pushed.
+  test('a v1 install comes back empty rather than broken', () async {
+    // The question this file exists to answer: what happens to somebody who
+    // already had the app when the schema changed underneath them.
     //
-    // migrateAndValidate is deliberately not used here. It compares the
-    // migrated database against the generated helper, which writes every
-    // DateTime as INTEGER while this database stores ISO text -- so a table
-    // created by the app's own Migrator always reads as a mismatch. The column
-    // comparison in the next test is the shape check; this one is about the
-    // rows.
+    // A v1 database is seeded with real rows, opened by the current code, and
+    // then used. Before the rebuild existed, the first query here failed with
+    // "no such table: group_events" -- not at open, which is why nothing
+    // earlier in a launch would have caught it.
     final schema = await verifier.schemaAt(1);
     const at = "'2026-01-01T00:00:00.000Z'";
-    const amounts = '[{\"member_id\":\"m1\",\"amount_minor\":40000}]';
 
     schema.rawDatabase.execute(
       'insert into groups (id, name, default_currency, created_at, updated_at) '
       "values ('g1', 'Flat 4B', 'INR', $at, $at)",
     );
     schema.rawDatabase.execute(
-      'insert into members (id, group_id, display_name, joined_at, updated_at) '
-      "values ('m1', 'g1', 'Ravi', $at, $at)",
-    );
-    schema.rawDatabase.execute(
-      'insert into entries (id, group_id, kind, description, currency, '
-      'amount_minor, entry_date, split_kind, created_by, created_at, '
-      "updated_at) values ('e1', 'g1', 'expense', 'Dinner', 'INR', 40000, "
-      "$at, 'equal', 'm1', $at, $at)",
-    );
-    schema.rawDatabase.execute(
-      'insert into entry_snapshots (id, entry_id, group_id, actor_id, '
-      'created_at, description, currency, amount_minor, entry_date, '
-      'split_kind, payers, shares, is_provisional) values '
-      "('ev1', 'e1', 'g1', 'm1', $at, 'Dinner', 'INR', 40000, $at, 'equal', "
-      "'$amounts', '$amounts', 1)",
-    );
-    schema.rawDatabase.execute(
-      "insert into sync_cursors (feed, cursor) values ('snapshots:g1', $at)",
+      'insert into entry_snapshots (id, entry_id, group_id, created_at, '
+      'description, currency, amount_minor, entry_date, split_kind, payers, '
+      "shares) values ('ev1', 'e1', 'g1', $at, 'Dinner', 'INR', 40000, $at, "
+      "'equal', '[]', '[]')",
     );
 
     final db = AppDatabase(schema.newConnection());
     addTearDown(db.close);
 
-    // Opening is not enough; drift runs the migration on the first statement.
-    final rows = await db
-        .customSelect(
-          'select kind, subject_id, payload, is_provisional from group_events',
-        )
-        .get();
-    expect(rows, hasLength(1), reason: 'the snapshot came across');
+    // Drift runs the rebuild on the first statement, not at open.
+    final events = await db.customSelect('select * from group_events').get();
+    expect(events, isEmpty, reason: 'rebuilt, not migrated');
 
-    final row = rows.single.data;
-    expect(row['kind'], 'entry');
-    expect(row['subject_id'], 'e1');
+    final groups = await db.select(db.groups).get();
     expect(
-      row['is_provisional'],
-      1,
-      reason: 'a change this device never pushed is the only copy there is',
+      groups,
+      isEmpty,
+      reason: 'the local copy is a cache; the server still has this group',
     );
-
-    final payload = jsonDecode(row['payload'] as String) as Map;
-    expect(payload['amount_minor'], 40000);
-    expect(payload['entry_date'], '2026-01-01');
-    expect(
-      payload['shares'],
-      isA<List>(),
-      reason: 'an array, not an escaped blob of one',
-    );
-
-    final cursors = await db
-        .customSelect("select feed from sync_cursors where feed like 'snap%'")
-        .get();
-    expect(cursors, isEmpty, reason: 'the feed that cursor named is gone');
 
     final old = await db
         .customSelect(
           "select name from sqlite_master where name = 'entry_snapshots'",
         )
         .get();
-    expect(old, isEmpty, reason: 'and the table it came from is gone');
+    expect(old, isEmpty, reason: 'and nothing of the old shape is left behind');
   });
 
-  test('a migrated device and a fresh one agree on the schema', () async {
+  test('a rebuilt database is the one a new install gets', () async {
+    // The rebuild goes through the same path as onCreate, and this is what
+    // holds it there. Dropping the tables and calling createAll would pass a
+    // column comparison and still leave a device with no search index and no
+    // currencies -- neither of which is a drift table, and both of which the
+    // app needs before it can do anything.
     final schema = await verifier.schemaAt(1);
-    final migrated = AppDatabase(schema.newConnection());
-    addTearDown(migrated.close);
+    final rebuilt = AppDatabase(schema.newConnection());
+    addTearDown(rebuilt.close);
     final fresh = AppDatabase(NativeDatabase.memory());
     addTearDown(fresh.close);
 
-    expect(
-      await _columnsByTable(migrated),
-      await _columnsByTable(fresh),
-      reason: 'a device that upgraded must end up where a new install starts',
-    );
+    expect(await _columnsByTable(rebuilt), await _columnsByTable(fresh));
+
+    final seeded = await rebuilt.select(rebuilt.currencies).get();
+    expect(seeded, isNotEmpty, reason: 'reference data was seeded again');
+
+    final index = await rebuilt
+        .customSelect(
+          "select name from sqlite_master where name = 'entries_fts'",
+        )
+        .get();
+    expect(index, hasLength(1), reason: 'and the search index rebuilt with it');
   });
 
   test('the committed snapshot still matches the schema in code', () async {

@@ -252,17 +252,30 @@ void main() {
       final feed = await DriftActivityRepository(
         other,
       ).watchGroup(created.group.id).first;
-      expect(feed, hasLength(1));
-      expect((feed.single as EntryChanged).kind, EntryEventKind.created);
+
+      // More than the expense now: the group also records the person who was
+      // added to it. Narrowed rather than counted, so this test stays about
+      // the expense line and does not have to be revisited every time the
+      // server learns to record something else.
+      final expense = feed.whereType<EntryChanged>().single;
+      expect(expense.kind, EntryEventKind.created);
       expect(
-        feed.single.isProvisional,
+        expense.isProvisional,
         isFalse,
         reason: 'this device wrote nothing; it only read',
       );
       expect(
-        feed.single.actorId,
+        expense.actorId,
         created.creator.id,
         reason: 'authorship is the member row, not the account',
+      );
+
+      // And the half that is new: a placeholder appearing is on the record,
+      // written by a trigger nothing on this device asked for.
+      expect(
+        feed.whereType<MemberChanged>().map((e) => e.displayName),
+        contains('Priya'),
+        reason: 'a group that cannot see who arrived cannot remove them',
       );
     });
 

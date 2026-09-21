@@ -54,6 +54,22 @@ class AppDatabase extends _$AppDatabase {
 
   final bool _resumeSession;
 
+  /// Bump this on **any** change to a table in `tables.dart`.
+  ///
+  /// It is not bookkeeping and it is not backward compatibility: SQLite keeps
+  /// this number in the file, drift compares it to this one, and if the two
+  /// agree no migration hook runs at all. An install whose schema changed
+  /// underneath it without a bump therefore opens its old database, is told
+  /// nothing is wrong, and fails on the first query against a table that is not
+  /// there. That is the whole failure mode, and this integer is the only thing
+  /// that prevents it.
+  ///
+  /// While this is what it is -- see [migration] -- bumping costs a tester one
+  /// re-sync and nothing else, so the right instinct is to bump on any doubt.
+  /// `test/data/migration_test.dart` fails if the committed schema snapshot no
+  /// longer matches the tables in code, which catches the change you forgot to
+  /// record; it cannot catch a snapshot re-dumped at the same version, so that
+  /// is the one thing to be careful about.
   @override
   int get schemaVersion => 2;
 
@@ -76,93 +92,97 @@ class AppDatabase extends _$AppDatabase {
   /// public API for this boundary.
   void refreshAfterExternalSync() => markTablesUpdated(allTables);
 
-  /// v1 -> v2: the expense history becomes a group history.
+  /// Builds the schema from nothing: tables, search index, reference data.
   ///
-  /// `entry_snapshots` held one row per change to an expense, in typed
-  /// columns. `group_events` holds one row per thing that has happened in a
-  /// group, of which an expense snapshot is one kind, with the kind-specific
-  /// part as JSON. The server made the same move; this is the device
-  /// catching up.
-  ///
-  /// The old rows are carried across rather than dropped, and that is the
-  /// difference between a migration and a reset. Most would come back on the
-  /// next sync -- the new feed has its own cursor and re-pulls from the
-  /// beginning -- but not all: a provisional row describes a change this
-  /// device has not managed to push, and for an expense whose push was
-  /// refused it is the only record anywhere. Dropping the table would throw
-  /// those away silently, which is the one thing a local-first app must not
-  /// do.
-  ///
-  /// The old cursors go with it, because the feed they name no longer
-  /// exists.
-  Future<void> _entrySnapshotsBecomeGroupEvents(Migrator m) async {
-    await m.createTable(groupEvents);
+  /// Shared by the first launch and by [_rebuild], so the two cannot drift —
+  /// a rebuilt database is the same database a new install gets.
+  Future<void> _createFromScratch(Migrator m) async {
+    await m.createAll();
+    await _createSearchIndex();
+    await _seedReferenceData();
+  }
 
-    // json(payers) rather than the raw text: those columns already hold a
-    // JSON array, and quoting one into the payload as a string would give a
-    // reader an escaped blob where an array belongs.
-    //
-    // substr for the date because timestamps are stored as ISO-8601 text
-    // here -- see storeDateTimeAsText -- so the first ten characters are the
-    // calendar date the server renders, without parsing anything.
-    await customStatement('''
-      insert into group_events (
-        id, group_id, actor_id, created_at, kind, subject_id, payload,
-        is_provisional)
-      select
-        id, group_id, actor_id, created_at, 'entry', entry_id,
-        json_object(
-          'description',  description,
-          'currency',     currency,
-          'amount_minor', amount_minor,
-          'entry_date',   substr(entry_date, 1, 10),
-          'split_kind',   split_kind,
-          'category_id',  category_id,
-          'notes',        notes,
-          'deleted_at',   deleted_at,
-          'payers',       json(payers),
-          'shares',       json(shares)),
-        is_provisional
-      from entry_snapshots
-    ''');
+  /// Throws the local copy away and builds it again.
+  ///
+  /// What gets dropped is read out of `sqlite_master` rather than taken from
+  /// `allSchemaEntities`, and that distinction is the whole of this method. The
+  /// entities are what the *current code* declares; what has to go is whatever
+  /// this *file* happens to hold, and after a schema change those are different
+  /// sets by definition. Dropping the declared ones leaves every table the new
+  /// code no longer knows about sitting there — which is exactly how
+  /// `entry_snapshots` survived a rebuild that was supposed to remove it.
+  Future<void> _rebuild(Migrator m) async {
+    await customStatement('PRAGMA foreign_keys = OFF');
+    try {
+      Future<List<String>> named(String type) async => [
+        for (final row in await customSelect(
+          "select name from sqlite_master where type = ? "
+          "and name not like 'sqlite_%'",
+          variables: [Variable<String>(type)],
+        ).get())
+          row.read<String>('name'),
+      ];
 
-    await customStatement('drop table entry_snapshots');
-    await customStatement(
-      "delete from sync_cursors where feed like 'snapshots:%'",
-    );
+      // Triggers first: one referencing a table that has already gone is an
+      // error on the way out, not a no-op.
+      for (final trigger in await named('trigger')) {
+        await customStatement('DROP TRIGGER IF EXISTS "$trigger"');
+      }
+      for (final view in await named('view')) {
+        await customStatement('DROP VIEW IF EXISTS "$view"');
+      }
+
+      // fts5 virtual tables next, because dropping one also removes the four
+      // or five shadow tables it keeps beside itself — and dropping one of
+      // those directly is an error rather than a tidy-up.
+      for (final table in await named('table')) {
+        if (table.endsWith('_fts')) {
+          await customStatement('DROP TABLE IF EXISTS "$table"');
+        }
+      }
+
+      // Re-read, because the shadows are gone now and listing them again would
+      // be listing tables that no longer exist.
+      for (final table in await named('table')) {
+        await customStatement('DROP TABLE IF EXISTS "$table"');
+      }
+
+      await _createFromScratch(m);
+    } finally {
+      await customStatement('PRAGMA foreign_keys = ON');
+    }
   }
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-    onCreate: (m) async {
-      await m.createAll();
-      await _createSearchIndex();
-      await _seedReferenceData();
-    },
+    onCreate: _createFromScratch,
 
-    // A local-first app cannot drop and recreate: the device holds the only
-    // copy of anything recorded offline and never pushed. So every schema
-    // change from v1 onwards needs a step here, and the way to know a step is
-    // right is to run it against a real v1 database — which is what the
-    // committed snapshot in `drift_schemas/` is for, and why it is committed
-    // now rather than reconstructed later from a schemaVersion bump nobody
-    // wrote down.
+    // Every schema change rebuilds the local database from empty, and the
+    // device re-syncs.
     //
-    //   dart run drift_dev schema dump lib/data/local/database.dart drift_schemas/
-    //   dart run drift_dev schema generate drift_schemas/ test/data/generated_migrations/
+    // This is a pre-release policy, not a permanent one, and it is written down
+    // here because it is the kind of thing that quietly stops being acceptable.
+    // It is fine exactly while the only installs are testers who can lose their
+    // local copy without losing anything: the ledger lives on the server too,
+    // so a rebuild costs a sync rather than data.
     //
-    // See test/data/migration_test.dart.
-    onUpgrade: (m, from, to) async {
-      if (from == 1 && to == 2) {
-        await _entrySnapshotsBecomeGroupEvents(m);
-        return;
-      }
-      throw StateError(
-        'No migration from schema v$from to v$to. Add a step in '
-        'AppDatabase.migration and a case in test/data/migration_test.dart '
-        'before shipping a schemaVersion bump.',
-      );
-    },
+    // The one thing it does throw away is the outbox -- writes made offline and
+    // never pushed, which by definition exist nowhere else. That is the cost,
+    // it is real, and it is the reason this has to become a real migration
+    // before anybody who is not a tester installs the app. See the note on
+    // [schemaVersion].
+    //
+    // Deliberately not `destructiveFallback`, drift's own version of this. That
+    // drops the tables it knows about and calls `createAll`, which would leave
+    // the FTS index and the reference-data seed behind -- the two things this
+    // database needs at creation that are not drift tables. Going through the
+    // same [_createFromScratch] the first launch uses is what makes a rebuilt
+    // database indistinguishable from a fresh one.
+    // Drift routes a downgrade here too, so a tester moved back to an older
+    // build by Play recovers the same way rather than opening a database from
+    // the future.
+    onUpgrade: (m, from, to) async => _rebuild(m),
+
     beforeOpen: (details) async {
       if (_resumeSession) {
         await (update(syncSessions)..where((t) => t.id.equals('account')))
