@@ -103,6 +103,53 @@ void main() {
     expect(session.enabled, isTrue);
   });
 
+  test('the search index does not survive the rebuild', () async {
+    // The subtle half, and the reason the rebuild reads sqlite_master rather
+    // than dropping the entities the current code declares.
+    //
+    // entries_fts is an external-content fts5 table: it stores terms against
+    // `entries` rowids and reads the text back through them. Drop and recreate
+    // `entries` underneath it and every rowid it holds points at nothing --
+    // and because it is created with IF NOT EXISTS, a surviving index is never
+    // replaced. Searching then returns hits for expenses that are not there,
+    // which was measured rather than assumed: one hit against an empty table.
+    //
+    // It is also the one orphan that could not simply be left behind. A table
+    // the new schema no longer knows about is dead weight; a stale search
+    // index is a wrong answer.
+    final schema = await verifier.schemaAt(1);
+    const at = "'2026-01-01T00:00:00.000Z'";
+
+    schema.rawDatabase.execute(
+      'insert into groups (id, name, default_currency, created_at, updated_at) '
+      "values ('g1', 'Flat 4B', 'INR', $at, $at)",
+    );
+    schema.rawDatabase.execute(
+      'insert into members (id, group_id, display_name, joined_at, updated_at) '
+      "values ('m1', 'g1', 'Ravi', $at, $at)",
+    );
+    schema.rawDatabase.execute(
+      'insert into entries (id, group_id, kind, description, currency, '
+      'amount_minor, entry_date, split_kind, created_by, created_at, '
+      "updated_at) values ('e1', 'g1', 'expense', 'Zanzibar', 'INR', 100, "
+      "$at, 'equal', 'm1', $at, $at)",
+    );
+
+    final db = AppDatabase(schema.newConnection());
+    addTearDown(db.close);
+
+    final hits = await db
+        .customSelect(
+          "select rowid from entries_fts where entries_fts match 'Zanzibar'",
+        )
+        .get();
+    expect(
+      hits,
+      isEmpty,
+      reason: 'a rebuilt index cannot still be answering for the old rows',
+    );
+  });
+
   test('a rebuilt database is the one a new install gets', () async {
     // The rebuild goes through the same path as onCreate, and this is what
     // holds it there. Dropping the tables and calling createAll would pass a
