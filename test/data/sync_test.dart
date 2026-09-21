@@ -17,6 +17,7 @@ import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/models/entry.dart';
 import 'package:opensplit/domain/models/entry_event.dart';
 import 'package:opensplit/domain/models/group_event.dart';
+import 'package:opensplit/domain/models/currency.dart';
 import 'package:opensplit/domain/models/profile.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:test/test.dart';
@@ -78,6 +79,62 @@ class Device {
 }
 
 void main() {
+  group('reference data', () {
+    test('a currency added on the server reaches a device', () async {
+      // The point of syncing these at all. The app ships with a preset list so
+      // it can format an amount before it has ever reached the network, but a
+      // seed is a floor rather than a source -- without this, adding a currency
+      // meant shipping a release for a row.
+      final server = FakeRemoteLedger();
+      final device = Device('solo', server);
+      addTearDown(device.close);
+
+      server.serverCurrencies.add(
+        const Currency(code: 'XCD', exponent: 2, symbol: r'$', name: 'Test'),
+      );
+      await device.sync.syncEverything();
+
+      final held = await device.db.select(device.db.currencies).get();
+      expect(
+        held.map((c) => c.code),
+        contains('XCD'),
+        reason: 'no app update required',
+      );
+    });
+
+    test('a currency withdrawn on the server stays on the device', () async {
+      // Upsert, never delete. A category or currency taken off the server is
+      // still on the expenses that used it, and entries.category_id references
+      // it -- removing the row to tidy a list would break a foreign key.
+      final server = FakeRemoteLedger();
+      final device = Device('solo', server);
+      addTearDown(device.close);
+
+      server.serverCurrencies.removeWhere((c) => c.code == 'INR');
+      await device.sync.syncEverything();
+
+      final held = await device.db.select(device.db.currencies).get();
+      expect(held.map((c) => c.code), contains('INR'));
+    });
+
+    test('a renamed currency is corrected in place', () async {
+      final server = FakeRemoteLedger();
+      final device = Device('solo', server);
+      addTearDown(device.close);
+
+      final inr = server.serverCurrencies.firstWhere((c) => c.code == 'INR');
+      server.serverCurrencies
+        ..remove(inr)
+        ..add(inr.copyWith(name: 'Indian Rupee (renamed)'));
+      await device.sync.syncEverything();
+
+      final held = await (device.db.select(
+        device.db.currencies,
+      )..where((t) => t.code.equals('INR'))).getSingle();
+      expect(held.name, 'Indian Rupee (renamed)');
+    });
+  });
+
   // Two devices means two AppDatabase instances in one process. They are
   // separate in-memory databases, so the usual warning does not apply.
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;

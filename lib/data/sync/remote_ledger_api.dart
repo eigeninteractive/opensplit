@@ -1,4 +1,6 @@
 import '../../domain/models/entry.dart';
+import '../../domain/models/currency.dart';
+import '../../domain/models/category.dart';
 import '../../domain/models/group_event.dart';
 import '../../domain/models/group.dart';
 import '../../domain/models/member.dart';
@@ -177,6 +179,17 @@ abstract interface class RemoteLedgerApi {
   /// Cursored on `(created_at, id)` rather than `(updated_at, id)`, and that is
   /// the only way this feed differs from the others: these rows are append-only
   /// and never revised, so there is no second write to order against the first.
+  /// Every currency and category the server knows about.
+  ///
+  /// Whole rather than paged or cursored, and that is proportionate rather than
+  /// lazy: there are a couple of dozen rows between them, they change about
+  /// never, and `currencies` has no `updated_at` to cursor on in the first
+  /// place. The same reasoning as [pullFxRates], which is the other pull with
+  /// no cursor.
+  Future<List<Currency>> pullCurrencies();
+
+  Future<List<Category>> pullCategories();
+
   Future<ChangePage<GroupEventRow>> pullGroupEvents({
     required String groupId,
     SyncCursor? since,

@@ -263,7 +263,15 @@ class AppDatabase extends _$AppDatabase {
   ///
   /// Run at creation rather than fetched on first launch: the app has to be
   /// able to format an amount and categorise an expense before it has ever
-  /// reached the network.
+  /// reached the network, and Principle 1 says logging an expense is never
+  /// gated -- including on a connection. The category ids are fixed rather than
+  /// generated for the same reason: an expense can be categorised before the
+  /// device has synced once, and the id it gets has to be the one every other
+  /// device already means.
+  ///
+  /// A floor, not the source. `SyncEngine.pullReferenceData` refreshes both
+  /// tables from the server on every sweep, so a currency added there reaches
+  /// people without an app update -- which is what this seed used to require.
   Future<void> _seedReferenceData() async {
     await batch((batch) {
       batch.insertAll(currencies, [

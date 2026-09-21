@@ -1,6 +1,8 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../domain/models/entry.dart';
+import '../../domain/models/currency.dart';
+import '../../domain/models/category.dart';
 import '../../domain/models/group_event.dart';
 import '../../domain/models/group.dart';
 import '../../domain/models/member.dart';
@@ -322,6 +324,41 @@ final class SupabaseLedgerApi implements RemoteLedgerApi {
           .select()
           .single();
       return profileFromJson(row);
+    } on PostgrestException catch (e) {
+      throw _translate(e);
+    }
+  }
+
+  @override
+  Future<List<Currency>> pullCurrencies() async {
+    try {
+      final rows = await _client.from('currencies').select();
+      return [
+        for (final row in rows)
+          Currency(
+            code: row['code'] as String,
+            exponent: (row['exponent'] as num).toInt(),
+            symbol: row['symbol'] as String?,
+            name: row['name'] as String,
+          ),
+      ];
+    } on PostgrestException catch (e) {
+      throw _translate(e);
+    }
+  }
+
+  @override
+  Future<List<Category>> pullCategories() async {
+    try {
+      final rows = await _client.from('categories').select();
+      return [
+        for (final row in rows)
+          Category(
+            id: row['id'] as String,
+            name: row['name'] as String,
+            icon: row['icon'] as String,
+          ),
+      ];
     } on PostgrestException catch (e) {
       throw _translate(e);
     }

@@ -228,8 +228,72 @@ class SyncEngine {
   /// a person in three of your groups was fetched three times and the rate
   /// table was swept three times, to no effect after the first.
   Future<void> pullShared() async {
+    await pullReferenceData();
     await pullFxRates();
     await drain(ProfileFeed(api, db));
+  }
+
+  /// Currencies and categories, from the server rather than only from the seed.
+  ///
+  /// The device ships with a copy -- see `_seedReferenceData`, which is what
+  /// lets somebody record an expense before they have ever reached the network,
+  /// and is not going anywhere. But a seed is a floor, not a source: a currency
+  /// added on the server used to need an app update to reach anybody, which is
+  /// a release for a row.
+  ///
+  /// Upsert, never delete, and that is the whole of the merge rule. A category
+  /// withdrawn on the server is still on the entries that used it, and
+  /// `entries.category_id` references it; removing the row locally would break
+  /// a foreign key to make a list tidier. Reference data grows.
+  ///
+  /// Failures are swallowed. Everything here is already on the device, this
+  /// runs before the pull that actually matters, and taking the whole sweep
+  /// down because a currency name could not be refreshed would be the tail
+  /// wagging the dog.
+  Future<void> pullReferenceData() async {
+    try {
+      final currencies = await api.pullCurrencies();
+      final categories = await api.pullCategories();
+
+      await db.batch((batch) {
+        for (final currency in currencies) {
+          batch.insert(
+            db.currencies,
+            CurrenciesCompanion.insert(
+              code: currency.code,
+              exponent: currency.exponent,
+              symbol: Value(currency.symbol),
+              name: currency.name,
+            ),
+            onConflict: DoUpdate(
+              (_) => CurrenciesCompanion.custom(
+                exponent: Constant(currency.exponent),
+                symbol: Constant(currency.symbol),
+                name: Constant(currency.name),
+              ),
+            ),
+          );
+        }
+        for (final category in categories) {
+          batch.insert(
+            db.categories,
+            CategoriesCompanion.insert(
+              id: category.id,
+              name: category.name,
+              icon: category.icon,
+            ),
+            onConflict: DoUpdate(
+              (_) => CategoriesCompanion.custom(
+                name: Constant(category.name),
+                icon: Constant(category.icon),
+              ),
+            ),
+          );
+        }
+      });
+    } catch (_) {
+      // See above: nothing here is worth failing a sync over.
+    }
   }
 
   /// Runs one feed to exhaustion.

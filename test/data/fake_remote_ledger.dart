@@ -6,6 +6,9 @@ import 'package:opensplit/domain/models/entry.dart';
 import 'package:opensplit/domain/models/group.dart';
 import 'package:opensplit/domain/activity/snapshot_diff.dart';
 import 'package:opensplit/domain/models/entry_snapshot.dart';
+import 'package:opensplit/domain/models/currency.dart';
+import 'package:opensplit/domain/models/category.dart';
+import 'package:opensplit/data/local/reference_data.dart';
 import 'package:opensplit/domain/models/group_event.dart';
 import 'package:opensplit/domain/models/member.dart';
 import 'package:opensplit/domain/models/profile.dart';
@@ -430,6 +433,31 @@ class FakeRemoteLedger implements RemoteLedgerApi {
 
     _snapshots.add(taken);
   }
+
+  /// What the server holds as reference data.
+  ///
+  /// Seeded with the app's own presets so the fake agrees with a real instance,
+  /// and mutable so a test can add a currency the client has never heard of --
+  /// which is the case this feed exists for.
+  final List<Currency> serverCurrencies = [
+    for (final c in presetCurrencies)
+      Currency(
+        code: c.code,
+        exponent: c.exponent,
+        symbol: c.symbol,
+        name: c.name,
+      ),
+  ];
+  final List<Category> serverCategories = [
+    for (final c in presetCategories)
+      Category(id: c.id, name: c.name, icon: c.icon),
+  ];
+
+  @override
+  Future<List<Currency>> pullCurrencies() async => serverCurrencies;
+
+  @override
+  Future<List<Category>> pullCategories() async => serverCategories;
 
   @override
   Future<ChangePage<GroupEventRow>> pullGroupEvents({
