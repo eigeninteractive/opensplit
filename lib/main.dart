@@ -1,6 +1,9 @@
 import 'dart:developer' as developer;
 
+import 'package:flutter/foundation.dart'
+    show LicenseEntryWithLineBreaks, LicenseRegistry;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
@@ -21,6 +24,22 @@ Future<void> main() async {
   // Google on a user's first launch — which is exactly what an app promising
   // to work offline and report nothing must not do.
   GoogleFonts.config.allowRuntimeFetching = false;
+
+  // The faces ship with their licence, and the app can show it.
+  //
+  // Flutter's licence page is built from [LicenseRegistry], which is populated
+  // from the LICENSE file of every *package* in the build. These four faces are
+  // not a package — they are .ttf files in `assets/`, and package:google_fonts
+  // registers nothing of its own -- so the one screen that offers "the packages
+  // this app is built on, and their terms" was missing the only third-party
+  // work the app actually redistributes. The OFL asks for the notice and the
+  // licence to accompany every copy; this is the copy a user can read.
+  LicenseRegistry.addLicense(() async* {
+    yield LicenseEntryWithLineBreaks(const [
+      'Instrument Sans',
+      'JetBrains Mono',
+    ], await rootBundle.loadString('assets/google_fonts/LICENSE'));
+  });
 
   // Real paths, not hash fragments. A fragment is never sent to the server, so
   // a `#/g/123` URL cannot be an Android App Link — the whole "tap a shared

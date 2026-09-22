@@ -1,0 +1,50 @@
+name: Bug report
+description: Something behaves wrongly, or a number is wrong.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A precise report is the most valuable thing you can send this project.
+        If money is involved — a balance, a split, a settlement — say the exact
+        amounts, because rounding bugs hide in the last paisa.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: And what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to get there
+      description: |
+        The shortest path you know of. If it involves a group, say how many
+        members and which currencies.
+      placeholder: |
+        1. Make a group with 3 members, default INR
+        2. Add an expense of ₹100 split evenly
+        3. …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: From Settings → About. Say "web" if you are in a browser.
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Device and OS
+      placeholder: Pixel 8, Android 16 / Firefox 148 on macOS
+  - type: checkboxes
+    id: offline
+    attributes:
+      label: Anything that applies
+      options:
+        - label: It happened while offline, or just after coming back online
+        - label: More than one device is in the group
+        - label: The group uses more than one currency

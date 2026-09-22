@@ -72,19 +72,22 @@ class AboutScreen extends StatelessWidget {
 
             // Flutter's own, rather than a page listing them by hand. It is
             // generated from what actually shipped, so it cannot fall out of
-            // step with pubspec.lock the way a written list would.
+            // step with pubspec.lock the way a written list would. The bundled
+            // typefaces are the one thing it cannot find on its own — they are
+            // assets rather than a package — so main.dart registers them.
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.inventory_outlined),
               title: const Text('Open-source licences'),
               subtitle: const Text(
-                'The packages this app is built on, and their terms.',
+                'The packages and typefaces this app is built on, and their '
+                'terms.',
               ),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => showLicensePage(
                 context: context,
                 applicationName: 'OpenSplit',
-                applicationLegalese: '© Eigen Interactive · AGPL-3.0',
+                applicationLegalese: '© 2026 EigenInteractive · AGPL-3.0',
               ),
             ),
 

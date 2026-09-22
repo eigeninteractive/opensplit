@@ -1,0 +1,26 @@
+name: Feature request
+description: Something is harder than it should be.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the problem rather than the solution where you can — the
+        problem is the part only you can see, and it often has a better answer
+        than the one that comes to mind first.
+
+        A few things are already settled: logging an expense is never gated,
+        there are no ads, and anything that can be computed on your device is.
+        PRINCIPLES.md is short, and it is what keeps the answers consistent.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is hard right now
+      description: What were you trying to do, and what got in the way?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What might help
+      description: Optional. A guess is fine, and so is leaving this empty.

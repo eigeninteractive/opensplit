@@ -1,5 +1,7 @@
 name: opensplit
 description: "Split expenses with friends. Free forever, no ads, works offline, open source."
+repository: https://github.com/eigeninteractive/opensplit
+issue_tracker: https://github.com/eigeninteractive/opensplit/issues
 publish_to: "none"
 version: 1.0.0+3
 
