@@ -1,0 +1,354 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "version": "1.0.0",
+    "title": "OpenSplit",
+    "description": "The server stores rows and enforces one invariant. It computes nothing: splitting, folding balances, simplifying debts and analytics all happen on the device."
+  },
+  "components": {
+    "schemas": {
+      "Health": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "service": {
+            "type": "string",
+            "enum": [
+              "opensplit"
+            ]
+          },
+          "now": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "ok",
+          "service",
+          "now"
+        ]
+      },
+      "IdentityOutcome": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "enum": [
+                  "kept"
+                ]
+              },
+              "account": {
+                "$ref": "#/components/schemas/Account"
+              },
+              "token": {
+                "type": "string",
+                "nullable": true
+              }
+            },
+            "required": [
+              "outcome",
+              "account",
+              "token"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "enum": [
+                  "replaced"
+                ]
+              },
+              "account": {
+                "$ref": "#/components/schemas/Account"
+              },
+              "token": {
+                "type": "string",
+                "nullable": true
+              },
+              "strandedUserId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+              }
+            },
+            "required": [
+              "outcome",
+              "account",
+              "token",
+              "strandedUserId"
+            ]
+          }
+        ]
+      },
+      "Account": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "isAnonymous": {
+            "type": "boolean"
+          },
+          "email": {
+            "type": "string",
+            "nullable": true,
+            "format": "email"
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "isAnonymous",
+          "email",
+          "displayName"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "example": "stale_base"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ]
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "GoogleIdentityRequest": {
+        "type": "object",
+        "properties": {
+          "idToken": {
+            "type": "string",
+            "minLength": 1
+          },
+          "nonce": {
+            "type": "string"
+          },
+          "allowSignIn": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "idToken"
+        ]
+      },
+      "EmailStartResponse": {
+        "type": "object",
+        "properties": {
+          "flow": {
+            "$ref": "#/components/schemas/EmailFlow"
+          }
+        },
+        "required": [
+          "flow"
+        ]
+      },
+      "EmailFlow": {
+        "type": "string",
+        "enum": [
+          "linkPending",
+          "signInPending"
+        ],
+        "description": "linkPending: verifying keeps the current account id, so every group on this device still belongs to it. signInPending: the address already had an account, so verifying REPLACES the session, and anything recorded as a guest stays with the guest account."
+      },
+      "EmailStartRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "EmailVerifyRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "code": {
+            "type": "string",
+            "minLength": 4,
+            "maxLength": 12
+          },
+          "flow": {
+            "$ref": "#/components/schemas/EmailFlow"
+          }
+        },
+        "required": [
+          "email",
+          "code",
+          "flow"
+        ]
+      }
+    },
+    "parameters": {}
+  },
+  "paths": {
+    "/api/health": {
+      "get": {
+        "tags": [
+          "meta"
+        ],
+        "summary": "Whether the Worker is answering",
+        "responses": {
+          "200": {
+            "description": "It is",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/google": {
+      "post": {
+        "tags": [
+          "identity"
+        ],
+        "summary": "Attach Google to this session, or sign in with it",
+        "description": "Tries to link first, so the account id survives and nothing on the device has to move. Falls back to signing in only when the Google account provably belongs to somebody already, and only when allowSignIn says the cost has already been explained to the person.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleIdentityRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Linked, or signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityOutcome"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "That Google account already has an account of its own, and allowSignIn was not set.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/email": {
+      "post": {
+        "tags": [
+          "identity"
+        ],
+        "summary": "Send a sign-in code, and say which flow it started",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailStartRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A code is on its way",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailStartResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/email/verify": {
+      "post": {
+        "tags": [
+          "identity"
+        ],
+        "summary": "Complete the flow that POST /identity/email started",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailVerifyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Attached, or signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityOutcome"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "That code was for a flow this session cannot finish.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

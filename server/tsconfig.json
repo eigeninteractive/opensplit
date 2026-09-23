@@ -1,0 +1,34 @@
+{
+  // The Worker itself. Nothing in here runs in Node, so Node's types are
+  // deliberately absent: `@types/node` declares its own `crypto`, `console`,
+  // `Blob` and `AbortController`, which are not quite workerd's, and letting
+  // both into one program means code is checked against whichever won.
+  //
+  // Build-time files (vitest.config.ts, drizzle.*.config.ts, scripts/) do run
+  // in Node and live in tsconfig.node.json. Tests run in workerd and live in
+  // test/tsconfig.json.
+  "compilerOptions": {
+    "target": "es2024",
+    "lib": ["es2024"],
+    "module": "es2022",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    // Forces `import type` for type-only imports, so what is erased at build
+    // time is stated rather than inferred.
+    "verbatimModuleSyntax": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    // `@better-auth/core` references `bun:sqlite`, a module that does not exist
+    // outside Bun. Nothing here can fix that, and our own code is still checked
+    // against library types either way: this skips checking declaration files
+    // against themselves, not our use of them.
+    "skipLibCheck": true,
+    "types": ["./worker-configuration.d.ts"]
+  },
+  "include": ["src/**/*.ts", "worker-configuration.d.ts"]
+}

@@ -1,0 +1,86 @@
+/**
+ * OpenSplit's backend: one Worker serving the static site, the Flutter web
+ * bundle and the API, with one Durable Object per group.
+ *
+ * See docs/cloudflare-migration-plan.md for why it is shaped this way, and
+ * docs/cloudflare-runbook.md for the commands that create the resources named
+ * below. Nothing here is created automatically.
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "opensplit",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-23",
+
+  // Better Auth reaches for node built-ins (crypto, buffer). Without this the
+  // Worker fails at import time, not at request time, which is at least loud.
+  "compatibility_flags": ["nodejs_compat"],
+
+  "observability": { "enabled": true },
+  "upload_source_maps": true,
+
+  /**
+   * Static assets are served ahead of the Worker script, so a request for
+   * `main.dart.js` never invokes it. Anything with no matching asset falls
+   * through to `src/index.ts`, which routes `/api/*` and answers SPA deep
+   * links such as `/app/join/:token` from `/app/index.html`.
+   *
+   * `not_found_handling` is deliberately left at its default. Setting it to
+   * `single-page-application` would serve the marketing site's `index.html`
+   * for `/app/join/xyz`, which is the wrong document.
+   *
+   * Phase 6 repoints `directory` at the real build output. Until then
+   * `./public` is a placeholder that exists so the routing can be tested.
+   */
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+
+  "durable_objects": {
+    "bindings": [{ "name": "GROUP", "class_name": "Group" }, { "name": "FX", "class_name": "Fx" }]
+  },
+
+  /**
+   * The declarative `exports` map, not the legacy `migrations` array. The two
+   * are mutually exclusive, and once deployed with `exports` there is no going
+   * back — which is fine, because this is a new namespace.
+   *
+   * `storage: "sqlite"` is the only option for a new class, and is what gives
+   * the SQL API and point-in-time recovery.
+   */
+  "exports": {
+    "Group": { "type": "durable-object", "storage": "sqlite" },
+    "Fx": { "type": "durable-object", "storage": "sqlite" }
+  },
+
+  /**
+   * `database_id` is a placeholder. `wrangler dev` and the test pool ignore it
+   * and keep a local SQLite file; a real deploy needs the id printed by
+   * `wrangler d1 create opensplit`. See the runbook.
+   */
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "opensplit",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // Exchange rates, one blob per month. Also a placeholder id.
+  "kv_namespaces": [{ "binding": "FX_RATES", "id": "0000000000000000000000000000000f" }],
+
+  "triggers": {
+    "crons": [
+      "0 4 * * *", // exchange rates
+      "30 4 * * *", // archive and purge dormant groups
+      "0 5 * * 0" // abandoned guests, index reconciliation
+    ]
+  },
+
+  "vars": {
+    // Overridden per environment. Used for OAuth callbacks and link minting.
+    "APP_ORIGIN": "http://localhost:8787"
+  }
+}

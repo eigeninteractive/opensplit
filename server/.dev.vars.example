@@ -1,0 +1,9 @@
+# Local secrets for `wrangler dev`. Copy to .dev.vars, which is gitignored.
+# In production these are set with `wrangler secret put` — see the runbook.
+
+BETTER_AUTH_SECRET="a-long-random-string-for-local-development-only"
+GOOGLE_CLIENT_ID=""
+GOOGLE_CLIENT_SECRET=""
+RESEND_API_KEY=""
+FCM_PROJECT_ID=""
+FCM_SERVICE_ACCOUNT=""

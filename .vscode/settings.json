@@ -1,0 +1,12 @@
+{
+	// Biome lives in server/node_modules, but the editor is rooted at the repo.
+	// Without this the extension falls back to its own bundled binary, which can
+	// be older than the one the CLI and CI run — and then it reports config keys
+	// as unknown that are simply newer than it is. One binary, one answer.
+	"biome.lsp.bin": "./server/node_modules/@biomejs/biome/bin/biome",
+
+	// Wrangler's config is JSONC: comments and trailing commas are valid.
+	"files.associations": {
+		"wrangler.json": "jsonc"
+	}
+}

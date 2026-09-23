@@ -1,0 +1,11 @@
+{
+  // Everything that runs in Node rather than in workerd: the test runner's
+  // config, drizzle-kit's configs, and the script that writes the committed
+  // OpenAPI document. These were previously unchecked — `scripts/` matched no
+  // include pattern at all, so `npm run typecheck` passed whatever it said.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["*.ts", "scripts/**/*.ts"]
+}

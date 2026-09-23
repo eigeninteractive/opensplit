@@ -1,0 +1,42 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "ignoreUnknown": false,
+    // `useIgnoreFile` above already drops everything `.gitignore` does — `.wrangler`,
+    // `node_modules`, `public` — so what is listed here is the opposite case: files that
+    // *are* committed and still are not ours to format.
+    //
+    // `auth-schema.ts` is written by `auth generate` and `migrations/meta` by drizzle-kit;
+    // both are regenerated in CI and diffed, so formatting either would turn every
+    // regeneration into a drift failure. `worker-configuration.d.ts` is wrangler's.
+    // `package.json` is npm's — it rewrites it with two-space indent on every install,
+    // which is a fight with no winner.
+    "includes": ["**", "!**/worker-configuration.d.ts", "!**/migrations/meta", "!src/auth-schema.ts", "!package.json", "!package-lock.json"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "lineWidth": 320
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended"
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "trailingCommas": "all"
+    }
+  },
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  }
+}
