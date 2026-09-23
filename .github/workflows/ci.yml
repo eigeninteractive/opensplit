@@ -36,6 +36,11 @@ jobs:
           dart run drift_dev schema dump lib/data/local/database.dart drift_schemas/
           dart run drift_dev schema generate drift_schemas/ test/data/generated_migrations/
           dart format test/data/generated_migrations
+      # The API client is generated from docs/openapi.json and committed, so a
+      # wire change that skipped the regeneration is caught here rather than on
+      # a device. Needs a JDK, which the runner image already carries.
+      - name: Check the generated API client against the contract
+        run: dart run tool/generate_api_client.dart --check
       - run: dart format --output=none --set-exit-if-changed lib test tool
       - name: Check automatic fixes and generated contract drift
         run: |
