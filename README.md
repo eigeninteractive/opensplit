@@ -694,9 +694,9 @@ drift_schemas/      a snapshot of every shipped local schema, so a future
                     migration can be tested against a real old database
                     rather than a guess at one.
 docs/               procedures and rules that are too long for a commit
-                    message and have to be followed exactly: moving
-                    production onto the group_events schema, and what to
-                    know before changing the local database.
+                    message and have to be followed exactly: rebuilding the
+                    backend from the migrations, and what to know before
+                    changing the local database.
 ```
 
 The migrations are edited in place rather than appended to while the app is
@@ -713,5 +713,30 @@ suggested settlements leaves nothing owed.
 
 ## Licence
 
+Copyright © 2026 EigenInteractive.
+
 [AGPL-3.0](LICENSE). If you run a modified OpenSplit as a service, your users
-are entitled to your changes.
+are entitled to your changes. The app carries that obligation rather than
+leaving it to this file: *Settings → About* links to the source, and
+`REPOSITORY_URL` is a build-time define so that a fork's copy points at the
+fork.
+
+The typefaces are not ours and are not under that licence. Instrument Sans and
+JetBrains Mono are bundled under the SIL Open Font License 1.1, with the notices
+and the licence text in [assets/google_fonts/LICENSE](assets/google_fonts/LICENSE)
+— which the app also shows, under *About → Open-source licences*.
+
+### The name and the mark
+
+AGPL-3.0 covers the code. The name *OpenSplit* and the brand assets in
+`assets/brand/`, `assets/icon/` and `brand/` stay with EigenInteractive, so a
+fork will want its own name and its own mark. That is the usual arrangement —
+GPLv3 §7(e), which AGPL-3.0 incorporates, exists so that a copyright licence
+need not hand over a trademark — and the code, which is the part worth taking,
+is yours to take.
+
+## Issues
+
+Bug reports and feature requests are very welcome. The templates ask for the
+few things that make a report actionable — mostly the exact amounts, since
+rounding bugs hide in the last paisa.
