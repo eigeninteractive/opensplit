@@ -21,7 +21,7 @@ runs" in the final phase.
 | Plan | Workers Free to start | Durable Objects with SQLite storage are on Free: 100k requests/day, 13,000 GB-s/day, 5M rows read/day, 100k rows written/day, 5 GB stored. See *Limits that shape the design*. |
 | ORM and migrations | Drizzle + drizzle-kit, for D1 **and** the Durable Object | One TypeScript schema is the source of truth; `drizzle-kit generate` emits the SQL. No migration is written by hand. `drizzle-orm/durable-sqlite` maps `db.transaction()` straight onto `ctx.storage.transactionSync()` in sync mode, so the balance invariant keeps the atomicity it depends on. |
 | Validation and contract | Zod 4 + `@hono/zod-openapi` | One Zod schema per payload is the validator, the TypeScript type and the OpenAPI definition. The spec is emitted at 3.0.3 and committed; CI fails on drift. |
-| Dart client | Generated from the spec by OpenAPI Generator's `dart` target into `packages/opensplit_api` | Plain classes over `package:http` — no built_value, no dio, no chopper — which is the only generated stack that does not fight the pubspec's minimalism. A path package rather than a folder under `lib/`, so generated code keeps its own lint posture instead of forcing the app to relax its own. Replaces the hand-written `wire.dart`; `mappers.dart` still translates to the freezed domain models. Costs a JDK in the codegen path. |
+| Dart client | OpenAPI Generator's **`dart-dio`** target with `json_serializable`, into `packages/opensplit_api` | The plain `dart` target was the plan, for having no extra dependencies. It loses on one property this codebase already decided it needs: forward compatibility with enum values. See *Why `dart-dio`*. Not built_value, which would drag `BuiltList`/`BuiltMap` through every call site of an app that already models with freezed. A path package rather than a folder under `lib/`, so generated code keeps its own lint posture. Costs `dio`, `json_serializable` and a JDK in the codegen path. |
 | Router | Hono | The de facto Workers router; Better Auth mounts on it directly, and `@hono/zod-openapi` is the maintainers' recommendation for new projects. |
 | Lint and format | Biome, matching the other Cloudflare projects | `biome.jsonc`: two-space indent, `lineWidth` 320, double quotes, trailing commas, `preset: "recommended"` — the same settings as `eigen-server` and `eigen-platform/server`. Generated files (`src/auth-schema.ts`, `migrations/meta`, `worker-configuration.d.ts`) are excluded or formatting them would fight the drift checks; `package.json` is excluded because npm rewrites it on every install. The repo-root `.vscode/settings.json` points the editor at `server/node_modules`, so editor, CLI and CI run one binary. |
 | Self-hosting | Withdrawn, and said so plainly | Durable Objects, D1 and KV are not products anyone can stand up. The server is written in the shape Cloudflare wants, with no portability seam, and PRINCIPLES.md #6 is rewritten rather than quietly left standing. See *The promise that does not survive*. |
@@ -634,6 +634,45 @@ in review as a change to the contract. That is the same discipline
 
 `/api/reference` and `/api/fx` are the two responses worth caching at the edge;
 both are identical for every user, which is what `using (true)` said in SQL.
+
+---
+
+### Why `dart-dio`
+
+The plain `dart` target generates smaller output and needs no build step, and
+it was the plan. It was tried, and it cannot decode a response from a server
+newer than the client.
+
+Its enum decoder returns `null` for a value it does not recognise, and every
+model does `EventKind.fromJson(json[r'kind'])!`. So one new event kind from a
+newer server throws a null-check error and **takes the whole sync page with
+it**. Setting `enumUnknownDefaultCase=true` adds an `unknownDefaultOpenApi`
+member to the enum but nothing maps unknown strings to it, so the flag changes
+nothing on that generator.
+
+That is precisely the failure `GroupEventKind.parse` was written to prevent,
+and its comment already says why: *"A server that has learned a new kind will
+send it to clients that have not, and the right answer for an old build is to
+leave that line out of the feed — not to fail the whole sync page it arrived in
+and stop the feed updating at all."*
+
+`dart-dio` with `json_serializable` emits
+`@JsonKey(unknownEnumValue: EventKind.unknownDefaultOpenApi)`, which decodes an
+unrecognised value into the sentinel. The page parses, the unknown row is
+identifiable, and the client skips it. Read-side only: serialising the sentinel
+emits a value the API rejects, which is correct — a client should never
+originate a kind it does not understand.
+
+Both targets handle the activity payload identically (`Map<String, Object?>`),
+so that was not the deciding factor. This was.
+
+The costs are real and accepted. `dio` joins the dependency tree, though the
+app needs an HTTP client either way once `supabase_flutter` goes, and dio's
+interceptors are the right place for the bearer-or-cookie decision. And the
+package now runs `build_runner`, whose `.g.dart` output is committed — a
+consumer never runs build_runner on a dependency, so a package whose
+`part 'x.g.dart'` directives point at nothing does not compile. The root
+`.gitignore` excludes `*.g.dart` for the app and re-includes this package's.
 
 ---
 

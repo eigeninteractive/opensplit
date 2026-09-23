@@ -4,10 +4,10 @@
 # Owned because the template's version of this file makes three claims this
 # repository cannot stand behind:
 #
-#   * `sdk: '>=2.17.0 <4.0.0'`, which is a compatibility promise nothing here
-#     tests. This package is only ever resolved by the app above it, whose
-#     floor is the one that matters.
-#   * a `test` dev-dependency pinned to `>=1.21.6 <1.22.0`, for generated tests
+#   * an SDK floor that is a compatibility promise nothing here tests. This
+#     package is resolved by exactly one app, whose floor is the one that
+#     matters.
+#   * a `test` dev-dependency pinned to a two-patch range, for generated tests
 #     this repository does not generate.
 #   * `description` written into a single-quoted YAML scalar with no escaping,
 #     so an apostrophe produces a manifest pub cannot parse.
@@ -16,7 +16,7 @@ name: opensplit_api
 description: >-
   The OpenSplit API client, generated from docs/openapi.json by
   tool/generate_api_client.dart. A build artefact of the wire contract, not a
-  hand-written library — see the server's schemas for the source of truth.
+  hand-written library - see the server's Zod schemas for the source of truth.
 version: 1.0.0
 homepage: https://github.com/eigeninteractive/opensplit
 repository: https://github.com/eigeninteractive/opensplit/tree/main/packages/opensplit_api
@@ -30,7 +30,12 @@ environment:
   sdk: ^3.12.2
 
 dependencies:
-  collection: ^1.19.0
-  http: ^1.6.0
-  intl: ^0.20.3
-  meta: ^1.16.0
+  dio: ^5.10.0
+  json_annotation: ^4.12.0
+
+dev_dependencies:
+  # The serializers are generated here and committed: a consumer never runs
+  # build_runner on a dependency, so a package whose `part 'x.g.dart'`
+  # directives point at nothing does not compile.
+  build_runner: ^2.15.1
+  json_serializable: ^6.12.0

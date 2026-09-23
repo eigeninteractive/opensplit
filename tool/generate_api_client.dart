@@ -73,6 +73,17 @@ Future<void> main(List<String> args) async {
     stage,
   ], what: 'OpenAPI Generator');
 
+  // The json_serializable output is committed alongside the models it belongs
+  // to. A consumer never runs build_runner on a dependency, so a package whose
+  // `part 'x.g.dart'` directives point at nothing does not compile.
+  await _run('dart', ['pub', 'get'], workingDirectory: stage, what: 'pub get');
+  await _run(
+    'dart',
+    ['run', 'build_runner', 'build', '--delete-conflicting-outputs'],
+    workingDirectory: stage,
+    what: 'build_runner',
+  );
+
   // The generator's output is not `dart format` clean, and these sources are
   // committed. Formatting here rather than excluding the package from the
   // repository's format check also normalises the generator's own line
@@ -100,8 +111,14 @@ Future<void> main(List<String> args) async {
   }
 
   // Installed only now, with every fallible step behind us.
-  Directory('$_output/lib').deleteSync(recursive: true);
+  final installed = Directory('$_output/lib');
+  if (installed.existsSync()) installed.deleteSync(recursive: true);
   Directory('$stage/lib').renameSync('$_output/lib');
+
+  // build.yaml tells build_runner which builders to run over this package. It
+  // is generated, not ours, but it has to travel with the sources so anybody
+  // regenerating from a clean checkout gets the same serializers.
+  File('$stage/build.yaml').copySync('$_output/build.yaml');
   stdout.writeln('Generated $_output from $_spec.');
 }
 

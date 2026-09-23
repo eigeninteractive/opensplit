@@ -100,3 +100,13 @@ env/*.json
 # only ever consumed by the app above it.
 packages/*/.dart_tool/
 packages/*/pubspec.lock
+
+# ...except the API client's, which must be committed.
+#
+# `*.g.dart` above is right for the app: build_runner regenerates freezed,
+# drift and riverpod output locally and in CI. It is wrong for a package that
+# is consumed as a dependency, because a consumer never runs build_runner on
+# one — so a package whose `part 'x.g.dart'` directives point at nothing simply
+# does not compile. These are a build artefact that has to travel with its
+# sources; `tool/generate_api_client.dart` produces them and CI diffs them.
+!packages/opensplit_api/lib/**/*.g.dart

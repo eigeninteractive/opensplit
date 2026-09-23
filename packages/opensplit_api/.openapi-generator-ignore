@@ -1,12 +1,22 @@
-# Files the generator offers that this repo does not want.
-#
-# The package is a build artefact of docs/openapi.json, consumed only by this
-# app. It needs no CI of its own, no publishing script, and no generated tests
-# asserting that generated constructors construct.
+# Files the generator must not overwrite. Everything not listed here — lib/,
+# build.yaml, README.md — is regenerated wholesale on every run.
+
+# Hand-owned: the template claims an SDK floor nothing here tests, pins a `test`
+# dev-dependency for tests this repository does not generate, and writes the
+# description into a single-quoted YAML scalar without escaping, so an
+# apostrophe produces a manifest pub cannot parse.
+pubspec.yaml
+
+# Hand-owned: holds the relaxations the templates' own output requires. The
+# generator would overwrite them on every run.
+analysis_options.yaml
+
+# The repository root has one, and it already covers this package's build
+# artefacts. The template's version would add nothing and drift on its own.
+.gitignore
+
 .travis.yml
 git_push.sh
 test/
-README.md
-analysis_options.yaml
 doc/
-pubspec.yaml
+README.md

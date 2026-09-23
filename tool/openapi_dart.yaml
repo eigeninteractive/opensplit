@@ -3,32 +3,52 @@
 # A config file rather than a wall of --additional-properties, because these
 # are decisions and decisions deserve somewhere to be written down.
 #
-# Run with `dart run tool/generate_api_client.dart`, or the npx line inside it.
-# The output is committed and CI fails on drift, the same discipline
-# drift_schemas/ and docs/openapi.json already get: a wire change that skips
-# the client shows up in review as a change to the client.
+# Run with `dart run tool/generate_api_client.dart`. The output is committed
+# and CI fails on drift, the same discipline drift_schemas/ and
+# docs/openapi.json already get: a wire change that skips the client shows up
+# in review as a change to the client.
 
-generatorName: dart
+generatorName: dart-dio
 inputSpec: docs/openapi.json
 outputDir: packages/opensplit_api
 
 additionalProperties:
   pubName: opensplit_api
-  # No apostrophe. The generator emits this into a single-quoted YAML scalar
-  # without escaping it, so "OpenSplit's" produces a pubspec.yaml that pub
-  # cannot parse.
-  pubDescription: "The OpenSplit API client. Generated from docs/openapi.json - do not edit."
+  pubLibrary: opensplit_api
   pubVersion: 1.0.0
-  pubAuthor: OpenSplit
-  pubHomepage: https://github.com/eigeninteractive/opensplit
 
-  # Plain classes over package:http. Not built_value, not dio, not chopper:
-  # this is the only generated stack that does not drag a second serialization
-  # framework and its own code generation into a pubspec that already runs
-  # freezed, drift and riverpod through build_runner.
-  serializationLibrary: native
+  # json_serializable, not built_value. Both are available on this generator;
+  # built_value drags its own immutable-collection types (BuiltList, BuiltMap)
+  # through every call site, which is a second modelling vocabulary in an app
+  # that already has freezed.
+  serializationLibrary: json_serializable
 
-# The generated package is its own thing, with its own analysis options, so
-# its lint posture is not the app's. Keeping it out of lib/ is what makes that
-# possible — generated code cannot be expected to pass a hand-written project's
-# lints, and silencing them app-wide to suit it would be the wrong trade.
+  # copyWith on a wire DTO is not useful here. The domain models are freezed
+  # and own that job; a DTO is read once, mapped, and discarded.
+  skipCopyWith: true
+
+  # The reason this generator was chosen over the plain `dart` one.
+  #
+  # It adds an `unknownDefaultOpenApi` member to every enum, and
+  # json_serializable decodes an unrecognised value into it via
+  # `@JsonKey(unknownEnumValue: ...)`. The plain `dart` generator emits the
+  # member too, but nothing maps unknown strings to it — its decoder returns
+  # null and the model does `EnumType.fromJson(json[r'kind'])!`, so one new
+  # event kind from a newer server throws and takes the whole sync page with
+  # it.
+  #
+  # That is the exact failure GroupEventKind.parse exists to prevent: a server
+  # that has learned a new kind will send it to clients that have not, and the
+  # right answer for an old build is to leave that line out of the feed, not
+  # to stop the feed updating at all. The sentinel is read-side only —
+  # serialising it emits a value the API does not accept, which is correct,
+  # because a client should never originate a kind it does not understand.
+  enumUnknownDefaultCase: true
+
+globalProperties:
+  # No generated tests asserting that generated constructors construct, and no
+  # markdown rendering of a spec that is already committed as JSON.
+  modelTests: "false"
+  apiTests: "false"
+  modelDocs: "false"
+  apiDocs: "false"
