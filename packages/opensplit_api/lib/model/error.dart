@@ -19,20 +19,20 @@ class Error {
   ErrorError error;
 
   @override
-  bool operator ==(Object other) => identical(this, other) || other is Error &&
-    other.error == error;
+  bool operator ==(Object other) =>
+      identical(this, other) || other is Error && other.error == error;
 
   @override
   int get hashCode =>
-    // ignore: unnecessary_parenthesis
-    (error.hashCode);
+      // ignore: unnecessary_parenthesis
+      (error.hashCode);
 
   @override
   String toString() => 'Error[error=$error]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-      json[r'error'] = this.error;
+    json[r'error'] = this.error;
     return json;
   }
 
@@ -47,8 +47,10 @@ class Error {
       // Note 1: the values aren't checked for validity beyond being non-null.
       // Note 2: this code is stripped in release mode!
       assert(() {
-        assert(json.containsKey(r'error'), 'Required key "Error[error]" is missing from JSON.');
-        assert(json[r'error'] != null, 'Required key "Error[error]" has a null value in JSON.');
+        assert(json.containsKey(r'error'),
+            'Required key "Error[error]" is missing from JSON.');
+        assert(json[r'error'] != null,
+            'Required key "Error[error]" has a null value in JSON.');
         return true;
       }());
 
@@ -59,7 +61,10 @@ class Error {
     return null;
   }
 
-  static List<Error> listFromJson(dynamic json, {bool growable = false,}) {
+  static List<Error> listFromJson(
+    dynamic json, {
+    bool growable = false,
+  }) {
     final result = <Error>[];
     if (json is List && json.isNotEmpty) {
       for (final row in json) {
@@ -87,13 +92,19 @@ class Error {
   }
 
   // maps a json object with a list of Error-objects as value to a dart map
-  static Map<String, List<Error>> mapListFromJson(dynamic json, {bool growable = false,}) {
+  static Map<String, List<Error>> mapListFromJson(
+    dynamic json, {
+    bool growable = false,
+  }) {
     final map = <String, List<Error>>{};
     if (json is Map && json.isNotEmpty) {
       // ignore: parameter_assignments
       json = json.cast<String, dynamic>();
       for (final entry in json.entries) {
-        map[entry.key] = Error.listFromJson(entry.value, growable: growable,);
+        map[entry.key] = Error.listFromJson(
+          entry.value,
+          growable: growable,
+        );
       }
     }
     return map;
@@ -104,4 +115,3 @@ class Error {
     'error',
   };
 }
-

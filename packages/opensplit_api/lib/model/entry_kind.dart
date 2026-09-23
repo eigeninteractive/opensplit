@@ -10,7 +10,6 @@
 
 part of openapi.api;
 
-
 enum EntryKind {
   expense._(r'expense'),
   settlement._(r'settlement'),
@@ -30,11 +29,15 @@ enum EntryKind {
 
   /// Returns the instance of [EntryKind] that was successfully decoded
   /// from the passed [value] on success, null otherwise.
-  static EntryKind? fromJson(dynamic value) => EntryKindTypeTransformer().decode(value);
+  static EntryKind? fromJson(dynamic value) =>
+      EntryKindTypeTransformer().decode(value);
 
   /// Returns a [List] containing instances of [EntryKind]
   /// that were successfully decoded from the passed [JSON][json].
-  static List<EntryKind> listFromJson(dynamic json, {bool growable = false,}) {
+  static List<EntryKind> listFromJson(
+    dynamic json, {
+    bool growable = false,
+  }) {
     final result = <EntryKind>[];
     if (json is List && json.isNotEmpty) {
       for (final row in json) {
@@ -51,7 +54,8 @@ enum EntryKind {
 /// Transformation class that can [encode] an instance of [EntryKind] to String,
 /// and [decode] dynamic data back to [EntryKind].
 class EntryKindTypeTransformer {
-  factory EntryKindTypeTransformer() => _instance ??= const EntryKindTypeTransformer._();
+  factory EntryKindTypeTransformer() =>
+      _instance ??= const EntryKindTypeTransformer._();
 
   const EntryKindTypeTransformer._();
 
@@ -73,8 +77,10 @@ class EntryKindTypeTransformer {
     }
     if (data != null) {
       switch (data) {
-        case r'expense': return EntryKind.expense;
-        case r'settlement': return EntryKind.settlement;
+        case r'expense':
+          return EntryKind.expense;
+        case r'settlement':
+          return EntryKind.settlement;
         default:
           if (!allowNull) {
             throw ArgumentError('Unknown enum value to decode: $data');
@@ -87,4 +93,3 @@ class EntryKindTypeTransformer {
   /// The singleton instance of this transformer.
   static EntryKindTypeTransformer? _instance;
 }
-

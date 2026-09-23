@@ -601,9 +601,18 @@ DELETE /api/account
 `changes` returns:
 
 ```json
-{ "seq": 412, "hasMore": false,
+{ "groupId": "…", "seq": 412, "hasMore": false, "purgedAt": null,
   "group": { … } | null, "members": [ … ], "entries": [ … ], "events": [ … ] }
 ```
+
+`groupId` is on the page and on none of the rows. The group id is a property
+of the page, not of an expense: repeating it two hundred times per sync is
+seven kilobytes of pure redundancy, and it would put back on the wire exactly
+the column the storage design removed, inviting anyone reading the contract to
+assume it is stored that way. Stated once, though, rather than left implicit —
+a device writes these rows into a local database that *is* multi-group, and
+taking the id from the response rather than from its own request is what makes
+a page answering for the wrong group detectable instead of silently merged.
 
 Every request and response body is a Zod schema, registered with
 `@hono/zod-openapi`, so one declaration is the runtime validator, the

@@ -47,7 +47,7 @@ export function changesSince(tx: Tx, profileId: string, since: number, requested
    */
   const grave = findTombstone(tx);
   if (grave) {
-    return { ...empty, seq: grave.seq, hasMore: false, purgedAt: since < grave.seq ? grave.purgedAt : null };
+    return { ...empty, groupId: grave.groupId, seq: grave.seq, hasMore: false, purgedAt: since < grave.seq ? grave.purgedAt : null };
   }
 
   const meta = findMeta(tx);
@@ -94,7 +94,7 @@ export function changesSince(tx: Tx, profileId: string, since: number, requested
     limit ${limit + 1}`);
 
   if (moved.length === 0) {
-    return { ...empty, seq: since, hasMore: false, purgedAt: null };
+    return { ...empty, groupId: meta.id, seq: since, hasMore: false, purgedAt: null };
   }
 
   const hasMore = moved.length > limit;
@@ -106,6 +106,7 @@ export function changesSince(tx: Tx, profileId: string, since: number, requested
   const entryRows = tx.select().from(schema.entries).where(window(schema.entries.seq)).orderBy(asc(schema.entries.seq)).all();
 
   return {
+    groupId: meta.id,
     seq: upTo,
     hasMore,
     purgedAt: null,

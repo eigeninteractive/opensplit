@@ -25,25 +25,28 @@ class MemberCreate {
   String? upiVpa;
 
   @override
-  bool operator ==(Object other) => identical(this, other) || other is MemberCreate &&
-    other.id == id &&
-    other.displayName == displayName &&
-    other.upiVpa == upiVpa;
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MemberCreate &&
+          other.id == id &&
+          other.displayName == displayName &&
+          other.upiVpa == upiVpa;
 
   @override
   int get hashCode =>
-    // ignore: unnecessary_parenthesis
-    (id.hashCode) +
-    (displayName.hashCode) +
-    (upiVpa == null ? 0 : upiVpa!.hashCode);
+      // ignore: unnecessary_parenthesis
+      (id.hashCode) +
+      (displayName.hashCode) +
+      (upiVpa == null ? 0 : upiVpa!.hashCode);
 
   @override
-  String toString() => 'MemberCreate[id=$id, displayName=$displayName, upiVpa=$upiVpa]';
+  String toString() =>
+      'MemberCreate[id=$id, displayName=$displayName, upiVpa=$upiVpa]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-      json[r'id'] = this.id;
-      json[r'displayName'] = this.displayName;
+    json[r'id'] = this.id;
+    json[r'displayName'] = this.displayName;
     if (this.upiVpa != null) {
       json[r'upiVpa'] = this.upiVpa;
     } else {
@@ -63,10 +66,14 @@ class MemberCreate {
       // Note 1: the values aren't checked for validity beyond being non-null.
       // Note 2: this code is stripped in release mode!
       assert(() {
-        assert(json.containsKey(r'id'), 'Required key "MemberCreate[id]" is missing from JSON.');
-        assert(json[r'id'] != null, 'Required key "MemberCreate[id]" has a null value in JSON.');
-        assert(json.containsKey(r'displayName'), 'Required key "MemberCreate[displayName]" is missing from JSON.');
-        assert(json[r'displayName'] != null, 'Required key "MemberCreate[displayName]" has a null value in JSON.');
+        assert(json.containsKey(r'id'),
+            'Required key "MemberCreate[id]" is missing from JSON.');
+        assert(json[r'id'] != null,
+            'Required key "MemberCreate[id]" has a null value in JSON.');
+        assert(json.containsKey(r'displayName'),
+            'Required key "MemberCreate[displayName]" is missing from JSON.');
+        assert(json[r'displayName'] != null,
+            'Required key "MemberCreate[displayName]" has a null value in JSON.');
         return true;
       }());
 
@@ -79,7 +86,10 @@ class MemberCreate {
     return null;
   }
 
-  static List<MemberCreate> listFromJson(dynamic json, {bool growable = false,}) {
+  static List<MemberCreate> listFromJson(
+    dynamic json, {
+    bool growable = false,
+  }) {
     final result = <MemberCreate>[];
     if (json is List && json.isNotEmpty) {
       for (final row in json) {
@@ -107,13 +117,19 @@ class MemberCreate {
   }
 
   // maps a json object with a list of MemberCreate-objects as value to a dart map
-  static Map<String, List<MemberCreate>> mapListFromJson(dynamic json, {bool growable = false,}) {
+  static Map<String, List<MemberCreate>> mapListFromJson(
+    dynamic json, {
+    bool growable = false,
+  }) {
     final map = <String, List<MemberCreate>>{};
     if (json is Map && json.isNotEmpty) {
       // ignore: parameter_assignments
       json = json.cast<String, dynamic>();
       for (final entry in json.entries) {
-        map[entry.key] = MemberCreate.listFromJson(entry.value, growable: growable,);
+        map[entry.key] = MemberCreate.listFromJson(
+          entry.value,
+          growable: growable,
+        );
       }
     }
     return map;
@@ -125,4 +141,3 @@ class MemberCreate {
     'displayName',
   };
 }
-

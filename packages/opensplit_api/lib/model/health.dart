@@ -25,26 +25,26 @@ class Health {
   DateTime now;
 
   @override
-  bool operator ==(Object other) => identical(this, other) || other is Health &&
-    other.ok == ok &&
-    other.service == service &&
-    other.now == now;
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Health &&
+          other.ok == ok &&
+          other.service == service &&
+          other.now == now;
 
   @override
   int get hashCode =>
-    // ignore: unnecessary_parenthesis
-    (ok.hashCode) +
-    (service.hashCode) +
-    (now.hashCode);
+      // ignore: unnecessary_parenthesis
+      (ok.hashCode) + (service.hashCode) + (now.hashCode);
 
   @override
   String toString() => 'Health[ok=$ok, service=$service, now=$now]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-      json[r'ok'] = this.ok;
-      json[r'service'] = this.service;
-      json[r'now'] = this.now.toUtc().toIso8601String();
+    json[r'ok'] = this.ok;
+    json[r'service'] = this.service;
+    json[r'now'] = this.now.toUtc().toIso8601String();
     return json;
   }
 
@@ -59,12 +59,18 @@ class Health {
       // Note 1: the values aren't checked for validity beyond being non-null.
       // Note 2: this code is stripped in release mode!
       assert(() {
-        assert(json.containsKey(r'ok'), 'Required key "Health[ok]" is missing from JSON.');
-        assert(json[r'ok'] != null, 'Required key "Health[ok]" has a null value in JSON.');
-        assert(json.containsKey(r'service'), 'Required key "Health[service]" is missing from JSON.');
-        assert(json[r'service'] != null, 'Required key "Health[service]" has a null value in JSON.');
-        assert(json.containsKey(r'now'), 'Required key "Health[now]" is missing from JSON.');
-        assert(json[r'now'] != null, 'Required key "Health[now]" has a null value in JSON.');
+        assert(json.containsKey(r'ok'),
+            'Required key "Health[ok]" is missing from JSON.');
+        assert(json[r'ok'] != null,
+            'Required key "Health[ok]" has a null value in JSON.');
+        assert(json.containsKey(r'service'),
+            'Required key "Health[service]" is missing from JSON.');
+        assert(json[r'service'] != null,
+            'Required key "Health[service]" has a null value in JSON.');
+        assert(json.containsKey(r'now'),
+            'Required key "Health[now]" is missing from JSON.');
+        assert(json[r'now'] != null,
+            'Required key "Health[now]" has a null value in JSON.');
         return true;
       }());
 
@@ -77,7 +83,10 @@ class Health {
     return null;
   }
 
-  static List<Health> listFromJson(dynamic json, {bool growable = false,}) {
+  static List<Health> listFromJson(
+    dynamic json, {
+    bool growable = false,
+  }) {
     final result = <Health>[];
     if (json is List && json.isNotEmpty) {
       for (final row in json) {
@@ -105,13 +114,19 @@ class Health {
   }
 
   // maps a json object with a list of Health-objects as value to a dart map
-  static Map<String, List<Health>> mapListFromJson(dynamic json, {bool growable = false,}) {
+  static Map<String, List<Health>> mapListFromJson(
+    dynamic json, {
+    bool growable = false,
+  }) {
     final map = <String, List<Health>>{};
     if (json is Map && json.isNotEmpty) {
       // ignore: parameter_assignments
       json = json.cast<String, dynamic>();
       for (final entry in json.entries) {
-        map[entry.key] = Health.listFromJson(entry.value, growable: growable,);
+        map[entry.key] = Health.listFromJson(
+          entry.value,
+          growable: growable,
+        );
       }
     }
     return map;
@@ -124,7 +139,6 @@ class Health {
     'now',
   };
 }
-
 
 enum HealthServiceEnum {
   opensplit._(r'opensplit'),
@@ -144,11 +158,15 @@ enum HealthServiceEnum {
 
   /// Returns the instance of [HealthServiceEnum] that was successfully decoded
   /// from the passed [value] on success, null otherwise.
-  static HealthServiceEnum? fromJson(dynamic value) => HealthServiceEnumTypeTransformer().decode(value);
+  static HealthServiceEnum? fromJson(dynamic value) =>
+      HealthServiceEnumTypeTransformer().decode(value);
 
   /// Returns a [List] containing instances of [HealthServiceEnum]
   /// that were successfully decoded from the passed [JSON][json].
-  static List<HealthServiceEnum> listFromJson(dynamic json, {bool growable = false,}) {
+  static List<HealthServiceEnum> listFromJson(
+    dynamic json, {
+    bool growable = false,
+  }) {
     final result = <HealthServiceEnum>[];
     if (json is List && json.isNotEmpty) {
       for (final row in json) {
@@ -165,7 +183,8 @@ enum HealthServiceEnum {
 /// Transformation class that can [encode] an instance of [HealthServiceEnum] to String,
 /// and [decode] dynamic data back to [HealthServiceEnum].
 class HealthServiceEnumTypeTransformer {
-  factory HealthServiceEnumTypeTransformer() => _instance ??= const HealthServiceEnumTypeTransformer._();
+  factory HealthServiceEnumTypeTransformer() =>
+      _instance ??= const HealthServiceEnumTypeTransformer._();
 
   const HealthServiceEnumTypeTransformer._();
 
@@ -186,7 +205,8 @@ class HealthServiceEnumTypeTransformer {
     }
     if (data != null) {
       switch (data) {
-        case r'opensplit': return HealthServiceEnum.opensplit;
+        case r'opensplit':
+          return HealthServiceEnum.opensplit;
         default:
           if (!allowNull) {
             throw ArgumentError('Unknown enum value to decode: $data');
@@ -199,5 +219,3 @@ class HealthServiceEnumTypeTransformer {
   /// The singleton instance of this transformer.
   static HealthServiceEnumTypeTransformer? _instance;
 }
-
-

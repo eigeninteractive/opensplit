@@ -472,6 +472,23 @@ export const EventSchema = z
  */
 export const ChangePageSchema = z
   .object({
+    /**
+     * Which group this page describes, stated by the server.
+     *
+     * Not on each row, and that is the point. The group id is a property of
+     * the page, not of an entry — repeating it two hundred times per sync
+     * would be seven kilobytes of pure redundancy, and it would put back on
+     * the wire exactly the column the storage design removed, inviting anyone
+     * reading the contract to assume it is stored that way.
+     *
+     * Stated once, though, rather than left implicit: a device needs it to
+     * write rows into a local database that *is* multi-group, and taking it
+     * from the response instead of from its own request is what makes a page
+     * that answers for the wrong group detectable rather than silently
+     * merged.
+     */
+    groupId: IdSchema,
+
     /** The cursor to send next time. Unchanged from `since` when nothing moved. */
     seq: SeqSchema,
     hasMore: z.boolean(),

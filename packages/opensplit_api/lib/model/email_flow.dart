@@ -30,11 +30,15 @@ enum EmailFlow {
 
   /// Returns the instance of [EmailFlow] that was successfully decoded
   /// from the passed [value] on success, null otherwise.
-  static EmailFlow? fromJson(dynamic value) => EmailFlowTypeTransformer().decode(value);
+  static EmailFlow? fromJson(dynamic value) =>
+      EmailFlowTypeTransformer().decode(value);
 
   /// Returns a [List] containing instances of [EmailFlow]
   /// that were successfully decoded from the passed [JSON][json].
-  static List<EmailFlow> listFromJson(dynamic json, {bool growable = false,}) {
+  static List<EmailFlow> listFromJson(
+    dynamic json, {
+    bool growable = false,
+  }) {
     final result = <EmailFlow>[];
     if (json is List && json.isNotEmpty) {
       for (final row in json) {
@@ -51,7 +55,8 @@ enum EmailFlow {
 /// Transformation class that can [encode] an instance of [EmailFlow] to String,
 /// and [decode] dynamic data back to [EmailFlow].
 class EmailFlowTypeTransformer {
-  factory EmailFlowTypeTransformer() => _instance ??= const EmailFlowTypeTransformer._();
+  factory EmailFlowTypeTransformer() =>
+      _instance ??= const EmailFlowTypeTransformer._();
 
   const EmailFlowTypeTransformer._();
 
@@ -73,8 +78,10 @@ class EmailFlowTypeTransformer {
     }
     if (data != null) {
       switch (data) {
-        case r'linkPending': return EmailFlow.linkPending;
-        case r'signInPending': return EmailFlow.signInPending;
+        case r'linkPending':
+          return EmailFlow.linkPending;
+        case r'signInPending':
+          return EmailFlow.signInPending;
         default:
           if (!allowNull) {
             throw ArgumentError('Unknown enum value to decode: $data');
@@ -87,4 +94,3 @@ class EmailFlowTypeTransformer {
   /// The singleton instance of this transformer.
   static EmailFlowTypeTransformer? _instance;
 }
-

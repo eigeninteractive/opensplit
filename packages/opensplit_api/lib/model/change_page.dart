@@ -13,6 +13,7 @@ part of openapi.api;
 class ChangePage {
   /// Returns a new [ChangePage] instance.
   ChangePage({
+    required this.groupId,
     required this.seq,
     required this.hasMore,
     required this.group,
@@ -21,6 +22,8 @@ class ChangePage {
     this.events = const [],
     required this.purgedAt,
   });
+
+  String groupId;
 
   /// Minimum value: 0
   int seq;
@@ -38,41 +41,47 @@ class ChangePage {
   DateTime? purgedAt;
 
   @override
-  bool operator ==(Object other) => identical(this, other) || other is ChangePage &&
-    other.seq == seq &&
-    other.hasMore == hasMore &&
-    other.group == group &&
-    _deepEquality.equals(other.members, members) &&
-    _deepEquality.equals(other.entries, entries) &&
-    _deepEquality.equals(other.events, events) &&
-    other.purgedAt == purgedAt;
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ChangePage &&
+          other.groupId == groupId &&
+          other.seq == seq &&
+          other.hasMore == hasMore &&
+          other.group == group &&
+          _deepEquality.equals(other.members, members) &&
+          _deepEquality.equals(other.entries, entries) &&
+          _deepEquality.equals(other.events, events) &&
+          other.purgedAt == purgedAt;
 
   @override
   int get hashCode =>
-    // ignore: unnecessary_parenthesis
-    (seq.hashCode) +
-    (hasMore.hashCode) +
-    (group == null ? 0 : group!.hashCode) +
-    (members.hashCode) +
-    (entries.hashCode) +
-    (events.hashCode) +
-    (purgedAt == null ? 0 : purgedAt!.hashCode);
+      // ignore: unnecessary_parenthesis
+      (groupId.hashCode) +
+      (seq.hashCode) +
+      (hasMore.hashCode) +
+      (group == null ? 0 : group!.hashCode) +
+      (members.hashCode) +
+      (entries.hashCode) +
+      (events.hashCode) +
+      (purgedAt == null ? 0 : purgedAt!.hashCode);
 
   @override
-  String toString() => 'ChangePage[seq=$seq, hasMore=$hasMore, group=$group, members=$members, entries=$entries, events=$events, purgedAt=$purgedAt]';
+  String toString() =>
+      'ChangePage[groupId=$groupId, seq=$seq, hasMore=$hasMore, group=$group, members=$members, entries=$entries, events=$events, purgedAt=$purgedAt]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-      json[r'seq'] = this.seq;
-      json[r'hasMore'] = this.hasMore;
+    json[r'groupId'] = this.groupId;
+    json[r'seq'] = this.seq;
+    json[r'hasMore'] = this.hasMore;
     if (this.group != null) {
       json[r'group'] = this.group;
     } else {
       json[r'group'] = null;
     }
-      json[r'members'] = this.members;
-      json[r'entries'] = this.entries;
-      json[r'events'] = this.events;
+    json[r'members'] = this.members;
+    json[r'entries'] = this.entries;
+    json[r'events'] = this.events;
     if (this.purgedAt != null) {
       json[r'purgedAt'] = this.purgedAt!.toUtc().toIso8601String();
     } else {
@@ -92,22 +101,39 @@ class ChangePage {
       // Note 1: the values aren't checked for validity beyond being non-null.
       // Note 2: this code is stripped in release mode!
       assert(() {
-        assert(json.containsKey(r'seq'), 'Required key "ChangePage[seq]" is missing from JSON.');
-        assert(json[r'seq'] != null, 'Required key "ChangePage[seq]" has a null value in JSON.');
-        assert(json.containsKey(r'hasMore'), 'Required key "ChangePage[hasMore]" is missing from JSON.');
-        assert(json[r'hasMore'] != null, 'Required key "ChangePage[hasMore]" has a null value in JSON.');
-        assert(json.containsKey(r'group'), 'Required key "ChangePage[group]" is missing from JSON.');
-        assert(json.containsKey(r'members'), 'Required key "ChangePage[members]" is missing from JSON.');
-        assert(json[r'members'] != null, 'Required key "ChangePage[members]" has a null value in JSON.');
-        assert(json.containsKey(r'entries'), 'Required key "ChangePage[entries]" is missing from JSON.');
-        assert(json[r'entries'] != null, 'Required key "ChangePage[entries]" has a null value in JSON.');
-        assert(json.containsKey(r'events'), 'Required key "ChangePage[events]" is missing from JSON.');
-        assert(json[r'events'] != null, 'Required key "ChangePage[events]" has a null value in JSON.');
-        assert(json.containsKey(r'purgedAt'), 'Required key "ChangePage[purgedAt]" is missing from JSON.');
+        assert(json.containsKey(r'groupId'),
+            'Required key "ChangePage[groupId]" is missing from JSON.');
+        assert(json[r'groupId'] != null,
+            'Required key "ChangePage[groupId]" has a null value in JSON.');
+        assert(json.containsKey(r'seq'),
+            'Required key "ChangePage[seq]" is missing from JSON.');
+        assert(json[r'seq'] != null,
+            'Required key "ChangePage[seq]" has a null value in JSON.');
+        assert(json.containsKey(r'hasMore'),
+            'Required key "ChangePage[hasMore]" is missing from JSON.');
+        assert(json[r'hasMore'] != null,
+            'Required key "ChangePage[hasMore]" has a null value in JSON.');
+        assert(json.containsKey(r'group'),
+            'Required key "ChangePage[group]" is missing from JSON.');
+        assert(json.containsKey(r'members'),
+            'Required key "ChangePage[members]" is missing from JSON.');
+        assert(json[r'members'] != null,
+            'Required key "ChangePage[members]" has a null value in JSON.');
+        assert(json.containsKey(r'entries'),
+            'Required key "ChangePage[entries]" is missing from JSON.');
+        assert(json[r'entries'] != null,
+            'Required key "ChangePage[entries]" has a null value in JSON.');
+        assert(json.containsKey(r'events'),
+            'Required key "ChangePage[events]" is missing from JSON.');
+        assert(json[r'events'] != null,
+            'Required key "ChangePage[events]" has a null value in JSON.');
+        assert(json.containsKey(r'purgedAt'),
+            'Required key "ChangePage[purgedAt]" is missing from JSON.');
         return true;
       }());
 
       return ChangePage(
+        groupId: mapValueOfType<String>(json, r'groupId')!,
         seq: mapValueOfType<int>(json, r'seq')!,
         hasMore: mapValueOfType<bool>(json, r'hasMore')!,
         group: Group.fromJson(json[r'group']),
@@ -120,7 +146,10 @@ class ChangePage {
     return null;
   }
 
-  static List<ChangePage> listFromJson(dynamic json, {bool growable = false,}) {
+  static List<ChangePage> listFromJson(
+    dynamic json, {
+    bool growable = false,
+  }) {
     final result = <ChangePage>[];
     if (json is List && json.isNotEmpty) {
       for (final row in json) {
@@ -148,13 +177,19 @@ class ChangePage {
   }
 
   // maps a json object with a list of ChangePage-objects as value to a dart map
-  static Map<String, List<ChangePage>> mapListFromJson(dynamic json, {bool growable = false,}) {
+  static Map<String, List<ChangePage>> mapListFromJson(
+    dynamic json, {
+    bool growable = false,
+  }) {
     final map = <String, List<ChangePage>>{};
     if (json is Map && json.isNotEmpty) {
       // ignore: parameter_assignments
       json = json.cast<String, dynamic>();
       for (final entry in json.entries) {
-        map[entry.key] = ChangePage.listFromJson(entry.value, growable: growable,);
+        map[entry.key] = ChangePage.listFromJson(
+          entry.value,
+          growable: growable,
+        );
       }
     }
     return map;
@@ -162,6 +197,7 @@ class ChangePage {
 
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
+    'groupId',
     'seq',
     'hasMore',
     'group',
@@ -171,4 +207,3 @@ class ChangePage {
     'purgedAt',
   };
 }
-

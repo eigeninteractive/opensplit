@@ -269,6 +269,12 @@
       "ChangePage": {
         "type": "object",
         "properties": {
+          "groupId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
           "seq": {
             "type": "integer",
             "minimum": 0,
@@ -306,6 +312,7 @@
           }
         },
         "required": [
+          "groupId",
           "seq",
           "hasMore",
           "group",

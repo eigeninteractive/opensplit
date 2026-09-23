@@ -10,7 +10,6 @@
 
 part of openapi.api;
 
-
 enum SplitKind {
   equal._(r'equal'),
   exact._(r'exact'),
@@ -32,11 +31,15 @@ enum SplitKind {
 
   /// Returns the instance of [SplitKind] that was successfully decoded
   /// from the passed [value] on success, null otherwise.
-  static SplitKind? fromJson(dynamic value) => SplitKindTypeTransformer().decode(value);
+  static SplitKind? fromJson(dynamic value) =>
+      SplitKindTypeTransformer().decode(value);
 
   /// Returns a [List] containing instances of [SplitKind]
   /// that were successfully decoded from the passed [JSON][json].
-  static List<SplitKind> listFromJson(dynamic json, {bool growable = false,}) {
+  static List<SplitKind> listFromJson(
+    dynamic json, {
+    bool growable = false,
+  }) {
     final result = <SplitKind>[];
     if (json is List && json.isNotEmpty) {
       for (final row in json) {
@@ -53,7 +56,8 @@ enum SplitKind {
 /// Transformation class that can [encode] an instance of [SplitKind] to String,
 /// and [decode] dynamic data back to [SplitKind].
 class SplitKindTypeTransformer {
-  factory SplitKindTypeTransformer() => _instance ??= const SplitKindTypeTransformer._();
+  factory SplitKindTypeTransformer() =>
+      _instance ??= const SplitKindTypeTransformer._();
 
   const SplitKindTypeTransformer._();
 
@@ -75,10 +79,14 @@ class SplitKindTypeTransformer {
     }
     if (data != null) {
       switch (data) {
-        case r'equal': return SplitKind.equal;
-        case r'exact': return SplitKind.exact;
-        case r'shares': return SplitKind.shares;
-        case r'percent': return SplitKind.percent;
+        case r'equal':
+          return SplitKind.equal;
+        case r'exact':
+          return SplitKind.exact;
+        case r'shares':
+          return SplitKind.shares;
+        case r'percent':
+          return SplitKind.percent;
         default:
           if (!allowNull) {
             throw ArgumentError('Unknown enum value to decode: $data');
@@ -91,4 +99,3 @@ class SplitKindTypeTransformer {
   /// The singleton instance of this transformer.
   static SplitKindTypeTransformer? _instance;
 }
-

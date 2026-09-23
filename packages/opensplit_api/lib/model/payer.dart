@@ -23,23 +23,24 @@ class Payer {
   int amountMinor;
 
   @override
-  bool operator ==(Object other) => identical(this, other) || other is Payer &&
-    other.memberId == memberId &&
-    other.amountMinor == amountMinor;
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Payer &&
+          other.memberId == memberId &&
+          other.amountMinor == amountMinor;
 
   @override
   int get hashCode =>
-    // ignore: unnecessary_parenthesis
-    (memberId.hashCode) +
-    (amountMinor.hashCode);
+      // ignore: unnecessary_parenthesis
+      (memberId.hashCode) + (amountMinor.hashCode);
 
   @override
   String toString() => 'Payer[memberId=$memberId, amountMinor=$amountMinor]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-      json[r'memberId'] = this.memberId;
-      json[r'amountMinor'] = this.amountMinor;
+    json[r'memberId'] = this.memberId;
+    json[r'amountMinor'] = this.amountMinor;
     return json;
   }
 
@@ -54,10 +55,14 @@ class Payer {
       // Note 1: the values aren't checked for validity beyond being non-null.
       // Note 2: this code is stripped in release mode!
       assert(() {
-        assert(json.containsKey(r'memberId'), 'Required key "Payer[memberId]" is missing from JSON.');
-        assert(json[r'memberId'] != null, 'Required key "Payer[memberId]" has a null value in JSON.');
-        assert(json.containsKey(r'amountMinor'), 'Required key "Payer[amountMinor]" is missing from JSON.');
-        assert(json[r'amountMinor'] != null, 'Required key "Payer[amountMinor]" has a null value in JSON.');
+        assert(json.containsKey(r'memberId'),
+            'Required key "Payer[memberId]" is missing from JSON.');
+        assert(json[r'memberId'] != null,
+            'Required key "Payer[memberId]" has a null value in JSON.');
+        assert(json.containsKey(r'amountMinor'),
+            'Required key "Payer[amountMinor]" is missing from JSON.');
+        assert(json[r'amountMinor'] != null,
+            'Required key "Payer[amountMinor]" has a null value in JSON.');
         return true;
       }());
 
@@ -69,7 +74,10 @@ class Payer {
     return null;
   }
 
-  static List<Payer> listFromJson(dynamic json, {bool growable = false,}) {
+  static List<Payer> listFromJson(
+    dynamic json, {
+    bool growable = false,
+  }) {
     final result = <Payer>[];
     if (json is List && json.isNotEmpty) {
       for (final row in json) {
@@ -97,13 +105,19 @@ class Payer {
   }
 
   // maps a json object with a list of Payer-objects as value to a dart map
-  static Map<String, List<Payer>> mapListFromJson(dynamic json, {bool growable = false,}) {
+  static Map<String, List<Payer>> mapListFromJson(
+    dynamic json, {
+    bool growable = false,
+  }) {
     final map = <String, List<Payer>>{};
     if (json is Map && json.isNotEmpty) {
       // ignore: parameter_assignments
       json = json.cast<String, dynamic>();
       for (final entry in json.entries) {
-        map[entry.key] = Payer.listFromJson(entry.value, growable: growable,);
+        map[entry.key] = Payer.listFromJson(
+          entry.value,
+          growable: growable,
+        );
       }
     }
     return map;
@@ -115,4 +129,3 @@ class Payer {
     'amountMinor',
   };
 }
-

@@ -10,9 +10,9 @@
 
 part of openapi.api;
 
-
 class IdentityApi {
-  IdentityApi([ApiClient? apiClient]) : apiClient = apiClient ?? defaultApiClient;
+  IdentityApi([ApiClient? apiClient])
+      : apiClient = apiClient ?? defaultApiClient;
 
   final ApiClient apiClient;
 
@@ -25,7 +25,10 @@ class IdentityApi {
   /// Parameters:
   ///
   /// * [GoogleIdentityRequest] googleIdentityRequest (required):
-  Future<Response> linkGoogleWithHttpInfo(GoogleIdentityRequest googleIdentityRequest, { Future<void>? abortTrigger, }) async {
+  Future<Response> linkGoogleWithHttpInfo(
+    GoogleIdentityRequest googleIdentityRequest, {
+    Future<void>? abortTrigger,
+  }) async {
     // ignore: prefer_const_declarations
     final path = r'/api/identity/google';
 
@@ -37,7 +40,6 @@ class IdentityApi {
     final formParams = <String, String>{};
 
     const contentTypes = <String>['application/json'];
-
 
     return apiClient.invokeAPI(
       path,
@@ -58,17 +60,26 @@ class IdentityApi {
   /// Parameters:
   ///
   /// * [GoogleIdentityRequest] googleIdentityRequest (required):
-  Future<IdentityOutcome?> linkGoogle(GoogleIdentityRequest googleIdentityRequest, { Future<void>? abortTrigger, }) async {
-    final response = await linkGoogleWithHttpInfo(googleIdentityRequest, abortTrigger: abortTrigger,);
+  Future<IdentityOutcome?> linkGoogle(
+    GoogleIdentityRequest googleIdentityRequest, {
+    Future<void>? abortTrigger,
+  }) async {
+    final response = await linkGoogleWithHttpInfo(
+      googleIdentityRequest,
+      abortTrigger: abortTrigger,
+    );
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
     // When a remote server returns no body with a status of 204, we shall not decode it.
     // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
     // FormatException when trying to decode an empty string.
-    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'IdentityOutcome',) as IdentityOutcome;
-    
+    if (response.body.isNotEmpty &&
+        response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(
+        await _decodeBodyBytes(response),
+        'IdentityOutcome',
+      ) as IdentityOutcome;
     }
     return null;
   }
@@ -80,7 +91,10 @@ class IdentityApi {
   /// Parameters:
   ///
   /// * [EmailStartRequest] emailStartRequest (required):
-  Future<Response> startEmailSignInWithHttpInfo(EmailStartRequest emailStartRequest, { Future<void>? abortTrigger, }) async {
+  Future<Response> startEmailSignInWithHttpInfo(
+    EmailStartRequest emailStartRequest, {
+    Future<void>? abortTrigger,
+  }) async {
     // ignore: prefer_const_declarations
     final path = r'/api/identity/email';
 
@@ -93,7 +107,6 @@ class IdentityApi {
 
     const contentTypes = <String>['application/json'];
 
-
     return apiClient.invokeAPI(
       path,
       'POST',
@@ -111,17 +124,26 @@ class IdentityApi {
   /// Parameters:
   ///
   /// * [EmailStartRequest] emailStartRequest (required):
-  Future<EmailStartResponse?> startEmailSignIn(EmailStartRequest emailStartRequest, { Future<void>? abortTrigger, }) async {
-    final response = await startEmailSignInWithHttpInfo(emailStartRequest, abortTrigger: abortTrigger,);
+  Future<EmailStartResponse?> startEmailSignIn(
+    EmailStartRequest emailStartRequest, {
+    Future<void>? abortTrigger,
+  }) async {
+    final response = await startEmailSignInWithHttpInfo(
+      emailStartRequest,
+      abortTrigger: abortTrigger,
+    );
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
     // When a remote server returns no body with a status of 204, we shall not decode it.
     // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
     // FormatException when trying to decode an empty string.
-    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'EmailStartResponse',) as EmailStartResponse;
-    
+    if (response.body.isNotEmpty &&
+        response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(
+        await _decodeBodyBytes(response),
+        'EmailStartResponse',
+      ) as EmailStartResponse;
     }
     return null;
   }
@@ -133,7 +155,10 @@ class IdentityApi {
   /// Parameters:
   ///
   /// * [EmailVerifyRequest] emailVerifyRequest (required):
-  Future<Response> verifyEmailCodeWithHttpInfo(EmailVerifyRequest emailVerifyRequest, { Future<void>? abortTrigger, }) async {
+  Future<Response> verifyEmailCodeWithHttpInfo(
+    EmailVerifyRequest emailVerifyRequest, {
+    Future<void>? abortTrigger,
+  }) async {
     // ignore: prefer_const_declarations
     final path = r'/api/identity/email/verify';
 
@@ -145,7 +170,6 @@ class IdentityApi {
     final formParams = <String, String>{};
 
     const contentTypes = <String>['application/json'];
-
 
     return apiClient.invokeAPI(
       path,
@@ -164,17 +188,26 @@ class IdentityApi {
   /// Parameters:
   ///
   /// * [EmailVerifyRequest] emailVerifyRequest (required):
-  Future<IdentityOutcome?> verifyEmailCode(EmailVerifyRequest emailVerifyRequest, { Future<void>? abortTrigger, }) async {
-    final response = await verifyEmailCodeWithHttpInfo(emailVerifyRequest, abortTrigger: abortTrigger,);
+  Future<IdentityOutcome?> verifyEmailCode(
+    EmailVerifyRequest emailVerifyRequest, {
+    Future<void>? abortTrigger,
+  }) async {
+    final response = await verifyEmailCodeWithHttpInfo(
+      emailVerifyRequest,
+      abortTrigger: abortTrigger,
+    );
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
     // When a remote server returns no body with a status of 204, we shall not decode it.
     // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
     // FormatException when trying to decode an empty string.
-    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'IdentityOutcome',) as IdentityOutcome;
-    
+    if (response.body.isNotEmpty &&
+        response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(
+        await _decodeBodyBytes(response),
+        'IdentityOutcome',
+      ) as IdentityOutcome;
     }
     return null;
   }

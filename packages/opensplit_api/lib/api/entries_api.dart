@@ -10,9 +10,9 @@
 
 part of openapi.api;
 
-
 class EntriesApi {
-  EntriesApi([ApiClient? apiClient]) : apiClient = apiClient ?? defaultApiClient;
+  EntriesApi([ApiClient? apiClient])
+      : apiClient = apiClient ?? defaultApiClient;
 
   final ApiClient apiClient;
 
@@ -29,11 +29,16 @@ class EntriesApi {
   /// * [String] entryId (required):
   ///
   /// * [int] baseSeq:
-  Future<Response> deleteEntryWithHttpInfo(String groupId, String entryId, { int? baseSeq, Future<void>? abortTrigger, }) async {
+  Future<Response> deleteEntryWithHttpInfo(
+    String groupId,
+    String entryId, {
+    int? baseSeq,
+    Future<void>? abortTrigger,
+  }) async {
     // ignore: prefer_const_declarations
     final path = r'/api/groups/{groupId}/entries/{entryId}'
-      .replaceAll('{groupId}', groupId)
-      .replaceAll('{entryId}', entryId);
+        .replaceAll('{groupId}', groupId)
+        .replaceAll('{entryId}', entryId);
 
     // ignore: prefer_final_locals
     Object? postBody;
@@ -47,7 +52,6 @@ class EntriesApi {
     }
 
     const contentTypes = <String>[];
-
 
     return apiClient.invokeAPI(
       path,
@@ -72,17 +76,30 @@ class EntriesApi {
   /// * [String] entryId (required):
   ///
   /// * [int] baseSeq:
-  Future<Entry?> deleteEntry(String groupId, String entryId, { int? baseSeq, Future<void>? abortTrigger, }) async {
-    final response = await deleteEntryWithHttpInfo(groupId, entryId, baseSeq: baseSeq, abortTrigger: abortTrigger,);
+  Future<Entry?> deleteEntry(
+    String groupId,
+    String entryId, {
+    int? baseSeq,
+    Future<void>? abortTrigger,
+  }) async {
+    final response = await deleteEntryWithHttpInfo(
+      groupId,
+      entryId,
+      baseSeq: baseSeq,
+      abortTrigger: abortTrigger,
+    );
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
     // When a remote server returns no body with a status of 204, we shall not decode it.
     // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
     // FormatException when trying to decode an empty string.
-    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'Entry',) as Entry;
-    
+    if (response.body.isNotEmpty &&
+        response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(
+        await _decodeBodyBytes(response),
+        'Entry',
+      ) as Entry;
     }
     return null;
   }
@@ -98,11 +115,16 @@ class EntriesApi {
   /// * [String] entryId (required):
   ///
   /// * [int] baseSeq:
-  Future<Response> restoreEntryWithHttpInfo(String groupId, String entryId, { int? baseSeq, Future<void>? abortTrigger, }) async {
+  Future<Response> restoreEntryWithHttpInfo(
+    String groupId,
+    String entryId, {
+    int? baseSeq,
+    Future<void>? abortTrigger,
+  }) async {
     // ignore: prefer_const_declarations
     final path = r'/api/groups/{groupId}/entries/{entryId}/restore'
-      .replaceAll('{groupId}', groupId)
-      .replaceAll('{entryId}', entryId);
+        .replaceAll('{groupId}', groupId)
+        .replaceAll('{entryId}', entryId);
 
     // ignore: prefer_final_locals
     Object? postBody;
@@ -117,7 +139,6 @@ class EntriesApi {
 
     const contentTypes = <String>[];
 
-
     return apiClient.invokeAPI(
       path,
       'POST',
@@ -139,17 +160,30 @@ class EntriesApi {
   /// * [String] entryId (required):
   ///
   /// * [int] baseSeq:
-  Future<Entry?> restoreEntry(String groupId, String entryId, { int? baseSeq, Future<void>? abortTrigger, }) async {
-    final response = await restoreEntryWithHttpInfo(groupId, entryId, baseSeq: baseSeq, abortTrigger: abortTrigger,);
+  Future<Entry?> restoreEntry(
+    String groupId,
+    String entryId, {
+    int? baseSeq,
+    Future<void>? abortTrigger,
+  }) async {
+    final response = await restoreEntryWithHttpInfo(
+      groupId,
+      entryId,
+      baseSeq: baseSeq,
+      abortTrigger: abortTrigger,
+    );
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
     // When a remote server returns no body with a status of 204, we shall not decode it.
     // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
     // FormatException when trying to decode an empty string.
-    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'Entry',) as Entry;
-    
+    if (response.body.isNotEmpty &&
+        response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(
+        await _decodeBodyBytes(response),
+        'Entry',
+      ) as Entry;
     }
     return null;
   }
@@ -165,10 +199,14 @@ class EntriesApi {
   /// * [String] groupId (required):
   ///
   /// * [EntryInput] entryInput (required):
-  Future<Response> upsertEntryWithHttpInfo(String groupId, EntryInput entryInput, { Future<void>? abortTrigger, }) async {
+  Future<Response> upsertEntryWithHttpInfo(
+    String groupId,
+    EntryInput entryInput, {
+    Future<void>? abortTrigger,
+  }) async {
     // ignore: prefer_const_declarations
-    final path = r'/api/groups/{groupId}/entries'
-      .replaceAll('{groupId}', groupId);
+    final path =
+        r'/api/groups/{groupId}/entries'.replaceAll('{groupId}', groupId);
 
     // ignore: prefer_final_locals
     Object? postBody = entryInput;
@@ -178,7 +216,6 @@ class EntriesApi {
     final formParams = <String, String>{};
 
     const contentTypes = <String>['application/json'];
-
 
     return apiClient.invokeAPI(
       path,
@@ -201,17 +238,28 @@ class EntriesApi {
   /// * [String] groupId (required):
   ///
   /// * [EntryInput] entryInput (required):
-  Future<Entry?> upsertEntry(String groupId, EntryInput entryInput, { Future<void>? abortTrigger, }) async {
-    final response = await upsertEntryWithHttpInfo(groupId, entryInput, abortTrigger: abortTrigger,);
+  Future<Entry?> upsertEntry(
+    String groupId,
+    EntryInput entryInput, {
+    Future<void>? abortTrigger,
+  }) async {
+    final response = await upsertEntryWithHttpInfo(
+      groupId,
+      entryInput,
+      abortTrigger: abortTrigger,
+    );
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
     // When a remote server returns no body with a status of 204, we shall not decode it.
     // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
     // FormatException when trying to decode an empty string.
-    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'Entry',) as Entry;
-    
+    if (response.body.isNotEmpty &&
+        response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(
+        await _decodeBodyBytes(response),
+        'Entry',
+      ) as Entry;
     }
     return null;
   }

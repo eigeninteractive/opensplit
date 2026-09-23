@@ -10,7 +10,6 @@
 
 part of openapi.api;
 
-
 enum EventKind {
   entry._(r'entry'),
   memberAdded._(r'member_added'),
@@ -38,11 +37,15 @@ enum EventKind {
 
   /// Returns the instance of [EventKind] that was successfully decoded
   /// from the passed [value] on success, null otherwise.
-  static EventKind? fromJson(dynamic value) => EventKindTypeTransformer().decode(value);
+  static EventKind? fromJson(dynamic value) =>
+      EventKindTypeTransformer().decode(value);
 
   /// Returns a [List] containing instances of [EventKind]
   /// that were successfully decoded from the passed [JSON][json].
-  static List<EventKind> listFromJson(dynamic json, {bool growable = false,}) {
+  static List<EventKind> listFromJson(
+    dynamic json, {
+    bool growable = false,
+  }) {
     final result = <EventKind>[];
     if (json is List && json.isNotEmpty) {
       for (final row in json) {
@@ -59,7 +62,8 @@ enum EventKind {
 /// Transformation class that can [encode] an instance of [EventKind] to String,
 /// and [decode] dynamic data back to [EventKind].
 class EventKindTypeTransformer {
-  factory EventKindTypeTransformer() => _instance ??= const EventKindTypeTransformer._();
+  factory EventKindTypeTransformer() =>
+      _instance ??= const EventKindTypeTransformer._();
 
   const EventKindTypeTransformer._();
 
@@ -81,16 +85,26 @@ class EventKindTypeTransformer {
     }
     if (data != null) {
       switch (data) {
-        case r'entry': return EventKind.entry;
-        case r'member_added': return EventKind.memberAdded;
-        case r'member_joined': return EventKind.memberJoined;
-        case r'member_left': return EventKind.memberLeft;
-        case r'member_renamed': return EventKind.memberRenamed;
-        case r'group_renamed': return EventKind.groupRenamed;
-        case r'group_archived': return EventKind.groupArchived;
-        case r'group_restored': return EventKind.groupRestored;
-        case r'link_created': return EventKind.linkCreated;
-        case r'link_revoked': return EventKind.linkRevoked;
+        case r'entry':
+          return EventKind.entry;
+        case r'member_added':
+          return EventKind.memberAdded;
+        case r'member_joined':
+          return EventKind.memberJoined;
+        case r'member_left':
+          return EventKind.memberLeft;
+        case r'member_renamed':
+          return EventKind.memberRenamed;
+        case r'group_renamed':
+          return EventKind.groupRenamed;
+        case r'group_archived':
+          return EventKind.groupArchived;
+        case r'group_restored':
+          return EventKind.groupRestored;
+        case r'link_created':
+          return EventKind.linkCreated;
+        case r'link_revoked':
+          return EventKind.linkRevoked;
         default:
           if (!allowNull) {
             throw ArgumentError('Unknown enum value to decode: $data');
@@ -103,4 +117,3 @@ class EventKindTypeTransformer {
   /// The singleton instance of this transformer.
   static EventKindTypeTransformer? _instance;
 }
-

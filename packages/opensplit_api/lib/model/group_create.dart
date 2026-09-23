@@ -37,38 +37,41 @@ class GroupCreate {
   String displayName;
 
   @override
-  bool operator ==(Object other) => identical(this, other) || other is GroupCreate &&
-    other.id == id &&
-    other.name == name &&
-    other.defaultCurrency == defaultCurrency &&
-    other.isDirect == isDirect &&
-    other.simplifyDebts == simplifyDebts &&
-    other.memberId == memberId &&
-    other.displayName == displayName;
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is GroupCreate &&
+          other.id == id &&
+          other.name == name &&
+          other.defaultCurrency == defaultCurrency &&
+          other.isDirect == isDirect &&
+          other.simplifyDebts == simplifyDebts &&
+          other.memberId == memberId &&
+          other.displayName == displayName;
 
   @override
   int get hashCode =>
-    // ignore: unnecessary_parenthesis
-    (id.hashCode) +
-    (name.hashCode) +
-    (defaultCurrency.hashCode) +
-    (isDirect.hashCode) +
-    (simplifyDebts.hashCode) +
-    (memberId.hashCode) +
-    (displayName.hashCode);
+      // ignore: unnecessary_parenthesis
+      (id.hashCode) +
+      (name.hashCode) +
+      (defaultCurrency.hashCode) +
+      (isDirect.hashCode) +
+      (simplifyDebts.hashCode) +
+      (memberId.hashCode) +
+      (displayName.hashCode);
 
   @override
-  String toString() => 'GroupCreate[id=$id, name=$name, defaultCurrency=$defaultCurrency, isDirect=$isDirect, simplifyDebts=$simplifyDebts, memberId=$memberId, displayName=$displayName]';
+  String toString() =>
+      'GroupCreate[id=$id, name=$name, defaultCurrency=$defaultCurrency, isDirect=$isDirect, simplifyDebts=$simplifyDebts, memberId=$memberId, displayName=$displayName]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-      json[r'id'] = this.id;
-      json[r'name'] = this.name;
-      json[r'defaultCurrency'] = this.defaultCurrency;
-      json[r'isDirect'] = this.isDirect;
-      json[r'simplifyDebts'] = this.simplifyDebts;
-      json[r'memberId'] = this.memberId;
-      json[r'displayName'] = this.displayName;
+    json[r'id'] = this.id;
+    json[r'name'] = this.name;
+    json[r'defaultCurrency'] = this.defaultCurrency;
+    json[r'isDirect'] = this.isDirect;
+    json[r'simplifyDebts'] = this.simplifyDebts;
+    json[r'memberId'] = this.memberId;
+    json[r'displayName'] = this.displayName;
     return json;
   }
 
@@ -83,16 +86,26 @@ class GroupCreate {
       // Note 1: the values aren't checked for validity beyond being non-null.
       // Note 2: this code is stripped in release mode!
       assert(() {
-        assert(json.containsKey(r'id'), 'Required key "GroupCreate[id]" is missing from JSON.');
-        assert(json[r'id'] != null, 'Required key "GroupCreate[id]" has a null value in JSON.');
-        assert(json.containsKey(r'name'), 'Required key "GroupCreate[name]" is missing from JSON.');
-        assert(json[r'name'] != null, 'Required key "GroupCreate[name]" has a null value in JSON.');
-        assert(json.containsKey(r'defaultCurrency'), 'Required key "GroupCreate[defaultCurrency]" is missing from JSON.');
-        assert(json[r'defaultCurrency'] != null, 'Required key "GroupCreate[defaultCurrency]" has a null value in JSON.');
-        assert(json.containsKey(r'memberId'), 'Required key "GroupCreate[memberId]" is missing from JSON.');
-        assert(json[r'memberId'] != null, 'Required key "GroupCreate[memberId]" has a null value in JSON.');
-        assert(json.containsKey(r'displayName'), 'Required key "GroupCreate[displayName]" is missing from JSON.');
-        assert(json[r'displayName'] != null, 'Required key "GroupCreate[displayName]" has a null value in JSON.');
+        assert(json.containsKey(r'id'),
+            'Required key "GroupCreate[id]" is missing from JSON.');
+        assert(json[r'id'] != null,
+            'Required key "GroupCreate[id]" has a null value in JSON.');
+        assert(json.containsKey(r'name'),
+            'Required key "GroupCreate[name]" is missing from JSON.');
+        assert(json[r'name'] != null,
+            'Required key "GroupCreate[name]" has a null value in JSON.');
+        assert(json.containsKey(r'defaultCurrency'),
+            'Required key "GroupCreate[defaultCurrency]" is missing from JSON.');
+        assert(json[r'defaultCurrency'] != null,
+            'Required key "GroupCreate[defaultCurrency]" has a null value in JSON.');
+        assert(json.containsKey(r'memberId'),
+            'Required key "GroupCreate[memberId]" is missing from JSON.');
+        assert(json[r'memberId'] != null,
+            'Required key "GroupCreate[memberId]" has a null value in JSON.');
+        assert(json.containsKey(r'displayName'),
+            'Required key "GroupCreate[displayName]" is missing from JSON.');
+        assert(json[r'displayName'] != null,
+            'Required key "GroupCreate[displayName]" has a null value in JSON.');
         return true;
       }());
 
@@ -109,7 +122,10 @@ class GroupCreate {
     return null;
   }
 
-  static List<GroupCreate> listFromJson(dynamic json, {bool growable = false,}) {
+  static List<GroupCreate> listFromJson(
+    dynamic json, {
+    bool growable = false,
+  }) {
     final result = <GroupCreate>[];
     if (json is List && json.isNotEmpty) {
       for (final row in json) {
@@ -137,13 +153,19 @@ class GroupCreate {
   }
 
   // maps a json object with a list of GroupCreate-objects as value to a dart map
-  static Map<String, List<GroupCreate>> mapListFromJson(dynamic json, {bool growable = false,}) {
+  static Map<String, List<GroupCreate>> mapListFromJson(
+    dynamic json, {
+    bool growable = false,
+  }) {
     final map = <String, List<GroupCreate>>{};
     if (json is Map && json.isNotEmpty) {
       // ignore: parameter_assignments
       json = json.cast<String, dynamic>();
       for (final entry in json.entries) {
-        map[entry.key] = GroupCreate.listFromJson(entry.value, growable: growable,);
+        map[entry.key] = GroupCreate.listFromJson(
+          entry.value,
+          growable: growable,
+        );
       }
     }
     return map;
@@ -158,4 +180,3 @@ class GroupCreate {
     'displayName',
   };
 }
-

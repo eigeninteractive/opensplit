@@ -76,62 +76,65 @@ class EntryInput {
   int? baseSeq;
 
   @override
-  bool operator ==(Object other) => identical(this, other) || other is EntryInput &&
-    other.id == id &&
-    other.kind == kind &&
-    other.description == description &&
-    other.categoryId == categoryId &&
-    other.currency == currency &&
-    other.amountMinor == amountMinor &&
-    other.entryDate == entryDate &&
-    other.splitKind == splitKind &&
-    other.fxRate == fxRate &&
-    other.fxSource == fxSource &&
-    other.notes == notes &&
-    other.clientKey == clientKey &&
-    _deepEquality.equals(other.payers, payers) &&
-    _deepEquality.equals(other.shares, shares) &&
-    other.baseSeq == baseSeq;
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is EntryInput &&
+          other.id == id &&
+          other.kind == kind &&
+          other.description == description &&
+          other.categoryId == categoryId &&
+          other.currency == currency &&
+          other.amountMinor == amountMinor &&
+          other.entryDate == entryDate &&
+          other.splitKind == splitKind &&
+          other.fxRate == fxRate &&
+          other.fxSource == fxSource &&
+          other.notes == notes &&
+          other.clientKey == clientKey &&
+          _deepEquality.equals(other.payers, payers) &&
+          _deepEquality.equals(other.shares, shares) &&
+          other.baseSeq == baseSeq;
 
   @override
   int get hashCode =>
-    // ignore: unnecessary_parenthesis
-    (id.hashCode) +
-    (kind == null ? 0 : kind!.hashCode) +
-    (description.hashCode) +
-    (categoryId == null ? 0 : categoryId!.hashCode) +
-    (currency.hashCode) +
-    (amountMinor.hashCode) +
-    (entryDate.hashCode) +
-    (splitKind == null ? 0 : splitKind!.hashCode) +
-    (fxRate == null ? 0 : fxRate!.hashCode) +
-    (fxSource == null ? 0 : fxSource!.hashCode) +
-    (notes == null ? 0 : notes!.hashCode) +
-    (clientKey == null ? 0 : clientKey!.hashCode) +
-    (payers.hashCode) +
-    (shares.hashCode) +
-    (baseSeq == null ? 0 : baseSeq!.hashCode);
+      // ignore: unnecessary_parenthesis
+      (id.hashCode) +
+      (kind == null ? 0 : kind!.hashCode) +
+      (description.hashCode) +
+      (categoryId == null ? 0 : categoryId!.hashCode) +
+      (currency.hashCode) +
+      (amountMinor.hashCode) +
+      (entryDate.hashCode) +
+      (splitKind == null ? 0 : splitKind!.hashCode) +
+      (fxRate == null ? 0 : fxRate!.hashCode) +
+      (fxSource == null ? 0 : fxSource!.hashCode) +
+      (notes == null ? 0 : notes!.hashCode) +
+      (clientKey == null ? 0 : clientKey!.hashCode) +
+      (payers.hashCode) +
+      (shares.hashCode) +
+      (baseSeq == null ? 0 : baseSeq!.hashCode);
 
   @override
-  String toString() => 'EntryInput[id=$id, kind=$kind, description=$description, categoryId=$categoryId, currency=$currency, amountMinor=$amountMinor, entryDate=$entryDate, splitKind=$splitKind, fxRate=$fxRate, fxSource=$fxSource, notes=$notes, clientKey=$clientKey, payers=$payers, shares=$shares, baseSeq=$baseSeq]';
+  String toString() =>
+      'EntryInput[id=$id, kind=$kind, description=$description, categoryId=$categoryId, currency=$currency, amountMinor=$amountMinor, entryDate=$entryDate, splitKind=$splitKind, fxRate=$fxRate, fxSource=$fxSource, notes=$notes, clientKey=$clientKey, payers=$payers, shares=$shares, baseSeq=$baseSeq]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-      json[r'id'] = this.id;
+    json[r'id'] = this.id;
     if (this.kind != null) {
       json[r'kind'] = this.kind;
     } else {
       json[r'kind'] = null;
     }
-      json[r'description'] = this.description;
+    json[r'description'] = this.description;
     if (this.categoryId != null) {
       json[r'categoryId'] = this.categoryId;
     } else {
       json[r'categoryId'] = null;
     }
-      json[r'currency'] = this.currency;
-      json[r'amountMinor'] = this.amountMinor;
-      json[r'entryDate'] = this.entryDate;
+    json[r'currency'] = this.currency;
+    json[r'amountMinor'] = this.amountMinor;
+    json[r'entryDate'] = this.entryDate;
     if (this.splitKind != null) {
       json[r'splitKind'] = this.splitKind;
     } else {
@@ -157,8 +160,8 @@ class EntryInput {
     } else {
       json[r'clientKey'] = null;
     }
-      json[r'payers'] = this.payers;
-      json[r'shares'] = this.shares;
+    json[r'payers'] = this.payers;
+    json[r'shares'] = this.shares;
     if (this.baseSeq != null) {
       json[r'baseSeq'] = this.baseSeq;
     } else {
@@ -178,18 +181,30 @@ class EntryInput {
       // Note 1: the values aren't checked for validity beyond being non-null.
       // Note 2: this code is stripped in release mode!
       assert(() {
-        assert(json.containsKey(r'id'), 'Required key "EntryInput[id]" is missing from JSON.');
-        assert(json[r'id'] != null, 'Required key "EntryInput[id]" has a null value in JSON.');
-        assert(json.containsKey(r'currency'), 'Required key "EntryInput[currency]" is missing from JSON.');
-        assert(json[r'currency'] != null, 'Required key "EntryInput[currency]" has a null value in JSON.');
-        assert(json.containsKey(r'amountMinor'), 'Required key "EntryInput[amountMinor]" is missing from JSON.');
-        assert(json[r'amountMinor'] != null, 'Required key "EntryInput[amountMinor]" has a null value in JSON.');
-        assert(json.containsKey(r'entryDate'), 'Required key "EntryInput[entryDate]" is missing from JSON.');
-        assert(json[r'entryDate'] != null, 'Required key "EntryInput[entryDate]" has a null value in JSON.');
-        assert(json.containsKey(r'payers'), 'Required key "EntryInput[payers]" is missing from JSON.');
-        assert(json[r'payers'] != null, 'Required key "EntryInput[payers]" has a null value in JSON.');
-        assert(json.containsKey(r'shares'), 'Required key "EntryInput[shares]" is missing from JSON.');
-        assert(json[r'shares'] != null, 'Required key "EntryInput[shares]" has a null value in JSON.');
+        assert(json.containsKey(r'id'),
+            'Required key "EntryInput[id]" is missing from JSON.');
+        assert(json[r'id'] != null,
+            'Required key "EntryInput[id]" has a null value in JSON.');
+        assert(json.containsKey(r'currency'),
+            'Required key "EntryInput[currency]" is missing from JSON.');
+        assert(json[r'currency'] != null,
+            'Required key "EntryInput[currency]" has a null value in JSON.');
+        assert(json.containsKey(r'amountMinor'),
+            'Required key "EntryInput[amountMinor]" is missing from JSON.');
+        assert(json[r'amountMinor'] != null,
+            'Required key "EntryInput[amountMinor]" has a null value in JSON.');
+        assert(json.containsKey(r'entryDate'),
+            'Required key "EntryInput[entryDate]" is missing from JSON.');
+        assert(json[r'entryDate'] != null,
+            'Required key "EntryInput[entryDate]" has a null value in JSON.');
+        assert(json.containsKey(r'payers'),
+            'Required key "EntryInput[payers]" is missing from JSON.');
+        assert(json[r'payers'] != null,
+            'Required key "EntryInput[payers]" has a null value in JSON.');
+        assert(json.containsKey(r'shares'),
+            'Required key "EntryInput[shares]" is missing from JSON.');
+        assert(json[r'shares'] != null,
+            'Required key "EntryInput[shares]" has a null value in JSON.');
         return true;
       }());
 
@@ -202,9 +217,8 @@ class EntryInput {
         amountMinor: mapValueOfType<int>(json, r'amountMinor')!,
         entryDate: mapValueOfType<String>(json, r'entryDate')!,
         splitKind: SplitKind.fromJson(json[r'splitKind']),
-        fxRate: json[r'fxRate'] == null
-            ? null
-            : num.parse('${json[r'fxRate']}'),
+        fxRate:
+            json[r'fxRate'] == null ? null : num.parse('${json[r'fxRate']}'),
         fxSource: mapValueOfType<String>(json, r'fxSource'),
         notes: mapValueOfType<String>(json, r'notes'),
         clientKey: mapValueOfType<String>(json, r'clientKey'),
@@ -216,7 +230,10 @@ class EntryInput {
     return null;
   }
 
-  static List<EntryInput> listFromJson(dynamic json, {bool growable = false,}) {
+  static List<EntryInput> listFromJson(
+    dynamic json, {
+    bool growable = false,
+  }) {
     final result = <EntryInput>[];
     if (json is List && json.isNotEmpty) {
       for (final row in json) {
@@ -244,13 +261,19 @@ class EntryInput {
   }
 
   // maps a json object with a list of EntryInput-objects as value to a dart map
-  static Map<String, List<EntryInput>> mapListFromJson(dynamic json, {bool growable = false,}) {
+  static Map<String, List<EntryInput>> mapListFromJson(
+    dynamic json, {
+    bool growable = false,
+  }) {
     final map = <String, List<EntryInput>>{};
     if (json is Map && json.isNotEmpty) {
       // ignore: parameter_assignments
       json = json.cast<String, dynamic>();
       for (final entry in json.entries) {
-        map[entry.key] = EntryInput.listFromJson(entry.value, growable: growable,);
+        map[entry.key] = EntryInput.listFromJson(
+          entry.value,
+          growable: growable,
+        );
       }
     }
     return map;
@@ -266,4 +289,3 @@ class EntryInput {
     'shares',
   };
 }
-

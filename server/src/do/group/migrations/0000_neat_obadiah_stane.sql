@@ -131,6 +131,7 @@ CREATE TABLE `schedule` (
 --> statement-breakpoint
 CREATE TABLE `tombstone` (
 	`id` text PRIMARY KEY NOT NULL,
+	`group_id` text NOT NULL,
 	`purged_at` text NOT NULL,
 	`seq` integer NOT NULL
 );

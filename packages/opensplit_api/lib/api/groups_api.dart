@@ -10,7 +10,6 @@
 
 part of openapi.api;
 
-
 class GroupsApi {
   GroupsApi([ApiClient? apiClient]) : apiClient = apiClient ?? defaultApiClient;
 
@@ -27,10 +26,14 @@ class GroupsApi {
   /// * [String] groupId (required):
   ///
   /// * [MemberCreate] memberCreate (required):
-  Future<Response> addMemberWithHttpInfo(String groupId, MemberCreate memberCreate, { Future<void>? abortTrigger, }) async {
+  Future<Response> addMemberWithHttpInfo(
+    String groupId,
+    MemberCreate memberCreate, {
+    Future<void>? abortTrigger,
+  }) async {
     // ignore: prefer_const_declarations
-    final path = r'/api/groups/{groupId}/members'
-      .replaceAll('{groupId}', groupId);
+    final path =
+        r'/api/groups/{groupId}/members'.replaceAll('{groupId}', groupId);
 
     // ignore: prefer_final_locals
     Object? postBody = memberCreate;
@@ -40,7 +43,6 @@ class GroupsApi {
     final formParams = <String, String>{};
 
     const contentTypes = <String>['application/json'];
-
 
     return apiClient.invokeAPI(
       path,
@@ -63,17 +65,28 @@ class GroupsApi {
   /// * [String] groupId (required):
   ///
   /// * [MemberCreate] memberCreate (required):
-  Future<Member?> addMember(String groupId, MemberCreate memberCreate, { Future<void>? abortTrigger, }) async {
-    final response = await addMemberWithHttpInfo(groupId, memberCreate, abortTrigger: abortTrigger,);
+  Future<Member?> addMember(
+    String groupId,
+    MemberCreate memberCreate, {
+    Future<void>? abortTrigger,
+  }) async {
+    final response = await addMemberWithHttpInfo(
+      groupId,
+      memberCreate,
+      abortTrigger: abortTrigger,
+    );
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
     // When a remote server returns no body with a status of 204, we shall not decode it.
     // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
     // FormatException when trying to decode an empty string.
-    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'Member',) as Member;
-    
+    if (response.body.isNotEmpty &&
+        response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(
+        await _decodeBodyBytes(response),
+        'Member',
+      ) as Member;
     }
     return null;
   }
@@ -87,7 +100,10 @@ class GroupsApi {
   /// Parameters:
   ///
   /// * [GroupCreate] groupCreate (required):
-  Future<Response> createGroupWithHttpInfo(GroupCreate groupCreate, { Future<void>? abortTrigger, }) async {
+  Future<Response> createGroupWithHttpInfo(
+    GroupCreate groupCreate, {
+    Future<void>? abortTrigger,
+  }) async {
     // ignore: prefer_const_declarations
     final path = r'/api/groups';
 
@@ -99,7 +115,6 @@ class GroupsApi {
     final formParams = <String, String>{};
 
     const contentTypes = <String>['application/json'];
-
 
     return apiClient.invokeAPI(
       path,
@@ -120,17 +135,26 @@ class GroupsApi {
   /// Parameters:
   ///
   /// * [GroupCreate] groupCreate (required):
-  Future<Group?> createGroup(GroupCreate groupCreate, { Future<void>? abortTrigger, }) async {
-    final response = await createGroupWithHttpInfo(groupCreate, abortTrigger: abortTrigger,);
+  Future<Group?> createGroup(
+    GroupCreate groupCreate, {
+    Future<void>? abortTrigger,
+  }) async {
+    final response = await createGroupWithHttpInfo(
+      groupCreate,
+      abortTrigger: abortTrigger,
+    );
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
     // When a remote server returns no body with a status of 204, we shall not decode it.
     // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
     // FormatException when trying to decode an empty string.
-    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'Group',) as Group;
-    
+    if (response.body.isNotEmpty &&
+        response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(
+        await _decodeBodyBytes(response),
+        'Group',
+      ) as Group;
     }
     return null;
   }
@@ -146,10 +170,13 @@ class GroupsApi {
   /// * [String] groupId (required):
   ///
   /// * [GroupPatch] groupPatch (required):
-  Future<Response> updateGroupWithHttpInfo(String groupId, GroupPatch groupPatch, { Future<void>? abortTrigger, }) async {
+  Future<Response> updateGroupWithHttpInfo(
+    String groupId,
+    GroupPatch groupPatch, {
+    Future<void>? abortTrigger,
+  }) async {
     // ignore: prefer_const_declarations
-    final path = r'/api/groups/{groupId}'
-      .replaceAll('{groupId}', groupId);
+    final path = r'/api/groups/{groupId}'.replaceAll('{groupId}', groupId);
 
     // ignore: prefer_final_locals
     Object? postBody = groupPatch;
@@ -160,7 +187,6 @@ class GroupsApi {
 
     const contentTypes = <String>['application/json'];
 
-
     return apiClient.invokeAPI(
       path,
       'PATCH',
@@ -182,17 +208,28 @@ class GroupsApi {
   /// * [String] groupId (required):
   ///
   /// * [GroupPatch] groupPatch (required):
-  Future<Group?> updateGroup(String groupId, GroupPatch groupPatch, { Future<void>? abortTrigger, }) async {
-    final response = await updateGroupWithHttpInfo(groupId, groupPatch, abortTrigger: abortTrigger,);
+  Future<Group?> updateGroup(
+    String groupId,
+    GroupPatch groupPatch, {
+    Future<void>? abortTrigger,
+  }) async {
+    final response = await updateGroupWithHttpInfo(
+      groupId,
+      groupPatch,
+      abortTrigger: abortTrigger,
+    );
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
     // When a remote server returns no body with a status of 204, we shall not decode it.
     // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
     // FormatException when trying to decode an empty string.
-    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'Group',) as Group;
-    
+    if (response.body.isNotEmpty &&
+        response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(
+        await _decodeBodyBytes(response),
+        'Group',
+      ) as Group;
     }
     return null;
   }
@@ -210,11 +247,16 @@ class GroupsApi {
   /// * [String] memberId (required):
   ///
   /// * [MemberPatch] memberPatch (required):
-  Future<Response> updateMemberWithHttpInfo(String groupId, String memberId, MemberPatch memberPatch, { Future<void>? abortTrigger, }) async {
+  Future<Response> updateMemberWithHttpInfo(
+    String groupId,
+    String memberId,
+    MemberPatch memberPatch, {
+    Future<void>? abortTrigger,
+  }) async {
     // ignore: prefer_const_declarations
     final path = r'/api/groups/{groupId}/members/{memberId}'
-      .replaceAll('{groupId}', groupId)
-      .replaceAll('{memberId}', memberId);
+        .replaceAll('{groupId}', groupId)
+        .replaceAll('{memberId}', memberId);
 
     // ignore: prefer_final_locals
     Object? postBody = memberPatch;
@@ -224,7 +266,6 @@ class GroupsApi {
     final formParams = <String, String>{};
 
     const contentTypes = <String>['application/json'];
-
 
     return apiClient.invokeAPI(
       path,
@@ -249,17 +290,30 @@ class GroupsApi {
   /// * [String] memberId (required):
   ///
   /// * [MemberPatch] memberPatch (required):
-  Future<Member?> updateMember(String groupId, String memberId, MemberPatch memberPatch, { Future<void>? abortTrigger, }) async {
-    final response = await updateMemberWithHttpInfo(groupId, memberId, memberPatch, abortTrigger: abortTrigger,);
+  Future<Member?> updateMember(
+    String groupId,
+    String memberId,
+    MemberPatch memberPatch, {
+    Future<void>? abortTrigger,
+  }) async {
+    final response = await updateMemberWithHttpInfo(
+      groupId,
+      memberId,
+      memberPatch,
+      abortTrigger: abortTrigger,
+    );
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
     // When a remote server returns no body with a status of 204, we shall not decode it.
     // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
     // FormatException when trying to decode an empty string.
-    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'Member',) as Member;
-    
+    if (response.body.isNotEmpty &&
+        response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(
+        await _decodeBodyBytes(response),
+        'Member',
+      ) as Member;
     }
     return null;
   }

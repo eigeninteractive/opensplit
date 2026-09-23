@@ -35,7 +35,10 @@ enum Retry {
 
   /// Returns a [List] containing instances of [Retry]
   /// that were successfully decoded from the passed [JSON][json].
-  static List<Retry> listFromJson(dynamic json, {bool growable = false,}) {
+  static List<Retry> listFromJson(
+    dynamic json, {
+    bool growable = false,
+  }) {
     final result = <Retry>[];
     if (json is List && json.isNotEmpty) {
       for (final row in json) {
@@ -52,7 +55,8 @@ enum Retry {
 /// Transformation class that can [encode] an instance of [Retry] to String,
 /// and [decode] dynamic data back to [Retry].
 class RetryTypeTransformer {
-  factory RetryTypeTransformer() => _instance ??= const RetryTypeTransformer._();
+  factory RetryTypeTransformer() =>
+      _instance ??= const RetryTypeTransformer._();
 
   const RetryTypeTransformer._();
 
@@ -74,9 +78,12 @@ class RetryTypeTransformer {
     }
     if (data != null) {
       switch (data) {
-        case r'stale': return Retry.stale;
-        case r'permanent': return Retry.permanent;
-        case r'transient': return Retry.transient;
+        case r'stale':
+          return Retry.stale;
+        case r'permanent':
+          return Retry.permanent;
+        case r'transient':
+          return Retry.transient;
         default:
           if (!allowNull) {
             throw ArgumentError('Unknown enum value to decode: $data');
@@ -89,4 +96,3 @@ class RetryTypeTransformer {
   /// The singleton instance of this transformer.
   static RetryTypeTransformer? _instance;
 }
-

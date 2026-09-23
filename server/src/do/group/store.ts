@@ -52,8 +52,8 @@ export function findMeta(tx: Tx): MetaRow | undefined {
   return tx.select().from(schema.meta).get();
 }
 
-export function findTombstone(tx: Tx): { purgedAt: string; seq: number } | undefined {
-  return tx.select({ purgedAt: schema.tombstone.purgedAt, seq: schema.tombstone.seq }).from(schema.tombstone).get();
+export function findTombstone(tx: Tx): { groupId: string; purgedAt: string; seq: number } | undefined {
+  return tx.select({ groupId: schema.tombstone.groupId, purgedAt: schema.tombstone.purgedAt, seq: schema.tombstone.seq }).from(schema.tombstone).get();
 }
 
 /**

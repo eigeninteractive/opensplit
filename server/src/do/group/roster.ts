@@ -312,6 +312,7 @@ export function hasAccountHolders(tx: Tx): boolean {
  */
 export function purge(tx: Tx, now: string): void {
   const seq = nextSeq(tx);
+  const groupId = requireMeta(tx).id;
 
   tx.delete(schema.entryPayers).run();
   tx.delete(schema.entryShares).run();
@@ -322,5 +323,5 @@ export function purge(tx: Tx, now: string): void {
   tx.delete(schema.meta).run();
   tx.delete(schema.members).run();
 
-  tx.insert(schema.tombstone).values({ id: "purged", purgedAt: now, seq }).onConflictDoNothing().run();
+  tx.insert(schema.tombstone).values({ id: "purged", groupId, purgedAt: now, seq }).onConflictDoNothing().run();
 }

@@ -197,6 +197,16 @@ export const meta = sqliteTable(
 export const tombstone = sqliteTable("tombstone", {
   /** Always `'purged'`. There is one of these, or there is none. */
   id: text("id").primaryKey(),
+
+  /**
+   * The group's own id, kept because `meta` is one of the things deleted.
+   *
+   * It is not personal data — it is the address the caller already used to
+   * get here — and without it a collected group cannot name itself in the one
+   * response it still gives.
+   */
+  groupId: text("group_id").notNull(),
+
   purgedAt: text("purged_at").notNull(),
   seq: integer("seq").notNull(),
 });

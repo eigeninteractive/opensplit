@@ -1,4 +1,4 @@
-import { exports as workerExports } from "cloudflare:workers";
+import { env, exports as workerExports } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import type { ApiError } from "../src/schemas/common";
@@ -261,5 +261,34 @@ describe("the roster over HTTP", () => {
 
     const blank = await call(`/api/groups/${id}`, ravi, { method: "PATCH", body: JSON.stringify({ name: "   " }) });
     expect(blank.status).toBe(400);
+  });
+});
+
+describe("which group a page is about", () => {
+  /**
+   * Stated by the server rather than assumed from the request. A device writes
+   * these rows into a local database that is multi-group, so it needs the id —
+   * and taking it from the response is what makes a page answering for the
+   * wrong group detectable instead of silently merged into the right one.
+   */
+  it("is on the page, and not repeated on every row", async () => {
+    const { id } = await makeGroup(ravi);
+    const page = await json<ChangePage>(await call(`/api/groups/${id}/changes`, ravi));
+
+    expect(page.groupId).toBe(id);
+
+    const rows = [...page.members, ...page.entries, ...page.events] as Record<string, unknown>[];
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) expect(row).not.toHaveProperty("groupId");
+  });
+
+  it("is still stated by a group that has been collected", async () => {
+    const { id } = await makeGroup(ravi);
+    await env.GROUP.getByName(id).runUpkeep(Date.now() + 800 * 24 * 60 * 60 * 1000);
+
+    const page = await json<ChangePage>(await call(`/api/groups/${id}/changes`, ravi));
+    expect(page.groupId).toBe(id);
+    expect(page.purgedAt).not.toBeNull();
+    expect(page.group).toBeNull();
   });
 });

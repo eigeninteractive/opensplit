@@ -28,33 +28,36 @@ class IdentityOutcome {
   String strandedUserId;
 
   @override
-  bool operator ==(Object other) => identical(this, other) || other is IdentityOutcome &&
-    other.outcome == outcome &&
-    other.account == account &&
-    other.token == token &&
-    other.strandedUserId == strandedUserId;
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is IdentityOutcome &&
+          other.outcome == outcome &&
+          other.account == account &&
+          other.token == token &&
+          other.strandedUserId == strandedUserId;
 
   @override
   int get hashCode =>
-    // ignore: unnecessary_parenthesis
-    (outcome.hashCode) +
-    (account.hashCode) +
-    (token == null ? 0 : token!.hashCode) +
-    (strandedUserId.hashCode);
+      // ignore: unnecessary_parenthesis
+      (outcome.hashCode) +
+      (account.hashCode) +
+      (token == null ? 0 : token!.hashCode) +
+      (strandedUserId.hashCode);
 
   @override
-  String toString() => 'IdentityOutcome[outcome=$outcome, account=$account, token=$token, strandedUserId=$strandedUserId]';
+  String toString() =>
+      'IdentityOutcome[outcome=$outcome, account=$account, token=$token, strandedUserId=$strandedUserId]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-      json[r'outcome'] = this.outcome;
-      json[r'account'] = this.account;
+    json[r'outcome'] = this.outcome;
+    json[r'account'] = this.account;
     if (this.token != null) {
       json[r'token'] = this.token;
     } else {
       json[r'token'] = null;
     }
-      json[r'strandedUserId'] = this.strandedUserId;
+    json[r'strandedUserId'] = this.strandedUserId;
     return json;
   }
 
@@ -69,13 +72,20 @@ class IdentityOutcome {
       // Note 1: the values aren't checked for validity beyond being non-null.
       // Note 2: this code is stripped in release mode!
       assert(() {
-        assert(json.containsKey(r'outcome'), 'Required key "IdentityOutcome[outcome]" is missing from JSON.');
-        assert(json[r'outcome'] != null, 'Required key "IdentityOutcome[outcome]" has a null value in JSON.');
-        assert(json.containsKey(r'account'), 'Required key "IdentityOutcome[account]" is missing from JSON.');
-        assert(json[r'account'] != null, 'Required key "IdentityOutcome[account]" has a null value in JSON.');
-        assert(json.containsKey(r'token'), 'Required key "IdentityOutcome[token]" is missing from JSON.');
-        assert(json.containsKey(r'strandedUserId'), 'Required key "IdentityOutcome[strandedUserId]" is missing from JSON.');
-        assert(json[r'strandedUserId'] != null, 'Required key "IdentityOutcome[strandedUserId]" has a null value in JSON.');
+        assert(json.containsKey(r'outcome'),
+            'Required key "IdentityOutcome[outcome]" is missing from JSON.');
+        assert(json[r'outcome'] != null,
+            'Required key "IdentityOutcome[outcome]" has a null value in JSON.');
+        assert(json.containsKey(r'account'),
+            'Required key "IdentityOutcome[account]" is missing from JSON.');
+        assert(json[r'account'] != null,
+            'Required key "IdentityOutcome[account]" has a null value in JSON.');
+        assert(json.containsKey(r'token'),
+            'Required key "IdentityOutcome[token]" is missing from JSON.');
+        assert(json.containsKey(r'strandedUserId'),
+            'Required key "IdentityOutcome[strandedUserId]" is missing from JSON.');
+        assert(json[r'strandedUserId'] != null,
+            'Required key "IdentityOutcome[strandedUserId]" has a null value in JSON.');
         return true;
       }());
 
@@ -89,7 +99,10 @@ class IdentityOutcome {
     return null;
   }
 
-  static List<IdentityOutcome> listFromJson(dynamic json, {bool growable = false,}) {
+  static List<IdentityOutcome> listFromJson(
+    dynamic json, {
+    bool growable = false,
+  }) {
     final result = <IdentityOutcome>[];
     if (json is List && json.isNotEmpty) {
       for (final row in json) {
@@ -117,13 +130,19 @@ class IdentityOutcome {
   }
 
   // maps a json object with a list of IdentityOutcome-objects as value to a dart map
-  static Map<String, List<IdentityOutcome>> mapListFromJson(dynamic json, {bool growable = false,}) {
+  static Map<String, List<IdentityOutcome>> mapListFromJson(
+    dynamic json, {
+    bool growable = false,
+  }) {
     final map = <String, List<IdentityOutcome>>{};
     if (json is Map && json.isNotEmpty) {
       // ignore: parameter_assignments
       json = json.cast<String, dynamic>();
       for (final entry in json.entries) {
-        map[entry.key] = IdentityOutcome.listFromJson(entry.value, growable: growable,);
+        map[entry.key] = IdentityOutcome.listFromJson(
+          entry.value,
+          growable: growable,
+        );
       }
     }
     return map;
@@ -137,7 +156,6 @@ class IdentityOutcome {
     'strandedUserId',
   };
 }
-
 
 enum IdentityOutcomeOutcomeEnum {
   replaced._(r'replaced'),
@@ -157,11 +175,15 @@ enum IdentityOutcomeOutcomeEnum {
 
   /// Returns the instance of [IdentityOutcomeOutcomeEnum] that was successfully decoded
   /// from the passed [value] on success, null otherwise.
-  static IdentityOutcomeOutcomeEnum? fromJson(dynamic value) => IdentityOutcomeOutcomeEnumTypeTransformer().decode(value);
+  static IdentityOutcomeOutcomeEnum? fromJson(dynamic value) =>
+      IdentityOutcomeOutcomeEnumTypeTransformer().decode(value);
 
   /// Returns a [List] containing instances of [IdentityOutcomeOutcomeEnum]
   /// that were successfully decoded from the passed [JSON][json].
-  static List<IdentityOutcomeOutcomeEnum> listFromJson(dynamic json, {bool growable = false,}) {
+  static List<IdentityOutcomeOutcomeEnum> listFromJson(
+    dynamic json, {
+    bool growable = false,
+  }) {
     final result = <IdentityOutcomeOutcomeEnum>[];
     if (json is List && json.isNotEmpty) {
       for (final row in json) {
@@ -178,7 +200,8 @@ enum IdentityOutcomeOutcomeEnum {
 /// Transformation class that can [encode] an instance of [IdentityOutcomeOutcomeEnum] to String,
 /// and [decode] dynamic data back to [IdentityOutcomeOutcomeEnum].
 class IdentityOutcomeOutcomeEnumTypeTransformer {
-  factory IdentityOutcomeOutcomeEnumTypeTransformer() => _instance ??= const IdentityOutcomeOutcomeEnumTypeTransformer._();
+  factory IdentityOutcomeOutcomeEnumTypeTransformer() =>
+      _instance ??= const IdentityOutcomeOutcomeEnumTypeTransformer._();
 
   const IdentityOutcomeOutcomeEnumTypeTransformer._();
 
@@ -199,7 +222,8 @@ class IdentityOutcomeOutcomeEnumTypeTransformer {
     }
     if (data != null) {
       switch (data) {
-        case r'replaced': return IdentityOutcomeOutcomeEnum.replaced;
+        case r'replaced':
+          return IdentityOutcomeOutcomeEnum.replaced;
         default:
           if (!allowNull) {
             throw ArgumentError('Unknown enum value to decode: $data');
@@ -212,5 +236,3 @@ class IdentityOutcomeOutcomeEnumTypeTransformer {
   /// The singleton instance of this transformer.
   static IdentityOutcomeOutcomeEnumTypeTransformer? _instance;
 }
-
-
