@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 
 import * as schema from "../../db/group/schema";
 import type { EntrySnapshot, GroupEventPayload, LinkEventPayload, MemberEventPayload } from "../../schemas/ledger";
@@ -68,8 +68,13 @@ type Append = Written &
   );
 
 export function append(tx: Tx, event: Append): void {
+  // Where this line falls among the lines this same change wrote. Counted
+  // rather than passed in, so a caller appending two events cannot forget.
+  const written = tx.select({ count: sql<number>`count(*)` }).from(schema.events).where(eq(schema.events.seq, event.seq)).get();
+
   tx.insert(schema.events)
     .values({
+      ordinal: written?.count ?? 0,
       id: crypto.randomUUID(),
       actorId: event.actorId,
       createdAt: event.now,

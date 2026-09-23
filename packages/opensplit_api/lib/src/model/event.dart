@@ -30,6 +30,8 @@ class Event {
     this.payload,
 
     required this.seq,
+
+    required this.ordinal,
   });
 
   @JsonKey(name: r'id', required: true, includeIfNull: false)
@@ -60,6 +62,10 @@ class Event {
   @JsonKey(name: r'seq', required: true, includeIfNull: false)
   final int seq;
 
+  // minimum: 0
+  @JsonKey(name: r'ordinal', required: true, includeIfNull: false)
+  final int ordinal;
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -70,7 +76,8 @@ class Event {
           other.kind == kind &&
           other.subjectId == subjectId &&
           other.payload == payload &&
-          other.seq == seq;
+          other.seq == seq &&
+          other.ordinal == ordinal;
 
   @override
   int get hashCode =>
@@ -80,7 +87,8 @@ class Event {
       kind.hashCode +
       (subjectId == null ? 0 : subjectId.hashCode) +
       payload.hashCode +
-      seq.hashCode;
+      seq.hashCode +
+      ordinal.hashCode;
 
   factory Event.fromJson(Map<String, dynamic> json) => _$EventFromJson(json);
 

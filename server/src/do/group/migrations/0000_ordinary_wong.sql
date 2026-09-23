@@ -59,6 +59,7 @@ CREATE TABLE `events` (
 	`subject_id` text,
 	`payload` text NOT NULL,
 	`seq` integer NOT NULL,
+	`ordinal` integer DEFAULT 0 NOT NULL,
 	FOREIGN KEY (`actor_id`) REFERENCES `members`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint

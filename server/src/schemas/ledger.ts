@@ -458,6 +458,15 @@ export const EventSchema = z
     subjectId: IdSchema.nullable(),
     payload: EventPayloadSchema,
     seq: SeqSchema,
+
+    /**
+     * Position within `seq`. Read the feed ordered by `(seq, ordinal)`.
+     *
+     * One change can append more than one line, and those lines share a `seq`
+     * and a `createdAt` because both are taken once per change. Without this
+     * the only tiebreak is a random id.
+     */
+    ordinal: z.int().nonnegative(),
   })
   .openapi("Event");
 

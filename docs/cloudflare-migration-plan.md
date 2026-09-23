@@ -147,7 +147,7 @@ entry_payers(entry_id, member_id, amount_minor, PK(entry_id, member_id))
 entry_shares(entry_id, member_id, amount_minor, weight_micros,
              PK(entry_id, member_id))
 
-events(id PK, actor_id, created_at, kind, subject_id, payload, seq)
+events(id PK, actor_id, created_at, kind, subject_id, payload, seq, ordinal)
 
 invites(token PK, member_id, created_by, created_at, expires_at,
         redeemed_at, redeemed_by)
@@ -328,6 +328,14 @@ Postgres refused it with a unique violation, which wedged the device's outbox
 on a write the server had already accepted.
 
 ### The sequence number, precisely
+
+The feed's total order is `(seq, ordinal)`. One change can append more than
+one line — a patch that renames and archives a group is two things that
+happened — and those lines share a `seq` and a `createdAt`, because both are
+taken once per change. The server could order them by `rowid`; a client cannot,
+because rows arrive in a JSON array and land in a table with its own idea of
+order. So the position is stated rather than implied, and a feed cannot render
+"archived" above "renamed".
 
 **One `seq` per committed change, not per row.** A save that writes an entry,
 four shares and an event stamps all of them with the same number, so a cursor

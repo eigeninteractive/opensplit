@@ -1,4 +1,4 @@
-import m0000 from "./0000_neat_obadiah_stane.sql";
+import m0000 from "./0000_ordinary_wong.sql";
 import journal from "./meta/_journal.json";
 
 export default {

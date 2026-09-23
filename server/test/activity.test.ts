@@ -160,6 +160,16 @@ describe("member and group life", () => {
 
     const renamed = events.filter(isGroupEvent).findLast((event) => event.kind === "group_renamed");
     expect(renamed?.payload.previousName).toBe("Goa trip");
+
+    /**
+     * Both lines share a sequence number and a timestamp, because both are
+     * taken once per change. `ordinal` is what stops the feed rendering them
+     * in whichever order a random id happened to sort in.
+     */
+    const together = events.filter((event) => event.seq === renamed?.seq);
+    expect(together).toHaveLength(2);
+    expect(together.map((event) => event.ordinal)).toEqual([0, 1]);
+    expect(together.map((event) => event.kind)).toEqual(["group_renamed", "group_archived"]);
   });
 
   it("says nothing about a payment handle: it is personal bookkeeping", async () => {

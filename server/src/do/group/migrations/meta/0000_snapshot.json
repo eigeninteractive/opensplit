@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "1f97e0b2-55a5-4828-9c1c-709da4803a72",
+  "id": "9163566a-1b59-4603-9cd0-175bf5163878",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "counter": {
@@ -379,6 +379,14 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "ordinal": {
+          "name": "ordinal",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
         }
       },
       "indexes": {

@@ -132,7 +132,7 @@ export function runDormancy(tx: Tx, now: number): UpkeepOutcome {
       .where(eq(schema.meta.id, meta.id))
       .run();
     tx.insert(schema.events)
-      .values({ id: crypto.randomUUID(), actorId: null, createdAt: new Date(now).toISOString(), kind: "group_archived", subjectId: null, payload: { name: meta.name, previousName: null }, seq })
+      .values({ id: crypto.randomUUID(), actorId: null, createdAt: new Date(now).toISOString(), kind: "group_archived", subjectId: null, payload: { name: meta.name, previousName: null }, seq, ordinal: 0 })
       .run();
 
     outcome.archived = true;

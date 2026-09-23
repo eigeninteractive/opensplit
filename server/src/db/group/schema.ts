@@ -429,6 +429,21 @@ export const events = sqliteTable(
     payload: text("payload", { mode: "json" }).notNull().$type<EventPayload>(),
 
     seq: integer("seq").notNull(),
+
+    /**
+     * Position within the sequence number, so the feed has a total order.
+     *
+     * One change can append more than one line — a patch that renames and
+     * archives a group is two things that happened — and those share a `seq`
+     * and a `createdAt`, because both are taken once per change. Without this
+     * the only tiebreak left is a random UUID, so a feed would occasionally
+     * render "archived" above "renamed" and read backwards.
+     *
+     * The server can order by `rowid`, which is insertion order. A client
+     * cannot: rows arrive in a JSON array and land in a table that has its own
+     * idea of order. So the order is stated rather than implied.
+     */
+    ordinal: integer("ordinal").notNull().default(0),
   },
   (table) => [index("events_seq").on(table.seq), index("events_subject").on(table.subjectId, table.createdAt)],
 );

@@ -675,6 +675,10 @@
             "type": "integer",
             "minimum": 0,
             "example": 412
+          },
+          "ordinal": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": [
@@ -683,7 +687,8 @@
           "createdAt",
           "kind",
           "subjectId",
-          "seq"
+          "seq",
+          "ordinal"
         ]
       },
       "EventKind": {

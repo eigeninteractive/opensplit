@@ -17,6 +17,7 @@ Event _$EventFromJson(Map<String, dynamic> json) =>
           'kind',
           'subjectId',
           'seq',
+          'ordinal',
         ],
       );
       final val = Event(
@@ -37,6 +38,7 @@ Event _$EventFromJson(Map<String, dynamic> json) =>
         subjectId: $checkedConvert('subjectId', (v) => v as String?),
         payload: $checkedConvert('payload', (v) => v as Map<String, dynamic>?),
         seq: $checkedConvert('seq', (v) => (v as num).toInt()),
+        ordinal: $checkedConvert('ordinal', (v) => (v as num).toInt()),
       );
       return val;
     });
@@ -49,6 +51,7 @@ Map<String, dynamic> _$EventToJson(Event instance) => <String, dynamic>{
   'subjectId': instance.subjectId,
   'payload': ?instance.payload,
   'seq': instance.seq,
+  'ordinal': instance.ordinal,
 };
 
 const _$EventKindEnumMap = {
