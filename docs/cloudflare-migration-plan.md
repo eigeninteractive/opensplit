@@ -255,10 +255,20 @@ object is meant to give; an exception is a bug. It also means the code and the
 message arrive intact without depending on how workerd serializes an `Error`.
 `statusFor(code)` maps the codes to HTTP next to where they are defined.
 
-The Worker resolves the session, checks the D1 membership index as a first
-pass, then calls the stub. **The object re-checks membership itself and is the
-authority** — the same defence in depth as today's policy-plus-trigger pair,
-relocated. The D1 check exists to fail cheap, not to decide.
+The Worker resolves the session and calls the stub. **The object checks
+membership itself and is the authority.**
+
+This document planned a first-pass check against D1's `memberships` index —
+refuse cheap, only then wake the object. Building it, the saving was not there
+and the cost was. A D1 read is a subrequest too, roughly what asking the object
+costs, and the object answers `not_member` from its own table in microseconds.
+Meanwhile the index is *derived*, so it lags by however long the outbox takes
+to flush — normally nothing, but the window opens exactly where it hurts, at
+the moment somebody joins: the object has them, D1 does not yet, and every
+request they make is refused until an alarm catches up.
+
+So `memberships` keeps the job it is genuinely for — answering "which groups am
+I in", which no single object can — and stops being an authorization.
 
 ### The rules being ported, explicitly
 
@@ -904,7 +914,11 @@ Five of the seven pgTAP files are ported: `01` (`test/ledger.test.ts`), `02`
 the alarm, the outbox surviving a D1 outage, and the RPC boundary's types.
 `03` (push tokens) and `05` (FX) land with the features they test, in phase 5.
 
-**3 — Client sync.** The Dart client is generated from `docs/openapi.json` by
+**3 — Client sync.** *Server half done:* `/api/bootstrap`, `/api/groups/…`
+and the entry routes are live, the spec has thirteen paths and twenty-seven
+schemas, and `test/api.test.ts` covers the HTTP layer itself — auth, the
+status-and-retry mapping, and the validation that happens before an object is
+woken. The Dart client is generated from `docs/openapi.json` by
 `openapi_generator` and replaces `wire.dart`; `mappers.dart` keeps translating
 its DTOs into the freezed domain models, so nothing above `data/` changes shape.
 `RemoteLedgerApi` reshaped around one feed per group and an `int` cursor, Drift

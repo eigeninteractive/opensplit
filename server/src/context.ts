@@ -30,6 +30,23 @@ export interface Session {
 }
 
 /**
+ * The same environment, for handlers that run behind `requireSession`.
+ *
+ * `session` is non-null here, which is the whole difference. Without it every
+ * ledger handler would open with a `!` or a redundant null check on something
+ * the middleware has already refused the request over — and a `!` is a claim
+ * the compiler cannot check, repeated twenty times.
+ */
+export interface AuthedEnv {
+  Bindings: Env;
+  Variables: {
+    db: DrizzleD1Database;
+    auth: Auth;
+    session: Session;
+  };
+}
+
+/**
  * The database and the auth instance, on every request.
  *
  * Both are cheap to construct and neither touches the network here, so this is
@@ -65,7 +82,7 @@ export const withSession = createMiddleware<AppEnv>(async (c, next) => {
  * Durable Object re-checks membership itself and is the authority, exactly as
  * the policy-plus-trigger pair was before the move.
  */
-export const requireSession = createMiddleware<AppEnv>(async (c, next) => {
+export const requireSession = createMiddleware<AuthedEnv>(async (c, next) => {
   const resolved = await c.var.auth.api.getSession({ headers: c.req.raw.headers });
   if (!resolved) {
     return c.json(apiError("no_session", "Sign in first."), 401);

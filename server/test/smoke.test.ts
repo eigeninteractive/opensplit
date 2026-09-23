@@ -29,6 +29,22 @@ describe("the Worker is wired up", () => {
     });
   });
 
+  /**
+   * The sync routes are mounted at `/api`, which is also where the public ones
+   * live. A wildcard `use()` in that sub-app would claim `/api/nope` and answer
+   * 401 — telling an unauthenticated caller nothing useful and contradicting
+   * the health check sitting beside it.
+   */
+  it("does not let the authenticated routes claim paths they do not own", async () => {
+    for (const path of ["/api/nope", "/api/groups-ish", "/api/bootstrapped"]) {
+      const response = await workerExports.default.fetch(`https://opensplit.test${path}`);
+      expect(response.status, path).toBe(404);
+    }
+
+    const health = await workerExports.default.fetch("https://opensplit.test/api/health");
+    expect(health.status).toBe(200);
+  });
+
   it("serves a single-page-application deep link from the app document", async () => {
     const response = await workerExports.default.fetch("https://opensplit.test/app/join/some-token");
 

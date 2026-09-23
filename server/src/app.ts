@@ -1,5 +1,5 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
-
+import { ledgerRoutes } from "./api/ledger";
 import { type AppEnv, services } from "./context";
 import { identityRoutes } from "./identity/routes";
 import { openApiDocument } from "./openapi";
@@ -54,6 +54,9 @@ app.openapi(healthRoute, (c) => c.json({ ok: true, service: "opensplit", now: ne
 app.on(["GET", "POST"], "/api/auth/*", (c) => c.var.auth.handler(c.req.raw));
 
 app.route("/api/identity", identityRoutes());
+
+// The sync surface. Everything about a group goes through its own object.
+app.route("/api", ledgerRoutes());
 
 /**
  * The contract, served and committed.

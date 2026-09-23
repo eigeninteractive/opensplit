@@ -19,26 +19,41 @@ import { z } from "@hono/zod-openapi";
  * that `PT409` had to be raised in place of `40001` because PostgREST would
  * otherwise retry a permanent refusal until the gateway timed out.
  *
- * Now the server states the kind and the client maps the status:
- *
- *   409  a conflict a person has to resolve — retrying sends the same stale
- *        base forever, but it is not permanent either
- *   4xx  refused identically forever; retrying only wedges the outbox
- *   5xx  worth backing off and trying again
+ * The server states both the kind and what to do about it, and `retry` is the
+ * second half of that. Leaving it to the client meant inferring intent from a
+ * status code, which does not survive contact with this API: six refusals are
+ * a truthful 409 — the request really does conflict with the resource's
+ * current state — and only `stale_base` is worth composing again.
+ * `not_settled` refuses identically until somebody settles a debt;
+ * `already_member` refuses forever. A device reading the number would spin on
+ * its outbox, which is the exact failure `PT409` existed to avoid.
  */
+export const RetrySchema = z.enum(["stale", "permanent", "transient"]).openapi({
+  description: "stale: re-read, re-compose and send again. permanent: this will be refused identically forever; do not retry. transient: back off and try the same request again.",
+});
+
 export const ErrorSchema = z
   .object({
     error: z.object({
       code: z.string().openapi({ example: "stale_base" }),
       message: z.string(),
+      retry: RetrySchema,
     }),
   })
   .openapi("Error");
 
 export type ApiError = z.infer<typeof ErrorSchema>;
+export type Retry = z.infer<typeof RetrySchema>;
 
-export function apiError(code: string, message: string): ApiError {
-  return { error: { code, message } };
+/**
+ * Permanent by default, because that is the safe way to be wrong.
+ *
+ * A permanent refusal reported as transient loops. A transient failure
+ * reported as permanent drops one write and says so. The first is worse, so
+ * anything that has not thought about it gets the second.
+ */
+export function apiError(code: string, message: string, retry: Retry = "permanent"): ApiError {
+  return { error: { code, message, retry } };
 }
 
 /** A response body that is only ever an error, for the standard refusals. */
