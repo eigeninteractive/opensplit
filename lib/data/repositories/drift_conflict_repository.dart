@@ -4,7 +4,7 @@ import 'package:drift/drift.dart';
 
 import '../../domain/models/entry.dart';
 import '../local/database.dart';
-import '../sync/wire.dart' show entryFromJson;
+import '../local/entry_json.dart' show entryFromJson;
 import 'mappers.dart';
 
 /// An edit the server refused, and what the expense says instead.

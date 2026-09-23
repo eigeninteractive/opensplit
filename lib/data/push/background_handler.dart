@@ -14,8 +14,9 @@ import '../repositories/drift_currency_repository.dart';
 import '../repositories/drift_entry_repository.dart';
 import '../repositories/drift_group_repository.dart';
 import '../repositories/drift_profile_repository.dart';
+import '../sync/api_client.dart';
+import '../sync/cloudflare_ledger_api.dart';
 import '../sync/outbox_queue.dart';
-import '../sync/supabase_ledger_api.dart';
 import '../sync/sync_engine.dart';
 import '../sync/sync_session.dart';
 import 'notification_channel.dart';
@@ -93,7 +94,11 @@ Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
     outbox = OutboxQueue(db);
     final engine = SyncEngine(
       db: db,
-      api: SupabaseLedgerApi(client),
+      // The background isolate builds its own client: it has no Riverpod
+      // container, and the foreground's is not reachable from here.
+      api: CloudflareLedgerApi(
+        buildApiClient(baseUrl: apiBaseUrl, token: () async => null),
+      ),
       outbox: outbox,
     );
 

@@ -22,11 +22,16 @@ abstract class Group with _$Group {
     required DateTime createdAt,
     DateTime? archivedAt,
 
-    /// Version for last-write-wins, from the server once synced.
+    /// The group sequence number this row was last received at.
     ///
     /// Null on a row this device created and has not yet pushed, which cannot
     /// be in conflict with anything — the server has never seen it.
-    DateTime? updatedAt,
+    ///
+    /// An integer rather than a timestamp, because the group's Durable Object
+    /// is its only writer and can therefore issue one. That removed the whole
+    /// question of whose clock decides: a number this device cannot invent is
+    /// either the server's or absent.
+    int? seq,
   }) = _Group;
 
   const Group._();

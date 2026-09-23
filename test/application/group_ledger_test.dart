@@ -104,7 +104,6 @@ void main() {
             splitKind: SplitKind.equal,
             createdBy: 'm-ravi',
             createdAt: now,
-            updatedAt: now,
           ),
         );
     await db.batch((batch) {

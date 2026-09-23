@@ -1,14 +1,19 @@
-import '../../domain/models/entry.dart';
-import '../../domain/models/currency.dart';
 import '../../domain/models/category.dart';
-import '../../domain/models/group_event.dart';
+import '../../domain/models/currency.dart';
+import '../../domain/models/entry.dart';
 import '../../domain/models/group.dart';
+import '../../domain/models/group_event.dart';
 import '../../domain/models/member.dart';
 import '../../domain/models/profile.dart';
-import 'change_feed.dart';
-import 'sync_cursor.dart';
 
 /// What kind of "no" the server said.
+///
+/// Read off the refusal rather than inferred from a status code, which is a
+/// change of kind rather than of spelling. The obvious rule — 409 is a
+/// conflict a person resolves, every other 4xx is permanent — is not true of
+/// this API: six refusals are a truthful 409, because the request genuinely
+/// conflicts with the resource's current state, and only one of them is worth
+/// composing again. A device reading the number would spin on its outbox.
 enum RejectionKind {
   /// Worth another attempt later: a dropped connection, a timeout, a restart.
   transient,
@@ -29,190 +34,228 @@ enum RejectionKind {
 
 /// Raised when the server rejects a write.
 class RemoteRejected implements Exception {
-  const RemoteRejected(this.message, {this.kind = RejectionKind.transient});
+  const RemoteRejected(
+    this.message, {
+    this.kind = RejectionKind.transient,
+    this.code,
+  });
 
   final String message;
   final RejectionKind kind;
 
+  /// The server's own word for what it refused, when it gave one.
+  ///
+  /// Carried so a screen can say something specific — "that place has already
+  /// been claimed" rather than "conflict" — without the client re-deriving it
+  /// from a status and a message.
+  final String? code;
+
   @override
-  String toString() => 'RemoteRejected($kind): $message';
+  String toString() =>
+      'RemoteRejected($kind${code == null ? '' : ' $code'}): $message';
+}
+
+/// Who this device is signed in as, and which groups to ask.
+///
+/// The one question no group can answer about itself. Everything else here is
+/// addressed by a group id the caller already holds; this is where a second
+/// device or a reinstall finds out those ids exist at all.
+class RemoteBootstrap {
+  const RemoteBootstrap({
+    required this.profileId,
+    required this.displayName,
+    required this.upiVpa,
+    required this.isAnonymous,
+    required this.groupIds,
+  });
+
+  final String profileId;
+  final String? displayName;
+  final String? upiVpa;
+  final bool isAnonymous;
+
+  /// Groups this account is still in. A group left is a group not listed.
+  final List<String> groupIds;
+}
+
+/// One page of one group's history.
+///
+/// One request and one integer, where there used to be four requests and four
+/// `(timestamp, id)` keyset cursors per group per sync. The group's Durable
+/// Object is its only writer, so it can hand out a strictly increasing number,
+/// and everything in a page is ordered by it.
+///
+/// A page is cut only between sequence numbers, never inside one. Every row
+/// written by one change shares a number, so a device sees a whole change or
+/// none of it and can never hold an expense whose shares have not arrived.
+class GroupChanges {
+  const GroupChanges({
+    required this.groupId,
+    required this.seq,
+    required this.hasMore,
+    required this.purgedAt,
+    required this.group,
+    required this.members,
+    required this.entries,
+    required this.events,
+  });
+
+  /// Which group this page describes, as the server states it.
+  ///
+  /// Taken from the response rather than from the request that produced it,
+  /// which is what makes a page answering for the wrong group detectable
+  /// instead of silently merged into the right one's tables.
+  final String groupId;
+
+  /// Send this back as `since` next time. Unchanged when nothing moved.
+  final int seq;
+
+  final bool hasMore;
+
+  /// Set once, on the page that carries the end of the group.
+  ///
+  /// A group archived, a year silent and settled is collected, and everything
+  /// about it is deleted. A device reading this drops its local copy — which
+  /// it can only do if somebody tells it.
+  final DateTime? purgedAt;
+
+  /// Null when the group's own row has not changed since the cursor.
+  final Group? group;
+
+  final List<Member> members;
+  final List<Entry> entries;
+  final List<GroupEventRow> events;
 }
 
 /// The entire surface the client needs from a server.
 ///
-/// Deliberately tiny, and deliberately free of business logic: the server
-/// stores facts and enforces one invariant. Everything else — splitting,
-/// folding balances, simplifying debts, analytics — happens on the device.
-///
-/// Nothing above `data/` names a backend, so this interface is what makes the
-/// self-hosting promise real rather than aspirational, and what provides an
-/// exit if the hosted backend's terms change.
+/// Deliberately small, and deliberately free of business logic: the server
+/// stores facts and enforces the rules only it can — who is a member, whether
+/// an expense balances, whether somebody else has moved the money since. Every
+/// other calculation in this app happens on the device.
 abstract interface class RemoteLedgerApi {
-  /// Writes an entry with its payers and shares in one transaction.
-  ///
-  /// Idempotent on `clientKey`: a retry after a dropped connection is safe and
-  /// produces no duplicate. Returns the stored entry, carrying the server's
-  /// `updatedAt` — never the client's clock, which is what makes last-write-
-  /// wins meaningful across devices with different times.
-  ///
-  /// [baseUpdatedAt] is the server version this edit was composed against, and
-  /// is what lets the server tell an ordinary edit from one written against a
-  /// version somebody has since changed. Null for a row this device invented
-  /// and has never pushed: there is no version to be stale against.
-  ///
-  /// Throws [RemoteRejected] with [RejectionKind.stale] when the base no
-  /// longer matches *and* applying the write would move money. A stale base on
-  /// its own is not refused — see the RPC, which explains why arbitrating a
-  /// typo would cost more than it saves.
-  Future<Entry> upsertEntry(Entry entry, {DateTime? baseUpdatedAt});
+  /// Who I am and which groups to ask. See [RemoteBootstrap].
+  Future<RemoteBootstrap> bootstrap();
 
-  /// Soft-deletes an entry composed against [baseUpdatedAt].
+  /// Everything that changed in one group after [since].
   ///
-  /// Deletion changes every live balance contributed by the entry, so a stale
-  /// delete is a conflict even when an edit with the same stale base would have
-  /// changed prose only. A retry is idempotent when the server already holds a
-  /// tombstone.
-  Future<Entry> deleteEntry(String entryId, {required DateTime baseUpdatedAt});
-
-  /// This group's expenses, changed strictly after [since].
-  ///
-  /// Includes soft-deleted rows. A deletion is a change like any other; filter
-  /// it out and a deleted expense lives forever on every device that had
-  /// already synced it.
-  Future<ChangePage<Entry>> pullEntries({
+  /// Includes soft-deleted expenses and members who have left. Both are
+  /// changes like any other: filter them out and a deleted expense lives
+  /// forever on every device that had already synced it.
+  Future<GroupChanges> pullChanges({
     required String groupId,
-    SyncCursor? since,
+    required int since,
     required int limit,
   });
 
-  /// Every group this account is currently a member of.
+  /// Writes an expense with its payers and shares in one call.
   ///
-  /// Without this a device can only ever sync groups it already knows about,
-  /// and there is no way to come to know about one: everything else here is
-  /// scoped to a `groupId` the caller has to supply. A second device, or a
-  /// reinstall, would show an empty app forever — with the data sitting on the
-  /// server, readable, and never asked for.
+  /// Idempotent on `clientKey`: a retry after a dropped connection produces no
+  /// duplicate. Returns the stored expense carrying the server's sequence
+  /// number, which the caller adopts as the base for the next edit.
   ///
-  /// Groups left behind are excluded. Leaving is the one way membership ends,
-  /// and rediscovering a group on the next sync would undo it.
-  ///
-  /// Deliberately not a feed, and the one thing here that answers "which"
-  /// rather than "what changed": a feed needs a cursor, a cursor needs
-  /// somewhere to start, and on the device this exists for there is nothing
-  /// local to start from.
-  Future<List<String>> pullMyGroupIds();
+  /// [Entry.seq] on the argument is the version this edit was composed
+  /// against, and is null for a row this device invented. Throws
+  /// [RemoteRejected] with [RejectionKind.stale] when that base has moved
+  /// *and* applying the write would move money — a stale base on its own is
+  /// not refused, because two people fixing a typo should not have to
+  /// arbitrate.
+  Future<Entry> pushEntry(Entry entry);
 
-  /// One group's own row, if it changed strictly after [since].
+  /// Soft-deletes an expense composed against [baseSeq].
   ///
-  /// A page of at most one row, which is worth stating because it looks like
-  /// ceremony and is not. Routed through the same cursor as everything else, a
-  /// settled group costs an empty answer per sync instead of refetching its row
-  /// — and syncs are frequent now that every write triggers one.
-  Future<ChangePage<Group>> pullGroup({
+  /// Deleting always moves money — every payer and share leaves the live
+  /// balance — so unlike a prose edit this must carry the exact version the
+  /// device last saw, and a missing one is a refusal rather than a licence. A
+  /// retry is idempotent once the server holds the tombstone.
+  Future<Entry> deleteEntry({
     required String groupId,
-    SyncCursor? since,
-    required int limit,
+    required String entryId,
+    required int baseSeq,
   });
 
-  /// This group's members, changed strictly after [since].
-  ///
-  /// Includes members who have left: `left_at` is a column, so leaving is a
-  /// change to pull rather than a row to stop sending.
-  Future<ChangePage<Member>> pullMembers({
+  /// Puts a deleted expense back. The counterpart of [deleteEntry], and the
+  /// reason the activity feed's `restored` kind is reachable at all.
+  Future<Entry> restoreEntry({
     required String groupId,
-    SyncCursor? since,
-    required int limit,
+    required String entryId,
+    required int baseSeq,
   });
 
-  /// Returns the stored row, so the caller can adopt the server's
-  /// `updated_at` instead of leaving a device clock in the version column.
-  Future<Group> pushGroup(Group group);
+  /// Creates the group and its creator's member row in one call.
+  ///
+  /// Both, because that is what removes the bootstrap problem: gating member
+  /// writes on membership is unsatisfiable for the first member. Idempotent
+  /// for the account that made it, so a retry whose response was lost returns
+  /// the same group rather than refusing.
+  Future<Group> createGroup(Group group, {required Member creator});
 
-  /// Returns the stored row. See [pushGroup].
-  Future<Member> pushMember(Member member);
+  /// Renames, archives, or changes a setting. Returns the stored row so the
+  /// caller can adopt the server's sequence number.
+  Future<Group> updateGroup(Group group);
+
+  /// Adds somebody who has never opened the app.
+  Future<Member> addMember(Member member);
+
+  /// Changes a name, a payment handle, or whether somebody is still here.
+  Future<Member> updateMember(Member member);
 
   /// Every profile belonging to somebody you share a group with, plus your own.
   ///
-  /// This is what makes a name change travel. Names used to be copied into
-  /// `members.display_name` per group, so renaming yourself meant rewriting a
-  /// row in every group you were in — and only the ones this device knew about.
-  /// Now the name lives on the account and this pull carries it, with the same
-  /// `updated_at` cursor everything else uses so a sync fetches only what
-  /// actually changed.
-  ///
-  /// Account-wide rather than per group, and correct because `profiles_read`
-  /// already scopes it: your own row plus anybody sharing a group with you. Per
-  /// group, somebody in three of your groups was fetched three times.
-  Future<ChangePage<Profile>> pullProfiles({
-    SyncCursor? since,
+  /// The one feed still cursored on a timestamp, and honestly so: profiles
+  /// live in a database several requests write concurrently, so there is
+  /// nothing there that can issue a sequence number.
+  Future<ProfilePage> pullProfiles({
+    DateTime? since,
+    String? sinceId,
     required int limit,
   });
-
-  /// Fetches the current rows for profiles newly referenced by membership.
-  ///
-  /// The incremental profile feed alone cannot discover every row correctly:
-  /// its RLS-filtered result set grows when an invite is redeemed, and the
-  /// newly visible profile may have an `updated_at` older than the device's
-  /// existing cursor. Member synchronization supplies the exact ids that just
-  /// became relevant, so this lookup closes that visibility gap without
-  /// throwing away incremental profile sync.
-  Future<List<Profile>> pullProfilesByIds(List<String> profileIds);
 
   /// Writes your own name and payment handle. The server refuses any other row.
   Future<Profile> pushProfile(Profile profile);
 
-  /// What has happened to this group's expenses since [since].
-  ///
-  /// Read-only, and there is deliberately no push counterpart. The server
-  /// writes these rows itself, from the expense it actually committed, and no
-  /// client holds an insert grant on the table -- which is what makes a feed
-  /// line something a reader can trust rather than something the editing device
-  /// asserted about itself.
-  ///
-  /// This replaced a push. While the client authored these rows it could
-  /// describe its own edit however it liked, and could re-split a bill so
-  /// somebody else owed more while recording nothing at all. Both are
-  /// unexpressible now: there is no diff on the wire, only the expense's own
-  /// shape at each moment, and the difference between consecutive shapes is
-  /// worked out on the device that reads them.
-  ///
-  /// Cursored on `(created_at, id)` rather than `(updated_at, id)`, and that is
-  /// the only way this feed differs from the others: these rows are append-only
-  /// and never revised, so there is no second write to order against the first.
   /// Every currency and category the server knows about.
   ///
-  /// Whole rather than paged or cursored, and that is proportionate rather than
-  /// lazy: there are a couple of dozen rows between them, they change about
-  /// never, and `currencies` has no `updated_at` to cursor on in the first
-  /// place. The same reasoning as [pullFxRates], which is the other pull with
-  /// no cursor.
+  /// Whole rather than paged, which is proportionate rather than lazy: there
+  /// are a couple of dozen rows between them and they change about never.
   Future<List<Currency>> pullCurrencies();
-
   Future<List<Category>> pullCategories();
-
-  Future<ChangePage<GroupEventRow>> pullGroupEvents({
-    required String groupId,
-    SyncCursor? since,
-    required int limit,
-  });
 
   /// Exchange rates published on or after [since] (`yyyy-MM-dd`).
   ///
-  /// Reference data, identical for every user, and immutable once published —
-  /// a rate for a past date never changes — so the client keeps a high-water
-  /// mark and only ever asks for what came after it.
+  /// Immutable once published — a rate for a past date never changes — so the
+  /// client keeps a high-water mark and only asks for what came after it.
   Future<List<RemoteFxRate>> pullFxRates({required String since});
 
   /// Asks the server to fetch rates for a currency on a date it has never
-  /// needed before.
-  ///
-  /// Fire and forget. The daily job keeps recent dates topped up; this covers
-  /// an expense backdated past whatever we hold. The rate arrives on a later
-  /// sync, so callers must not wait on it.
+  /// needed before. Fire and forget; the rate arrives on a later sync.
   Future<void> requestFxBackfill({
     required DateTime asOf,
     required String currency,
   });
+}
+
+/// One page of the profile feed, with the keyset cursor it ended at.
+class ProfilePage {
+  const ProfilePage({
+    required this.rows,
+    required this.cursor,
+    required this.cursorId,
+    required this.hasMore,
+  });
+
+  const ProfilePage.empty()
+    : rows = const <Profile>[],
+      cursor = null,
+      cursorId = null,
+      hasMore = false;
+
+  final List<Profile> rows;
+
+  /// Where the feed stands after [rows], or null when [rows] is empty.
+  final DateTime? cursor;
+  final String? cursorId;
+  final bool hasMore;
 }
 
 /// One published rate, against USD.

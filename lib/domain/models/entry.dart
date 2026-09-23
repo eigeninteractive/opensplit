@@ -87,7 +87,14 @@ abstract class Entry with _$Entry {
     /// The member who recorded this, which is not necessarily a payer.
     required String createdBy,
     required DateTime createdAt,
-    required DateTime updatedAt,
+
+    /// The group sequence number this expense was last received at.
+    ///
+    /// Null on a row this device invented and has never pushed. It is both the
+    /// version the server last confirmed and the base a subsequent edit is
+    /// judged against, which used to be two columns — see [Entries.seq] in
+    /// `tables.dart` for why they could collapse into one.
+    int? seq,
 
     /// Soft delete. Financial rows are never physically removed, so that a
     /// balance that changed can always be explained.
@@ -109,9 +116,9 @@ abstract class Entry with _$Entry {
 
   /// The invariant, checked locally: payers and shares each sum to the total.
   ///
-  /// The server enforces this too, via a deferred constraint trigger. Checking
-  /// it here as well is not redundant — it fails at the point the bug happened,
-  /// with the entry in hand, instead of as a Postgres exception one sync later.
+  /// The server enforces this too, in the group's Durable Object. Checking it
+  /// here as well is not redundant — it fails at the point the bug happened,
+  /// with the entry in hand, instead of as a refusal one sync later.
   bool get isBalanced {
     final paid = payers.fold(0, (sum, p) => sum + p.amountMinor);
     final owed = shares.fold(0, (sum, s) => sum + s.amountMinor);

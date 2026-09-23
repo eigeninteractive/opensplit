@@ -159,7 +159,6 @@ class EntryGen {
       ],
       createdBy: members.first,
       createdAt: createdAt,
-      updatedAt: createdAt,
     );
   }
 

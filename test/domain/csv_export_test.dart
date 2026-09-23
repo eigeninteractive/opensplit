@@ -49,7 +49,6 @@ Entry _entry({
     notes: notes,
     createdBy: 'ravi',
     createdAt: at,
-    updatedAt: at,
     deletedAt: deletedAt,
   );
 }

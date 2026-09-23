@@ -41,7 +41,6 @@ Entry _entry({
     ],
     createdBy: 'ravi',
     createdAt: at,
-    updatedAt: at,
   );
 }
 

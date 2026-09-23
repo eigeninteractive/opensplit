@@ -338,21 +338,22 @@ final class DriftEntryRepository {
     _checkExpected(existing, expected);
 
     final at = now ?? _clock();
-    // Soft delete, and `updatedAt` moves so the deletion is itself a delta that
-    // other devices will pull. A hard delete would simply vanish from their
-    // cursor sweep and live on forever on every device that already had it.
+    // Soft delete. A hard delete would simply vanish from other devices' change
+    // feeds and live on forever on every device that already had it.
+    //
+    // `seq` is deliberately untouched: it still says what the server last
+    // confirmed, which is the base this deletion will be judged against.
     await _writeWithSnapshot(
-      after: existing.copyWith(deletedAt: at, updatedAt: at),
+      after: existing.copyWith(deletedAt: at),
       actorId: actorId,
       at: at,
     );
   });
 
   void _checkExpected(Entry current, Entry? expected) {
-    // An acknowledgement only changes updatedAt. It must not invalidate an
-    // open form, but an actual local or remote edit must not be overwritten.
-    if (expected != null &&
-        expected.copyWith(updatedAt: current.updatedAt) != current) {
+    // An acknowledgement only moves `seq`. It must not invalidate an open
+    // form, but an actual local or remote edit must not be overwritten.
+    if (expected != null && expected.copyWith(seq: current.seq) != current) {
       throw const StaleEntryException();
     }
   }

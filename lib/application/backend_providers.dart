@@ -5,8 +5,9 @@ import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import '../data/auth/google_sign_in_gateway.dart';
 import '../data/auth/supabase_auth_service.dart';
 import '../data/push/supabase_device_token_repository.dart';
-import '../data/sync/supabase_invite_api.dart';
-import '../data/sync/supabase_ledger_api.dart';
+import '../config.dart';
+import '../data/sync/api_client.dart';
+import '../data/sync/cloudflare_ledger_api.dart';
 import '../domain/repositories/auth_service.dart';
 import '../domain/repositories/device_token_repository.dart';
 import '../domain/repositories/invite_api.dart';
@@ -39,16 +40,31 @@ AuthService? authService(Ref ref) {
   );
 }
 
+/// Invites move to the Cloudflare backend with the rest of the link flows.
+/// Until then there is no implementation, and a null provider is the honest
+/// way to say so — it is already the shape every caller handles, because a
+/// deliberately local-only build has always produced one.
 @Riverpod(keepAlive: true)
-InviteApi? inviteApi(Ref ref) {
-  final client = ref.watch(supabaseClientProvider);
-  return client == null ? null : SupabaseInviteApi(client);
-}
+InviteApi? inviteApi(Ref ref) => null;
 
 @Riverpod(keepAlive: true)
 RemoteLedgerApi? remoteLedgerApi(Ref ref) {
-  final client = ref.watch(supabaseClientProvider);
-  return client == null ? null : SupabaseLedgerApi(client);
+  if (apiBaseUrl.isEmpty) return null;
+
+  return CloudflareLedgerApi(
+    buildApiClient(
+      baseUrl: apiBaseUrl,
+      // Where the Better Auth client will hand over Android's bearer token.
+      // It is not here yet, and returning null is the honest placeholder: an
+      // unauthenticated request is refused with a 401 the sync reports, rather
+      // than a Supabase token the Cloudflare backend has never heard of being
+      // sent and failing in a way that looks like something else.
+      //
+      // The web needs nothing here either way: its session is a first-party
+      // cookie the browser attaches and JavaScript cannot read.
+      token: () async => null,
+    ),
+  );
 }
 
 @Riverpod(keepAlive: true)

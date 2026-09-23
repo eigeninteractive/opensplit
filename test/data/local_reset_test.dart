@@ -75,7 +75,6 @@ void main() {
             splitKind: SplitKind.equal,
             createdBy: 'm1',
             createdAt: now,
-            updatedAt: now,
           ),
         );
     await db
@@ -115,9 +114,9 @@ void main() {
           ),
         );
     await db
-        .into(db.syncCursors)
+        .into(db.groupCursors)
         .insert(
-          SyncCursorsCompanion.insert(feed: 'entries:g1', cursor: Value(now)),
+          GroupCursorsCompanion.insert(groupId: 'g1', seq: const Value(7)),
         );
     await OutboxQueue(db).enqueue(OutboxTarget.entry, 'e1');
   }
@@ -140,7 +139,7 @@ void main() {
     );
     expect(await db.select(db.profiles).get(), isEmpty);
     expect(await db.select(db.outbox).get(), isEmpty);
-    expect(await db.select(db.syncCursors).get(), isEmpty);
+    expect(await db.select(db.groupCursors).get(), isEmpty);
   });
 
   test('reference data survives, because it belongs to no account', () async {

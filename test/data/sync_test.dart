@@ -250,7 +250,7 @@ void main() {
         await pending;
 
         expect(await a.db.select(a.db.groups).get(), isEmpty);
-        expect(await a.db.select(a.db.syncCursors).get(), isEmpty);
+        expect(await a.db.select(a.db.groupCursors).get(), isEmpty);
         final background = SyncEngine(db: a.db, api: server, outbox: a.outbox);
         expect((await background.syncEverything()).isClean, isFalse);
         expect(await a.db.select(a.db.groups).get(), isEmpty);
@@ -323,7 +323,7 @@ void main() {
           actorId: g.ravi,
         );
         // Replay a page, as after a reconnect or a reset cursor.
-        await a.db.delete(a.db.syncCursors).go();
+        await a.db.delete(a.db.groupCursors).go();
         await a.sync.pull(g.groupId);
 
         expect((await a.entries.getEntry(entry.id))!.amountMinor, 3500);
@@ -855,7 +855,7 @@ void main() {
       await server.inOneTransaction(() => a.sync.push());
 
       final stamps = <DateTime>{
-        for (final e in await a.ledger(g.groupId)) e.updatedAt,
+        for (final e in await a.ledger(g.groupId)) e.seq,
       };
       expect(stamps, hasLength(1), reason: 'the batch really does share one');
 
@@ -1163,7 +1163,7 @@ void main() {
         expect(await b.db.select(b.db.members).get(), isEmpty);
         expect(
           await (b.db.select(
-            b.db.syncCursors,
+            b.db.groupCursors,
           )..where((row) => row.feed.equals('members:${group.groupId}'))).get(),
           isEmpty,
         );

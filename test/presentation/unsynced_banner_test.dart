@@ -81,7 +81,6 @@ Future<void> _deadLetter(
           splitKind: SplitKind.equal,
           createdBy: 'me',
           createdAt: DateTime.utc(2026, 8, 21),
-          updatedAt: DateTime.utc(2026, 8, 21),
           description: Value(description),
         ),
       );

@@ -43,7 +43,6 @@ Entry entry({
     fxRate: fxRate,
     createdBy: member,
     createdAt: date,
-    updatedAt: date,
     deletedAt: deleted ? date : null,
   );
 }

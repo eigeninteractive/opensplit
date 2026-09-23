@@ -1,7 +1,6 @@
 import 'package:drift/native.dart';
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';
-import 'package:opensplit/data/sync/wire.dart';
 import 'package:test/test.dart';
 
 import '../harness.dart';
@@ -89,30 +88,6 @@ void main() {
   // back — with null meaning null the whole way, rather than an empty string
   // standing in for it somewhere in the middle.
   group('a group whose creator deleted their account', () {
-    test('parses with no creator', () {
-      final parsed = groupFromJson({
-        'id': 'g1',
-        'name': 'Flat 4B',
-        'default_currency': 'INR',
-        'created_by': null,
-        'created_at': '2026-08-26T00:00:00Z',
-      });
-
-      expect(parsed.createdBy, isNull);
-    });
-
-    test('goes back out as null, not as a placeholder value', () {
-      final parsed = groupFromJson({
-        'id': 'g1',
-        'name': 'Flat 4B',
-        'default_currency': 'INR',
-        'created_by': null,
-        'created_at': '2026-08-26T00:00:00Z',
-      });
-
-      expect(groupToJson(parsed)['created_by'], isNull);
-    });
-
     test('a group created without an account has no creator either', () async {
       final created = await groups.createGroup(
         name: 'Offline',

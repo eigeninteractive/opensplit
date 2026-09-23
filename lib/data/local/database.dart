@@ -37,7 +37,8 @@ part 'database.g.dart';
     EntryConflicts,
     FxRates,
     Outbox,
-    SyncCursors,
+    GroupCursors,
+    FeedCursors,
     SyncLeases,
     SyncSessions,
   ],
@@ -74,7 +75,7 @@ class AppDatabase extends _$AppDatabase {
   /// See `docs/local-database.md`, which also carries the rule this file cannot
   /// enforce: never reuse the name of a removed table.
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   /// Timestamps are stored as ISO-8601 text rather than Unix seconds.
   ///

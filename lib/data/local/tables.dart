@@ -107,6 +107,22 @@ class GroupEvents extends Table {
   /// The after-image as JSON, in whatever shape the kind calls for.
   TextColumn get payload => text()();
 
+  /// The sequence number this line was committed at, and its position within
+  /// it.
+  ///
+  /// `(seq, ordinal)` is the feed's total order, and both halves are needed:
+  /// one change can append more than one line — a patch that renames and
+  /// archives a group is two things that happened — and those lines share a
+  /// `seq` and a `createdAt`, because both are taken once per change.
+  ///
+  /// The server can order such lines by rowid, which is insertion order. This
+  /// table cannot: rows arrive in a JSON array and land wherever SQLite puts
+  /// them. So the position travels on the wire.
+  ///
+  /// Null on a provisional row, which by definition has no server version.
+  IntColumn get seq => integer().nullable()();
+  IntColumn get ordinal => integer().nullable()();
+
   /// Written by this device, describing a change the server has not confirmed.
   ///
   /// The whole reason the feed works offline and as a guest. Dropped the moment
@@ -144,12 +160,17 @@ class Groups extends Table {
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get archivedAt => dateTime().nullable()();
 
-  /// Version for last-write-wins, from the server once synced.
+  /// The sequence number this row was last received at, or null.
   ///
-  /// Locally created rows carry a device clock until their first push, which is
-  /// safe because a row the server has never seen cannot be in conflict with
-  /// anything. From then on both sides of every comparison are server times.
-  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+  /// Null means this device invented the row and the server has not confirmed
+  /// it. There is no device-clock equivalent and that is the improvement: a
+  /// locally created row simply has no server version yet, rather than
+  /// carrying one made up out of a clock that must never decide a conflict.
+  ///
+  /// This replaced an `updatedAt` that was doing three jobs — sync cursor,
+  /// last-write-wins version, and conflict base — none of which it could do
+  /// safely, because a client can write a timestamp. See [Entries.seq].
+  IntColumn get seq => integer().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -179,8 +200,8 @@ class Members extends Table {
   /// Falls back to the linked profile's when this is null.
   TextColumn get upiVpa => text().nullable()();
 
-  /// Version for last-write-wins. See [Groups.updatedAt].
-  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+  /// The sequence number this row was last received at. See [Groups.seq].
+  IntColumn get seq => integer().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -230,22 +251,22 @@ class Entries extends Table {
   TextColumn get createdBy => text()();
   DateTimeColumn get createdAt => dateTime()();
 
-  /// Sync cursor column. Server `now()` once synced, never a client clock.
-  DateTimeColumn get updatedAt => dateTime()();
-
-  /// The server version this row was last derived from.
+  /// The group sequence number this row was last received at.
   ///
-  /// Distinct from [updatedAt], and the difference is the whole point: a local
-  /// edit moves [updatedAt] to a device clock and leaves this alone, so the
-  /// pair says both "what this device thinks now" and "what the server said
-  /// when this edit was composed". The second is what the push sends as its
-  /// base, and what lets the server tell a fresh edit from one written against
-  /// a version somebody has since changed.
+  /// One column where there used to be two. `updatedAt` was the sync cursor
+  /// and the last-write-wins version; `baseUpdatedAt` was the server version an
+  /// edit had been composed against. They had to be separate because a local
+  /// edit overwrote `updatedAt` with a device clock and left the base alone.
   ///
-  /// Null for a row this device invented and has never pushed. There is no
-  /// version to be stale against, so the write is an insert and is never
+  /// A sequence number is only ever issued by the server, so a local edit
+  /// invents nothing and this keeps saying what the server last said — which
+  /// *is* the base. The push sends it, and the server refuses the write only
+  /// when the base has moved and applying the edit would move money.
+  ///
+  /// Null for a row this device invented and has never pushed: there is no
+  /// version to be stale against, so the write is an insert and can never be
   /// refused as a conflict.
-  DateTimeColumn get baseUpdatedAt => dateTime().nullable()();
+  IntColumn get seq => integer().nullable()();
 
   DateTimeColumn get deletedAt => dateTime().nullable()();
 
@@ -295,6 +316,12 @@ class EntryConflicts extends Table {
   /// Stored whole rather than as a diff. A diff would need a base to be read
   /// against, and the base is precisely what has moved.
   TextColumn get attempted => text()();
+
+  /// The version the refused edit was composed against.
+  ///
+  /// Kept so the notice can fetch exactly what the server has now and show the
+  /// two side by side, rather than asking the person to remember.
+  IntColumn get baseSeq => integer().nullable()();
 
   DateTimeColumn get rejectedAt => dateTime()();
 
@@ -407,29 +434,53 @@ class Outbox extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-/// Per-group delta-sync position. Client-only.
-@DataClassName('SyncCursorRow')
-class SyncCursors extends Table {
-  /// Which feed this cursor belongs to, as named by [ChangeFeed.key].
-  ///
-  /// A feed name rather than a group id, which is what this column used to be
-  /// called while already holding `events:<id>` and `__profiles__` alongside
-  /// bare group ids. Three naming schemes in one primary key is how two feeds
-  /// come to share a row.
+/// How far this device has read one group's history. Client-only.
+///
+/// One row per group, holding one integer, where there used to be four rows
+/// per group each holding a `(timestamp, id)` pair. The group's Durable Object
+/// is the only thing that writes it, so it can hand out a strictly increasing
+/// number — and a number that is unique per change needs no tiebreak.
+///
+/// That is what removed the second column. A Postgres `now()` is transaction
+/// time, so every row written in one transaction shared an `updated_at`: a
+/// `>` cursor would skip the rest of a batch forever and a `>=` cursor would
+/// re-read it forever, and the only fix was to order on the pair. None of that
+/// arises here.
+@DataClassName('GroupCursorRow')
+class GroupCursors extends Table {
+  TextColumn get groupId =>
+      text().references(Groups, #id, onDelete: KeyAction.cascade)();
+
+  /// The highest sequence number already applied. Zero means never synced,
+  /// which is also where a fresh cursor starts, so there is no null case.
+  IntColumn get seq => integer().withDefault(const Constant(0))();
+
+  DateTimeColumn get lastSyncedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {groupId};
+}
+
+/// How far this device has read a feed that no single writer owns.
+///
+/// Profiles live in D1, which several requests write concurrently, so there is
+/// nothing there that can issue a sequence number. Those feeds keep a
+/// `(timestamp, id)` keyset cursor, and keeping the two kinds in separate
+/// tables says plainly that they are different mechanisms rather than one
+/// mechanism with nullable halves.
+@DataClassName('FeedCursorRow')
+class FeedCursors extends Table {
+  /// A stable feed name. Changing it strands the old cursor and re-reads the
+  /// feed from the beginning, which is safe but not free.
   TextColumn get feed => text()();
 
   /// Highest server timestamp already pulled. Null means never synced.
   DateTimeColumn get cursor => dateTime().nullable()();
 
-  /// Id of the last row consumed at exactly [cursor].
-  ///
-  /// The cursor has to be the pair, not the timestamp alone. Postgres `now()`
-  /// is transaction time, so every row written in one transaction shares an
-  /// `updated_at` — a bulk sync can easily produce more rows at one timestamp
-  /// than a page holds. A `> timestamp` cursor would skip the rest of that
-  /// batch forever; a `>= timestamp` cursor would re-read it forever. Ordering
-  /// and comparing on `(updated_at, id)` terminates and loses nothing.
+  /// Id of the last row consumed at exactly [cursor]. Without it, rows sharing
+  /// a timestamp are either skipped or re-read forever.
   TextColumn get cursorId => text().nullable()();
+
   DateTimeColumn get lastSyncedAt => dateTime().nullable()();
 
   @override

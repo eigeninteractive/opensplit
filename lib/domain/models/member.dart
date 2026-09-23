@@ -43,8 +43,8 @@ abstract class Member with _$Member {
     /// needed. Falls back to the linked profile's when null.
     String? upiVpa,
 
-    /// Version for last-write-wins. See [Group.updatedAt].
-    DateTime? updatedAt,
+    /// The group sequence number this row was last received at. See [Group.seq].
+    int? seq,
   }) = _Member;
 
   const Member._();

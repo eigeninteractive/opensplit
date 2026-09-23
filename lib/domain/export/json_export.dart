@@ -111,7 +111,6 @@ String groupToJson({
           ],
           'created_by': entry.createdBy,
           'created_at': entry.createdAt.toIso8601String(),
-          'updated_at': entry.updatedAt.toIso8601String(),
           'deleted_at': entry.deletedAt?.toIso8601String(),
         },
     ],

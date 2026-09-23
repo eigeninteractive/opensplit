@@ -125,7 +125,7 @@ void main() {
     // the beginning rather than from where this device had got to -- and
     // groups come from the server's own list, so even one this device never
     // held arrives.
-    final cursors = await db.select(db.syncCursors).get();
+    final cursors = await db.select(db.groupCursors).get();
     expect(cursors, isEmpty, reason: 'every feed re-pulls from the beginning');
 
     // And it is allowed to. sync_sessions is emptied with everything else, and

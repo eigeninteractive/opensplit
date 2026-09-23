@@ -94,6 +94,17 @@ abstract class GroupEventRow with _$GroupEventRow {
     /// ever wanted at a time.
     required Map<String, Object?> payload,
 
+    /// Where this line falls in the group's history.
+    ///
+    /// `(seq, ordinal)` is a total order, and both halves are needed: one
+    /// change can append more than one line, and those lines share a `seq` and
+    /// a `createdAt` because both are taken once per change.
+    ///
+    /// Null on a provisional row, which by definition has no server version
+    /// and sorts after everything the server has confirmed.
+    int? seq,
+    int? ordinal,
+
     /// Written by this device and not yet replaced by the server's account of
     /// the same change. Local only; there is no such column on the server.
     @Default(false) bool isProvisional,

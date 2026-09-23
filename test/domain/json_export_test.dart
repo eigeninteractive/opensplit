@@ -61,7 +61,6 @@ void main() {
     splitKind: SplitKind.shares,
     createdBy: 'm-priya',
     createdAt: DateTime.utc(2026, 6, 10),
-    updatedAt: DateTime.utc(2026, 6, 12),
     payers: const [EntryPayer(memberId: 'm-priya', amountMinor: 30000)],
     shares: const [
       EntryShare(

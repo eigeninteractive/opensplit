@@ -36,7 +36,6 @@ Entry _entry({
     ],
     createdBy: payers.keys.first,
     createdAt: at,
-    updatedAt: at,
     deletedAt: deletedAt,
   );
 }

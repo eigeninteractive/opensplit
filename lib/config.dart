@@ -14,6 +14,16 @@ library;
 
 import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 
+/// Where the OpenSplit backend lives.
+///
+/// One origin for the site, the app bundle and the API, which is what lets the
+/// web build hold its session in a first-party `HttpOnly` cookie instead of a
+/// token JavaScript can read.
+const String apiBaseUrl = String.fromEnvironment(
+  'API_BASE_URL',
+  defaultValue: 'http://localhost:8787',
+);
+
 const String supabaseUrl = String.fromEnvironment(
   'SUPABASE_URL',
   defaultValue: 'http://127.0.0.1:54321',

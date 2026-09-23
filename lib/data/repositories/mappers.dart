@@ -24,7 +24,7 @@ extension GroupRowMapper on GroupRow {
     createdBy: createdBy,
     createdAt: createdAt,
     archivedAt: archivedAt,
-    updatedAt: updatedAt,
+    seq: seq,
   );
 }
 
@@ -37,7 +37,7 @@ extension MemberRowMapper on MemberRow {
     joinedAt: joinedAt,
     leftAt: leftAt,
     upiVpa: upiVpa,
-    updatedAt: updatedAt,
+    seq: seq,
   );
 }
 
@@ -95,7 +95,7 @@ extension EntryRowMapper on EntryRow {
     notes: notes,
     createdBy: createdBy,
     createdAt: createdAt,
-    updatedAt: updatedAt,
+    seq: seq,
     deletedAt: deletedAt,
     clientKey: clientKey,
   );
@@ -136,6 +136,8 @@ extension GroupEventRowMapper on GroupEventRowData {
       payload: Map<String, Object?>.from(
         jsonDecode(payload) as Map? ?? const {},
       ),
+      seq: seq,
+      ordinal: ordinal,
       isProvisional: isProvisional,
     );
   }

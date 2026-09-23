@@ -131,7 +131,6 @@ final class DriftGroupRepository {
               // which disagreed with the Group object this method returned.
               createdBy: Value(creatorProfileId),
               createdAt: group.createdAt,
-              updatedAt: Value(now),
             ),
           );
       await _db
@@ -143,7 +142,6 @@ final class DriftGroupRepository {
               profileId: Value(creator.profileId),
               displayName: creator.displayName,
               joinedAt: creator.joinedAt,
-              updatedAt: Value(now),
             ),
           );
       // Both rows have to reach the server, and the group has to land first:
@@ -182,7 +180,6 @@ final class DriftGroupRepository {
           // Bumped on every local write. Without this a rename made offline
           // keeps its old version, and the next pull sees the server as newer
           // and discards the edit before the outbox has had a chance to send it.
-          updatedAt: Value(_clock()),
         ),
       );
       await outbox?.enqueue(OutboxTarget.group, group.id);
@@ -210,9 +207,9 @@ final class DriftGroupRepository {
     final now = _clock();
     await _db.transaction(() async {
       await (_db.update(_db.members)..where((t) => t.id.equals(memberId)))
-          .write(MembersCompanion(leftAt: Value(now), updatedAt: Value(now)));
+          .write(MembersCompanion(leftAt: Value(now)));
       await (_db.update(_db.groups)..where((t) => t.id.equals(groupId))).write(
-        GroupsCompanion(archivedAt: Value(now), updatedAt: Value(now)),
+        GroupsCompanion(archivedAt: Value(now)),
       );
       await outbox?.enqueue(OutboxTarget.member, memberId);
     });
@@ -255,7 +252,6 @@ final class DriftGroupRepository {
               profileId: Value(member.profileId),
               displayName: member.displayName,
               joinedAt: member.joinedAt,
-              updatedAt: Value(member.joinedAt),
             ),
           );
       await outbox?.enqueue(OutboxTarget.member, member.id);
@@ -273,14 +269,8 @@ final class DriftGroupRepository {
       );
     }
     await _db.transaction(() async {
-      await (_db.update(
-        _db.members,
-      )..where((t) => t.id.equals(memberId))).write(
-        MembersCompanion(
-          displayName: Value(trimmed),
-          updatedAt: Value(_clock()),
-        ),
-      );
+      await (_db.update(_db.members)..where((t) => t.id.equals(memberId)))
+          .write(MembersCompanion(displayName: Value(trimmed)));
       await outbox?.enqueue(OutboxTarget.member, memberId);
     });
   }
@@ -296,11 +286,8 @@ final class DriftGroupRepository {
     // Marked as left, never deleted. Their name still has to render on every
     // expense they were part of, and their balance still has to be settleable.
     await _db.transaction(() async {
-      await (_db.update(
-        _db.members,
-      )..where((t) => t.id.equals(memberId))).write(
-        MembersCompanion(leftAt: Value(_clock()), updatedAt: Value(_clock())),
-      );
+      await (_db.update(_db.members)..where((t) => t.id.equals(memberId)))
+          .write(MembersCompanion(leftAt: Value(_clock())));
       await outbox?.enqueue(OutboxTarget.member, memberId);
     });
   }
@@ -320,7 +307,6 @@ final class DriftGroupRepository {
       )..where((t) => t.id.equals(memberId))).write(
         MembersCompanion(
           upiVpa: Value(trimmed == null || trimmed.isEmpty ? null : trimmed),
-          updatedAt: Value(_clock()),
         ),
       );
       await outbox?.enqueue(OutboxTarget.member, memberId);
@@ -363,10 +349,7 @@ final class DriftGroupRepository {
 
   Future<void> setArchived(String groupId, {required bool archived}) async {
     await (_db.update(_db.groups)..where((t) => t.id.equals(groupId))).write(
-      GroupsCompanion(
-        archivedAt: Value(archived ? _clock() : null),
-        updatedAt: Value(_clock()),
-      ),
+      GroupsCompanion(archivedAt: Value(archived ? _clock() : null)),
     );
     await outbox?.enqueue(OutboxTarget.group, groupId);
   }

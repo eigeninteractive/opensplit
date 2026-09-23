@@ -129,7 +129,6 @@ Entry composeEntry(
     notes: draft.notes,
     createdBy: createdBy,
     createdAt: now,
-    updatedAt: now,
     clientKey: clientKey ?? id,
   );
 }

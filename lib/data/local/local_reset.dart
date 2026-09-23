@@ -57,7 +57,7 @@ Future<void> forgetLocalLedger(
     // cursors have to go or the new account's first pull would start from a
     // position reached under the old one and skip everything before it.
     await db.delete(db.outbox).go();
-    await db.delete(db.syncCursors).go();
+    await db.delete(db.groupCursors).go();
 
     // Cached display names and handles, keyed by profile id.
     await db.delete(db.profiles).go();

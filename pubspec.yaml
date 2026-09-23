@@ -64,6 +64,12 @@ dependencies:
   # forcing the app to relax its own to accommodate it.
   opensplit_api:
     path: packages/opensplit_api
+  # Named directly as well as transitively, because this app configures it:
+  # the base URL, the timeouts, and the interceptor that decides between a
+  # bearer token and a cookie all live here rather than in the generated
+  # client. Depending on a package you import is the rule that makes a
+  # transitive bump unable to break you silently.
+  dio: ^5.10.0
 dev_dependencies:
   args: ^2.7.0
   flutter_test:

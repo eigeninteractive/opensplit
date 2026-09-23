@@ -79,7 +79,7 @@ Future<void> writeEntryInTransaction(
           notes: Value(entry.notes),
           createdBy: entry.createdBy,
           createdAt: entry.createdAt,
-          updatedAt: entry.updatedAt,
+          seq: Value(entry.seq),
           deletedAt: Value(entry.deletedAt),
           clientKey: Value(entry.clientKey),
         ),
