@@ -16,16 +16,17 @@ export default {
   fetch: app.fetch,
 
   /**
-   * Three schedules, dispatched on the cron expression that fired. Filled in
+   * Two schedules, dispatched on the cron expression that fired. Filled in
    * across phases 5 and 7; see the plan.
+   *
+   * Archiving and collecting dormant groups used to be the third, and is not
+   * here: every group sets its own alarm, so there is nothing central left to
+   * sweep. See `src/do/group/upkeep.ts`.
    */
   async scheduled(controller, _env, _ctx): Promise<void> {
     switch (controller.cron) {
       case "0 4 * * *":
         // Exchange rates.
-        break;
-      case "30 4 * * *":
-        // Archive and purge dormant groups.
         break;
       case "0 5 * * 0":
         // Abandoned guest accounts, membership index reconciliation.

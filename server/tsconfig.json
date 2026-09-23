@@ -13,6 +13,13 @@
     "module": "es2022",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
+    // drizzle-kit emits `src/do/migrations/migrations.js` — the journal plus
+    // one import per migration — and regenerates it whenever a migration is
+    // added. Hand-writing a typed equivalent would be a second list to keep in
+    // step, which is exactly the drift the generator exists to remove, so the
+    // generated file is imported as it is. `checkJs` stays off: it is not ours
+    // to fix, and `src/sql.d.ts` is what gives its `.sql` imports a type.
+    "allowJs": true,
     "noEmit": true,
     "isolatedModules": true,
     // Forces `import type` for type-only imports, so what is erased at build
@@ -30,5 +37,5 @@
     "skipLibCheck": true,
     "types": ["./worker-configuration.d.ts"]
   },
-  "include": ["src/**/*.ts", "worker-configuration.d.ts"]
+  "include": ["src/**/*.ts", "src/**/*.js", "worker-configuration.d.ts"]
 }

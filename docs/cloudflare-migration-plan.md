@@ -125,6 +125,9 @@ somebody else — and that is a fold over its own rows.
 
 ## Durable Object: `Group`
 
+**Built in phase 2.** What follows is what runs, and several things in it are
+not what this document originally planned. Those are marked, with the reason.
+
 ### Storage
 
 ```sql
@@ -148,79 +151,154 @@ events(id PK, actor_id, created_at, kind, subject_id, payload, seq)
 
 invites(token PK, member_id, created_by, created_at, expires_at,
         redeemed_at, redeemed_by)
-group_link(token PK, created_by, created_at, expires_at, revoked_at)
+group_link(id PK, token, created_by, created_at, expires_at, revoked_at)
 
 counter(name PK, value)        -- 'seq'
-index_outbox(id PK, kind, payload, attempts)
+outbox(id PK, kind, payload, attempts, created_at)
+schedule(name PK, due_at)      -- 'outbox' | 'archive' | 'purge'
+tombstone(id PK, purged_at, seq)
 ```
 
+The column missing from every table is `group_id`. That is not tidiness: three
+rules the Postgres schema needed triggers for were only expressible *because*
+the scope was data, and none of them has a guard in the new code.
+
+| Rule | Postgres | Here |
+|---|---|---|
+| An entry cannot be moved into another group | `guard_entry_write` comparing `OLD.group_id` | No column to move it with |
+| A share cannot name a member of another group | `assert_member_in_group`, a trigger with a three-table join | An existence check on one table |
+| A member cannot carry themselves into another group | `guard_member_update` | Same |
+
 Payers and shares carry no `seq` of their own: they are part of the entry and
-travel with it, which is also what the wire format already assumes.
+travel with it, which is what the wire format already assumed.
 
 Schema is a Drizzle schema compiled by `drizzle-kit` with
-`driver: "durable-sqlite"`. The generated SQL is bundled into the Worker as
-text (a `rules` entry for `**/*.sql`) and applied by `migrate()` from
-`drizzle-orm/durable-sqlite/migrator` inside `blockConcurrencyWhile` on first
-access after a deploy.
+`driver: "durable-sqlite"`, into `src/do/group/migrations/`. The SQL is bundled
+into the Worker as text — a `rules` entry for `**/*.sql` in `wrangler.jsonc` —
+and applied by `migrate()` inside `blockConcurrencyWhile` on first open after a
+deploy. Migrations are lazy and per object: a group nobody has touched for six
+months migrates on its next open, which is the property that makes
+re-application worth a test of its own.
 
-This is the DO analogue of `supabase/migrations`, and it needs its own test: an
-object created at v1 and opened by v3 code must arrive at v3 with its rows
-intact. Migrations here are lazy and per-object — a group nobody has touched
-for six months migrates on its next open — which is the property that makes
-that test worth having.
+### Four departures from the original plan
+
+**Dormancy is per-object alarms, not a nightly sweep.** This document planned a
+`30 4 * * *` cron reading candidate group ids from the D1 index and asking each
+object about itself. That is fan-out proportional to the number of groups, on a
+platform that gives every object its own scheduler. Each group now sets its own
+alarm: writing an expense pushes it out three months, the alarm archives, and a
+second one collects a year later. A quiet group costs one wake-up per quarter
+instead of ninety that find nothing to do, there is no registry to keep, and
+the alarm is durable and retried by the platform. **The archive/purge cron is
+deleted**; the two genuinely global schedules remain.
+
+**Collecting a group is observable.** Postgres deleted the rows and told
+nobody, so a device that had synced the group kept it forever and a device that
+had not would simply never see it again. A feed cursored on a sequence number
+can carry the news, so `purge` leaves one `tombstone` row and the next
+`changes` page reports `purgedAt`. The device drops its local copy.
+
+**Writes are patches, not full-row upserts.** `putGroup` and `putMember` became
+`create`/`update` and `addMember`/`updateMember`. Three of the Postgres column
+guards existed only because the client sent every column on every save: a patch
+with no field for `id`, `created_at` or `created_by` needs no rule saying they
+cannot be rewritten. `groups.created_by` also stops being an authorization —
+creating a group is one call that writes the group and the creator's member row
+in one transaction, so the bootstrap window `is_group_creator()` existed to
+cover does not exist, and the column goes back to describing who made this.
+
+**A soft delete finally has an undo.** `restored` has been in the client's
+event enum since the beginning and was unreachable: `upsert_entry` never
+touched `deleted_at` and direct DML was closed, so the server could not produce
+the kind the app could render. `restoreEntry` is the counterpart of
+`deleteEntry` and the feed shows both.
 
 ### Methods (RPC, not `fetch`)
 
 ```ts
-changesSince(since: number, limit: number): ChangePage
-upsertEntry(input: EntryInput, baseSeq: number | null): Entry
-deleteEntry(entryId: string, baseSeq: number): Entry
-putGroup(input: GroupInput): Group        // create, rename, archive, settings
-putMember(input: MemberInput): Member
-createInvite(memberId: string): Invite
-peekInvite(token: string): InvitePreview | null
-redeemInvite(token: string, profileId: string): Member
-createGroupLink(): GroupLink
-revokeGroupLink(): void
-peekGroupLink(token: string): GroupLinkPreview | null
-placeholders(token: string): Placeholder[]
-joinWithLink(token, profileId, memberId?, displayName?): Member
-forgetProfile(profileId: string): DeletionOutcome   // account deletion
-maybeArchive(after: Duration): boolean              // cron
-purgeIfSettledAndDormant(after: Duration): boolean  // cron
+changes(profileId, since, limit): Result<ChangePage>
+
+create(input, profileId): Result<Group>
+update(patch, profileId): Result<Group>
+addMember(input, profileId): Result<Member>
+updateMember(memberId, patch, profileId): Result<Member>
+
+upsertEntry(input, profileId): Result<Entry>      // input carries baseSeq
+deleteEntry(entryId, baseSeq, profileId): Result<Entry>
+restoreEntry(entryId, baseSeq, profileId): Result<Entry>
+
+createInvite(memberId, profileId): Result<Invite>
+createLink(profileId): Result<GroupLink>
+revokeLink(profileId): Result<{revoked}>
+peekLink(token, viewer | null): Result<LinkPreview | null>   // no session needed
+placeholders(token): Result<Placeholder[]>
+join(token, profileId, {memberId?, displayName?}): Result<Member>
+
+forgetProfile(profileId): {forgotten, purged}     // account deletion
+runUpkeep(now): {archived, purged}                // alarm and tests
+reconcile(): number                               // weekly cron
 ```
 
+Every method takes a **profile id** and none takes a member id for "who I am".
+The object resolves the caller's own member row and uses it for authorship,
+which is what made the Postgres trigger necessary and is why there is no
+equivalent.
+
+`peek` and `join` replace five Postgres functions — `peek_invite`,
+`peek_group_link`, `redeem_invite`, `list_link_placeholders` and
+`join_with_link`. The person holding the URL cannot know which kind of link it
+is and should not have to.
+
+**Refusals are values, not exceptions.** Every method returns
+`{ok:true,value} | {ok:false,error:{code,message}}`. A refusal is an answer the
+object is meant to give; an exception is a bug. It also means the code and the
+message arrive intact without depending on how workerd serializes an `Error`.
+`statusFor(code)` maps the codes to HTTP next to where they are defined.
+
 The Worker resolves the session, checks the D1 membership index as a first
-pass, then calls the stub. **The DO re-checks membership itself and is the
-authority** — the same defence-in-depth as today's policy-plus-trigger pair,
+pass, then calls the stub. **The object re-checks membership itself and is the
+authority** — the same defence in depth as today's policy-plus-trigger pair,
 relocated. The D1 check exists to fail cheap, not to decide.
 
 ### The rules being ported, explicitly
 
-These are the pgTAP-covered rules. Each becomes a guard in the DO with a test
-that names it:
+Each of these is a guard in the object with a test that names it. Where the
+answer is "there is no guard", the absence is the point.
 
-- An entry must balance: `sum(payers) = sum(shares) = amount`.
-- An entry may never be hard-deleted; deletion sets `deleted_at`.
-- An entry id belonging to another group cannot be rewritten in place.
-- Authorship is the caller's own member row. There is no parameter for it.
-- A group's `id`, `created_at` and `created_by` cannot be rewritten. `created_by`
-  is set once at creation, and is an authorization, not a description.
+- An entry must balance: `sum(payers) = sum(shares) = amount`. One function,
+  called once, with the finished shape in hand.
+- An entry may never be hard-deleted; deletion sets `deleted_at`. *There is no
+  method that removes an entry row.*
+- An entry id belonging to another group cannot be rewritten in place. *There is
+  no shared id space.*
+- Authorship is the caller's own member row. *There is no parameter for it.*
+- A group's `id`, `created_at` and `created_by` cannot be rewritten. *There are
+  no fields for them on the patch.*
 - A member cannot be moved between groups or re-identified; `joined_at` is fixed.
-- `profile_id` transitions only `null → yourself` (the invite claim), plus the
-  one exception of an account being deleted, which sets it back to `null`.
+- `profile_id` transitions only `null → yourself`, plus account deletion setting
+  it back to `null`. *It is not a field on any patch; claiming is what `join`
+  does.*
 - `display_name` and `upi_vpa` are editable on your own row and on any
   placeholder, and on nobody else's — including by the group's creator. This is
   the rule that stops a settle-up handoff paying the wrong person.
 - `left_at` is always yours to set on yourself. Setting it on somebody else
   requires them to be settled in every currency.
-- Events are written by the DO from what it committed. There is no client-facing
-  write path to `events`, and no diff on the wire — only the entry's shape at
-  each moment, with the difference derived on the device that reads it.
-- An entry snapshot that is byte-identical to the previous one appends no event.
-  One save that touches an entry and four shares must produce one event, not five.
-- Adding an expense to an archived group un-archives it, and records that as the
-  expense it was, not as "somebody restored the group".
+- Events are written by the object from what it committed. There is no
+  client-facing write path to `events`, and no diff on the wire.
+- A snapshot byte-identical to the previous one appends no event — and a push
+  that changes nothing spends no sequence number either, so a retried outbox
+  item does not re-notify the group.
+- Adding an expense to an archived group un-archives it and records that as the
+  expense it was. Postgres needed a transaction-local session variable to tell
+  this from a deliberate restore; straight-line code knows which one it is
+  doing.
+
+One rule is new: **somebody who has left reads the feed up to the change that
+recorded them leaving, and no further.** Both of the obvious answers are wrong.
+Cutting them off at once — `is_group_member`'s `left_at is null` — means their
+device never learns why syncing stopped. Letting them read on means removal
+removes nothing. A total order over the group's history makes the third answer
+expressible.
 
 ### Conflict detection
 
@@ -230,24 +308,89 @@ fixing a typo do not arbitrate; an edit carrying a stale amount does. The
 comparison is between two canonical `{amount, payers, shares}` shapes, ordered
 by member id, weights excluded.
 
-Refused with HTTP 409 and `{"error":{"code":"stale_base"}}`. The
+Refused with `stale_base`, which `statusFor` maps to 409. The
 `PT409`-versus-`40001` problem does not exist here — there is no PostgREST to
-reinterpret a SQLSTATE — but the distinction it protected does, and the client
-still maps it to `RejectionKind.stale`.
+reinterpret a SQLSTATE — but the distinction it protected does.
+
+One behaviour changed: a `clientKey` that already names an expense, arriving on
+an id that does not, now returns the expense the server already recorded.
+Postgres refused it with a unique violation, which wedged the device's outbox
+on a write the server had already accepted.
+
+### The sequence number, precisely
+
+**One `seq` per committed change, not per row.** A save that writes an entry,
+four shares and an event stamps all of them with the same number, so a cursor
+either sees that whole change or none of it. `limit` on `changes` therefore
+counts *changes, not rows*, and a page is cut only between numbers — a device
+can never observe an entry whose shares have not arrived, which would be a
+balance that does not add up on somebody's screen.
+
+`updated_at` survives as a descriptive column and nothing depends on it. That
+is a real reduction in attack surface: it used to be the sync clock, so a
+client able to write it could backdate a change behind everybody's cursor or
+stamp one far enough ahead to pin every device's cursor there and stop the
+group syncing permanently. Both were reachable and both took a trigger to
+close.
 
 ### Write-through to the D1 index
 
-Membership changes write an `index_outbox` row in the same transaction, then
-flush to D1 immediately after commit. A failed flush sets an alarm and retries
-with backoff; the D1 writes are idempotent upserts, so at-least-once delivery is
-enough. A weekly cron reconciles: every group in the index is asked to confirm
-its own member list.
+Membership and token changes write an `outbox` row in the same transaction,
+flushed to D1 immediately after commit. A `fetch` cannot join a
+`transactionSync`, so an inline write that failed would leave the index behind
+the object with nothing left to retry it. A failed flush backs off on the
+object's own alarm; the D1 writes are idempotent upserts and deletes, so
+at-least-once is enough.
 
-The DO is the truth. D1 is a derived index, and is allowed to be briefly stale
-in exactly one direction — a first-pass check that says "no" when the DO would
-say "yes" costs a retry, never a wrong answer.
+The object is the truth. D1 is a derived index, allowed to be briefly stale in
+exactly one direction — a first-pass check that says "no" where the object
+would say "yes" costs a retry, never a wrong answer. `reconcile()` overwrites
+the index with the object's own answer rather than comparing the two and
+guessing which is right.
+
+### The activity payload, and one finding
+
+`Event.payload` started as `Record<string, unknown>`, which is the obvious type
+for a deliberately open payload. Two things were wrong with it.
+
+The first was a bug. workerd types an RPC method's return by what it can
+structured-clone, and `unknown` is not that — so `Result<ChangePage>` **lost
+its entire success branch**: every `changes()` call typed as the refusal alone
+and every read of a page was `unknown`. Nothing failed. The tests passed and
+the handler compiled.
+
+The second was that the openness was never real. There are exactly four payload
+shapes, the set is closed, and which one an event carries is decided entirely
+by its `kind`:
+
+| Kinds | Payload |
+|---|---|
+| `entry` | `EntrySnapshot` — the after-image: kind, description, currency, amount, date, split, category, notes, `deletedAt`, payers, shares |
+| `member_added`, `member_joined`, `member_left`, `member_renamed` | `{displayName, previousName}` |
+| `group_renamed`, `group_archived`, `group_restored` | `{name, previousName}` |
+| `link_created`, `link_revoked` | `{expiresAt}` |
+
+So they are four Zod schemas and a union. `append()` takes a **discriminated**
+parameter pairing each kind with its payload and its `subjectId`, which is
+where the rule is actually enforced — appending a `member_renamed` carrying a
+group's payload does not compile, and `test/object.test.ts` asserts that with
+`@ts-expect-error`.
+
+The union is deliberately not pushed up to `Event` itself. A discriminated
+`Event` would be stronger still, and would force `oneOf` through the generated
+Dart client, whose `events` array would degrade to `dynamic` — losing `id`,
+`seq` and `actorId`, which the client does use, to type a payload it reads as
+a map and parses per kind anyway. Instead `kind` and `payload` stay separate
+columns, and four named guards (`isEntryEvent` and friends) are the single
+place a reader narrows. A reader that forgets does not compile.
+
+The `outbox` payload got the same treatment for the same reason: three kinds,
+three shapes, narrowed on `kind` where the write is applied, with one asserted
+cast at the boundary where JSON comes back out of SQLite rather than a cast at
+every use.
 
 ---
+
 
 ## Durable Object: `Fx`
 
@@ -506,13 +649,16 @@ are deleted.
 
 ## Cron
 
-One Worker, three schedules:
+One Worker, **two** schedules:
 
 - `0 4 * * *` — FX refresh via the `Fx` DO.
-- `30 4 * * *` — archive and purge sweep. Candidate group ids come from the D1
-  index; each DO decides its own fate and deletes its own storage. Replaces the
-  `pg_cron` job calling `purge_settled_dormant_groups`.
 - `0 5 * * 0` — abandoned anonymous accounts, and index reconciliation.
+
+There was a third, `30 4 * * *`, for archiving and collecting dormant groups.
+It is gone: every group sets its own alarm, so there is nothing central left to
+sweep. See *Four departures* above. What remains here is what is genuinely
+global — rates nobody owns, accounts that belong to no group, and checking that
+the derived index still agrees with the objects that are the truth.
 
 ---
 
@@ -545,7 +691,7 @@ server/
   wrangler.jsonc
   package.json              pinned versions, npm ci in CI
   drizzle.d1.config.ts      dialect sqlite, out: migrations/
-  drizzle.do.config.ts      driver durable-sqlite, out: src/do/migrations/
+  drizzle.do.config.ts      driver durable-sqlite, out: src/do/group/migrations/
   src/
     index.ts                Hono app, routing, SPA fallback
     auth.ts                 Better Auth config (drizzle adapter)
@@ -555,9 +701,18 @@ server/
     schemas/                Zod payloads — validator, type and spec in one
     api/                    route modules, one per resource
     identity/               the three link-or-sign-in endpoints
-    do/group.ts             the Group Durable Object
+    do/group/index.ts       the Group Durable Object: the RPC surface
+    do/group/store.ts       the seq allocator, membership, the three refusals
+    do/group/ledger.ts      upsert, delete and restore; the balance invariant
+    do/group/roster.ts      the group, its members, and the column rules
+    do/group/invites.ts     one peek, one join, two kinds of link
+    do/group/events.ts      snapshots and named events; the dedup
+    do/group/changes.ts     the feed, and the cursor it pages on
+    do/group/balances.ts    the one fold this server computes
+    do/group/upkeep.ts      dormancy by alarm, and the D1 outbox
+    do/group/refusal.ts     refusals as values, and their statuses
+    do/group/migrations/    GENERATED by drizzle-kit, bundled as text
     do/fx.ts                the Fx Durable Object
-    do/migrations/          GENERATED by drizzle-kit, bundled as text
     fx/providers/           ported from supabase/functions/fetch-fx
     push/fcm.ts
     email/sender.ts         behind an EmailSender interface
@@ -566,9 +721,11 @@ server/
   test/                     vitest, running in workerd
 ```
 
-Three directories are generated and none of them is hand-edited:
-`src/auth-schema.ts`, `src/do/migrations/` and `migrations/`. The first comes
-from `auth generate`, the other two from `drizzle-kit generate`.
+Three paths are generated and none of them is hand-edited:
+`src/auth-schema.ts`, `src/do/group/migrations/` and `migrations/`. The first
+comes from `auth generate`, the other two from `drizzle-kit generate`. All
+three are excluded from Biome, because formatting a generated file turns every
+regeneration into a CI drift failure.
 
 `supabase/` is deleted in the final phase, whole.
 
@@ -658,15 +815,23 @@ The pgTAP suite is not decoration and is not dropped. It is ported, test for
 test, to `vitest-pool-workers`, which runs real D1, KV and Durable Objects in
 Miniflare and gives `runInDurableObject` and `runDurableObjectAlarm`.
 
-| Today | Becomes |
-|---|---|
-| `01_schema_and_invariant` | DO unit: unbalanced entry refused; no hard delete; `clientKey` idempotency; `seq` monotonic; DO schema migration v1→v3 |
-| `02_rls_and_invites` | Worker integration: stranger cannot read or write a group; invite spent exactly once; expired and revoked tokens; claiming sets one column |
-| `03_push_tokens` | token ownership; recipients exclude the actor and non-members |
-| `04_adversarial` | a member cannot rewrite another's `upi_vpa`, blank a `profile_id`, remove an unsettled member, rewrite `created_by`, re-identify a group, or write an entry into a group they are not in |
-| `05_fx` | conversion, coverage, backfill throttling, concurrent backfill and cron |
-| `06_activity` | no event when nothing changed; one event for one multi-row save; actor attribution; no client write path |
-| `07_account_deletion` | placeholders retained with names; co-members' balances unchanged; groups nobody can read are deleted |
+| Today | Becomes | Phase |
+|---|---|---|
+| `01_schema_and_invariant` | `test/ledger.test.ts` — unbalanced entry refused; no hard delete; `clientKey` idempotency; `seq` monotonic; the stale-base predicate | 2 ✅ |
+| `02_rls_and_invites` | `test/invites.test.ts` — stranger cannot read or write a group; invite spent exactly once; expired and revoked tokens; claiming sets one column | 2 ✅ |
+| `03_push_tokens` | token ownership; recipients exclude the actor and non-members | 5 |
+| `04_adversarial` | `test/roster.test.ts` — a member cannot rewrite another's `upi_vpa`, blank a `profile_id`, remove an unsettled member, rewrite `created_by`, re-identify a group, or write an entry into a group they are not in | 2 ✅ |
+| `05_fx` | conversion, coverage, backfill throttling, concurrent backfill and cron | 5 |
+| `06_activity` | `test/activity.test.ts` — no event when nothing changed; one event for one multi-row save; actor attribution; no client write path | 2 ✅ |
+| `07_account_deletion` | `test/dormancy.test.ts` — placeholders retained with names; co-members' balances unchanged; groups nobody can read are deleted | 2 ✅ |
+| *(nothing)* | `test/object.test.ts` — migrations re-applied on every open; the alarm; the outbox surviving a D1 outage; the RPC boundary's types | 2 ✅ |
+
+The last row is the part of the design with no pgTAP ancestor, which is exactly
+the part with no existing tests to inherit. The suites that are half the length
+of their originals are that way for one reason: `02` spent most of its lines
+proving that Zara, who is in no group, sees no groups, no members, no entries,
+no balances and no invite rows — five policies producing five empty result sets
+that each had to be asserted separately. That is one refusal now.
 
 Plus, Dart side:
 
@@ -726,10 +891,18 @@ identity endpoints, Resend sender, `profiles` hook, bearer tokens. Dart
 link-or-sign-in covered by vitest; sign-in, guest, link, and the
 already-claimed refusal all work end to end on a device.
 
-**2 — The Group DO.** Schema, migration runner, `putGroup`, `putMember`,
-`upsertEntry`, `deleteEntry`, events, every guard, `changesSince`. All seven
-pgTAP files ported and passing. **This phase is the gate**: no client work
-starts until the adversarial suite is green.
+**2 — The Group DO. Done.** Schema, migration runner, the sequence allocator,
+`create`/`update`/`addMember`/`updateMember`, `upsertEntry`/`deleteEntry`/
+`restoreEntry`, invites and the open link, events, every guard, `changes`,
+dormancy by alarm, the D1 outbox, and account deletion. 117 tests pass;
+typecheck is clean across three programs; `wrangler deploy --dry-run` builds.
+
+Five of the seven pgTAP files are ported: `01` (`test/ledger.test.ts`), `02`
+(`test/invites.test.ts`), `04` (`test/roster.test.ts`), `06`
+(`test/activity.test.ts`), `07` (`test/dormancy.test.ts`), plus
+`test/object.test.ts` for the parts with no pgTAP ancestor — migrations,
+the alarm, the outbox surviving a D1 outage, and the RPC boundary's types.
+`03` (push tokens) and `05` (FX) land with the features they test, in phase 5.
 
 **3 — Client sync.** The Dart client is generated from `docs/openapi.json` by
 `openapi_generator` and replaces `wire.dart`; `mappers.dart` keeps translating

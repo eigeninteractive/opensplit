@@ -20,6 +20,21 @@
   "upload_source_maps": true,
 
   /**
+   * The Durable Object's own migrations, bundled as strings.
+   *
+   * `drizzle-kit generate --config drizzle.do.config.ts` writes SQL files and
+   * a `migrations.js` that imports them; `migrate()` applies whichever have
+   * not run yet, per object, inside `blockConcurrencyWhile` on first open
+   * after a deploy. There is no `wrangler d1 migrations apply` equivalent for
+   * a Durable Object — each one migrates itself, lazily — so the SQL has to
+   * travel inside the Worker script.
+   *
+   * `fallthrough` so this adds to the default rules rather than replacing
+   * them, which would silently turn off source-map and WASM handling.
+   */
+  "rules": [{ "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }],
+
+  /**
    * Static assets are served ahead of the Worker script, so a request for
    * `main.dart.js` never invokes it. Anything with no matching asset falls
    * through to `src/index.ts`, which routes `/api/*` and answers SPA deep
@@ -71,10 +86,23 @@
   // Exchange rates, one blob per month. Also a placeholder id.
   "kv_namespaces": [{ "binding": "FX_RATES", "id": "0000000000000000000000000000000f" }],
 
+  /**
+   * Two schedules, not three.
+   *
+   * There is deliberately no nightly sweep for dormancy. Postgres needed one
+   * because a table cannot schedule itself, so `archive_dormant_groups` and
+   * `purge_settled_dormant_groups` scanned every group every night. A Durable
+   * Object sets its own alarm, so each group carries its own clock: one
+   * wake-up in three months instead of ninety that find nothing to do, and no
+   * fan-out proportional to the number of groups.
+   *
+   * What is left here is genuinely global — rates nobody owns, accounts that
+   * belong to no group, and checking that D1's derived index still agrees with
+   * the objects that are the truth.
+   */
   "triggers": {
     "crons": [
       "0 4 * * *", // exchange rates
-      "30 4 * * *", // archive and purge dormant groups
       "0 5 * * 0" // abandoned guests, index reconciliation
     ]
   },
