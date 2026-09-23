@@ -131,6 +131,7 @@ export type Bootstrap = z.infer<typeof BootstrapSchema>;
 
 const bootstrapRoute = createRoute({
   method: "get",
+  operationId: "bootstrap",
   path: "/bootstrap",
   tags: ["sync"],
   summary: "Who I am, and which groups to ask",
@@ -139,6 +140,7 @@ const bootstrapRoute = createRoute({
 
 const changesRoute = createRoute({
   method: "get",
+  operationId: "getChanges",
   path: "/groups/{groupId}/changes",
   tags: ["sync"],
   summary: "Everything that changed in one group since a cursor",
@@ -149,6 +151,7 @@ const changesRoute = createRoute({
 
 const createGroupRoute = createRoute({
   method: "post",
+  operationId: "createGroup",
   path: "/groups",
   tags: ["groups"],
   summary: "Make a group, and its creator's place in it",
@@ -159,6 +162,7 @@ const createGroupRoute = createRoute({
 
 const patchGroupRoute = createRoute({
   method: "patch",
+  operationId: "updateGroup",
   path: "/groups/{groupId}",
   tags: ["groups"],
   summary: "Rename, archive or change a setting",
@@ -169,6 +173,7 @@ const patchGroupRoute = createRoute({
 
 const addMemberRoute = createRoute({
   method: "post",
+  operationId: "addMember",
   path: "/groups/{groupId}/members",
   tags: ["groups"],
   summary: "Add somebody who has never opened the app",
@@ -179,6 +184,7 @@ const addMemberRoute = createRoute({
 
 const patchMemberRoute = createRoute({
   method: "patch",
+  operationId: "updateMember",
   path: "/groups/{groupId}/members/{memberId}",
   tags: ["groups"],
   summary: "Change a name, a payment handle, or whether somebody is still here",
@@ -189,6 +195,7 @@ const patchMemberRoute = createRoute({
 
 const upsertEntryRoute = createRoute({
   method: "post",
+  operationId: "upsertEntry",
   path: "/groups/{groupId}/entries",
   tags: ["entries"],
   summary: "Record or edit an expense, whole",
@@ -199,6 +206,7 @@ const upsertEntryRoute = createRoute({
 
 const deleteEntryRoute = createRoute({
   method: "delete",
+  operationId: "deleteEntry",
   path: "/groups/{groupId}/entries/{entryId}",
   tags: ["entries"],
   summary: "Soft-delete an expense",
@@ -209,6 +217,7 @@ const deleteEntryRoute = createRoute({
 
 const restoreEntryRoute = createRoute({
   method: "post",
+  operationId: "restoreEntry",
   path: "/groups/{groupId}/entries/{entryId}/restore",
   tags: ["entries"],
   summary: "Put a deleted expense back",

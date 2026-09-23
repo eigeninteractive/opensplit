@@ -1,0 +1,34 @@
+# The Dart client, generated from docs/openapi.json.
+#
+# A config file rather than a wall of --additional-properties, because these
+# are decisions and decisions deserve somewhere to be written down.
+#
+# Run with `dart run tool/generate_api_client.dart`, or the npx line inside it.
+# The output is committed and CI fails on drift, the same discipline
+# drift_schemas/ and docs/openapi.json already get: a wire change that skips
+# the client shows up in review as a change to the client.
+
+generatorName: dart
+inputSpec: docs/openapi.json
+outputDir: packages/opensplit_api
+
+additionalProperties:
+  pubName: opensplit_api
+  # No apostrophe. The generator emits this into a single-quoted YAML scalar
+  # without escaping it, so "OpenSplit's" produces a pubspec.yaml that pub
+  # cannot parse.
+  pubDescription: "The OpenSplit API client. Generated from docs/openapi.json - do not edit."
+  pubVersion: 1.0.0
+  pubAuthor: OpenSplit
+  pubHomepage: https://github.com/eigeninteractive/opensplit
+
+  # Plain classes over package:http. Not built_value, not dio, not chopper:
+  # this is the only generated stack that does not drag a second serialization
+  # framework and its own code generation into a pubspec that already runs
+  # freezed, drift and riverpod through build_runner.
+  serializationLibrary: native
+
+# The generated package is its own thing, with its own analysis options, so
+# its lint posture is not the app's. Keeping it out of lib/ is what makes that
+# possible — generated code cannot be expected to pass a hand-written project's
+# lints, and silencing them app-wide to suit it would be the wrong trade.

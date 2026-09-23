@@ -44,10 +44,22 @@ export const CurrencySchema = z
   .regex(/^[A-Z]{3}$/)
   .openapi({ example: "INR" });
 
-export const EntryKindSchema = z.enum(["expense", "settlement"]);
-export const SplitKindSchema = z.enum(["equal", "exact", "shares", "percent"]);
+/**
+ * Registered as named schemas rather than left inline, for two reasons.
+ *
+ * One shared `EntryKind` across `Entry`, `EntryInput` and `EntrySnapshot`
+ * beats three structurally identical `EntryInputKindEnum`-style classes that
+ * cannot be assigned to one another.
+ *
+ * And an inline enum carrying a `default` makes the Dart generator emit
+ * `const EntryInputKindEnum._('expense')` as a parameter default, which is a
+ * generative enum constructor call and does not compile. A `$ref` gives it a
+ * real enum value to point at.
+ */
+export const EntryKindSchema = z.enum(["expense", "settlement"]).openapi("EntryKind");
+export const SplitKindSchema = z.enum(["equal", "exact", "shares", "percent"]).openapi("SplitKind");
 
-export const EventKindSchema = z.enum(["entry", "member_added", "member_joined", "member_left", "member_renamed", "group_renamed", "group_archived", "group_restored", "link_created", "link_revoked"]);
+export const EventKindSchema = z.enum(["entry", "member_added", "member_joined", "member_left", "member_renamed", "group_renamed", "group_archived", "group_restored", "link_created", "link_revoked"]).openapi("EventKind");
 
 /**
  * The sequence number a change was committed at.
@@ -370,21 +382,48 @@ export const LinkEventPayloadSchema = z
   .openapi("LinkEventPayload");
 
 /**
- * Every shape the record can hold, enumerated.
+ * Every shape the record can hold, enumerated — in TypeScript.
  *
  * There are four, they are closed, and which one an event carries is decided
- * entirely by its `kind` — so a free-form map was never the honest type for
+ * entirely by its `kind`, so a free-form map was never the honest *type* for
  * this. `append()` in `events.ts` takes a discriminated parameter, which is
- * where the pairing between a kind and its payload is actually enforced: you
- * cannot append a `member_renamed` carrying a group's payload.
+ * where the pairing is enforced: a `member_renamed` carrying a group's payload
+ * does not compile.
  *
- * The union is deliberately *not* pushed up to `Event` itself. A discriminated
- * `Event` would be the strongest possible typing and would force a sealed
- * class through the generated Dart client, which reads the payload as a map
- * and parses it per kind — so it would cost the client a rewrite to express
- * something the server already guarantees at the write.
+ * ## Why the contract says `object` and not `oneOf`
+ *
+ * It was `z.union([...])`, which emits `oneOf` — and `oneOf` is where the Dart
+ * generator gives up. It does not produce a sealed class or even a `dynamic`.
+ * It flattens all four branches into **one class carrying every field from
+ * every branch, all required**, so `EventPayload.fromJson` asserts that a
+ * "Priya joined" payload has an `amountMinor`, an `entryDate` and an
+ * `expiresAt`, and throws when it does not. That is not a weaker client, it is
+ * a client that cannot read the feed at all.
+ *
+ * So `z.custom` keeps the precise TypeScript type and tells the document what
+ * this genuinely is: an object whose shape depends on a sibling field, which
+ * OpenAPI 3.0.3 cannot express in a form this generator handles. The four
+ * shapes are still registered as named schemas above, so the contract
+ * documents them even though `payload` does not point at them.
+ *
+ * Nothing is lost at runtime. `Event` is a response type and responses are not
+ * validated — the payload is written by this server from what it committed and
+ * never arrives from a client. And the Dart side already reads it as
+ * `Map<String, Object?>` and parses per kind, which is what this produces.
  */
-export const EventPayloadSchema = z.union([EntrySnapshotSchema, MemberEventPayloadSchema, GroupEventPayloadSchema, LinkEventPayloadSchema]);
+export const EventPayloadSchema = z.custom<EntrySnapshot | MemberEventPayload | GroupEventPayload | LinkEventPayload>().openapi({
+  type: "object",
+
+  /**
+   * `{nullable: true}` rather than `true`, and it is load-bearing. Plain
+   * `additionalProperties: true` generates `Map<String, Object>` in Dart, and
+   * `.cast<String, Object>()` is lazy — it throws on the first read of a key
+   * whose value is null. Every payload here has one: `previousName`,
+   * `categoryId`, `deletedAt`. The feed would break on the first rename.
+   */
+  additionalProperties: { nullable: true },
+  description: "The after-image, in whatever shape `kind` calls for: EntrySnapshot, MemberEventPayload, GroupEventPayload or LinkEventPayload.",
+});
 
 /**
  * Reading a payload back, at the one place the type system cannot help.

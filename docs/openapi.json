@@ -133,13 +133,7 @@
                 "type": "string"
               },
               "retry": {
-                "type": "string",
-                "enum": [
-                  "stale",
-                  "permanent",
-                  "transient"
-                ],
-                "description": "stale: re-read, re-compose and send again. permanent: this will be refused identically forever; do not retry. transient: back off and try the same request again."
+                "$ref": "#/components/schemas/Retry"
               }
             },
             "required": [
@@ -152,6 +146,15 @@
         "required": [
           "error"
         ]
+      },
+      "Retry": {
+        "type": "string",
+        "enum": [
+          "stale",
+          "permanent",
+          "transient"
+        ],
+        "description": "stale: re-read, re-compose and send again. permanent: this will be refused identically forever; do not retry. transient: back off and try the same request again."
       },
       "GoogleIdentityRequest": {
         "type": "object",
@@ -443,11 +446,7 @@
             "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
           },
           "kind": {
-            "type": "string",
-            "enum": [
-              "expense",
-              "settlement"
-            ]
+            "$ref": "#/components/schemas/EntryKind"
           },
           "description": {
             "type": "string"
@@ -475,13 +474,7 @@
             "example": "2026-09-23"
           },
           "splitKind": {
-            "type": "string",
-            "enum": [
-              "equal",
-              "exact",
-              "shares",
-              "percent"
-            ]
+            "$ref": "#/components/schemas/SplitKind"
           },
           "fxRate": {
             "type": "number",
@@ -573,6 +566,22 @@
           "seq"
         ]
       },
+      "EntryKind": {
+        "type": "string",
+        "enum": [
+          "expense",
+          "settlement"
+        ]
+      },
+      "SplitKind": {
+        "type": "string",
+        "enum": [
+          "equal",
+          "exact",
+          "shares",
+          "percent"
+        ]
+      },
       "Payer": {
         "type": "object",
         "properties": {
@@ -639,19 +648,7 @@
             "example": "2026-09-23T11:20:41.865Z"
           },
           "kind": {
-            "type": "string",
-            "enum": [
-              "entry",
-              "member_added",
-              "member_joined",
-              "member_left",
-              "member_renamed",
-              "group_renamed",
-              "group_archived",
-              "group_restored",
-              "link_created",
-              "link_revoked"
-            ]
+            "$ref": "#/components/schemas/EventKind"
           },
           "subjectId": {
             "type": "string",
@@ -661,20 +658,11 @@
             "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
           },
           "payload": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/EntrySnapshot"
-              },
-              {
-                "$ref": "#/components/schemas/MemberEventPayload"
-              },
-              {
-                "$ref": "#/components/schemas/GroupEventPayload"
-              },
-              {
-                "$ref": "#/components/schemas/LinkEventPayload"
-              }
-            ]
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "description": "The after-image, in whatever shape `kind` calls for: EntrySnapshot, MemberEventPayload, GroupEventPayload or LinkEventPayload."
           },
           "seq": {
             "type": "integer",
@@ -688,152 +676,22 @@
           "createdAt",
           "kind",
           "subjectId",
-          "payload",
           "seq"
         ]
       },
-      "EntrySnapshot": {
-        "type": "object",
-        "properties": {
-          "kind": {
-            "type": "string",
-            "enum": [
-              "expense",
-              "settlement"
-            ]
-          },
-          "description": {
-            "type": "string"
-          },
-          "currency": {
-            "type": "string",
-            "pattern": "^[A-Z]{3}$",
-            "example": "INR"
-          },
-          "amountMinor": {
-            "type": "integer",
-            "minimum": 0,
-            "exclusiveMinimum": true
-          },
-          "entryDate": {
-            "type": "string",
-            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-            "example": "2026-09-23"
-          },
-          "splitKind": {
-            "type": "string",
-            "enum": [
-              "equal",
-              "exact",
-              "shares",
-              "percent"
-            ]
-          },
-          "categoryId": {
-            "type": "string",
-            "nullable": true,
-            "minLength": 1,
-            "maxLength": 64,
-            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
-          },
-          "notes": {
-            "type": "string",
-            "nullable": true
-          },
-          "deletedAt": {
-            "type": "string",
-            "nullable": true,
-            "format": "date-time",
-            "example": "2026-09-23T11:20:41.865Z"
-          },
-          "payers": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/MoneyRow"
-            }
-          },
-          "shares": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/MoneyRow"
-            }
-          }
-        },
-        "required": [
-          "kind",
-          "description",
-          "currency",
-          "amountMinor",
-          "entryDate",
-          "splitKind",
-          "categoryId",
-          "notes",
-          "deletedAt",
-          "payers",
-          "shares"
-        ]
-      },
-      "MoneyRow": {
-        "type": "object",
-        "properties": {
-          "memberId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 64,
-            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
-          },
-          "amountMinor": {
-            "type": "integer"
-          }
-        },
-        "required": [
-          "memberId",
-          "amountMinor"
-        ]
-      },
-      "MemberEventPayload": {
-        "type": "object",
-        "properties": {
-          "displayName": {
-            "type": "string"
-          },
-          "previousName": {
-            "type": "string",
-            "nullable": true
-          }
-        },
-        "required": [
-          "displayName",
-          "previousName"
-        ]
-      },
-      "GroupEventPayload": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "previousName": {
-            "type": "string",
-            "nullable": true
-          }
-        },
-        "required": [
-          "name",
-          "previousName"
-        ]
-      },
-      "LinkEventPayload": {
-        "type": "object",
-        "properties": {
-          "expiresAt": {
-            "type": "string",
-            "format": "date-time",
-            "example": "2026-09-23T11:20:41.865Z"
-          }
-        },
-        "required": [
-          "expiresAt"
+      "EventKind": {
+        "type": "string",
+        "enum": [
+          "entry",
+          "member_added",
+          "member_joined",
+          "member_left",
+          "member_renamed",
+          "group_renamed",
+          "group_archived",
+          "group_restored",
+          "link_created",
+          "link_revoked"
         ]
       },
       "GroupCreate": {
@@ -961,12 +819,7 @@
             "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
           },
           "kind": {
-            "type": "string",
-            "enum": [
-              "expense",
-              "settlement"
-            ],
-            "default": "expense"
+            "$ref": "#/components/schemas/EntryKind"
           },
           "description": {
             "type": "string",
@@ -997,14 +850,7 @@
             "example": "2026-09-23"
           },
           "splitKind": {
-            "type": "string",
-            "enum": [
-              "equal",
-              "exact",
-              "shares",
-              "percent"
-            ],
-            "default": "equal"
+            "$ref": "#/components/schemas/SplitKind"
           },
           "fxRate": {
             "type": "number",
@@ -1070,6 +916,7 @@
   "paths": {
     "/api/health": {
       "get": {
+        "operationId": "health",
         "tags": [
           "meta"
         ],
@@ -1090,6 +937,7 @@
     },
     "/api/identity/google": {
       "post": {
+        "operationId": "linkGoogle",
         "tags": [
           "identity"
         ],
@@ -1131,6 +979,7 @@
     },
     "/api/identity/email": {
       "post": {
+        "operationId": "startEmailSignIn",
         "tags": [
           "identity"
         ],
@@ -1161,6 +1010,7 @@
     },
     "/api/identity/email/verify": {
       "post": {
+        "operationId": "verifyEmailCode",
         "tags": [
           "identity"
         ],
@@ -1201,6 +1051,7 @@
     },
     "/api/bootstrap": {
       "get": {
+        "operationId": "bootstrap",
         "tags": [
           "sync"
         ],
@@ -1231,6 +1082,7 @@
     },
     "/api/groups/{groupId}/changes": {
       "get": {
+        "operationId": "getChanges",
         "tags": [
           "sync"
         ],
@@ -1353,6 +1205,7 @@
     },
     "/api/groups": {
       "post": {
+        "operationId": "createGroup",
         "tags": [
           "groups"
         ],
@@ -1454,6 +1307,7 @@
     },
     "/api/groups/{groupId}": {
       "patch": {
+        "operationId": "updateGroup",
         "tags": [
           "groups"
         ],
@@ -1568,6 +1422,7 @@
     },
     "/api/groups/{groupId}/members": {
       "post": {
+        "operationId": "addMember",
         "tags": [
           "groups"
         ],
@@ -1682,6 +1537,7 @@
     },
     "/api/groups/{groupId}/members/{memberId}": {
       "patch": {
+        "operationId": "updateMember",
         "tags": [
           "groups"
         ],
@@ -1807,6 +1663,7 @@
     },
     "/api/groups/{groupId}/entries": {
       "post": {
+        "operationId": "upsertEntry",
         "tags": [
           "entries"
         ],
@@ -1921,6 +1778,7 @@
     },
     "/api/groups/{groupId}/entries/{entryId}": {
       "delete": {
+        "operationId": "deleteEntry",
         "tags": [
           "entries"
         ],
@@ -2045,6 +1903,7 @@
     },
     "/api/groups/{groupId}/entries/{entryId}/restore": {
       "post": {
+        "operationId": "restoreEntry",
         "tags": [
           "entries"
         ],

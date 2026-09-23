@@ -28,7 +28,7 @@ import { z } from "@hono/zod-openapi";
  * `already_member` refuses forever. A device reading the number would spin on
  * its outbox, which is the exact failure `PT409` existed to avoid.
  */
-export const RetrySchema = z.enum(["stale", "permanent", "transient"]).openapi({
+export const RetrySchema = z.enum(["stale", "permanent", "transient"]).openapi("Retry", {
   description: "stale: re-read, re-compose and send again. permanent: this will be refused identically forever; do not retry. transient: back off and try the same request again.",
 });
 

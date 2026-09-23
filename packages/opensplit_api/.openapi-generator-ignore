@@ -1,0 +1,11 @@
+# Files the generator offers that this repo does not want.
+#
+# The package is a build artefact of docs/openapi.json, consumed only by this
+# app. It needs no CI of its own, no publishing script, and no generated tests
+# asserting that generated constructors construct.
+.travis.yml
+git_push.sh
+test/
+README.md
+analysis_options.yaml
+doc/

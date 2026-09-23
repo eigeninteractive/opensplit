@@ -1,0 +1,17 @@
+# Hand-written, and listed in .openapi-generator-ignore so regeneration does
+# not overwrite it.
+#
+# Every Dart file beside this one is generated from docs/openapi.json. Holding
+# generated code to a hand-written project's lint posture is a fight with a
+# template, so this package keeps its own: errors still fail, and the handful
+# of style warnings the generator's own client emits are turned off rather
+# than papered over with `// ignore` lines it would regenerate away.
+#
+# This is the reason the client is a path package rather than a folder under
+# lib/. The app's own analysis_options stays strict.
+
+analyzer:
+  errors:
+    # api_client.dart returns a Future from inside a try block in three places.
+    # It is the generator's template, it is correct, and it is not ours to fix.
+    unawaited_return_in_try_block: ignore

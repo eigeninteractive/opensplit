@@ -15,6 +15,7 @@ import { apiError, jsonResponse } from "./schemas/common";
  */
 const healthRoute = createRoute({
   method: "get",
+  operationId: "health",
   path: "/api/health",
   tags: ["meta"],
   summary: "Whether the Worker is answering",

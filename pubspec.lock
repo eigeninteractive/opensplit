@@ -917,6 +917,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "9.6.0"
+  opensplit_api:
+    dependency: "direct main"
+    description:
+      path: "packages/opensplit_api"
+      relative: true
+    source: path
+    version: "1.0.0"
   package_config:
     dependency: transitive
     description:

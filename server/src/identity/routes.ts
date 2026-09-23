@@ -44,6 +44,7 @@ import { type Account, type IdentityOutcome, outcomeFor, toAccount } from "./out
 
 const googleRoute = createRoute({
   method: "post",
+  operationId: "linkGoogle",
   path: "/google",
   tags: ["identity"],
   summary: "Attach Google to this session, or sign in with it",
@@ -62,6 +63,7 @@ const googleRoute = createRoute({
 
 const emailStartRoute = createRoute({
   method: "post",
+  operationId: "startEmailSignIn",
   path: "/email",
   tags: ["identity"],
   summary: "Send a sign-in code, and say which flow it started",
@@ -78,6 +80,7 @@ const emailStartRoute = createRoute({
 
 const emailVerifyRoute = createRoute({
   method: "post",
+  operationId: "verifyEmailCode",
   path: "/email/verify",
   tags: ["identity"],
   summary: "Complete the flow that POST /identity/email started",

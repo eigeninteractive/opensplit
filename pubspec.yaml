@@ -58,6 +58,12 @@ dependencies:
   # avoids missing glyphs in platform-adaptive framework surfaces.
   cupertino_icons: ^1.0.8
   package_info_plus: ^10.2.1
+  # The API client, generated from docs/openapi.json by
+  # `dart run tool/generate_api_client.dart`. A path dependency rather than a
+  # folder under lib/, so generated code keeps its own lint posture instead of
+  # forcing the app to relax its own to accommodate it.
+  opensplit_api:
+    path: packages/opensplit_api
 dev_dependencies:
   args: ^2.7.0
   flutter_test:

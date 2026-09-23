@@ -94,3 +94,9 @@ env/*.json
 # preview HTML its authoring tool wrote. Kept out of the repo rather than
 # deleted, so re-running the generators against the originals stays possible.
 /brand/
+
+# The generated API client is committed; what resolving it produces is not.
+# `pubspec.lock` belongs to applications, not to libraries, and this package is
+# only ever consumed by the app above it.
+packages/*/.dart_tool/
+packages/*/pubspec.lock
