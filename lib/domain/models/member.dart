@@ -18,8 +18,11 @@ part 'member.freezed.dart';
 /// owner had were either destructive enough that nobody should hold them over
 /// somebody else — rewriting another member's payment handle, cutting them out
 /// of a group they are owed money in — or harmless enough that everybody
-/// should, like renaming the group. See `guard_member_update` in
-/// 0010_security.sql, which is where the rules that replaced it live.
+/// should, like renaming the group. See `updateMember` in the group's Durable
+/// Object, which is where the rules that replaced it live — as ordinary
+/// comparisons with the before-and-after values in hand, rather than as the
+/// trigger a row-level-security policy needed because it cannot say "this
+/// column, but only on your own row".
 @freezed
 abstract class Member with _$Member {
   const factory Member({

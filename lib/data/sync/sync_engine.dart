@@ -223,10 +223,10 @@ class SyncEngine {
   /// Everything a pull needs that is not about one group.
   ///
   /// Exchange rates and profiles are app-wide: rates are reference data, and
-  /// `profiles_read` already scopes profiles to you plus your co-members, so
-  /// one request answers for every group at once. Pulling them per group meant
-  /// a person in three of your groups was fetched three times and the rate
-  /// table was swept three times, to no effect after the first.
+  /// the profile feed already scopes itself to you plus your co-members, so one
+  /// request answers for every group at once. Pulling them per group meant a
+  /// person in three of your groups was fetched three times and the rate table
+  /// was swept three times, to no effect after the first.
   Future<void> pullShared() async {
     await pullReferenceData();
     await pullFxRates();

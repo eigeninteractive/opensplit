@@ -13,6 +13,7 @@ import 'package:opensplit/data/push/cloudflare_device_token_repository.dart';
 import 'package:opensplit/data/repositories/drift_activity_repository.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';
+import 'package:opensplit/data/repositories/drift_profile_repository.dart';
 import 'package:opensplit/data/sync/api_client.dart';
 import 'package:opensplit/data/sync/cloudflare_invite_api.dart';
 import 'package:opensplit/data/sync/cloudflare_ledger_api.dart';
@@ -869,6 +870,62 @@ void main() {
       expect(page.hasMore, isFalse);
       expect(collected.length, 2, reason: 'Ravi and whoever claimed the place');
     });
+
+    test(
+      'the sync engine pushes a profile and pulls a co-member back',
+      () async {
+        if (!available) return;
+
+        // The whole engine path, not the adapter: a local write goes through the
+        // outbox, and a co-member's profile arrives through the cursored feed
+        // and lands in the device's own table. Nothing above this proves the
+        // cursor survives a real response, or that `applyProfiles` writes what
+        // the feed actually sends.
+        final g = await seededGroup(ravi);
+        final invite = await ravi.invites.create(
+          groupId: g.groupId,
+          memberId: g.priya,
+        );
+        final priya = await _Device.guest();
+        await priya.invites.redeem(invite.token);
+
+        final device = AppDatabase(NativeDatabase.memory());
+        addTearDown(device.close);
+        await seedReferenceData(device);
+
+        final queue = OutboxQueue(device);
+        addTearDown(queue.dispose);
+        final engine = SyncEngine(db: device, api: ravi.ledger, outbox: queue);
+        addTearDown(engine.dispose);
+
+        final profiles = DriftProfileRepository(device, outbox: queue);
+        await profiles.upsert(
+          Profile(
+            id: ravi.profileId,
+            displayName: 'Ravi',
+            upiVpa: 'ravi@okhdfcbank',
+          ),
+        );
+
+        final report = await engine.syncEverything();
+        expect(report.isClean, isTrue, reason: '${report.error}');
+
+        // Mine, pushed and read back with the server's timestamp on it — which
+        // is the value the feed cursors on, so a null here would mean the next
+        // sweep started from the beginning forever.
+        final mine = await profiles.byId(ravi.profileId);
+        expect(mine?.upiVpa, 'ravi@okhdfcbank');
+        expect(mine?.updatedAt, isNotNull);
+
+        // And theirs, which this device never wrote. It arrived because they
+        // share a group, which is the whole of the visibility rule.
+        final theirs = await profiles.byId(priya.profileId);
+        expect(theirs?.displayName, 'Priya');
+
+        // A second sweep finds nothing, because the cursor was kept.
+        expect((await engine.syncEverything()).pulled, 0);
+      },
+    );
 
     test('a device token registers, transfers and is forgotten', () async {
       if (!available) return;

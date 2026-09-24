@@ -102,11 +102,11 @@ class MembersScreen extends ConsumerWidget {
                         // them only for somebody who has no account to hold
                         // them yet, which is exactly a placeholder.
                         //
-                        // Removing and promoting still mirror
-                        // guard_member_update on the server: your own row, any
-                        // placeholder, or anything at all if you are an owner.
-                        // Offering more than that would produce a menu whose
-                        // items fail.
+                        // Removing and renaming still mirror the group's
+                        // Durable Object: your own row and any placeholder,
+                        // and removing somebody else only once they are
+                        // settled in every currency. Offering more than that
+                        // would produce a menu whose items fail.
                         itemBuilder: (context) {
                           final mine = member.id == ledger.me?.id;
 

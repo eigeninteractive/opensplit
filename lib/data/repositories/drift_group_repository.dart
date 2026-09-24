@@ -278,7 +278,8 @@ final class DriftGroupRepository {
   /// The server refuses this for anybody but yourself unless they are settled
   /// up — removing somebody also cuts off their read access, and the person
   /// most worth cutting off is the one still owed money. Callers should not
-  /// offer it for an unsettled member; see `guard_member_update`.
+  /// offer it for an unsettled member; see `updateMember` in the group's
+  /// Durable Object, which is where that rule lives.
   Future<void> removeMember(String memberId) async {
     // Marked as left, never deleted. Their name still has to render on every
     // expense they were part of, and their balance still has to be settleable.
