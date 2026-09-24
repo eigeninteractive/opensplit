@@ -211,6 +211,18 @@ abstract interface class RemoteLedgerApi {
     required int limit,
   });
 
+  /// Exactly these profiles, cursor or no cursor.
+  ///
+  /// The one thing [pullProfiles] structurally cannot do. A cursor orders
+  /// changes within what you can already see; it cannot surface a row that only
+  /// just became visible to you. When somebody claims a placeholder, their
+  /// account may have been named years ago — the row is old, the cursor is past
+  /// it, and no incremental pull will ever mention it again.
+  ///
+  /// The member change is the signal that visibility moved, so the sync asks
+  /// for those profiles by name.
+  Future<List<Profile>> pullProfilesByIds(List<String> ids);
+
   /// Writes your own name and payment handle. The server refuses any other row.
   Future<Profile> pushProfile(Profile profile);
 

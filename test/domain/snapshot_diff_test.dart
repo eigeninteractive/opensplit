@@ -1,4 +1,5 @@
 import 'package:opensplit/domain/activity/snapshot_diff.dart';
+import 'package:opensplit/domain/models/entry.dart';
 import 'package:opensplit/domain/models/entry_event.dart';
 import 'package:opensplit/domain/models/entry_snapshot.dart';
 import 'package:opensplit/domain/split/splitter.dart';
@@ -25,12 +26,14 @@ void main() {
     Map<String, int> shares = const {'m1': 40000},
     Map<String, int> payers = const {'m1': 40000},
     String? actorId = 'm1',
+    EntryKind kind = EntryKind.expense,
   }) => EntrySnapshot(
     id: 'snap-${seq++}',
     entryId: 'e1',
     groupId: 'g1',
     actorId: actorId,
     createdAt: at,
+    kind: kind,
     description: description,
     currency: currency,
     amountMinor: amountMinor,

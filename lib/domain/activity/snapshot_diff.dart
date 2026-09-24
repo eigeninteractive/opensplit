@@ -66,6 +66,11 @@ List<FieldChange> diffSnapshots(EntrySnapshot before, EntrySnapshot after) {
     ),
     ..._changed('category_id', before.categoryId, after.categoryId),
     ..._changed('split_kind', before.splitKind.name, after.splitKind.name),
+    // A bill becoming a repayment changes what the money means, not just how
+    // it reads. Left out, the server still records the change -- it dedupes on
+    // the payload, which differs -- and the feed renders an edit listing
+    // nothing, which is the "somebody edited nothing" line in a worse disguise.
+    ..._changed('kind', before.kind.name, after.kind.name),
     ..._changed('notes', before.notes, after.notes),
     ..._diffMembers('share', before.shares, after.shares),
     ..._diffMembers('paid', before.payers, after.payers),

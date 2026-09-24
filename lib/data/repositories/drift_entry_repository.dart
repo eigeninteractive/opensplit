@@ -313,13 +313,20 @@ final class DriftEntryRepository {
     // Recomposed rather than patched, so an edit goes through exactly the same
     // validation as a creation. Creation metadata and the client key are
     // preserved: this is the same fact, revised.
+    //
+    // `seq` is preserved for a different reason, and it is the one that makes
+    // conflict detection possible at all. Only the server issues one, so it
+    // says what the server last confirmed -- which is exactly the version this
+    // edit was composed against. Recomposing to null would tell the server this
+    // row is brand new, and an edit built on a stale amount would be accepted
+    // as though nobody had touched it.
     final recomposed = composeEntry(
       draft,
       id: entryId,
       createdBy: existing.createdBy,
       now: at,
       clientKey: existing.clientKey,
-    ).copyWith(createdAt: existing.createdAt);
+    ).copyWith(createdAt: existing.createdAt, seq: existing.seq);
 
     await _writeWithSnapshot(after: recomposed, actorId: actorId, at: at);
     return recomposed;

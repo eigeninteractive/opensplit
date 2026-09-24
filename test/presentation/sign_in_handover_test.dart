@@ -42,6 +42,10 @@ void main() {
           sharedPreferencesProvider.overrideWithValue(preferences),
           authServiceProvider.overrideWithValue(auth),
           appDatabaseProvider.overrideWithValue(db),
+          // No network here either -- see the note in signedInApp. A signed-in app
+          // left with the default base URL reaches for localhost, fails, and leaves
+          // a retry timer pending past the end of the test.
+          remoteLedgerApiProvider.overrideWithValue(null),
         ],
         child: const OpenSplitApp(),
       ),
@@ -91,6 +95,10 @@ void main() {
         sharedPreferencesProvider.overrideWithValue(preferences),
         authServiceProvider.overrideWithValue(auth),
         appDatabaseProvider.overrideWithValue(db),
+        // No network here either -- see the note in signedInApp. A signed-in app
+        // left with the default base URL reaches for localhost, fails, and leaves
+        // a retry timer pending past the end of the test.
+        remoteLedgerApiProvider.overrideWithValue(null),
       ],
     );
     addTearDown(container.dispose);

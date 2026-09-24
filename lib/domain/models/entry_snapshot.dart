@@ -45,6 +45,13 @@ abstract class EntrySnapshot with _$EntrySnapshot {
     /// would be the worse answer.
     required String? actorId,
     required DateTime createdAt,
+
+    /// Whether this was a bill or somebody paying somebody back.
+    ///
+    /// Carried because the server records it, and a snapshot that dropped it
+    /// could not tell a settlement turning into an expense from no change at
+    /// all -- which is a change of what the money means, recorded as silence.
+    required EntryKind kind,
     required String description,
     required String currency,
     required int amountMinor,
@@ -80,6 +87,7 @@ EntrySnapshot snapshotOf(
   groupId: entry.groupId,
   actorId: actorId,
   createdAt: at,
+  kind: entry.kind,
   description: entry.description,
   currency: entry.currency,
   amountMinor: entry.amountMinor,
@@ -103,8 +111,12 @@ EntrySnapshot snapshotOf(
 ///
 /// The inverse of [snapshotPayload], and the two are deliberately adjacent: a
 /// field added to one and forgotten in the other is the bug this pairing exists
-/// to make obvious. The keys are the server's, spelled exactly as
-/// `snapshot_entry` builds them.
+/// to make obvious. The keys are the server's, spelled exactly as `snapshotOf`
+/// in `server/src/do/group/events.ts` builds them.
+///
+/// Unknown values are tolerated where the app can carry on — a kind or a split
+/// rule this release has never heard of still describes a real amount somebody
+/// spent, and refusing to render it would blank a feed rather than a word.
 EntrySnapshot snapshotFromPayload({
   required String id,
   required String entryId,
@@ -119,54 +131,63 @@ EntrySnapshot snapshotFromPayload({
   groupId: groupId,
   actorId: actorId,
   createdAt: createdAt,
+  kind: _enumOr(EntryKind.values, payload['kind'], EntryKind.expense),
   description: payload['description'] as String? ?? '',
   currency: payload['currency'] as String? ?? '',
-  amountMinor: (payload['amount_minor'] as num?)?.toInt() ?? 0,
-  entryDate: DateTime.parse(payload['entry_date'] as String),
-  splitKind: SplitKind.values.byName(payload['split_kind'] as String),
-  categoryId: payload['category_id'] as String?,
+  amountMinor: (payload['amountMinor'] as num?)?.toInt() ?? 0,
+  entryDate: DateTime.parse(payload['entryDate'] as String),
+  splitKind: _enumOr(SplitKind.values, payload['splitKind'], SplitKind.equal),
+  categoryId: payload['categoryId'] as String?,
   notes: payload['notes'] as String?,
-  deletedAt: payload['deleted_at'] == null
+  deletedAt: payload['deletedAt'] == null
       ? null
-      : DateTime.parse(payload['deleted_at'] as String),
+      : DateTime.parse(payload['deletedAt'] as String),
   payers: _amounts(payload['payers']),
   shares: _amounts(payload['shares']),
   isProvisional: isProvisional,
 );
 
+/// The named value, or [fallback] for one this release does not know.
+T _enumOr<T extends Enum>(List<T> values, Object? name, T fallback) {
+  for (final value in values) {
+    if (value.name == name) return value;
+  }
+  return fallback;
+}
+
 /// The payload this device would write for [snapshot].
 ///
 /// Used for the provisional row only. The authoritative one is built by
-/// `snapshot_entry` in the same transaction as the change, and this has to
-/// produce the identical shape — a provisional row and the server's account of
-/// the same change are compared by nothing, but they are rendered by the same
-/// code, and a key spelled differently here would surface as a feed line that
-/// changed its mind when the sync landed.
+/// `snapshotOf` in the same transaction as the change, and this has to produce
+/// the identical shape — a provisional row and the server's account of the same
+/// change are compared by nothing, but they are rendered by the same code, and
+/// a key spelled differently here would surface as a feed line that changed its
+/// mind when the sync landed.
 ///
-/// `deleted_at` is written in UTC with a trailing Z, matching what
-/// `snapshot_entry` renders. A local-time string would be the same instant said
-/// differently, which is exactly the ambiguity the server side canonicalises
-/// away.
+/// `deletedAt` is written in UTC with a trailing Z, matching what the server
+/// renders. A local-time string would be the same instant said differently,
+/// which is exactly the ambiguity the server canonicalises away.
 ///
-/// `entry_date` is deliberately NOT converted: it is a calendar date rather
-/// than an instant, and pushing it through UTC would move it to the previous
-/// day for anybody east of Greenwich.
+/// `entryDate` is deliberately NOT converted: it is a calendar date rather than
+/// an instant, and pushing it through UTC would move it to the previous day for
+/// anybody east of Greenwich.
 Map<String, Object?> snapshotPayload(EntrySnapshot snapshot) => {
+  'kind': snapshot.kind.name,
   'description': snapshot.description,
   'currency': snapshot.currency,
-  'amount_minor': snapshot.amountMinor,
-  'entry_date': _calendarDate(snapshot.entryDate),
-  'split_kind': snapshot.splitKind.name,
-  'category_id': snapshot.categoryId,
+  'amountMinor': snapshot.amountMinor,
+  'entryDate': _calendarDate(snapshot.entryDate),
+  'splitKind': snapshot.splitKind.name,
+  'categoryId': snapshot.categoryId,
   'notes': snapshot.notes,
-  'deleted_at': snapshot.deletedAt?.toUtc().toIso8601String(),
+  'deletedAt': snapshot.deletedAt?.toUtc().toIso8601String(),
   'payers': [
     for (final row in snapshot.payers)
-      {'member_id': row.memberId, 'amount_minor': row.amountMinor},
+      {'memberId': row.memberId, 'amountMinor': row.amountMinor},
   ],
   'shares': [
     for (final row in snapshot.shares)
-      {'member_id': row.memberId, 'amount_minor': row.amountMinor},
+      {'memberId': row.memberId, 'amountMinor': row.amountMinor},
   ],
 };
 
@@ -176,7 +197,7 @@ String _calendarDate(DateTime date) =>
     '${date.month.toString().padLeft(2, '0')}-'
     '${date.day.toString().padLeft(2, '0')}';
 
-/// `[{"member_id": "...", "amount_minor": 40000}, ...]`.
+/// `[{"memberId": "...", "amountMinor": 40000}, ...]`.
 ///
 /// Sorted on the way in as well as out. The server orders by member id when it
 /// builds the array so two snapshots of an unchanged split compare equal there;
@@ -188,8 +209,8 @@ List<MemberAmount> _amounts(Object? raw) {
     for (final row in raw)
       if (row is Map)
         MemberAmount(
-          memberId: row['member_id'] as String,
-          amountMinor: (row['amount_minor'] as num).toInt(),
+          memberId: row['memberId'] as String,
+          amountMinor: (row['amountMinor'] as num).toInt(),
         ),
   ]..sort((a, b) => a.memberId.compareTo(b.memberId));
 }

@@ -27,9 +27,20 @@ void main() {
   test('email verification updates the ledger identity before syncing', () async {
     final auth = _ChangingAuth();
     final syncedAccounts = <String?>[];
+    final databases = <AppDatabase>[];
     final container = ProviderContainer(
       overrides: [
         authServiceProvider.overrideWithValue(auth),
+        // In memory, like every other test here. Left real, this opens the
+        // per-account file the app would -- which needs path_provider, and a
+        // plugin channel that answers nothing outside a device.
+        appDatabaseProvider.overrideWith((ref) {
+          ref.watch(currentAccountIdProvider);
+          final db = AppDatabase(NativeDatabase.memory());
+          databases.add(db);
+          return db;
+        }),
+        remoteLedgerApiProvider.overrideWithValue(null),
         syncControllerProvider.overrideWith(
           () => _RecordingSync(syncedAccounts),
         ),
@@ -38,6 +49,9 @@ void main() {
     addTearDown(() async {
       container.dispose();
       await auth.events.close();
+      for (final db in databases) {
+        await db.close();
+      }
     });
     container.listen(accountProvider, (_, _) {});
     await container.read(accountProvider.future);
@@ -73,6 +87,11 @@ void main() {
         sharedPreferencesProvider.overrideWithValue(preferences),
         authServiceProvider.overrideWithValue(auth),
         networkSignalProvider.overrideWithValue(const _NoNetworkEvents()),
+        // This test is about which account a scheduler belongs to, and the
+        // sync itself is already a recording stub below. Left real, the api
+        // points at its development default and the reference-data fetch keeps
+        // the tree busy for as long as pumpAndSettle is willing to wait.
+        remoteLedgerApiProvider.overrideWithValue(null),
         appDatabaseProvider.overrideWith((ref) {
           ref.watch(currentAccountIdProvider);
           final db = AppDatabase(NativeDatabase.memory());
@@ -133,8 +152,8 @@ void main() {
   test('sign-in and refresh discover groups on an empty device', () async {
     final auth = _ChangingAuth()..emitOnVerify = true;
     final server = FakeRemoteLedger()
-      ..actingProfileId = _account.id
-      ..signedInProfileId = _account.id;
+      ..profileId = _account.id
+      ..profileId = _account.id;
     final reports = <SyncReport>[];
     final db = AppDatabase(NativeDatabase.memory());
     await seedReferenceData(db);
@@ -282,17 +301,18 @@ Future<void> _publishGroup(
   String name,
 ) async {
   final now = DateTime.utc(2026, 8, 28);
-  await server.pushGroup(
+  // One call, because the group and its first member are one change: gating
+  // member writes on membership is unsatisfiable for the person creating the
+  // group, so the server takes both together or neither.
+  await server.seedGroup(
     Group(
       id: id,
       name: name,
       defaultCurrency: 'INR',
-      createdBy: _account.id,
+      createdBy: '$id-owner',
       createdAt: now,
     ),
-  );
-  await server.pushMember(
-    Member(
+    creator: Member(
       id: '$id-owner',
       groupId: id,
       profileId: _account.id,

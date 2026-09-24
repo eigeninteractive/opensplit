@@ -323,6 +323,14 @@ class FakeRemoteLedger implements RemoteLedgerApi {
     return written;
   }
 
+  /// The server's own view of one member, read without syncing.
+  ///
+  /// The only way to ask what actually landed. A test that checks this by
+  /// pulling it back onto a device is really testing the device's merge rules,
+  /// which is a different question and the one it was trying to control for.
+  Member memberOn(String groupId, String memberId) =>
+      _group(groupId).members[memberId]!;
+
   /// An expense written by somebody else, as it would arrive from the server.
   Entry seedEntry(Entry entry) {
     final group = _group(entry.groupId);
@@ -337,9 +345,22 @@ class FakeRemoteLedger implements RemoteLedgerApi {
 
   int seqOf(String groupId) => _group(groupId)._seq;
 
-  void seedProfile(Profile profile) => profiles[profile.id] = profile;
+  /// Writes a profile as the account itself would, stamping it now.
+  ///
+  /// The stamp is the feed's cursor, so seeding two profiles in a row makes
+  /// the second strictly newer -- which is what lets a test put a row behind
+  /// the cursor on purpose.
+  void seedProfile(Profile profile) =>
+      profiles[profile.id] = profile.copyWith(updatedAt: _tick());
 
-  void publishFxRate(RemoteFxRate rate) => _rates.add(rate);
+  void publishFxRate({
+    required String asOf,
+    required String currency,
+    required double rate,
+    String source = 'test',
+  }) => _rates.add(
+    RemoteFxRate(asOf: asOf, currency: currency, rate: rate, source: source),
+  );
 
   /// When set, every rate pull is refused. A missing rate costs an estimate,
   /// never a balance, so a sync carrying money must survive one.
@@ -352,12 +373,56 @@ class FakeRemoteLedger implements RemoteLedgerApi {
   final Map<String, Profile> profiles = {};
   final List<RemoteFxRate> _rates = [];
 
+  /// What the last profile pull asked for, which is how a test sees the cursor.
+  DateTime? lastProfilesSince;
+
+  /// The one feed still paged on `(updatedAt, id)`, and faithfully so.
+  ///
+  /// Profiles live in D1, which several requests write at once, so there is
+  /// nothing there that can hand out a sequence number. The tie-break is
+  /// therefore real and is modelled: rows sharing an instant are ordered by id
+  /// and resumed by the pair, because a cursor on the timestamp alone skips
+  /// the rest of such a batch forever or re-reads it forever.
   @override
   Future<ProfilePage> pullProfiles({
     DateTime? since,
     String? sinceId,
     required int limit,
-  }) async => const ProfilePage.empty();
+  }) async {
+    lastProfilesSince = since;
+
+    final ordered = profiles.values.toList()
+      ..sort((x, y) {
+        final byTime = (x.updatedAt ?? _epoch).compareTo(y.updatedAt ?? _epoch);
+        return byTime != 0 ? byTime : x.id.compareTo(y.id);
+      });
+
+    final after = [
+      for (final profile in ordered)
+        if (since == null ||
+            (profile.updatedAt ?? _epoch).isAfter(since) ||
+            ((profile.updatedAt ?? _epoch) == since &&
+                (sinceId == null || profile.id.compareTo(sinceId) > 0)))
+          profile,
+    ];
+
+    final page = after.take(limit).toList();
+    if (page.isEmpty) return const ProfilePage.empty();
+
+    return ProfilePage(
+      rows: page,
+      cursor: page.last.updatedAt,
+      cursorId: page.last.id,
+      hasMore: after.length > limit,
+    );
+  }
+
+  static final _epoch = DateTime.utc(1970);
+
+  @override
+  Future<List<Profile>> pullProfilesByIds(List<String> ids) async => [
+    for (final id in ids) ?profiles[id],
+  ];
 
   @override
   Future<Profile> pushProfile(Profile profile) async {
@@ -366,8 +431,11 @@ class FakeRemoteLedger implements RemoteLedgerApi {
     return written;
   }
 
-  @override
-  Future<List<Currency>> pullCurrencies() async => [
+  /// What the server holds, mutable so a test can add, withdraw or rename one.
+  ///
+  /// The device ships a seed list, so proving that this feed does anything at
+  /// all means making the server disagree with it.
+  late final List<Currency> serverCurrencies = [
     for (final row in defaultCurrencies)
       Currency(
         code: row.code,
@@ -376,6 +444,9 @@ class FakeRemoteLedger implements RemoteLedgerApi {
         name: row.name,
       ),
   ];
+
+  @override
+  Future<List<Currency>> pullCurrencies() async => List.of(serverCurrencies);
 
   @override
   Future<List<Category>> pullCategories() async => [

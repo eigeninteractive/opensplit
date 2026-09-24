@@ -121,7 +121,7 @@ void main() {
       return db;
     }
 
-    final server = FakeRemoteLedger()..signedInProfileId = 'owner';
+    final server = FakeRemoteLedger()..profileId = 'owner';
     server.seedProfile(const Profile(id: 'owner', displayName: 'Owner'));
     SyncEngine sync(AppDatabase db) {
       final queue = OutboxQueue(db);

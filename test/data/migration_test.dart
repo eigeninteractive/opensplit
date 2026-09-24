@@ -19,25 +19,35 @@ import '../harness.dart';
 /// schemaVersion bump nobody wrote down, is guesswork; that is the mistake this
 /// file exists to have already avoided.
 ///
-/// When [AppDatabase.schemaVersion] goes to 2:
+/// After every [AppDatabase.schemaVersion] bump:
 ///
 ///   dart run drift_dev schema dump lib/data/local/database.dart drift_schemas/
 ///   dart run drift_dev schema generate drift_schemas/ test/data/generated_migrations/
 ///
-/// then add a `1 -> 2` case here.
+/// The tests below take the newest version from the helper rather than naming
+/// one, so a dump is all they need. The policy is still a destructive rebuild
+/// rather than a stepwise migration — see [AppDatabase] — so what they check is
+/// that a rebuilt device lands exactly where a new install does.
 void main() {
   late SchemaVerifier verifier;
+
+  /// The newest committed snapshot, taken from the helper rather than written
+  /// down. Hard-coding it meant these tests kept checking an older schema
+  /// after a bump and went on passing while doing it -- which is the one
+  /// failure mode a migration suite cannot afford. The test at the bottom
+  /// holds this to [AppDatabase.schemaVersion].
+  final current = GeneratedHelper.versions.last;
 
   setUpAll(() {
     verifier = SchemaVerifier(GeneratedHelper());
   });
 
   test('the committed snapshot still opens', () async {
-    final connection = await verifier.startAt(2);
+    final connection = await verifier.startAt(current);
     final db = AppDatabase(connection);
     addTearDown(db.close);
 
-    await verifier.migrateAndValidate(db, 2);
+    await verifier.migrateAndValidate(db, current);
   });
 
   test('a v1 install comes back empty rather than broken', () async {
@@ -198,8 +208,8 @@ void main() {
 
     // Every table a new install has, the rebuilt one has, with the same
     // columns. The reverse does not hold: a rebuilt device also carries
-    // whatever the schema has since stopped declaring, which for a v1 database
-    // is entry_snapshots. See the note in the test above.
+    // whatever the schema has since stopped declaring. See the note in the
+    // test above -- the rule is about names, not tidiness.
     for (final table in freshTables.keys) {
       expect(
         rebuiltTables[table],
@@ -209,7 +219,13 @@ void main() {
     }
     expect(rebuiltTables.keys.toSet().difference(freshTables.keys.toSet()), {
       'entry_snapshots',
-    }, reason: 'exactly one known orphan, and no others sneaking in');
+      // Gone in v3, when four per-group keyset cursors became one integer
+      // per group. Left behind rather than dropped, like every other name
+      // the schema has stopped declaring -- and harmless in a way worth
+      // stating: nothing reads it, and a cursor nobody reads cannot make a
+      // device skip a page.
+      'sync_cursors',
+    }, reason: 'exactly the known orphans, and no others sneaking in');
 
     // Deliberately no assertion about currencies. Neither database has any:
     // they are the server's now, and a rebuilt device gets them from its next
@@ -234,7 +250,7 @@ void main() {
     // so comparing `sqlite_master` compares two spellings of the same schema
     // and reports a difference on every table, forever. Names are the part
     // that actually owes a migration when it changes.
-    final snapshot = AppDatabase(await verifier.startAt(2));
+    final snapshot = AppDatabase(await verifier.startAt(current));
     addTearDown(snapshot.close);
     final code = AppDatabase(NativeDatabase.memory());
     await seedReferenceData(code);

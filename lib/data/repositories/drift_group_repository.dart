@@ -84,8 +84,9 @@ final class DriftGroupRepository {
   /// would render as an empty screen with no way to add an expense.
   ///
   /// That first member is not privileged in any way. `groups.created_by`
-  /// records who made it, and is read only as the bootstrap escape hatch for
-  /// the instant before this member row lands on the server.
+  /// records who made it, and names the member rather than the account — so it
+  /// still resolves after that person deletes their account, and it is what
+  /// tells the push which of a new group's members travels with the group.
   Future<({Group group, Member creator})> createGroup({
     required String name,
     required String defaultCurrency,
@@ -99,20 +100,20 @@ final class DriftGroupRepository {
     }
 
     final now = _clock();
-    final group = Group(
-      id: _uuid.v4(),
-      name: trimmed,
-      defaultCurrency: defaultCurrency,
-      isDirect: isDirect,
-      createdBy: creatorProfileId,
-      createdAt: now,
-    );
     final creator = Member(
       id: _uuid.v4(),
-      groupId: group.id,
+      groupId: _uuid.v4(),
       profileId: creatorProfileId,
       displayName: creatorDisplayName.trim(),
       joinedAt: now,
+    );
+    final group = Group(
+      id: creator.groupId,
+      name: trimmed,
+      defaultCurrency: defaultCurrency,
+      isDirect: isDirect,
+      createdBy: creator.id,
+      createdAt: now,
     );
 
     await _db.transaction(() async {
@@ -125,11 +126,7 @@ final class DriftGroupRepository {
               defaultCurrency: group.defaultCurrency,
               isDirect: Value(group.isDirect),
               simplifyDebts: Value(group.simplifyDebts),
-              // Null rather than a stand-in. This column holds a profile
-              // id, and the previous fallback wrote a *member* id into it —
-              // an id from a different table that nothing could resolve, and
-              // which disagreed with the Group object this method returned.
-              createdBy: Value(creatorProfileId),
+              createdBy: Value(creator.id),
               createdAt: group.createdAt,
             ),
           );

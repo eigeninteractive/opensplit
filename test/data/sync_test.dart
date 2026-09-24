@@ -9,7 +9,6 @@ import 'package:opensplit/data/repositories/drift_conflict_repository.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';
 import 'package:opensplit/data/repositories/drift_profile_repository.dart';
-import 'package:opensplit/data/sync/feeds.dart';
 import 'package:opensplit/data/sync/outbox_queue.dart';
 import 'package:opensplit/data/sync/sync_engine.dart';
 import 'package:opensplit/domain/balance/balance_fold.dart';
@@ -51,7 +50,11 @@ class Device {
   final FakeRemoteLedger _server;
 
   /// The account this device holds a session for, if any.
-  final String? profileId;
+  ///
+  /// Mutable, because signing in as somebody else is a thing devices do and
+  /// several tests turn on it -- a second device belonging to the same person
+  /// is the case that discovery exists for.
+  String? profileId;
 
   final AppDatabase db;
   late final OutboxQueue outbox;
@@ -68,7 +71,7 @@ class Device {
   /// activity row is resolved by the server from the session rather than sent
   /// with the write.
   SyncEngine get sync {
-    _server.actingProfileId = profileId;
+    if (profileId != null) _server.profileId = profileId!;
     return _engine;
   }
 
@@ -239,7 +242,7 @@ void main() {
         await a.sync.syncEverything();
         final entered = Completer<void>();
         final release = Completer<void>();
-        server.beforePullMyGroupIds = (_) async {
+        server.beforeBootstrap = (_) async {
           entered.complete();
           await release.future;
         };
@@ -358,8 +361,8 @@ void main() {
 
         final entered = Completer<void>();
         final release = Completer<void>();
-        server.pullMyGroupIdsCalls = 0;
-        server.beforePullMyGroupIds = (call) async {
+        server.bootstrapCalls = 0;
+        server.beforeBootstrap = (call) async {
           if (call != 1) return;
           entered.complete();
           await release.future;
@@ -372,19 +375,19 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 50));
 
         expect(
-          server.pullMyGroupIdsCalls,
+          server.bootstrapCalls,
           1,
           reason: 'the second engine must not enter while the first owns lease',
         );
 
         release.complete();
         await Future.wait([first, second]);
-        expect(server.pullMyGroupIdsCalls, 2);
+        expect(server.bootstrapCalls, 2);
       },
     );
 
     test('a new engine resumes after an abandoned lease expires', () async {
-      server.signedInProfileId = 'profile-ravi';
+      b.profileId = 'profile-ravi';
       await b.db
           .into(b.db.syncLeases)
           .insert(
@@ -695,7 +698,7 @@ void main() {
         expect(dead, hasLength(1));
         expect(
           dead.map((row) => row.lastError).join('\n'),
-          contains('does not balance'),
+          contains('does not add up'),
         );
 
         final reported = await a.outbox.watchDeadLetters().first;
@@ -736,7 +739,7 @@ void main() {
         "Dinner at Britto's",
         reason: 'the user has to recognise which expense this is',
       );
-      expect(failures.single.reason, contains('does not balance'));
+      expect(failures.single.reason, contains('does not add up'));
       expect(failures.single.target, OutboxTarget.entry);
     });
 
@@ -833,10 +836,16 @@ void main() {
       );
     });
 
-    test('does not stall on a batch sharing one timestamp', () async {
-      // Postgres `now()` is transaction time, so every row written in one
-      // transaction carries an identical `updated_at`. A timestamp-only cursor
-      // either skips the rest of such a batch forever or re-reads it forever.
+    test('gives every committed change a number of its own', () async {
+      // What replaced the composite cursor, and the reason it could be
+      // replaced. Postgres `now()` was transaction time, so a batch written in
+      // one transaction shared an `updated_at` exactly, and a cursor on the
+      // timestamp alone either skipped the rest of that batch forever or
+      // re-read it forever -- which is what `(updated_at, id)` was for.
+      //
+      // A sequence number is issued once per committed change by the one
+      // writer there is, so the tie it tie-broke cannot arise. Twelve pushes
+      // are twelve numbers, strictly increasing, whatever order they drain in.
       final g = await seedGroup();
       for (var i = 0; i < 12; i++) {
         await a.entries.create(
@@ -851,13 +860,16 @@ void main() {
           createdBy: g.ravi,
         );
       }
+      await a.sync.push();
 
-      await server.inOneTransaction(() => a.sync.push());
-
-      final stamps = <DateTime>{
-        for (final e in await a.ledger(g.groupId)) e.seq,
-      };
-      expect(stamps, hasLength(1), reason: 'the batch really does share one');
+      final stamps = [for (final e in await a.ledger(g.groupId)) e.seq!]
+        ..sort();
+      expect(stamps.toSet(), hasLength(12), reason: 'no number is reused');
+      expect(
+        stamps,
+        orderedEquals([for (var i = 0; i < 12; i++) stamps.first + i]),
+        reason: 'and none is skipped, so a cursor cannot step over a change',
+      );
 
       final small = SyncEngine(
         db: b.db,
@@ -1150,27 +1162,41 @@ void main() {
       'a failed cursor write rolls back its page and can be retried',
       () async {
         final group = await seedGroup();
-        server.signedInProfileId = 'profile-ravi';
+        b.profileId = 'profile-ravi';
+        await a.entries.create(
+          EntryDraft(
+            groupId: group.groupId,
+            currency: 'INR',
+            amountMinor: 90000,
+            description: 'Dinner',
+            split: EqualSplit([group.ravi, group.priya]),
+            payerAmounts: {group.ravi: 90000},
+          ),
+          createdBy: group.ravi,
+        );
         expect((await a.sync.syncEverything()).isClean, isTrue);
+
+        // There is one cursor per group now rather than one per feed, which
+        // makes this a sharper question than it used to be: a page is the
+        // group row, its members, its expenses and its activity applied
+        // together, so a cursor that cannot be written has to take all of them
+        // back. Half a page plus no cursor is the state that re-reads forever.
         await b.db.customStatement('''
-        CREATE TRIGGER reject_member_cursor BEFORE INSERT ON sync_cursors
-        WHEN NEW.feed LIKE 'members:%'
+        CREATE TRIGGER reject_group_cursor BEFORE INSERT ON group_cursors
         BEGIN SELECT RAISE(ABORT, 'test cursor failure'); END;
       ''');
 
         final failed = await b.sync.syncEverything();
         expect(failed.isClean, isFalse);
         expect(await b.db.select(b.db.members).get(), isEmpty);
-        expect(
-          await (b.db.select(
-            b.db.groupCursors,
-          )..where((row) => row.feed.equals('members:${group.groupId}'))).get(),
-          isEmpty,
-        );
+        expect(await b.db.select(b.db.entries).get(), isEmpty);
+        expect(await b.db.select(b.db.groupEvents).get(), isEmpty);
+        expect(await b.db.select(b.db.groupCursors).get(), isEmpty);
 
-        await b.db.customStatement('DROP TRIGGER reject_member_cursor');
+        await b.db.customStatement('DROP TRIGGER reject_group_cursor');
         expect((await b.sync.syncEverything()).isClean, isTrue);
         expect(await b.db.select(b.db.members).get(), hasLength(3));
+        expect(await b.ledger(group.groupId), hasLength(1));
       },
     );
 
@@ -1198,7 +1224,7 @@ void main() {
       await a.sync.syncGroup(created.group.id);
 
       // Device B holds nothing at all and is signed in as the same person.
-      server.signedInProfileId = 'profile-ravi';
+      b.profileId = 'profile-ravi';
       expect(await b.db.select(b.db.groups).get(), isEmpty);
 
       final found = await b.sync.discoverGroups();
@@ -1228,7 +1254,7 @@ void main() {
       );
       await a.sync.syncGroup(created.group.id);
 
-      server.signedInProfileId = 'profile-ravi';
+      b.profileId = 'profile-ravi';
       expect(await b.sync.discoverGroups(), isEmpty);
     });
 
@@ -1239,7 +1265,7 @@ void main() {
         creatorDisplayName: 'Ravi',
         creatorProfileId: 'profile-ravi',
       );
-      server.beforePullMyGroupIds = (_) async => throw StateError('offline');
+      server.beforeBootstrap = (_) async => throw StateError('offline');
       await expectLater(a.sync.discoverGroups(), throwsStateError);
       expect(
         (await a.db.select(a.db.groups).get()).single.id,
@@ -1251,9 +1277,8 @@ void main() {
     test(
       'an empty device reports a discovery failure and can recover',
       () async {
-        server.signedInProfileId = 'profile-ravi';
-        server.beforePullMyGroupIds = (_) async =>
-            throw StateError('unreachable');
+        b.profileId = 'profile-ravi';
+        server.beforeBootstrap = (_) async => throw StateError('unreachable');
 
         final failed = await b.sync.syncEverything();
 
@@ -1261,7 +1286,7 @@ void main() {
         expect(failed.error, isA<StateError>());
         expect(await b.db.select(b.db.groups).get(), isEmpty);
 
-        server.beforePullMyGroupIds = null;
+        server.beforeBootstrap = null;
         expect((await b.sync.syncEverything()).isClean, isTrue);
       },
     );
@@ -1283,8 +1308,8 @@ void main() {
       );
       await a.sync.syncGroup(created.group.id);
 
-      // Priya claims her place on the server, as redeem_invite would.
-      server.claimMember(priya.id, 'profile-priya');
+      // Priya claims her place on the server, as joining by link would.
+      server.claimMember(created.group.id, priya.id, 'profile-priya');
 
       // Device A still believes she is a placeholder, and renames her.
       await a.groups.renameMember(priya.id, 'Priya S');
@@ -1292,10 +1317,7 @@ void main() {
 
       // The server's own view, read before anything else touches it: the
       // rename has to have landed, and the claim has to have survived it.
-      final onServer = (await server.pullMembers(
-        groupId: created.group.id,
-        limit: 500,
-      )).rows.firstWhere((m) => m.id == priya.id);
+      final onServer = server.memberOn(created.group.id, priya.id);
       expect(onServer.displayName, 'Priya S', reason: 'the rename still lands');
       expect(
         onServer.profileId,
@@ -1306,7 +1328,7 @@ void main() {
       );
 
       // And she can therefore still find the group from a device of her own.
-      server.signedInProfileId = 'profile-priya';
+      b.profileId = 'profile-priya';
       expect(await b.sync.discoverGroups(), [created.group.id]);
     });
   });
@@ -1343,7 +1365,7 @@ void main() {
         // Redeeming the invite changes the member, not an already-named Google
         // profile. The incremental profile feed therefore cannot see Priya
         // behind its cursor; the member claim must hydrate her exact row.
-        server.claimMember(priya.id, 'profile-priya');
+        server.claimMember(created.group.id, priya.id, 'profile-priya');
         await a.sync.syncGroup(created.group.id);
 
         final profile = await DriftProfileRepository(
@@ -1365,7 +1387,7 @@ void main() {
         const Profile(id: 'priya-account', displayName: 'Priya'),
       );
 
-      await engine.drain(ProfileFeed(server, db));
+      await engine.pullProfiles();
       final first = await DriftProfileRepository(db).byId('priya-account');
       expect(first?.displayName, 'Priya');
 
@@ -1376,7 +1398,7 @@ void main() {
         const Profile(id: 'priya-account', displayName: 'Priya S'),
       );
 
-      await engine.drain(ProfileFeed(server, db));
+      await engine.pullProfiles();
       final second = await DriftProfileRepository(db).byId('priya-account');
       expect(
         second?.displayName,
@@ -1394,14 +1416,14 @@ void main() {
 
       server.seedProfile(const Profile(id: 'a', displayName: 'Ravi'));
 
-      await engine.drain(ProfileFeed(server, db));
+      await engine.pullProfiles();
       expect(
         server.lastProfilesSince,
         isNull,
         reason: 'the first pull holds nothing, so it asks for everything',
       );
 
-      await engine.drain(ProfileFeed(server, db));
+      await engine.pullProfiles();
       expect(
         server.lastProfilesSince,
         isNotNull,
@@ -1865,7 +1887,7 @@ void main() {
     });
   });
 
-  group('one engine, five feeds', () {
+  group('one engine, one feed', () {
     /// A third device, holding nothing, to pull onto.
     Future<Device> freshDevice() async {
       final device = Device('paged', server, profileId: 'profile-arun');
@@ -1920,45 +1942,58 @@ void main() {
           device.db,
         ).watchGroup(g.groupId).first).length,
         5,
-        reason: 'the activity feed pages on (created_at, id) the same way',
+        reason:
+            'the activity feed rides the same cursor -- it is not a feed of '
+            'its own any more, so it cannot page differently or lag behind',
       );
     });
 
-    test('rows sharing a timestamp survive a page boundary', () async {
+    test('a page is never cut inside one change', () async {
       final g = await seedGroup();
+      await a.sync.syncGroup(g.groupId);
+      // Where the group's own setup ends, so the next page starts at the first
+      // expense rather than at the group row and its members.
+      final beforeExpenses = server.seqOf(g.groupId);
+
       await addExpenses(g, 3);
       await a.sync.syncGroup(g.groupId);
 
-      // Postgres now() is transaction time, so a batch written in one
-      // transaction shares an updated_at exactly. A cursor on the timestamp
-      // alone either skips the rest of that batch forever or re-reads it
-      // forever; the pair terminates and loses nothing. Three rows at one
-      // instant, read two at a time, puts the tie right on the boundary.
-      final ledger = await a.ledger(g.groupId);
-      await server.inOneTransaction(() async {
-        for (final entry in ledger) {
-          await server.upsertEntry(
-            entry.copyWith(description: '${entry.description} (revised)'),
-          );
-        }
-      });
+      // The invariant that replaced the composite cursor, and the one thing a
+      // single integer has to get right. A `limit` counts changes, not rows: a
+      // save writes an expense and the activity line describing it under one
+      // sequence number, and both cross the wire together or neither does.
+      //
+      // Cutting by rows instead would let a device hold an expense whose
+      // record had not arrived -- or, with payers and shares on the same
+      // number, an amount that does not add up on somebody's screen.
+      final firstPage = await server.pullChanges(
+        groupId: g.groupId,
+        since: beforeExpenses,
+        limit: 1,
+      );
+      expect(firstPage.entries, hasLength(1));
+      expect(firstPage.events.map((event) => event.seq), [
+        firstPage.entries.single.seq,
+      ], reason: 'the expense and its record share a number and a page');
+      expect(firstPage.hasMore, isTrue);
 
       final device = await freshDevice();
       final engine = SyncEngine(
         db: device.db,
         api: server,
         outbox: device.outbox,
-        pageSize: 2,
+        pageSize: 1,
       );
       await engine.pullShared();
       await engine.pull(g.groupId);
 
-      final pulled = await device.entries.getEntries(g.groupId);
-      expect(pulled, hasLength(3));
+      expect(await device.entries.getEntries(g.groupId), hasLength(3));
       expect(
-        pulled.every((entry) => entry.description.endsWith('(revised)')),
-        isTrue,
-        reason: 'every row of the tied batch arrived, not just the first page',
+        (await DriftActivityRepository(
+          device.db,
+        ).watchGroup(g.groupId).first).length,
+        3,
+        reason: 'one change per page, four boundaries, nothing lost or doubled',
       );
     });
 

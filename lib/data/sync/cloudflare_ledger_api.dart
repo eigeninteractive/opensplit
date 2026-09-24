@@ -218,6 +218,9 @@ class CloudflareLedgerApi implements RemoteLedgerApi {
   }) async => const ProfilePage.empty();
 
   @override
+  Future<List<Profile>> pullProfilesByIds(List<String> ids) async => const [];
+
+  @override
   Future<Profile> pushProfile(Profile profile) async => profile;
 
   @override

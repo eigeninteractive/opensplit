@@ -73,7 +73,10 @@ const _labels = {
   'split_kind': 'how it splits',
   'currency': 'the currency',
   'notes': 'the notes',
+  'kind': 'what this is',
 };
+
+const _entryKinds = {'expense': 'an expense', 'settlement': 'a repayment'};
 
 const _splitKinds = {
   'equal': 'equally',
@@ -108,6 +111,9 @@ String? _value(String field, String? raw, Currency? currency) {
 
     case 'split_kind':
       return _splitKinds[raw] ?? raw;
+
+    case 'kind':
+      return _entryKinds[raw] ?? raw;
 
     // A category id is meaningless to a reader, and resolving it here would
     // drag the category list into a pure function for one line of text.

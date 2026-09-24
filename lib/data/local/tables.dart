@@ -146,16 +146,21 @@ class Groups extends Table {
   BoolColumn get isDirect => boolean().withDefault(const Constant(false))();
   BoolColumn get simplifyDebts => boolean().withDefault(const Constant(true))();
 
-  /// Profile id of the creator, if that account still exists.
+  /// Member id of the creator, and a member id rather than a profile id.
   ///
-  /// Deliberately not a foreign key: a group can arrive by sync before its
-  /// creator's profile row does, and refusing the insert would be worse than a
-  /// dangling display name.
+  /// It used to hold a profile id, which made this the one column that could
+  /// empty itself: deleting an account had to null it, so "created by nobody
+  /// who still exists" was a state every reader had to handle. A member is a
+  /// place in this group rather than an account, and it outlives the account
+  /// that claimed it — so the group can always say who started it, and the
+  /// answer resolves in the same table as every other name the group shows.
   ///
-  /// Nullable, matching the server. A group outlives the account that made it —
-  /// deleting an account sets this to null rather than taking the group down
-  /// with it — so "created by nobody who still exists" is a state that arrives
-  /// by sync and has to be representable here.
+  /// Deliberately not a foreign key: the group row and its members arrive in
+  /// the same page but in no guaranteed order within it.
+  ///
+  /// Still nullable here, unlike on the server, because this device writes the
+  /// row before it has a sequence number and a local-only group is a real
+  /// state. Set from creation onwards.
   TextColumn get createdBy => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get archivedAt => dateTime().nullable()();

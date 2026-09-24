@@ -79,7 +79,18 @@ class SqliteSyncGate implements SyncGate {
 
   Future<void> _renewWhileHeld(String owner, Completer<void> stop) async {
     while (!stop.isCompleted) {
-      await Future.any([Future<void>.delayed(renewalInterval), stop.future]);
+      // A sleep that can actually be cancelled. `Future.any` resolves as soon
+      // as the first future completes but cannot cancel the others, so a
+      // `Future.delayed` here kept a timer alive for the rest of the renewal
+      // interval after every sync had finished with it. Harmless in the sense
+      // that nothing fired, and not harmless at all in the sense that an app
+      // syncing on every write accumulated one per run -- and a widget test
+      // rightly refuses to end with a timer still pending.
+      final tick = Completer<void>();
+      final timer = Timer(renewalInterval, tick.complete);
+      await Future.any([tick.future, stop.future]);
+      timer.cancel();
+
       if (!stop.isCompleted) await _renew(owner);
     }
   }

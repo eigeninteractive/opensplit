@@ -22,7 +22,7 @@ const testAccountId = '00000000-0000-4000-8000-00000000dead';
 /// welcome screen and finds none of the widgets it came to look for.
 ///
 /// [signedInProvider] and [currentAccountIdProvider] are overridden rather than
-/// the session behind them because there is no Supabase in a widget test at
+/// the session behind them because there is no auth service in a widget test at
 /// all: `authServiceProvider` is null, so the real controller can only ever
 /// answer "nobody".
 /// Returns a scope, not a list of overrides: `Override` is not part of
@@ -40,6 +40,18 @@ Widget signedInApp({
     appDatabaseProvider.overrideWithValue(db),
     signedInProvider.overrideWithValue(true),
     currentAccountIdProvider.overrideWithValue(accountId),
+
+    // "With no backend" said out loud, rather than left to the configuration
+    // to imply. A null api is the shape a deliberately local-only build
+    // produces and every caller already handles.
+    //
+    // It has to be stated because the api is built from a base URL with a
+    // development default: left alone, a signed-in widget test reaches for
+    // localhost, fails, and renders "Could not refresh your groups" over the
+    // screen it came to look at. Every test using this helper is about what
+    // the app does with its own data, so none of them should be deciding
+    // anything about a connection.
+    remoteLedgerApiProvider.overrideWithValue(null),
   ],
   child: child,
 );

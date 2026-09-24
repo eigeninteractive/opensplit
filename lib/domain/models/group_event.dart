@@ -127,11 +127,15 @@ abstract class GroupEventRow with _$GroupEventRow {
   );
 
   /// The name carried by a member or group event.
+  ///
+  /// One getter for two payload shapes, because every caller wants the same
+  /// thing: a member event says `displayName` and a group event says `name`,
+  /// and which one arrived is already decided by [kind].
   String? get name =>
-      payload['display_name'] as String? ?? payload['name'] as String?;
+      payload['displayName'] as String? ?? payload['name'] as String?;
 
   /// What a rename renamed from.
-  String? get previousName => payload['previous_name'] as String?;
+  String? get previousName => payload['previousName'] as String?;
 }
 
 /// A line in a group's activity feed.

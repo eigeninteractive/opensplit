@@ -230,7 +230,7 @@ class SyncEngine {
   Future<void> pullShared() async {
     await pullReferenceData();
     await pullFxRates();
-    await _drainProfiles();
+    await pullProfiles();
   }
 
   /// Currencies and categories, from the server.
@@ -471,17 +471,29 @@ class SyncEngine {
         // A group the server has never seen is a create, and a create carries
         // the creator's own member row: gating member writes on membership is
         // unsatisfiable for the first member, so both land in one call.
-        final storedGroup =
-            await (group.seq == null
-                    ? _createGroup(group)
-                    : api.updateGroup(group))
-                .timeout(requestTimeout);
+        final created = group.seq == null
+            ? await _createGroup(group).timeout(requestTimeout)
+            : (
+                group: await api.updateGroup(group).timeout(requestTimeout),
+                creatorId: null,
+              );
 
         await db.transaction(() async {
           if (!await outbox.isCurrent(item)) return;
           await (db.update(db.groups)..where((t) => t.id.equals(row.id))).write(
-            GroupsCompanion(seq: Value(storedGroup.seq)),
+            GroupsCompanion(seq: Value(created.group.seq)),
           );
+
+          // The creator's row landed in that same call and at that same
+          // number -- the server stamps both from one change. Saying so here
+          // is what stops the outbox pushing it again as though it were
+          // somebody added afterwards, which would offer it as a placeholder
+          // and blank the very claim that makes this account a member.
+          final creatorId = created.creatorId;
+          if (creatorId != null) {
+            await (db.update(db.members)..where((t) => t.id.equals(creatorId)))
+                .write(MembersCompanion(seq: Value(created.group.seq)));
+          }
         });
 
       case OutboxTarget.member:
@@ -554,6 +566,7 @@ class SyncEngine {
   Future<int> pull(String groupId) async {
     var cursor = await _readGroupCursor(groupId);
     var applied = 0;
+    final claimed = <String>{};
 
     while (true) {
       await _assertActive();
@@ -565,6 +578,7 @@ class SyncEngine {
       // transaction. They have to commit together: a crash between them either
       // re-reads a page or, far worse, skips one.
       applied += await applyGroupChanges(db, page, now: _clock());
+      claimed.addAll(page.members.map((member) => member.profileId).nonNulls);
 
       if (page.purgedAt != null) return applied;
       if (page.seq == cursor) break;
@@ -572,7 +586,40 @@ class SyncEngine {
       if (!page.hasMore) break;
     }
 
+    await _hydrateProfiles(claimed);
     return applied;
+  }
+
+  /// Fetches profiles that became visible because a member row just changed.
+  ///
+  /// The gap no cursor can close. Somebody claims a placeholder with an account
+  /// they named two years ago: their profile row is older than this device's
+  /// profile cursor, so the incremental feed has already walked past it and
+  /// never will again. Their member row changing is the only signal that it
+  /// became readable at all, so the ids are asked for outright.
+  ///
+  /// Narrowed to profiles this device does not hold, which is what keeps it
+  /// from being a request on every sync of every group: an ordinary rename is
+  /// already the profile feed's job.
+  Future<void> _hydrateProfiles(Set<String> profileIds) async {
+    if (profileIds.isEmpty) return;
+
+    final held = await (db.select(
+      db.profiles,
+    )..where((t) => t.id.isIn(profileIds))).get();
+    final missing = profileIds.difference({for (final row in held) row.id});
+    if (missing.isEmpty) return;
+
+    await _assertActive();
+    final rows = await api
+        .pullProfilesByIds(missing.toList()..sort())
+        .timeout(requestTimeout);
+    if (rows.isEmpty) return;
+
+    await db.transaction(() async {
+      await _assertActive();
+      await applyProfiles(db, rows);
+    });
   }
 
   Future<int> _readGroupCursor(String groupId) async {
@@ -588,7 +635,7 @@ class SyncEngine {
   /// is nothing there that can hand out a sequence number. The keyset pair
   /// survives here and nowhere else — rows sharing a timestamp are otherwise
   /// either skipped or re-read forever.
-  Future<int> _drainProfiles() async {
+  Future<int> pullProfiles() async {
     const feed = 'profiles';
     var (cursor, cursorId) = await _readFeedCursor(feed);
     var applied = 0;
@@ -732,17 +779,26 @@ class SyncEngine {
   /// unsatisfiable for the first member. The old backend needed a nullable
   /// `created_by` on the group to escape that, and a trigger to stop anybody
   /// writing themselves into it.
-  Future<Group> _createGroup(Group group) async {
-    final creator = await (db.select(
-      db.members,
-    )..where((t) => t.groupId.equals(group.id) & t.seq.isNull())).get();
+  Future<({Group group, String creatorId})> _createGroup(Group group) async {
+    // Named, not guessed. Picking the first member without a sequence number
+    // happened to be the creator only while the group had exactly one member,
+    // and a group created offline with the whole trip typed in is the ordinary
+    // case -- there the creator would have been whoever the query returned.
+    final creatorId = group.createdBy;
+    final creator = creatorId == null
+        ? null
+        : await (db.select(
+            db.members,
+          )..where((t) => t.id.equals(creatorId))).getSingleOrNull();
 
-    if (creator.isEmpty) {
+    if (creator == null) {
       throw const RemoteRejected(
         'A group cannot be created without its first member.',
         kind: RejectionKind.permanent,
       );
     }
-    return api.createGroup(group, creator: creator.first.toDomain());
+
+    final stored = await api.createGroup(group, creator: creator.toDomain());
+    return (group: stored, creatorId: creator.id);
   }
 }
