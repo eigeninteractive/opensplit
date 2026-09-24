@@ -69,16 +69,27 @@ cannot rewrite another member's UPI handle so a settle-up handoff pays the
 wrong person.
 
 ```bash
-flutter test test/data/supabase_integration_test.dart   # needs supabase start
+cd server && npm run db:migrate:local && npm run dev   # in one terminal
+flutter test test/data/cloudflare_integration_test.dart
 ```
 
-That runs the real adapter against the local instance. It skips itself when
-nothing is listening, so `flutter test` stays green without it — which is also
-why it has to be run somewhere that *does* have a backend, or it never runs at
-all. CI does, in the `database` job. It is the only thing that catches a wrong
-RPC signature, a PostgREST filter that does not mean what it looks like, or an
-RLS policy that forbids something the app has to do. Every one of those has
-already happened once.
+That runs the real adapter against a local `wrangler dev` — the actual Worker,
+over local D1, KV and Durable Object storage. Nothing in it touches a
+Cloudflare account and it needs no credentials.
+
+It skips itself when nothing is listening, so `flutter test` stays green
+without it — which is also why it has to be run somewhere that *does* have a
+backend, or it never runs at all. CI does, in the `backend` job, and passes
+`--dart-define=REQUIRE_BACKEND=true` so that a missing Worker there is a
+failure rather than a quiet skip.
+
+It is the only test that goes near the wire. The Vitest suite proves the
+Durable Object against `workerd` and `sync_test.dart` proves the sync algorithm
+against a fake, but neither can catch a generated client calling a path that
+moved, a field that does not survive the JSON round trip, a refusal code mapped
+to the wrong kind, or a payload key the server spells one way and the app reads
+another. That last one is not hypothetical — it had already happened once, and
+this is the test that would have caught it the same afternoon.
 
 ### The local database schema is versioned
 

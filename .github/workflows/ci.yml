@@ -67,29 +67,51 @@ jobs:
           git diff --exit-code
           test -z "$(git status --porcelain --untracked-files=all)"
 
-  database:
-    name: Database tests
+  backend:
+    name: Backend and adapter tests
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: server
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: supabase/setup-cli@v3
+      - uses: actions/setup-node@v7
         with:
-          version: 2.115.0
+          node-version: "24.20.0"
+          cache: npm
+          cache-dependency-path: server/package-lock.json
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.47.1"
           cache: true
-      - run: supabase start
-      - run: supabase test db
-      - run: flutter pub get --enforce-lockfile
-      - run: dart run build_runner build
-      # Never let the adapter tests silently pass without their database.
-      - run: flutter test --dart-define=REQUIRE_SUPABASE=true test/data/supabase_integration_test.dart
-      - if: always()
-        run: supabase stop --no-backup
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      # The Durable Object and the routes, against workerd. Fast, and where
+      # most of the server's behaviour is actually pinned down.
+      - run: npm test
+      # And then the one test that goes near the wire. `wrangler dev` runs the
+      # real Worker over local D1, KV and Durable Object storage -- nothing
+      # here touches a Cloudflare account, and no credentials are needed.
+      - name: Start the Worker
+        run: |
+          cp .dev.vars.example .dev.vars
+          npm run db:migrate:local
+          npx wrangler dev --port 8787 &
+          timeout 120 bash -c \
+            'until curl -sf http://127.0.0.1:8787/api/health >/dev/null; do sleep 1; done'
+      - name: Test the adapter against it
+        working-directory: .
+        run: |
+          flutter pub get --enforce-lockfile
+          dart run build_runner build
+          # REQUIRE_BACKEND, so this can never quietly skip itself in CI --
+          # which is the only failure mode an opt-in integration test has.
+          flutter test --dart-define=REQUIRE_BACKEND=true \
+            test/data/cloudflare_integration_test.dart
 
   tooling:
     name: Release tooling and Edge Functions
