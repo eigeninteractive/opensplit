@@ -8,11 +8,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'application/providers.dart';
 import 'config.dart';
-import 'data/auth/session_storage.dart';
 import 'presentation/app.dart';
 
 Future<void> main() async {
@@ -48,36 +46,15 @@ Future<void> main() async {
 
   final prefs = await SharedPreferences.getInstance();
 
-  if (hasBackend) {
-    try {
-      await Supabase.initialize(
-        url: supabaseUrl,
-        publishableKey: supabasePublishableKey,
-        authOptions: FlutterAuthClientOptions(
-          localStorage: SharedPreferencesLocalStorage(
-            persistSessionKey: sessionStorageKey,
-          ),
-        ),
-      );
-    } catch (error, stackTrace) {
-      // Startup must not depend on reaching a server. Every screen is rendered
-      // from the local database, so a build that cannot initialise its backend
-      // is still a working app — it simply will not sync.
-      //
-      // developer.log rather than a print: this carries the error and the trace
-      // as structured fields, so DevTools shows it as one collapsible entry
-      // with a real stack instead of a line of text, and level 900 (WARNING)
-      // says what it is. A print would also have gone to release console output
-      // on the web, where anyone can read it.
-      developer.log(
-        'Continuing without a backend',
-        name: 'opensplit.startup',
-        level: 900,
-        error: error,
-        stackTrace: stackTrace,
-      );
-    }
-  }
+  // Nothing to initialise for the backend, and that is the shape of it now.
+  //
+  // There used to be a network-capable SDK to stand up here, inside a
+  // try/catch, because launching must not depend on reaching a server. The
+  // session is now a stored token and a cached account that
+  // `BetterAuthService` reads synchronously from the preferences already
+  // loaded above, and revalidates against the Worker afterwards. A device with
+  // no connectivity launches exactly as it did before and simply does not
+  // sync.
 
   // A build that cannot reach its backend says so, rather than looking correct
   // and quietly doing nothing. See [configurationProblem]: this only ever fires

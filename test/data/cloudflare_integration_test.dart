@@ -1,17 +1,20 @@
 @Tags(['integration'])
 library;
 
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:opensplit/data/auth/better_auth_service.dart';
+import 'package:opensplit/data/auth/session_store.dart';
 import 'package:opensplit/data/local/database.dart';
+import 'package:opensplit/data/push/cloudflare_device_token_repository.dart';
 import 'package:opensplit/data/repositories/drift_activity_repository.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';
 import 'package:opensplit/data/sync/api_client.dart';
+import 'package:opensplit/data/sync/cloudflare_invite_api.dart';
 import 'package:opensplit/data/sync/cloudflare_ledger_api.dart';
 import 'package:opensplit/data/sync/outbox_queue.dart';
 import 'package:opensplit/data/sync/remote_ledger_api.dart';
@@ -20,8 +23,14 @@ import 'package:opensplit/domain/balance/balance_fold.dart';
 import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/models/entry.dart';
 import 'package:opensplit/domain/models/entry_event.dart';
+import 'package:opensplit/domain/models/group.dart';
 import 'package:opensplit/domain/models/group_event.dart';
+import 'package:opensplit/domain/models/member.dart';
+import 'package:opensplit/domain/models/profile.dart';
+import 'package:opensplit/domain/repositories/auth_service.dart';
+import 'package:opensplit/domain/repositories/invite_api.dart';
 import 'package:opensplit/domain/split/splitter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../harness.dart';
 
@@ -44,50 +53,73 @@ import '../harness.dart';
 /// it can never silently skip there.
 ///
 ///   cd server && npm run db:migrate:local && npm run dev
-const _origin = 'http://127.0.0.1:8787';
+///
+/// `--dart-define=API_BASE_URL=...` points it somewhere else, which is worth
+/// having for the ordinary reason: 8787 is wrangler's default, so anybody with
+/// a second Worker project open already has it taken.
+const _origin = String.fromEnvironment(
+  'API_BASE_URL',
+  defaultValue: 'http://127.0.0.1:8787',
+);
 
-/// A guest account, and a bearer token the Worker will accept for it.
+/// Everything a signed-in device holds, wired the way the providers wire it.
 ///
-/// Raw HTTP rather than a client, because the Dart half of Better Auth does not
-/// exist yet — `backend_providers.dart` still passes `token: () async => null`,
-/// and this is the seam where `BetterAuthService` will land. Until it does, the
-/// ledger cannot be reached from Dart at all without these six lines, which is
-/// itself worth knowing.
-///
-/// The token is read from `set-auth-token` rather than from the body. The body
-/// carries a `token` field, and it is not the credential: it is the first half
-/// of one, unsigned. Sending it gets a 401 that looks exactly like a session
-/// problem.
-Future<({String token, String profileId})> _signInAnonymously() async {
-  final http = HttpClient();
-  try {
-    final request = await http.postUrl(
-      Uri.parse('$_origin/api/auth/sign-in/anonymous'),
+/// One HTTP client behind all four, because the session is a property of the
+/// connection: a second client would carry a second session and the two would
+/// disagree the moment either changed. Building it here the same way
+/// `backend_providers.dart` does is what makes this a test of the composition
+/// rather than of four objects that happen to share a base URL.
+class _Device {
+  _Device._({
+    required this.auth,
+    required this.ledger,
+    required this.invites,
+    required this.devices,
+    required this.account,
+  });
+
+  /// Signs in as a guest, and comes back holding a session.
+  ///
+  /// A real [BetterAuthService] rather than raw HTTP, so the token plumbing is
+  /// under test too — and it is the part most easily got wrong. Better Auth
+  /// puts the credential in the `set-auth-token` **header**; the `token` field
+  /// in the response body is the unsigned first half of one, and sending that
+  /// gets a 401 that looks exactly like a session problem.
+  static Future<_Device> guest() async {
+    SharedPreferences.setMockInitialValues({});
+    final sessions = SessionStore(await SharedPreferences.getInstance());
+
+    final client = buildApiClient(
+      baseUrl: _origin,
+      token: () async => sessions.read()?.token,
     );
-    request.headers.contentType = ContentType.json;
-    request.write('{}');
+    final auth = BetterAuthService(client: client, sessions: sessions);
+    await auth.signInAnonymously();
 
-    final response = await request.close();
-    final body = await response.transform(utf8.decoder).join();
-    if (response.statusCode != 200) {
-      fail('anonymous sign-in failed: ${response.statusCode} $body');
-    }
-
-    final token = response.headers.value('set-auth-token');
-    if (token == null) fail('no set-auth-token header on $body');
-
-    final user = (jsonDecode(body) as Map)['user'] as Map;
-    return (token: token, profileId: user['id'] as String);
-  } finally {
-    http.close(force: true);
+    return _Device._(
+      auth: auth,
+      ledger: CloudflareLedgerApi(client),
+      invites: CloudflareInviteApi(client),
+      devices: CloudflareDeviceTokenRepository(client),
+      account: auth,
+    );
   }
+
+  final BetterAuthService auth;
+  final CloudflareLedgerApi ledger;
+  final CloudflareInviteApi invites;
+  final CloudflareDeviceTokenRepository devices;
+  final AuthService account;
+
+  String get profileId => auth.currentUser!.id;
 }
 
 Future<bool> _workerIsUp() async {
+  final origin = Uri.parse(_origin);
   try {
     final socket = await Socket.connect(
-      '127.0.0.1',
-      8787,
+      origin.host,
+      origin.port,
       timeout: const Duration(seconds: 2),
     );
     socket.destroy();
@@ -144,11 +176,9 @@ void main() {
     setUp(() async {
       if (!available) return;
 
-      final session = await _signInAnonymously();
-      profileId = session.profileId;
-      api = CloudflareLedgerApi(
-        buildApiClient(baseUrl: _origin, token: () async => session.token),
-      );
+      final device = await _Device.guest();
+      profileId = device.profileId;
+      api = device.ledger;
 
       db = AppDatabase(NativeDatabase.memory());
       // Reference data is phase 5's; until the Worker serves currencies, the
@@ -551,6 +581,336 @@ void main() {
               .where((event) => event.kind == GroupEventKind.memberRenamed);
       expect(renamed.single.displayName, 'Priya S');
       expect(renamed.single.previousName, 'Priya');
+    });
+  });
+
+  /// Everything an account is, over the wire.
+  ///
+  /// Deliberately not built on the ledger group above: nothing here needs a
+  /// local database, and the things worth proving are between two accounts —
+  /// a link minted by one and spent by the other, a profile one can see and a
+  /// stranger cannot, a deletion that leaves somebody else's ledger alone.
+  group('accounts, links and profiles against a live Worker', () {
+    late _Device ravi;
+
+    setUp(() async {
+      if (!available) return;
+      ravi = await _Device.guest();
+    });
+
+    /// A group with Ravi in it and one placeholder waiting for a friend.
+    Future<({String groupId, String priya})> seededGroup(_Device host) async {
+      final groupId = 'g${DateTime.now().microsecondsSinceEpoch}';
+      await host.ledger.createGroup(
+        Group(
+          id: groupId,
+          name: 'Goa trip',
+          defaultCurrency: 'INR',
+          isDirect: false,
+          simplifyDebts: true,
+          createdBy: '$groupId-ravi',
+          createdAt: DateTime.now().toUtc(),
+        ),
+        creator: Member(
+          id: '$groupId-ravi',
+          groupId: groupId,
+          profileId: host.profileId,
+          displayName: 'Ravi',
+          joinedAt: DateTime.now().toUtc(),
+        ),
+      );
+
+      final priya = await host.ledger.addMember(
+        Member(
+          id: '$groupId-priya',
+          groupId: groupId,
+          displayName: 'Priya',
+          joinedAt: DateTime.now().toUtc(),
+        ),
+      );
+      return (groupId: groupId, priya: priya.id);
+    }
+
+    test('an invite is previewable with no session, then spendable', () async {
+      if (!available) return;
+
+      final g = await seededGroup(ravi);
+      final invite = await ravi.invites.create(
+        groupId: g.groupId,
+        memberId: g.priya,
+      );
+
+      // No session at all. This is the ordering the whole flow turns on:
+      // somebody who already has an account sees what they were sent before
+      // anything claims the slot on their behalf.
+      final anonymous = CloudflareInviteApi(
+        buildApiClient(baseUrl: _origin, token: () async => null),
+      );
+      final preview = await anonymous.peek(invite.token);
+      expect(preview, isNotNull);
+      expect(preview!.groupName, 'Goa trip');
+      expect(preview.memberName, 'Priya');
+      expect(preview.inviterName, 'Ravi');
+      expect(preview.isUsable, isTrue);
+
+      final priya = await _Device.guest();
+      final claimed = await priya.invites.redeem(invite.token);
+
+      // The place was claimed, not duplicated. One column changed on a row
+      // that already had balances and history, which is the entire payoff of
+      // members being group-scoped rather than accounts.
+      expect(claimed.id, g.priya);
+      expect(claimed.groupId, g.groupId, reason: 'the token said which group');
+      expect(claimed.profileId, priya.profileId);
+      expect(claimed.displayName, 'Priya');
+
+      // And the name travelled the other way: a guest has none of its own, so
+      // it adopts the one a friend typed on the placeholder.
+      final mine = await priya.ledger.pullProfilesByIds([priya.profileId]);
+      expect(mine.single.displayName, 'Priya');
+    });
+
+    test('a spent link says so rather than saying nothing', () async {
+      if (!available) return;
+
+      final g = await seededGroup(ravi);
+      final invite = await ravi.invites.create(
+        groupId: g.groupId,
+        memberId: g.priya,
+      );
+      await (await _Device.guest()).invites.redeem(invite.token);
+
+      // Three different reasons a link does not work, and a screen that shows
+      // "invalid link" for all of them tells nobody what to do next.
+      final second = await _Device.guest();
+      await expectLater(
+        second.invites.redeem(invite.token),
+        throwsA(isA<InviteRejected>()),
+      );
+
+      final preview = await second.invites.peek(invite.token);
+      expect(preview!.isRedeemed, isTrue);
+      expect(preview.isUsable, isFalse);
+    });
+
+    test('an open link offers the places already typed in', () async {
+      if (!available) return;
+
+      final g = await seededGroup(ravi);
+      final link = await ravi.invites.createGroupLink(g.groupId);
+      expect(
+        (await ravi.invites.currentGroupLink(g.groupId))?.token,
+        link.token,
+      );
+
+      final arriving = await _Device.guest();
+      final target = await arriving.invites.peekLink(link.token);
+      expect(target, isA<GroupLinkTarget>());
+
+      final places = await arriving.invites.placeholdersFor(link.token);
+      expect(places.single.memberId, g.priya);
+      expect(places.single.displayName, 'Priya');
+
+      // Claiming one is what stops a group of six becoming a group of twelve
+      // when a single link is pasted into a chat.
+      final joined = await arriving.invites.joinWithLink(
+        link.token,
+        memberId: g.priya,
+      );
+      expect(joined.id, g.priya);
+      expect(await arriving.invites.placeholdersFor(link.token), isEmpty);
+    });
+
+    test('revoking leaves the link able to explain itself', () async {
+      if (!available) return;
+
+      final g = await seededGroup(ravi);
+      final link = await ravi.invites.createGroupLink(g.groupId);
+      await ravi.invites.revokeGroupLink(g.groupId);
+
+      expect(await ravi.invites.currentGroupLink(g.groupId), isNull);
+
+      // Turned off, not never valid. Somebody tapping a link a friend shared
+      // last month deserves the first answer, and it is only reachable because
+      // the index keeps the token while the group's object still holds it.
+      final preview = await ravi.invites.peekLink(link.token);
+      expect((preview! as GroupLinkTarget).preview.isRevoked, isTrue);
+
+      final arriving = await _Device.guest();
+      await expectLater(
+        arriving.invites.joinWithLink(link.token),
+        throwsA(isA<InviteRejected>()),
+      );
+    });
+
+    test('a token that names nothing is not a link', () async {
+      if (!available) return;
+
+      expect(await ravi.invites.peekLink('not-a-token-at-all'), isNull);
+    });
+
+    test('a profile is visible to a co-member and to nobody else', () async {
+      if (!available) return;
+
+      final g = await seededGroup(ravi);
+      await ravi.ledger.pushProfile(
+        Profile(
+          id: ravi.profileId,
+          displayName: 'Ravi',
+          upiVpa: 'ravi@okhdfcbank',
+        ),
+      );
+
+      final stranger = await _Device.guest();
+      expect(
+        await stranger.ledger.pullProfilesByIds([ravi.profileId]),
+        isEmpty,
+        reason: 'a payment handle is not public',
+      );
+
+      final invite = await ravi.invites.create(
+        groupId: g.groupId,
+        memberId: g.priya,
+      );
+      await stranger.invites.redeem(invite.token);
+
+      // Sharing a group is the whole of the rule, and it is symmetric: a
+      // settle-up needs Ravi's handle exactly as much as it needs Priya's.
+      final seen = await stranger.ledger.pullProfilesByIds([ravi.profileId]);
+      expect(seen.single.upiVpa, 'ravi@okhdfcbank');
+
+      final feed = await stranger.ledger.pullProfiles(limit: 50);
+      expect(
+        feed.rows.map((row) => row.id),
+        containsAll([ravi.profileId, stranger.profileId]),
+      );
+    });
+
+    test('a payment handle can be cleared, not only added', () async {
+      if (!available) return;
+
+      await ravi.ledger.pushProfile(
+        Profile(id: ravi.profileId, displayName: 'Ravi', upiVpa: 'ravi@oksbi'),
+      );
+
+      // Bank accounts close. This is the case an optional field could not
+      // express, because the generated client omits a null rather than sending
+      // one — so the wire takes both fields every time.
+      final cleared = await ravi.ledger.pushProfile(
+        Profile(id: ravi.profileId, displayName: 'Ravi K'),
+      );
+      expect(cleared.upiVpa, isNull);
+      expect(cleared.displayName, 'Ravi K');
+      expect(cleared.updatedAt, isNotNull, reason: 'the feed cursors on it');
+    });
+
+    test('the profile feed pages on the pair, not the timestamp', () async {
+      if (!available) return;
+
+      final g = await seededGroup(ravi);
+      await ravi.ledger.pushProfile(
+        Profile(id: ravi.profileId, displayName: 'Ravi'),
+      );
+
+      final invite = await ravi.invites.create(
+        groupId: g.groupId,
+        memberId: g.priya,
+      );
+      await (await _Device.guest()).invites.redeem(invite.token);
+
+      final collected = <String>{};
+      var page = await ravi.ledger.pullProfiles(limit: 1);
+      collected.addAll(page.rows.map((row) => row.id));
+
+      var guard = 0;
+      while (page.hasMore && guard++ < 10) {
+        page = await ravi.ledger.pullProfiles(
+          since: page.cursor,
+          sinceId: page.cursorId,
+          limit: 1,
+        );
+        collected.addAll(page.rows.map((row) => row.id));
+      }
+
+      expect(page.hasMore, isFalse);
+      expect(collected.length, 2, reason: 'Ravi and whoever claimed the place');
+    });
+
+    test('a device token registers, transfers and is forgotten', () async {
+      if (!available) return;
+
+      final token = 'fcm-${DateTime.now().microsecondsSinceEpoch}';
+      await ravi.devices.register(token: token, platform: 'android');
+      // Re-registered on every launch, so it has to be idempotent.
+      await ravi.devices.register(token: token, platform: 'android');
+
+      // A phone that changes hands keeps its registration token, so the claim
+      // transfers rather than being refused — otherwise the previous owner's
+      // notifications would follow the new one.
+      final next = await _Device.guest();
+      await next.devices.register(token: token, platform: 'android');
+
+      // Which also means signing out on one phone cannot silence another's.
+      await ravi.devices.unregister(token);
+      await next.devices.unregister(token);
+    });
+
+    test('deleting an account leaves a shared group intact', () async {
+      if (!available) return;
+
+      final g = await seededGroup(ravi);
+      final invite = await ravi.invites.create(
+        groupId: g.groupId,
+        memberId: g.priya,
+      );
+      final priya = await _Device.guest();
+      await priya.invites.redeem(invite.token);
+
+      await priya.account.deleteAccount();
+
+      // Money Priya paid is a fact about Ravi's group as much as hers, so the
+      // member row keeps its name and loses its account — exactly the state of
+      // somebody a friend added who never signed up.
+      final page = await ravi.ledger.pullChanges(
+        groupId: g.groupId,
+        since: 0,
+        limit: 200,
+      );
+      final row = page.members.firstWhere((member) => member.id == g.priya);
+      expect(row.displayName, 'Priya');
+      expect(row.profileId, isNull);
+
+      // And the session went with it, rather than lingering until something
+      // else happened to fail.
+      expect(priya.auth.currentUser, isNull);
+      await expectLater(
+        priya.ledger.bootstrap(),
+        throwsA(isA<RemoteRejected>()),
+      );
+    });
+
+    test('a group nobody left could read is collected outright', () async {
+      if (!available) return;
+
+      final solo = await _Device.guest();
+      final g = await seededGroup(solo);
+
+      await solo.account.deleteAccount();
+
+      // Holding somebody's expense descriptions forever in a group with no
+      // living reader is the opposite of what deleting an account asks for.
+      // What is left is a tombstone, and it answers anybody: there is no
+      // membership left to check, and refusing would leave every device that
+      // still holds a copy holding it forever.
+      final onlooker = await _Device.guest();
+      final grave = await onlooker.ledger.pullChanges(
+        groupId: g.groupId,
+        since: 0,
+        limit: 200,
+      );
+      expect(grave.purgedAt, isNotNull);
+      expect(grave.group, isNull);
+      expect(grave.members, isEmpty);
     });
   });
 }

@@ -4,8 +4,6 @@
 
 // ignore_for_file: unused_element
 import 'package:opensplit_api/src/model/account.dart';
-import 'package:opensplit_api/src/model/identity_outcome_one_of.dart';
-import 'package:opensplit_api/src/model/identity_outcome_one_of1.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 part 'identity_outcome.g.dart';
@@ -28,6 +26,7 @@ class IdentityOutcome {
     required this.strandedUserId,
   });
 
+  /// kept: the account id did not change, so nothing on the device has to move. replaced: a different account holds the session now, and `strandedUserId` names the one this device's ledger stays with.
   @JsonKey(
     name: r'outcome',
     required: true,
@@ -42,8 +41,8 @@ class IdentityOutcome {
   @JsonKey(name: r'token', required: true, includeIfNull: true)
   final String? token;
 
-  @JsonKey(name: r'strandedUserId', required: true, includeIfNull: false)
-  final String strandedUserId;
+  @JsonKey(name: r'strandedUserId', required: true, includeIfNull: true)
+  final String? strandedUserId;
 
   @override
   bool operator ==(Object other) =>
@@ -59,7 +58,7 @@ class IdentityOutcome {
       outcome.hashCode +
       account.hashCode +
       (token == null ? 0 : token.hashCode) +
-      strandedUserId.hashCode;
+      (strandedUserId == null ? 0 : strandedUserId.hashCode);
 
   factory IdentityOutcome.fromJson(Map<String, dynamic> json) =>
       _$IdentityOutcomeFromJson(json);
@@ -72,7 +71,10 @@ class IdentityOutcome {
   }
 }
 
+/// kept: the account id did not change, so nothing on the device has to move. replaced: a different account holds the session now, and `strandedUserId` names the one this device's ledger stays with.
 enum IdentityOutcomeOutcomeEnum {
+  @JsonValue(r'kept')
+  kept(r'kept'),
   @JsonValue(r'replaced')
   replaced(r'replaced'),
   @JsonValue(r'unknown_default_open_api')

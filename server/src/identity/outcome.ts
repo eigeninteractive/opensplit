@@ -17,6 +17,8 @@ export type IdentityOutcome =
   | {
       outcome: "kept";
       account: Account;
+      /** Null, and stated rather than absent — see `schemas/identity.ts`. */
+      strandedUserId: null;
     }
   | {
       outcome: "replaced";
@@ -41,7 +43,7 @@ export interface Account {
  */
 export function outcomeFor(account: Account, previousUserId: string | null): IdentityOutcome {
   if (previousUserId === null || previousUserId === account.id) {
-    return { outcome: "kept", account };
+    return { outcome: "kept", account, strandedUserId: null };
   }
   return { outcome: "replaced", account, strandedUserId: previousUserId };
 }

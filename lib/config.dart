@@ -1,15 +1,15 @@
 /// Build-time configuration.
 ///
-/// Defaults point at a local `supabase start`, so a fresh clone runs against a
-/// local stack with no setup. Production values are injected at build time:
+/// The default points at a local `wrangler dev`, so a fresh clone runs against
+/// a local Worker with no setup. Production values are injected at build time:
 ///
 ///   flutter build web --wasm \
-///     --dart-define=SUPABASE_URL=https://xyz.supabase.co \
-///     --dart-define=SUPABASE_PUBLISHABLE_KEY=...
+///     --dart-define=API_BASE_URL=https://opensplit.example
 ///
-/// The publishable key is a public identifier, not a secret — it authorises
-/// nothing on its own. Every table is protected by row-level security, which is
-/// what actually decides who can read what.
+/// There is deliberately no key here. The backend is one origin serving the
+/// site, the app bundle and the API, and a request carries a session or it
+/// carries nothing — there is no anonymous public identifier to configure, and
+/// therefore none to leak, rotate or explain.
 library;
 
 import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
@@ -22,16 +22,6 @@ import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 const String apiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
   defaultValue: 'http://localhost:8787',
-);
-
-const String supabaseUrl = String.fromEnvironment(
-  'SUPABASE_URL',
-  defaultValue: 'http://127.0.0.1:54321',
-);
-
-const String supabasePublishableKey = String.fromEnvironment(
-  'SUPABASE_PUBLISHABLE_KEY',
-  defaultValue: 'sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH',
 );
 
 /// The one host this app is served from and generates links for.
@@ -94,18 +84,17 @@ String get licenseUrl => '$repositoryUrl/blob/main/LICENSE';
 ///
 /// The app is fully usable without one — everything is computed locally — so
 /// this only gates sync and account features rather than the product.
-bool get hasBackend =>
-    supabaseUrl.isNotEmpty && supabasePublishableKey.isNotEmpty;
+bool get hasBackend => apiBaseUrl.isNotEmpty;
 
 /// Whether this build points at a developer's own machine.
 ///
-/// `127.0.0.1` is the default above, and on a phone it means the phone: a build
+/// `localhost` is the default above, and on a phone it means the phone: a build
 /// that keeps it reaches nothing, ever. `10.0.2.2` is the Android emulator's
 /// alias for its host, which is right in an emulator and wrong on hardware.
 bool get isLocalBackend =>
-    supabaseUrl.contains('127.0.0.1') ||
-    supabaseUrl.contains('localhost') ||
-    supabaseUrl.contains('10.0.2.2');
+    apiBaseUrl.contains('127.0.0.1') ||
+    apiBaseUrl.contains('localhost') ||
+    apiBaseUrl.contains('10.0.2.2');
 
 /// What is wrong with this build's configuration, if anything.
 ///
@@ -121,18 +110,19 @@ bool get isLocalBackend =>
 /// build that was given its defines.
 String? get configurationProblem {
   if (kDebugMode || !isLocalBackend) return null;
-  return 'This build points at $supabaseUrl, which is a developer machine and '
+  return 'This build points at $apiBaseUrl, which is a developer machine and '
       'is not reachable from a phone or a browser. It was almost certainly '
       'built without --dart-define-from-file=env/app.json.';
 }
 
 /// The **web** OAuth client id, from the Google Cloud project.
 ///
-/// One value for both platforms, and that is not a shortcut: Supabase verifies
-/// the ID token's audience against the web client even when the token was
-/// minted on Android, so Android passes this same id as `serverClientId`. The
-/// Android OAuth client still has to exist in Google Cloud — it is what binds
-/// the package name and signing certificate — but its id is never needed here.
+/// One value for both platforms, and that is not a shortcut: the server
+/// verifies an ID token's audience against the web client even when the token
+/// was minted on Android, so Android passes this same id as `serverClientId`.
+/// The Android OAuth client still has to exist in Google Cloud — it is what
+/// binds the package name and signing certificate — but its id is never needed
+/// here. It is `GOOGLE_CLIENT_ID` in the Worker's own environment.
 ///
 /// iOS, when it arrives, will need its own; that is the point at which this
 /// stops being one constant.

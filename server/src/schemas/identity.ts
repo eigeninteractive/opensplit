@@ -31,35 +31,45 @@ export const AccountSchema = z
 /**
  * What attaching an identity did.
  *
- * A discriminated union rather than a pair of ids to compare, because "did this
- * device's ledger stay with the account" is the only question a caller has, and
- * answering it by diffing ids put that derivation at every call site.
+ * "Did this device's ledger stay with the account" is the only question a
+ * caller has, and answering it by diffing ids put that derivation at every call
+ * site. Which case applies cannot be inferred from which code path ran either:
+ * signing in with Google using the address an existing email account already
+ * owns lands on *that same account*, so the sign-in branch ran and yet nothing
+ * moved. Only the resulting id settles it, so the server settles it.
  *
- * Which case applies cannot be inferred from which code path ran. Signing in
- * with Google using the address an existing email account already owns lands on
- * *that same account*: the sign-in branch ran and yet nothing moved. Only the
- * resulting id settles it, so the server settles it.
+ * ## Why this is flat, and not `z.discriminatedUnion`
+ *
+ * It was a union, which emits `oneOf` — and `oneOf` is where the Dart generator
+ * gives up, in the same way it does for `EventPayload`. It flattens the two
+ * branches into one class carrying every field from both, **all required**, so
+ * `IdentityOutcome.fromJson` asserted that a `kept` outcome had a
+ * `strandedUserId` and threw when it did not. That is not a weaker client: it
+ * is a client that cannot read the most common answer this endpoint gives.
+ *
+ * So `strandedUserId` is nullable and `outcome` says when to read it. The
+ * pairing is still enforced where it matters — `outcomeFor` is the only thing
+ * that constructs one of these, and its return type is the union — which is the
+ * same argument `append()` makes for event payloads.
  */
 export const IdentityOutcomeSchema = z
-  .discriminatedUnion("outcome", [
-    z.object({
-      outcome: z.literal("kept"),
-      account: AccountSchema,
-      /** Null on web, where the session is an HttpOnly cookie instead. */
-      token: z.string().nullable(),
+  .object({
+    outcome: z.enum(["kept", "replaced"]).openapi({
+      description: "kept: the account id did not change, so nothing on the device has to move. replaced: a different account holds the session now, and `strandedUserId` names the one this device's ledger stays with.",
     }),
-    z.object({
-      outcome: z.literal("replaced"),
-      account: AccountSchema,
-      token: z.string().nullable(),
-      /**
-       * The account this device's local database still belongs to. Which
-       * database was left behind is the only part of the transition a caller
-       * can act on.
-       */
-      strandedUserId: IdSchema,
-    }),
-  ])
+    account: AccountSchema,
+
+    /** Null on web, where the session is an HttpOnly cookie instead. */
+    token: z.string().nullable(),
+
+    /**
+     * The account this device's local database still belongs to, when the
+     * session was replaced. Null when it was kept — which database was left
+     * behind is the only part of the transition a caller can act on, and there
+     * is nothing to act on when nothing moved.
+     */
+    strandedUserId: IdSchema.nullable(),
+  })
   .openapi("IdentityOutcome");
 
 export const GoogleIdentityRequestSchema = z

@@ -19,8 +19,6 @@ import 'package:opensplit_api/src/model/group_link.dart';
 import 'package:opensplit_api/src/model/group_patch.dart';
 import 'package:opensplit_api/src/model/health.dart';
 import 'package:opensplit_api/src/model/identity_outcome.dart';
-import 'package:opensplit_api/src/model/identity_outcome_one_of.dart';
-import 'package:opensplit_api/src/model/identity_outcome_one_of1.dart';
 import 'package:opensplit_api/src/model/invite.dart';
 import 'package:opensplit_api/src/model/invite_superseded_inner.dart';
 import 'package:opensplit_api/src/model/join_request.dart';
@@ -114,12 +112,6 @@ ReturnType deserialize<ReturnType, BaseType>(
       return Health.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'IdentityOutcome':
       return IdentityOutcome.fromJson(value as Map<String, dynamic>)
-          as ReturnType;
-    case 'IdentityOutcomeOneOf':
-      return IdentityOutcomeOneOf.fromJson(value as Map<String, dynamic>)
-          as ReturnType;
-    case 'IdentityOutcomeOneOf1':
-      return IdentityOutcomeOneOf1.fromJson(value as Map<String, dynamic>)
           as ReturnType;
     case 'Invite':
       return Invite.fromJson(value as Map<String, dynamic>) as ReturnType;

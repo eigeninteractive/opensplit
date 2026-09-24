@@ -169,7 +169,14 @@ final class GroupLinkTarget extends LinkTarget {
 abstract interface class InviteApi {
   /// Issues a link for an unclaimed place. Reissuing invalidates any previous
   /// link for that place.
-  Future<InviteLink> create(String memberId);
+  ///
+  /// Both ids, because a member id names a place in one group rather than a
+  /// person across the app — there is no table to look one up in without being
+  /// told which group's ledger to ask.
+  Future<InviteLink> create({
+    required String groupId,
+    required String memberId,
+  });
 
   /// Describes [token] without redeeming it. Null if no such link exists.
   ///

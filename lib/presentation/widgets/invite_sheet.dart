@@ -57,7 +57,10 @@ class _InviteSheetState extends ConsumerState<_InviteSheet> {
           .read(syncControllerProvider.notifier)
           .syncGroup(widget.member.groupId);
 
-      final invite = await invites.create(widget.member.id);
+      final invite = await invites.create(
+        groupId: widget.member.groupId,
+        memberId: widget.member.id,
+      );
       if (mounted) {
         setState(() {
           _url = invite.urlFor(linkHost);

@@ -23,8 +23,8 @@ const testAccountId = '00000000-0000-4000-8000-00000000dead';
 ///
 /// [signedInProvider] and [currentAccountIdProvider] are overridden rather than
 /// the session behind them because there is no auth service in a widget test at
-/// all: `authServiceProvider` is null, so the real controller can only ever
-/// answer "nobody".
+/// all: the api client below is null, so `authServiceProvider` is too and the
+/// real controller can only ever answer "nobody".
 /// Returns a scope, not a list of overrides: `Override` is not part of
 /// flutter_riverpod's public API, so it cannot be named in a signature here.
 Widget signedInApp({
@@ -42,16 +42,21 @@ Widget signedInApp({
     currentAccountIdProvider.overrideWithValue(accountId),
 
     // "With no backend" said out loud, rather than left to the configuration
-    // to imply. A null api is the shape a deliberately local-only build
+    // to imply. A null client is the shape a deliberately local-only build
     // produces and every caller already handles.
     //
-    // It has to be stated because the api is built from a base URL with a
+    // It has to be stated because the client is built from a base URL with a
     // development default: left alone, a signed-in widget test reaches for
     // localhost, fails, and renders "Could not refresh your groups" over the
     // screen it came to look at. Every test using this helper is about what
     // the app does with its own data, so none of them should be deciding
     // anything about a connection.
-    remoteLedgerApiProvider.overrideWithValue(null),
+    //
+    // One override rather than four. The sync, the links, the push
+    // registrations and the auth service are all built from this, so nulling
+    // it is the single place "no backend" is expressible — and a test that
+    // wants one of them back overrides that one alone.
+    apiClientProvider.overrideWithValue(null),
   ],
   child: child,
 );

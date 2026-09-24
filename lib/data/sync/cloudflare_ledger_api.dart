@@ -207,21 +207,56 @@ class CloudflareLedgerApi implements RemoteLedgerApi {
     return _member(stored, member.groupId);
   });
 
-  // Phases 4 and 5. Declared rather than omitted so the interface stays one
-  // description of what a backend has to do, and so adding them is a compile
-  // error here rather than a discovery at runtime.
   @override
   Future<ProfilePage> pullProfiles({
     DateTime? since,
     String? sinceId,
     required int limit,
-  }) async => const ProfilePage.empty();
+  }) => _guard(() async {
+    // Both halves or neither. A cursor with no id names a position the server
+    // cannot resume from, and answering it as though it could is how a page
+    // between two profiles renamed in the same millisecond gets skipped.
+    final resumable = since != null && sinceId != null;
+    final page = _required(
+      await _sync.getProfiles(
+        since: resumable ? since : null,
+        sinceId: resumable ? sinceId : null,
+        limit: limit,
+      ),
+    );
+
+    return ProfilePage(
+      rows: [for (final row in page.profiles) _profile(row)],
+      cursor: page.cursor,
+      cursorId: page.cursorId,
+      hasMore: page.hasMore,
+    );
+  });
 
   @override
-  Future<List<Profile>> pullProfilesByIds(List<String> ids) async => const [];
+  Future<List<Profile>> pullProfilesByIds(List<String> ids) => _guard(() async {
+    if (ids.isEmpty) return const [];
+
+    final page = _required(await _sync.getProfilesByIds(ids: ids.join(',')));
+    return [for (final row in page.profiles) _profile(row)];
+  });
 
   @override
-  Future<Profile> pushProfile(Profile profile) async => profile;
+  Future<Profile> pushProfile(Profile profile) => _guard(() async {
+    // Whole rather than a patch, and there is no id in it: the row written is
+    // the one the session names. Both fields travel every time because an
+    // omitted field and a null one are the same thing once `json_serializable`
+    // has written the body, and clearing a payment handle has to be possible.
+    final stored = _required(
+      await _sync.updateProfile(
+        profileUpdate: api.ProfileUpdate(
+          displayName: profile.displayName,
+          upiVpa: profile.upiVpa,
+        ),
+      ),
+    );
+    return _profile(stored);
+  });
 
   @override
   Future<List<Currency>> pullCurrencies() async => const [];
@@ -267,6 +302,20 @@ class CloudflareLedgerApi implements RemoteLedgerApi {
     leftAt: row.leftAt,
     upiVpa: row.upiVpa,
     seq: row.seq,
+  );
+
+  /// A deleted account keeps its row and loses its contents.
+  ///
+  /// `deletedAt` is not carried into the local model, and that is deliberate
+  /// rather than an omission: by the time an account is deleted every group it
+  /// was in has already nulled its member row's `profileId`, so nothing on the
+  /// device resolves to this profile any more. What arrives is an emptied row
+  /// with no name and no handle, which is exactly how it should render.
+  Profile _profile(api.Profile row) => Profile(
+    id: row.id,
+    displayName: row.displayName,
+    upiVpa: row.upiVpa,
+    updatedAt: row.updatedAt,
   );
 
   Entry _entry(api.Entry row, String groupId) => Entry(

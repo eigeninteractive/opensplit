@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:opensplit/data/auth/supabase_auth_service.dart';
+import 'package:opensplit/data/auth/better_auth_service.dart';
 
 void main() {
   group('the address Google sends the browser back to', () {

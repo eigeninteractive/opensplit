@@ -31,7 +31,6 @@ dependencies:
   shared_preferences: ^2.5.5
   url_launcher: ^6.3.2
   uuid: ^4.6.0
-  supabase_flutter: ^2.17.2
   google_sign_in: ^7.2.0
   # Named directly, unusually for an endorsed federated plugin, because the web
   # build imports `web_only.dart` from it: Google Identity Services will only

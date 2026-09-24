@@ -26,7 +26,7 @@ IdentityOutcome _$IdentityOutcomeFromJson(Map<String, dynamic> json) =>
           (v) => Account.fromJson(v as Map<String, dynamic>),
         ),
         token: $checkedConvert('token', (v) => v as String?),
-        strandedUserId: $checkedConvert('strandedUserId', (v) => v as String),
+        strandedUserId: $checkedConvert('strandedUserId', (v) => v as String?),
       );
       return val;
     });
@@ -40,6 +40,7 @@ Map<String, dynamic> _$IdentityOutcomeToJson(IdentityOutcome instance) =>
     };
 
 const _$IdentityOutcomeOutcomeEnumEnumMap = {
+  IdentityOutcomeOutcomeEnum.kept: 'kept',
   IdentityOutcomeOutcomeEnum.replaced: 'replaced',
   IdentityOutcomeOutcomeEnum.unknownDefaultOpenApi: 'unknown_default_open_api',
 };

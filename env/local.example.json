@@ -1,6 +1,5 @@
 {
-  "_": "Local Supabase. Pass this LAST so it overrides common.json; later files win.",
-  "SUPABASE_URL": "http://127.0.0.1:54321",
-  "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH",
+  "_": "A local `wrangler dev`. Pass this LAST so it overrides common.json; later files win.",
+  "API_BASE_URL": "http://127.0.0.1:8787",
   "LINK_HOST": "127.0.0.1:5000"
 }

@@ -59,5 +59,35 @@ api.OpensplitApi buildApiClient({
     );
   }
 
+  dio.interceptors.add(_IsoDatesInQueryStrings());
+
   return api.OpensplitApi(dio: dio);
+}
+
+/// Writes `T` where Dart writes a space.
+///
+/// Dio builds a query string by calling `toString()` on anything that is not
+/// already a String, and `DateTime.toString()` is not ISO-8601: it separates
+/// the date from the time with a space rather than a `T`. So a cursor the
+/// server had just issued came back to it as `2026-09-24 11:38:10.397Z` and
+/// was refused as malformed — correctly, because that is not a timestamp.
+///
+/// Fixed here rather than at the call sites because the call sites are
+/// generated: every `DateTime` query parameter in the client has this problem,
+/// including the ones phase 5 has not written yet.
+///
+/// `onRequest` is early enough. Dio composes the URI from `queryParameters`
+/// inside `fetch`, which runs after every request interceptor.
+class _IsoDatesInQueryStrings extends Interceptor {
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    options.queryParameters = {
+      for (final entry in options.queryParameters.entries)
+        entry.key: switch (entry.value) {
+          final DateTime at => at.toUtc().toIso8601String(),
+          final Object? other => other,
+        },
+    };
+    handler.next(options);
+  }
 }

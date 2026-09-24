@@ -34,60 +34,36 @@
         ]
       },
       "IdentityOutcome": {
-        "oneOf": [
-          {
-            "type": "object",
-            "properties": {
-              "outcome": {
-                "type": "string",
-                "enum": [
-                  "kept"
-                ]
-              },
-              "account": {
-                "$ref": "#/components/schemas/Account"
-              },
-              "token": {
-                "type": "string",
-                "nullable": true
-              }
-            },
-            "required": [
-              "outcome",
-              "account",
-              "token"
-            ]
+        "type": "object",
+        "properties": {
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "kept",
+              "replaced"
+            ],
+            "description": "kept: the account id did not change, so nothing on the device has to move. replaced: a different account holds the session now, and `strandedUserId` names the one this device's ledger stays with."
           },
-          {
-            "type": "object",
-            "properties": {
-              "outcome": {
-                "type": "string",
-                "enum": [
-                  "replaced"
-                ]
-              },
-              "account": {
-                "$ref": "#/components/schemas/Account"
-              },
-              "token": {
-                "type": "string",
-                "nullable": true
-              },
-              "strandedUserId": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 64,
-                "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
-              }
-            },
-            "required": [
-              "outcome",
-              "account",
-              "token",
-              "strandedUserId"
-            ]
+          "account": {
+            "$ref": "#/components/schemas/Account"
+          },
+          "token": {
+            "type": "string",
+            "nullable": true
+          },
+          "strandedUserId": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
           }
+        },
+        "required": [
+          "outcome",
+          "account",
+          "token",
+          "strandedUserId"
         ]
       },
       "Account": {

@@ -41,8 +41,6 @@ export 'package:opensplit_api/src/model/group_link.dart';
 export 'package:opensplit_api/src/model/group_patch.dart';
 export 'package:opensplit_api/src/model/health.dart';
 export 'package:opensplit_api/src/model/identity_outcome.dart';
-export 'package:opensplit_api/src/model/identity_outcome_one_of.dart';
-export 'package:opensplit_api/src/model/identity_outcome_one_of1.dart';
 export 'package:opensplit_api/src/model/invite.dart';
 export 'package:opensplit_api/src/model/invite_superseded_inner.dart';
 export 'package:opensplit_api/src/model/join_request.dart';

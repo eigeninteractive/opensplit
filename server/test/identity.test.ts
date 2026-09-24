@@ -16,7 +16,28 @@ interface Outcome {
   outcome: "kept" | "replaced";
   account: { id: string; isAnonymous: boolean; email: string | null };
   token: string | null;
-  strandedUserId?: string;
+
+  /**
+   * Present and null on a `kept` outcome, rather than absent.
+   *
+   * Not a style choice. A discriminated union here emits `oneOf`, which the
+   * Dart generator flattens into one class with every field from both branches
+   * required — so an absent `strandedUserId` made the most common answer this
+   * endpoint gives fail to decode on the device. `everyOutcomeCarriesTheField`
+   * below is what holds it present.
+   */
+  strandedUserId: string | null;
+}
+
+/**
+ * Every field the generated client declares required, actually there.
+ *
+ * Asserted on the parsed body rather than trusted from the type, because the
+ * type is this file's own description of the wire and the wire is what the
+ * device has to read.
+ */
+function everyOutcomeCarriesTheField(body: Outcome) {
+  expect(Object.keys(body).sort()).toEqual(["account", "outcome", "strandedUserId", "token"]);
 }
 
 async function continueWithGoogle(idToken: string, options: { token?: string; allowSignIn?: boolean } = {}): Promise<Response> {
@@ -46,6 +67,8 @@ describe("continuing with Google", () => {
     const body = (await response.json()) as Outcome;
     // Nothing was at stake, so nothing was left behind.
     expect(body.outcome).toBe("kept");
+    everyOutcomeCarriesTheField(body);
+    expect(body.strandedUserId).toBeNull();
     expect(body.account.email).toBe("new@example.com");
     expect(body.account.isAnonymous).toBe(false);
   });
@@ -125,6 +148,7 @@ describe("continuing with Google", () => {
     // is told which local database was left behind — the only part of the
     // transition it can act on.
     expect(body.outcome).toBe("replaced");
+    everyOutcomeCarriesTheField(body);
     expect(body.account.id).toBe(owner.account.id);
     expect(body.strandedUserId).toBe(guest.id);
   });

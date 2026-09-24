@@ -122,11 +122,7 @@ int _check(Map<String, dynamic> config) {
     return null;
   }
 
-  report('SUPABASE_URL', validateBackendUrl('${config['SUPABASE_URL'] ?? ''}'));
-  report(
-    'SUPABASE_PUBLISHABLE_KEY',
-    validatePublishableKey('${config['SUPABASE_PUBLISHABLE_KEY'] ?? ''}'),
-  );
+  report('API_BASE_URL', validateBackendUrl('${config['API_BASE_URL'] ?? ''}'));
   report(
     'LINK_HOST',
     matches(
@@ -201,7 +197,11 @@ int _check(Map<String, dynamic> config) {
   return problems;
 }
 
-/// Accepts hosted and self-hosted HTTPS endpoints without embedded credentials.
+/// Accepts hosted and self-hosted HTTPS origins without embedded credentials.
+///
+/// A path is refused along with the rest. The client appends `/api/...` to
+/// this, so a trailing path would silently produce `/app/api/bootstrap` and a
+/// 404 that looks like an outage.
 String? validateBackendUrl(String value) {
   final uri = Uri.tryParse(value);
   if (uri == null ||
@@ -209,25 +209,20 @@ String? validateBackendUrl(String value) {
       uri.host.isEmpty ||
       uri.userInfo.isNotEmpty ||
       uri.hasQuery ||
-      uri.hasFragment) {
-    return 'expected an HTTPS backend URL without credentials, query or fragment';
+      uri.hasFragment ||
+      (uri.path.isNotEmpty && uri.path != '/')) {
+    return 'expected an HTTPS origin with no path, credentials, query or '
+        'fragment';
   }
   return null;
 }
 
-/// Rejects privileged server keys while supporting self-hosted anon JWTs.
-String? validatePublishableKey(String value) {
-  if (RegExp(r'^sb_publishable_[A-Za-z0-9_-]+$').hasMatch(value)) return null;
-  try {
-    final parts = value.split('.');
-    if (parts.length == 3) {
-      final payload = jsonDecode(
-        utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
-      );
-      if (payload is Map && payload['role'] == 'anon') return null;
-    }
-  } catch (_) {
-    // Invalid encodings are configuration errors, not application crashes.
-  }
-  return 'expected a publishable key or anon-role JWT, never a service-role key';
-}
+/// There is no key to check any more, and that is worth saying out loud.
+///
+/// This used to also verify a publishable key — that it was one, and above all
+/// that it was not a service-role key somebody had pasted in by mistake, which
+/// would have shipped full database access inside a web bundle.
+///
+/// The backend is now one origin serving the site, the app bundle and the API,
+/// and a request carries a session or it carries nothing. There is no anonymous
+/// public identifier to configure, so there is none to leak, rotate or check.
