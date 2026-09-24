@@ -2,10 +2,16 @@
 <!--
   A real static file, deliberately.
 
-  Served from the host root, outside the /app/** rewrite, so it is readable by
-  a Play reviewer, a crawler and somebody who has already uninstalled the app —
-  none of which a Flutter route is. tool/build_web.dart copies site/ over the
-  built client.
+  Served from the host root, where the client's deep-link fallback cannot
+  reach it, so it is readable by a Play reviewer, a crawler and somebody who has
+  already uninstalled the app — none of which a Flutter route is.
+  tool/build_web.dart copies site/ over the built client.
+
+  A file rather than a directory with an index.html in it. Cloudflare's asset
+  router redirects a bare path to its trailing-slash form when the page behind
+  it is an index, and this path is the one in the store listing, in the
+  canonical tag below and in lib/config.dart. A published address should
+  answer, not bounce.
 
   Styling is the delivered design (see legal.css); the words are ours and were
   carried across unchanged.
@@ -17,20 +23,20 @@
 <title>Privacy Policy · OpenSplit</title>
 <meta name="description" content="What OpenSplit collects, where it goes, and how to delete it.">
 <meta name="theme-color" content="#5B5891">
-<link rel="canonical" href="https://opensplit.web.app/privacy">
+<link rel="canonical" href="https://opensplit.eigeninteractive.com/privacy">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="OpenSplit">
 <meta property="og:locale" content="en">
 <meta property="og:title" content="Privacy Policy · OpenSplit">
 <meta property="og:description" content="What OpenSplit collects, where it goes, and how to delete it.">
-<meta property="og:url" content="https://opensplit.web.app/privacy">
-<meta property="og:image" content="https://opensplit.web.app/store/og-card.png">
+<meta property="og:url" content="https://opensplit.eigeninteractive.com/privacy">
+<meta property="og:image" content="https://opensplit.eigeninteractive.com/store/og-card.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Privacy Policy · OpenSplit">
 <meta name="twitter:description" content="What OpenSplit collects, where it goes, and how to delete it.">
-<meta name="twitter:image" content="https://opensplit.web.app/store/og-card.png">
+<meta name="twitter:image" content="https://opensplit.eigeninteractive.com/store/og-card.png">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
 <link rel="apple-touch-icon" href="/icons/Icon-192.png">

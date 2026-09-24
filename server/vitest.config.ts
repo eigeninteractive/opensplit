@@ -60,6 +60,28 @@ export default defineConfig({
         isolatedStorage: true,
 
         /**
+         * A front end the server suite owns, in place of `../build/web`.
+         *
+         * Three files, standing in for the landing page, the client shell and
+         * the 404 page — which is exactly the three branches of the catch-all
+         * in `app.ts`. Pointing this at the real bundle instead would make the
+         * server's own tests depend on a Flutter build having been run, and
+         * would have them assert on the contents of a generated document that
+         * nothing here controls.
+         *
+         * Only the directory is overridden. `binding` and `run_worker_first`
+         * are the deployed values, restated here because this block replaces
+         * the one in wrangler.jsonc rather than merging with it — and a suite
+         * that quietly ran with a different routing model than production is
+         * worse than no suite.
+         */
+        assets: {
+          directory: path.join(import.meta.dirname, "test/fixtures/assets"),
+          binding: "ASSETS",
+          run_worker_first: ["/api/*"],
+        },
+
+        /**
          * Every outbound request the Worker makes, intercepted.
          *
          * Anything not explicitly answered fails loudly rather than reaching
@@ -77,6 +99,13 @@ export default defineConfig({
         bindings: {
           TEST_MIGRATIONS: migrations,
           TEST_GOOGLE_PRIVATE_JWK: privateJwk,
+
+          // The deployed origin lives in wrangler.jsonc, because that is the
+          // value whose being wrong breaks sign-in for everybody. Stated again
+          // here so the suite does not inherit it, and does not depend on an
+          // untracked .dev.vars either: this file is the whole environment the
+          // tests run in.
+          APP_ORIGIN: "http://localhost:8787",
 
           // Secrets the Worker expects. Real-shaped rather than empty, so
           // tests exercise the same code paths production does — an empty

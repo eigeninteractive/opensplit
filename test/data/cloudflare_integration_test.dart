@@ -130,14 +130,19 @@ Future<bool> _workerIsUp() async {
   }
 }
 
+/// Whether a Worker answered at [_origin], decided once in `setUpAll`.
+///
+/// Top level rather than a local, because the serving group below is a
+/// separate function: the two halves of this file test the same running
+/// Worker and have to agree about whether there is one.
+late bool _available;
+
 void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
 
-  late bool available;
-
   setUpAll(() async {
-    available = await _workerIsUp();
-    if (!available) {
+    _available = await _workerIsUp();
+    if (!_available) {
       if (const bool.fromEnvironment('REQUIRE_BACKEND')) {
         fail('CI requires a local Worker on $_origin. Run `npm run dev`.');
       }
@@ -175,7 +180,7 @@ void main() {
     }
 
     setUp(() async {
-      if (!available) return;
+      if (!_available) return;
 
       final device = await _Device.guest();
       profileId = device.profileId;
@@ -192,7 +197,7 @@ void main() {
     });
 
     tearDown(() async {
-      if (!available) return;
+      if (!_available) return;
       sync.dispose();
       await outbox.dispose();
       await db.close();
@@ -218,7 +223,7 @@ void main() {
     }
 
     test('a guest session is a session the ledger accepts', () async {
-      if (!available) return;
+      if (!_available) return;
 
       final me = await api.bootstrap();
       expect(me.profileId, profileId);
@@ -235,7 +240,7 @@ void main() {
     });
 
     test('a full round trip, and a second device reads it back', () async {
-      if (!available) return;
+      if (!_available) return;
 
       final g = await seeded();
       await entries.create(
@@ -313,7 +318,7 @@ void main() {
     });
 
     test('an edit crosses the wire as a field-level diff', () async {
-      if (!available) return;
+      if (!_available) return;
 
       // Where a payload key spelled differently either side actually shows up.
       // The line is not sent: the object records what the expense looked like
@@ -371,7 +376,7 @@ void main() {
     });
 
     test('an expense that does not add up is refused outright', () async {
-      if (!available) return;
+      if (!_available) return;
 
       final g = await seeded();
       final entry = await entries.create(
@@ -402,7 +407,7 @@ void main() {
     });
 
     test('a stale edit is refused only when it moves money', () async {
-      if (!available) return;
+      if (!_available) return;
 
       final g = await seeded();
       final entry = await entries.create(
@@ -457,7 +462,7 @@ void main() {
     });
 
     test('deleting carries the exact version, and propagates', () async {
-      if (!available) return;
+      if (!_available) return;
 
       final g = await seeded();
       final entry = await entries.create(
@@ -520,7 +525,7 @@ void main() {
     });
 
     test('the cursor pages, and then pulls nothing', () async {
-      if (!available) return;
+      if (!_available) return;
 
       final g = await seeded();
       for (var i = 0; i < 6; i++) {
@@ -557,7 +562,7 @@ void main() {
     });
 
     test('a member rename reaches the other device', () async {
-      if (!available) return;
+      if (!_available) return;
 
       final g = await seeded();
       await sync.syncGroup(g.groupId);
@@ -594,14 +599,14 @@ void main() {
     late CloudflareLedgerApi public;
 
     setUp(() {
-      if (!available) return;
+      if (!_available) return;
       public = CloudflareLedgerApi(
         buildApiClient(baseUrl: _origin, token: () async => null),
       );
     });
 
     test('the reference lists arrive whole, with no session', () async {
-      if (!available) return;
+      if (!_available) return;
 
       final reference = await public.pullReference();
 
@@ -624,7 +629,7 @@ void main() {
     });
 
     test('a device learns currencies before it can make a group', () async {
-      if (!available) return;
+      if (!_available) return;
 
       // The ordering this exists for: `groups.default_currency` references
       // `currencies`, so a device that has not swept cannot create a group at
@@ -646,7 +651,7 @@ void main() {
     });
 
     test('rates arrive against USD, stamped with who published them', () async {
-      if (!available) return;
+      if (!_available) return;
 
       // Needs the cron to have run against a live provider, which is not this
       // test's business to arrange: an empty page is a correct answer for a
@@ -678,7 +683,7 @@ void main() {
     });
 
     test('a backfill is fire and forget, and does not refuse', () async {
-      if (!available) return;
+      if (!_available) return;
 
       // The client cannot act on the answer either way — the rate arrives on a
       // later sync or it does not — so what matters is that asking never
@@ -696,7 +701,7 @@ void main() {
     });
 
     test('a malformed date is refused rather than guessed at', () async {
-      if (!available) return;
+      if (!_available) return;
 
       await expectLater(
         public.pullFxRates(since: 'last-tuesday'),
@@ -721,7 +726,7 @@ void main() {
     late _Device ravi;
 
     setUp(() async {
-      if (!available) return;
+      if (!_available) return;
       ravi = await _Device.guest();
     });
 
@@ -759,7 +764,7 @@ void main() {
     }
 
     test('an invite is previewable with no session, then spendable', () async {
-      if (!available) return;
+      if (!_available) return;
 
       final g = await seededGroup(ravi);
       final invite = await ravi.invites.create(
@@ -798,7 +803,7 @@ void main() {
     });
 
     test('a spent link says so rather than saying nothing', () async {
-      if (!available) return;
+      if (!_available) return;
 
       final g = await seededGroup(ravi);
       final invite = await ravi.invites.create(
@@ -821,7 +826,7 @@ void main() {
     });
 
     test('an open link offers the places already typed in', () async {
-      if (!available) return;
+      if (!_available) return;
 
       final g = await seededGroup(ravi);
       final link = await ravi.invites.createGroupLink(g.groupId);
@@ -849,7 +854,7 @@ void main() {
     });
 
     test('somebody nobody typed in arrives under their own name', () async {
-      if (!available) return;
+      if (!_available) return;
 
       final g = await seededGroup(ravi);
       final link = await ravi.invites.createGroupLink(g.groupId);
@@ -883,7 +888,7 @@ void main() {
     });
 
     test('revoking leaves the link able to explain itself', () async {
-      if (!available) return;
+      if (!_available) return;
 
       final g = await seededGroup(ravi);
       final link = await ravi.invites.createGroupLink(g.groupId);
@@ -905,13 +910,13 @@ void main() {
     });
 
     test('a token that names nothing is not a link', () async {
-      if (!available) return;
+      if (!_available) return;
 
       expect(await ravi.invites.peekLink('not-a-token-at-all'), isNull);
     });
 
     test('a profile is visible to a co-member and to nobody else', () async {
-      if (!available) return;
+      if (!_available) return;
 
       final g = await seededGroup(ravi);
       await ravi.ledger.pushProfile(
@@ -948,7 +953,7 @@ void main() {
     });
 
     test('a payment handle can be cleared, not only added', () async {
-      if (!available) return;
+      if (!_available) return;
 
       await ravi.ledger.pushProfile(
         Profile(id: ravi.profileId, displayName: 'Ravi', upiVpa: 'ravi@oksbi'),
@@ -966,7 +971,7 @@ void main() {
     });
 
     test('the profile feed pages on the pair, not the timestamp', () async {
-      if (!available) return;
+      if (!_available) return;
 
       final g = await seededGroup(ravi);
       await ravi.ledger.pushProfile(
@@ -1000,7 +1005,7 @@ void main() {
     test(
       'the sync engine pushes a profile and pulls a co-member back',
       () async {
-        if (!available) return;
+        if (!_available) return;
 
         // The whole engine path, not the adapter: a local write goes through the
         // outbox, and a co-member's profile arrives through the cursored feed
@@ -1054,7 +1059,7 @@ void main() {
     );
 
     test('a device token registers, transfers and is forgotten', () async {
-      if (!available) return;
+      if (!_available) return;
 
       final token = 'fcm-${DateTime.now().microsecondsSinceEpoch}';
       await ravi.devices.register(token: token, platform: 'android');
@@ -1073,7 +1078,7 @@ void main() {
     });
 
     test('deleting an account leaves a shared group intact', () async {
-      if (!available) return;
+      if (!_available) return;
 
       final g = await seededGroup(ravi);
       final invite = await ravi.invites.create(
@@ -1107,7 +1112,7 @@ void main() {
     });
 
     test('a group nobody left could read is collected outright', () async {
-      if (!available) return;
+      if (!_available) return;
 
       final solo = await _Device.guest();
       final g = await seededGroup(solo);
@@ -1129,5 +1134,126 @@ void main() {
       expect(grave.group, isNull);
       expect(grave.members, isEmpty);
     });
+  });
+
+  group('the origin serves the front end as well as the API', _serving);
+}
+
+/// The serving layer, against the Worker that will serve it.
+///
+/// Three files decide this and none of them is code: `site/_headers` and
+/// `site/_redirects` are parsed by Cloudflare and never served, and the
+/// deep-link fallback lives in `server/src/app.ts`. Unit tests elsewhere check
+/// that the rules *say* the right thing. Only a request can show they are
+/// applied — and the most consequential of them is applied by the Worker and
+/// the asset router together, which neither suite can see on its own.
+void _serving() {
+  late HttpClient http;
+
+  setUp(() {
+    if (!_available) return;
+    http = HttpClient();
+  });
+
+  tearDown(() => _available ? http.close(force: true) : null);
+
+  Future<HttpClientResponse> get(String path) async {
+    final request = await http.getUrl(Uri.parse('$_origin$path'));
+    request.followRedirects = false;
+    return request.close();
+  }
+
+  test('a cold deep link arrives cross-origin isolated', () async {
+    if (!_available) return;
+
+    // The invite link, in other words: somebody taps it and the browser asks
+    // for a path no asset matches. The Worker answers it with the client's own
+    // document, and these two headers have to survive that — they are what
+    // lets sqlite3.wasm use SharedArrayBuffer, so without them the local-first
+    // database fails on exactly the arrival that matters most.
+    final response = await get('/app/join/a-token-nobody-minted');
+    await response.drain<void>();
+
+    expect(response.statusCode, 200);
+    expect(response.headers.value('content-type'), contains('text/html'));
+    expect(response.headers.value('cross-origin-opener-policy'), 'same-origin');
+    expect(
+      response.headers.value('cross-origin-embedder-policy'),
+      'credentialless',
+    );
+  });
+
+  test('the static root is not isolated, and says so by omission', () async {
+    if (!_available) return;
+
+    // Scoped to the client deliberately. The landing page and the document
+    // pages embed Google Fonts, and isolating them would break that for no
+    // benefit — so this asserts the absence, which is the part a widened rule
+    // would silently undo.
+    final response = await get('/');
+    await response.drain<void>();
+
+    expect(response.statusCode, 200);
+    expect(response.headers.value('cross-origin-embedder-policy'), isNull);
+    expect(response.headers.value('x-content-type-options'), 'nosniff');
+  });
+
+  test('a document page answers at its own address', () async {
+    if (!_available) return;
+
+    for (final page in ['/privacy', '/terms', '/delete-account']) {
+      final response = await get(page);
+      await response.drain<void>();
+
+      // 200 and not 307. These are the URLs in the Play Console listing and in
+      // lib/config.dart, and a reviewer following a redirect chain to a
+      // privacy policy is a reason for rejection.
+      expect(response.statusCode, 200, reason: '$page did not serve directly');
+      expect(response.headers.value('content-type'), contains('text/html'));
+    }
+  });
+
+  test('routes the client used to own at the root still resolve', () async {
+    if (!_available) return;
+
+    final response = await get('/join/a-token-from-an-old-chat');
+    await response.drain<void>();
+
+    expect(response.statusCode, 301);
+    expect(
+      response.headers.value('location'),
+      '/app/join/a-token-from-an-old-chat',
+    );
+  });
+
+  test(
+    'a missing page is a 404, not the app and not the landing page',
+    () async {
+      if (!_available) return;
+
+      final response = await get('/no-such-page');
+      final body = await response
+          .transform(const SystemEncoding().decoder)
+          .join();
+
+      expect(response.statusCode, 404);
+      expect(body, contains('That page is not here'));
+    },
+  );
+
+  test('assetlinks.json is served the one way Android accepts', () async {
+    if (!_available) return;
+
+    // JSON, over one request, with no redirect. Get any of the three wrong and
+    // App Links fail silently: every invite link opens a browser instead of
+    // the app, on other people's phones, with nothing logged anywhere.
+    final response = await get('/.well-known/assetlinks.json');
+    await response.drain<void>();
+
+    expect(response.statusCode, 200);
+    expect(
+      response.headers.value('content-type'),
+      contains('application/json'),
+    );
   });
 }

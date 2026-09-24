@@ -32,43 +32,64 @@ void main() {
     expect(manifest['display'], 'standalone');
   });
 
-  test('hosting enables Wasm isolation and prevents stale workers', () {
-    final hosting =
-        (jsonDecode(File('firebase.json').readAsStringSync()) as Map)['hosting']
-            as Map;
-    final headers = hosting['headers'] as List;
-
-    Map headerFor(String source) =>
-        headers.cast<Map>().singleWhere((entry) => entry['source'] == source);
+  test('serving enables Wasm isolation, and only for the client', () {
+    final rules = _headerRules();
 
     // Scoped to the app rather than the whole origin. Cross-origin isolation
     // is what lets sqlite3.wasm use SharedArrayBuffer, and it is also what
     // stops a page loading anything cross-origin that does not opt in — a
-    // needless constraint on a marketing site somebody else designs.
+    // needless constraint on a marketing site somebody else designs, whose
+    // pages embed Google Fonts.
     //
     // The pair is safe here only because no sign-in depends on a popup any
     // more: the web hands the whole page to Google and comes back. Reinstating
     // an in-page Google button without removing these would break sign-in
     // silently, in release builds only.
-    final app = (headerFor('/app/**')['headers'] as List).cast<Map>();
-    expect(app, contains(containsPair('key', 'Cross-Origin-Opener-Policy')));
-    expect(app, contains(containsPair('key', 'Cross-Origin-Embedder-Policy')));
+    expect(rules['/app/*'], contains('Cross-Origin-Opener-Policy'));
+    expect(rules['/app/*'], contains('Cross-Origin-Embedder-Policy'));
 
-    for (final source in [
-      '/sw.js',
-      '/app/sw.js',
-      '/app/firebase-messaging-sw.js',
-    ]) {
-      final workerHeaders = (headerFor(source)['headers'] as List).cast<Map>();
+    expect(rules['/*'], isNot(contains('Cross-Origin-Opener-Policy')));
+    expect(rules['/*'], isNot(contains('Cross-Origin-Embedder-Policy')));
+    expect(rules['/*'], contains('X-Content-Type-Options'));
+  });
+
+  test('the serving rules reach the bundle Cloudflare is given', () {
+    // Both files are parsed by Cloudflare and never served, so losing one
+    // produces no 404 and no error: the site simply comes back without
+    // cross-origin isolation, and the client's database stops working in a way
+    // that reads as a Flutter bug. They have to be at the root of the assets
+    // directory, which is build/web, and they get there by being in site/.
+    for (final name in ['_headers', '_redirects']) {
       expect(
-        workerHeaders,
-        contains(
-          allOf(
-            containsPair('key', 'Cache-Control'),
-            containsPair('value', 'no-cache, max-age=0'),
-          ),
-        ),
+        File('site/$name').existsSync(),
+        isTrue,
+        reason: 'site/$name is what tool/build_web.dart copies to build/web',
       );
+    }
+    expect(
+      File('tool/build_web.dart').readAsStringSync(),
+      contains('_checkServingRules'),
+      reason: 'the build must fail rather than ship a bundle missing them',
+    );
+  });
+
+  test('every route the app used to own at the root still resolves', () {
+    // These URLs are in chat histories and browser histories from before the
+    // origin was split. A redirect that quietly stops being emitted is a link
+    // somebody else holds that now 404s.
+    final redirects = File('site/_redirects')
+        .readAsLinesSync()
+        .where((line) => line.startsWith('/'))
+        .map((line) => line.split(RegExp(r'\s+')))
+        .toList();
+
+    for (final route in ['/g/*', '/join/*', '/welcome', '/archived']) {
+      final rule = redirects.singleWhere(
+        (parts) => parts.first == route,
+        orElse: () => fail('$route no longer redirects anywhere'),
+      );
+      expect(rule[1], startsWith('/app'));
+      expect(rule[2], '301', reason: 'the split is not a temporary state');
     }
   });
 
@@ -89,24 +110,54 @@ void main() {
     expect(tombstone.readAsStringSync(), contains('registration.unregister()'));
   });
 
-  test('the single-page rewrite cannot swallow the static site', () {
-    final hosting =
-        (jsonDecode(File('firebase.json').readAsStringSync()) as Map)['hosting']
-            as Map;
-    final rewrites = (hosting['rewrites'] as List).cast<Map>();
+  test('the deep-link fallback cannot swallow the static site', () {
+    final worker = File('server/src/app.ts').readAsStringSync();
 
-    // The whole reason the app moved under /app/. A catch-all rewrite here
+    // The whole reason the client moved under /app/. A catch-all fallback
     // answers *everything* with the app shell — which is how the landing page,
     // the privacy policy and /favicon.ico all came back as 200 text/html, and
     // how an OAuth reviewer ended up looking at a sign-in screen.
-    for (final rewrite in rewrites) {
-      expect(
-        rewrite['source'] as String,
-        startsWith('/app'),
-        reason:
-            'a rewrite matching outside /app would serve the app shell in '
-            'place of the static pages at the host root',
-      );
-    }
+    //
+    // Asserted against the Worker rather than a config file because that is
+    // where the rule now lives: none of the platform's own not_found_handling
+    // settings answers the right document, so src/app.ts decides by hand.
+    expect(
+      worker,
+      contains(
+        "url.pathname === \"/app\" || url.pathname.startsWith(\"/app/\")",
+      ),
+      reason:
+          'the fallback must be scoped to /app; widening it serves the app '
+          'shell in place of the static pages at the host root',
+    );
+
+    // And the setting that would widen it behind the Worker's back.
+    final config = File('server/wrangler.jsonc').readAsStringSync();
+    expect(
+      config,
+      isNot(contains('"not_found_handling"')),
+      reason:
+          'single-page-application would answer /app/join/xyz with the '
+          'landing page, and 404-page would answer it with /404.html',
+    );
   });
+}
+
+/// The header names `_headers` sets, by the path pattern they are set on.
+///
+/// Parsed rather than asserted as text so the test says what the rules mean,
+/// and so reordering or recommenting the file does not fail it.
+Map<String, Set<String>> _headerRules() {
+  final rules = <String, Set<String>>{};
+  var pattern = '';
+  for (final line in File('site/_headers').readAsLinesSync()) {
+    if (line.trim().isEmpty || line.trimLeft().startsWith('#')) continue;
+    if (!line.startsWith(RegExp(r'\s'))) {
+      pattern = line.trim();
+      rules[pattern] = <String>{};
+    } else {
+      rules[pattern]!.add(line.split(':').first.trim());
+    }
+  }
+  return rules;
 }

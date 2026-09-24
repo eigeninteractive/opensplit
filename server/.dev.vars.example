@@ -8,3 +8,7 @@ RESEND_API_KEY=""
 FCM_PROJECT_ID=""
 FCM_SERVICE_ACCOUNT=""
 EXCHANGERATE_API_KEY=""
+
+# The origin the Worker believes it is. Overrides the deployed value in
+# wrangler.jsonc so that OAuth callbacks and cookies come back here.
+APP_ORIGIN="http://localhost:8787"

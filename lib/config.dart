@@ -26,9 +26,9 @@ const String apiBaseUrl = String.fromEnvironment(
 
 /// The one host this app is served from and generates links for.
 ///
-/// `opensplit.web.app` is the official domain, and the only one. It is where
-/// the web app is hosted, the host written into every invite link, and the sole
-/// host in the App Links intent filter in AndroidManifest.xml.
+/// `opensplit.eigeninteractive.com` is the official domain, and the only one.
+/// It is where the web app is hosted, the host written into every invite link,
+/// and the sole host in the App Links intent filter in AndroidManifest.xml.
 ///
 /// Committing to one is not tidiness. An invite link pasted into a chat outlives
 /// the app that made it — someone opens it a year later — so every host the app
@@ -43,20 +43,21 @@ const String apiBaseUrl = String.fromEnvironment(
 /// origin.
 const String linkHost = String.fromEnvironment(
   'LINK_HOST',
-  defaultValue: 'opensplit.web.app',
+  defaultValue: 'opensplit.eigeninteractive.com',
 );
 
 /// The public policy pages, served from the same host as the web app.
 ///
-/// Static HTML in `site/privacy/`, `site/terms/` and `site/delete-account/`,
-/// deliberately not Flutter routes: Google Play needs the privacy policy and
-/// the data-deletion page to be readable by a reviewer, a crawler and somebody
-/// who has already uninstalled the app, and a Flutter route is none of those.
+/// Static HTML in `site/privacy.html`, `site/terms.html` and
+/// `site/delete-account.html`, deliberately not Flutter routes: Google Play
+/// needs the privacy policy and the data-deletion page to be readable by a
+/// reviewer, a crawler and somebody who has already uninstalled the app, and a
+/// Flutter route is none of those.
 ///
 /// At the host root rather than under `/app/`, which is the whole point of the
 /// split: `site/` is plain HTML that needs no engine and no session, and the
-/// single-page-app rewrite reaches only `/app/**`, so nothing here can be
-/// swallowed by it.
+/// Worker's deep-link fallback answers only paths beginning `/app`, so nothing
+/// here can be swallowed by it.
 ///
 /// These are the exact URLs submitted to Play Console under *App content*, so
 /// the app and the store listing point at one page rather than two copies.
@@ -99,8 +100,8 @@ bool get isLocalBackend =>
 /// What is wrong with this build's configuration, if anything.
 ///
 /// Exists because of the one mistake this file makes easy. The defaults above
-/// are a local `supabase start`, so a fresh clone works with no setup — but
-/// they are also what a release build gets when somebody forgets
+/// are a local `wrangler dev`, so a fresh clone works with no setup — but they
+/// are also what a release build gets when somebody forgets
 /// `--dart-define-from-file=env/app.json`, and nothing about the result looks
 /// wrong. The app launches, the welcome screen appears, and every request goes
 /// to a host that is not there. That shipped once and cost an afternoon of

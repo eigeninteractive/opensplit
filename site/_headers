@@ -1,0 +1,44 @@
+# Response headers for anything served as a static asset.
+#
+# Cloudflare parses this file and applies its rules; it is never served itself.
+# It has to sit at the root of the assets directory, which is build/web — so it
+# lives here in site/, and tool/build_web.dart copies site/ over the built
+# client. See docs/cloudflare-runbook.md.
+#
+# This replaces firebase.json's `headers` block and is a third of its length,
+# because eleven of its fourteen rules were spelling out, one path at a time,
+# what Workers already does to every asset: `Cache-Control: public, max-age=0,
+# must-revalidate` with an ETag, so a service worker script, an index.html or a
+# manifest is revalidated on every load and can never be served stale. The
+# rules below are the ones that say something the default does not.
+#
+# One caution worth stating, because it is invisible until it bites: these
+# reach static assets only. Responses the Worker generates — the whole of
+# /api/* — are not touched by this file even when the path matches. What the
+# API asserts about itself, it asserts in Hono.
+#
+# The app shell *is* covered, though, including on a cold deep link. Those are
+# served by the Worker calling env.ASSETS.fetch(), and the asset router applies
+# these rules before handing the response back — verified, because the opposite
+# would mean cross-origin isolation depended on how somebody arrived at a page.
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+
+# Cross-origin isolation, scoped to the client rather than to the origin.
+#
+# It is what lets sqlite3.wasm use SharedArrayBuffer, which is what makes the
+# local-first database work in a browser at all. It is also what stops a page
+# loading anything cross-origin that has not opted in — a real constraint, and
+# a pointless one to impose on marketing pages at the root that somebody else
+# designs and that embed Google Fonts.
+#
+# The pair is safe here only because no sign-in depends on a popup any more:
+# the web build hands the whole page to Google and comes back. Reinstating an
+# in-page Google button without first removing these breaks sign-in silently,
+# in release builds only.
+/app/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: credentialless

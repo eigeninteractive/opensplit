@@ -1,0 +1,24 @@
+# Client routes that used to live at the host root.
+#
+# Before the origin was split into a static site and a client under /app/, the
+# app owned the whole host and every route was minted at it. Those URLs are in
+# chat histories and in browser histories, and a link pasted into a chat
+# outlives the layout that made it — so they keep resolving, to wherever the
+# route lives now.
+#
+# 301 and not 302: this is not a temporary arrangement. A permanent redirect is
+# what lets a browser stop asking and a crawler stop listing the old URL.
+#
+# Like _headers, this file is parsed rather than served, must sit at the root of
+# the assets directory, and does not apply to anything the Worker answers
+# itself. That last point is why /app/* is deliberately absent: a deep link
+# matching no asset is answered with the client's own document, which is a
+# rewrite and not a redirect, because the URL the person opened has to survive
+# into go_router rather than be replaced in their address bar.
+
+/g/*       /app/g/:splat     301
+/join/*    /app/join/:splat  301
+/welcome   /app/welcome      301
+/archived  /app/archived     301
+/account   /app/account      301
+/settings  /app/settings     301

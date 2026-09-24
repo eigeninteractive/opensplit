@@ -93,6 +93,24 @@ jobs:
       # The Durable Object and the routes, against workerd. Fast, and where
       # most of the server's behaviour is actually pinned down.
       - run: npm test
+      # The Worker serves the front end as well as the API, so it will not
+      # start at all without an assets directory -- wrangler refuses outright
+      # rather than serving nothing.
+      #
+      # The real client, not `--site-only`, and the couple of minutes it costs
+      # buys the one property nothing else here covers: that a cold deep link
+      # into /app arrives cross-origin isolated. That request is answered by
+      # the Worker rather than the asset router, so whether `_headers` reaches
+      # it is a fact about the two of them together, and losing it means the
+      # client's database quietly stops working in browsers. The web bundle
+      # job builds the same thing in parallel; coupling the two jobs to share
+      # it would put that job's whole duration on this one's critical path.
+      - name: Build the front end the Worker serves
+        working-directory: .
+        run: |
+          flutter pub get --enforce-lockfile
+          dart run build_runner build
+          dart run tool/build_web.dart --config=env/ci.example.json
       # And then the one test that goes near the wire. `wrangler dev` runs the
       # real Worker over local D1, KV and Durable Object storage -- nothing
       # here touches a Cloudflare account, and no credentials are needed.
@@ -118,8 +136,6 @@ jobs:
       - name: Test the adapter against it
         working-directory: .
         run: |
-          flutter pub get --enforce-lockfile
-          dart run build_runner build
           # REQUIRE_BACKEND, so this can never quietly skip itself in CI --
           # which is the only failure mode an opt-in integration test has.
           flutter test --dart-define=REQUIRE_BACKEND=true \

@@ -62,9 +62,9 @@ void main() {
   test('every page carries a description and a canonical', () {
     for (final page in [
       'site/index.html',
-      'site/privacy/index.html',
-      'site/terms/index.html',
-      'site/delete-account/index.html',
+      'site/privacy.html',
+      'site/terms.html',
+      'site/delete-account.html',
     ]) {
       final html = File(page).readAsStringSync();
       expect(
@@ -139,13 +139,16 @@ void main() {
   test('the sitemap lists exactly the pages that exist', () {
     final sitemap = File('site/sitemap.xml').readAsStringSync();
     final listed = RegExp(
-      r'<loc>https://opensplit\.web\.app/([^<]*)</loc>',
+      r'<loc>https://opensplit\.eigeninteractive\.com/([^<]*)</loc>',
     ).allMatches(sitemap).map((match) => match.group(1)!).toSet();
 
     expect(listed, {'', 'privacy', 'terms', 'delete-account'});
     for (final page in listed.where((page) => page.isNotEmpty)) {
+      // A file and not a directory, because `<name>/index.html` is answered
+      // with a redirect to `<name>/` — and a sitemap that advertises a URL
+      // which redirects is a sitemap arguing with its own canonical tags.
       expect(
-        File('site/$page/index.html').existsSync(),
+        File('site/$page.html').existsSync(),
         isTrue,
         reason: 'the sitemap advertises /$page, which is not a file',
       );

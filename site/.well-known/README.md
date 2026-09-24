@@ -3,18 +3,18 @@
 `assetlinks.json` must be served as `application/json`, over HTTPS, with no
 redirect, from every host the app claims. There is exactly one:
 
-- `https://opensplit.web.app/.well-known/assetlinks.json`
+- `https://opensplit.eigeninteractive.com/.well-known/assetlinks.json`
 
 Android fetches it once per host in the App Links intent filter and decides per
 host, which is the reason to claim as few as possible: a host listed there is a
 promise to serve this file, from that host, matching the signing key, for as
 long as any link naming it is still in someone's chat history.
 
-A vanity domain pointed here later should redirect to `opensplit.web.app`
-rather than be added as a second host. A redirect needs no `assetlinks.json` of
-its own and cannot drift out of step with this one.
-`test/deep_link_host_test.dart` is what keeps the manifest and `linkHost` from
-drifting apart.
+A vanity domain pointed here later should redirect to
+`opensplit.eigeninteractive.com` rather than be added as a second host. A
+redirect needs no `assetlinks.json` of its own and cannot drift out of step with
+this one. `test/deep_link_host_test.dart` is what keeps the manifest and
+`linkHost` from drifting apart.
 
 ## The fingerprint list is not optional reading
 
@@ -62,23 +62,34 @@ natively.
 
 ## Hosting
 
-The host must serve an SPA fallback under `/app`: an unmatched path there
-returns the app shell, so `/app/g/<id>` and `/app/join/<token>` work on a cold
-load rather than 404ing. `firebase.json` does this.
+The host must serve a fallback under `/app`: an unmatched path there returns the
+client's own document, so `/app/g/<id>` and `/app/join/<token>` work on a cold
+load rather than 404ing. `server/src/app.ts` does this, by hand, for paths
+beginning `/app` and no others.
 
-This file lives at the host root, outside `/app`, which is also where the
-landing page and the policy pages are. That is what keeps it clear of the
-fallback: the rewrite is scoped to `/app/**` and cannot reach it. It used to be
-a catch-all, and then `.well-known` had to be excluded by hand.
+By hand, because none of the platform's three `not_found_handling` settings
+answers the right document. `single-page-application` would hand `/app/join/xyz`
+the *landing page*, and `404-page` would hand it `/404.html`. That is also what
+keeps this file clear of the fallback: it lives at the host root, alongside the
+landing page and the policy pages, and nothing there is reachable by a rule
+scoped to `/app`.
 
-**Firebase Hosting's default `ignore` list is `["firebase.json", "**/.*",
-"**/node_modules/**"]`, and `**/.*` matches `.well-known`.** Accept that default
-and the directory is never uploaded at all: the URL 404s and App Links quietly
-stop working with nothing to explain it. `firebase.json` here deliberately does
-not use it. The copy in `build/web/.well-known/` is put there by
-`tool/build_web.dart`, which copies `site/` — dotfiles included — over the
-built app. Check it is there before believing a deploy:
+Three things have to be true of this file and none of them is checked anywhere
+that fails loudly:
+
+- **It has to be uploaded.** `wrangler deploy` uploads the whole assets
+  directory including dotfiles, and `tool/build_web.dart` copies `site/` — also
+  including dotfiles — over the built client. That was not free on the previous
+  host: Firebase Hosting's default `ignore` list contains `**/.*`, which matches
+  `.well-known`, so accepting the default silently never uploaded the directory
+  at all.
+- **It has to be `application/json`.** Wrangler infers the type from the
+  extension, so `.json` is enough and there is no rule for it in `_headers`.
+- **It must not redirect.** Nothing in `_redirects` touches `.well-known`, and
+  the trailing-slash handling only applies to HTML.
+
+Check it is there before believing a deploy:
 
 ```bash
-curl -sI https://opensplit.web.app/.well-known/assetlinks.json
+curl -sI https://opensplit.eigeninteractive.com/.well-known/assetlinks.json
 ```

@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       deploy:
-        description: Deploy to Firebase and Play (uncheck for first-upload artifacts only)
+        description: Deploy to Cloudflare and Play (uncheck for first-upload artifacts only)
         type: boolean
         default: false
       update_priority:
@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     environment: production
-    # Do not interrupt uploads or allow overlapping Play/Hosting releases.
+    # Do not interrupt uploads or allow overlapping Play/Worker releases.
     concurrency:
       group: opensplit-release-main
       cancel-in-progress: false
@@ -50,7 +50,6 @@ jobs:
       BUNDLE_FROZEN: "true"
       FASTLANE_SKIP_UPDATE_CHECK: "true"
       FASTLANE_OPT_OUT_USAGE: "true"
-      FIREBASE_CLI_DISABLE_UPDATE_CHECK: "true"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -58,7 +57,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "24.20.0"
-      - run: npm install --global firebase-tools@15.28.2
+          cache: npm
+          cache-dependency-path: server/package-lock.json
       - uses: ruby/setup-ruby@v1
         with:
           bundler-cache: true
@@ -77,7 +77,7 @@ jobs:
         # Only these public identifiers enter the client, never the whole env.
         run: |
           printf '%s' "$APP_VARIABLES" | jq '{
-            SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, LINK_HOST,
+            API_BASE_URL, LINK_HOST,
             GOOGLE_WEB_CLIENT_ID, FCM_PROJECT_ID, FCM_SENDER_ID,
             FCM_VAPID_KEY, ANDROID_FCM_API_KEY, ANDROID_FCM_APP_ID,
             WEB_FCM_API_KEY, WEB_FCM_APP_ID
@@ -130,22 +130,48 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: test "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$GITHUB_SHA"
-      - name: Authenticate to Firebase Hosting (keyless)
+      # One step, one version: the Worker script and everything in build/web go
+      # up together and become live together. That is the reason the bundle is
+      # built in this job rather than deployed from somewhere else — a front end
+      # that can be newer or older than the API it talks to is a class of bug
+      # this arrangement simply does not have.
+      #
+      # The Worker, the D1 database, the KV namespace and the custom domain all
+      # have to exist already; see docs/cloudflare-runbook.md. Creating them is
+      # not something a push to main should be able to do.
+      #
+      # `npx wrangler` against the pinned devDependency rather than
+      # cloudflare/wrangler-action, which installs "a default version" when it
+      # cannot find one. Wrangler is not a transport here: it owns the Durable
+      # Object `exports` map and the D1 migration state, so the version that
+      # deploys should be the version CI just ran the suite against, and
+      # package-lock.json is the only thing that guarantees that.
+      - name: Deploy the Worker and the web bundle
         if: github.event_name == 'push' || inputs.deploy
-        uses: google-github-actions/auth@v3
-        with:
-          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.FIREBASE_DEPLOY_SERVICE_ACCOUNT }}
-          project_id: ${{ vars.FIREBASE_PROJECT_ID }}
-      - name: Deploy live Firebase Hosting
+        working-directory: server
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npm ci
+          npx wrangler deploy
+      - name: Check the deployment is answering
         if: github.event_name == 'push' || inputs.deploy
         env:
-          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
-          FIREBASE_HOSTING_SITE: ${{ vars.FIREBASE_HOSTING_SITE }}
+          LINK_HOST: ${{ vars.LINK_HOST }}
         run: |
-          firebase target:apply hosting main-site "${FIREBASE_HOSTING_SITE:?Hosting site is missing}" \
-            --project "${FIREBASE_PROJECT_ID:?Firebase project is missing}" --non-interactive
-          firebase deploy --only hosting:main-site --project "$FIREBASE_PROJECT_ID" --non-interactive
+          # Deploys are eventually consistent across the edge, so this retries
+          # rather than asserting once. A release that uploaded and then does
+          # not answer is worth failing the run over.
+          for attempt in $(seq 1 30); do
+            if curl -sf "https://${LINK_HOST:?Link host is missing}/api/health" \
+              | grep -q '"service":"opensplit"'; then
+              exit 0
+            fi
+            sleep 4
+          done
+          echo "The deployed Worker did not answer /api/health." >&2
+          exit 1
       - name: Authenticate to Google Play (keyless)
         if: github.event_name == 'push' || inputs.deploy
         uses: google-github-actions/auth@v3

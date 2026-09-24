@@ -23,11 +23,11 @@ void main() {
     ).readAsStringSync();
   });
 
-  test('is opensplit.web.app', () {
+  test('is opensplit.eigeninteractive.com', () {
     // Stated outright rather than derived, because this is the commitment
     // itself: the domain is part of the product's contract with links that
     // already exist, not a configuration detail.
-    expect(linkHost, 'opensplit.web.app');
+    expect(linkHost, 'opensplit.eigeninteractive.com');
   });
 
   test('is the only host Android claims', () {
@@ -139,11 +139,23 @@ void _legalPages() {
 
     test('$name is a real file, not a route', () {
       expect(
-        File('site/$name/index.html').existsSync(),
+        File('site/$name.html').existsSync(),
         isTrue,
         reason:
-            'site/$name/index.html must exist: tool/build_web.sh copies site/ '
-            'to the host root, where the /app/** rewrite cannot reach it',
+            'site/$name.html must exist: tool/build_web.dart copies site/ to '
+            'the host root, where the /app deep-link fallback cannot reach it',
+      );
+    });
+
+    test('$name answers at its own address, without a redirect', () {
+      // A page kept as `<name>/index.html` is answered with a 307 to
+      // `<name>/` by Cloudflare's asset router, and this URL is the one in the
+      // Play Console listing and in the canonical tag. A published address
+      // should answer.
+      expect(
+        Directory('site/$name').existsSync(),
+        isFalse,
+        reason: 'site/$name/ would make $url redirect rather than serve',
       );
     });
   }
@@ -154,23 +166,23 @@ void _legalPages() {
     // to write to nobody, which is not something a reviewer or a user would
     // notice on our behalf.
     for (final name in ['privacy', 'terms', 'delete-account']) {
-      final page = File('site/$name/index.html').readAsStringSync();
+      final page = File('site/$name.html').readAsStringSync();
       expect(
         page,
         isNot(contains('[contact email]')),
-        reason: 'site/$name/index.html still has an unfilled contact address',
+        reason: 'site/$name.html still has an unfilled contact address',
       );
       expect(
         page,
         isNot(contains('[jurisdiction]')),
-        reason: 'site/$name/index.html still has an unfilled jurisdiction',
+        reason: 'site/$name.html still has an unfilled jurisdiction',
       );
       expect(
         page,
         contains('hello@eigeninteractive.com'),
         reason:
-            'site/$name/index.html has no contact address, which Play requires '
-            'a privacy policy to carry',
+            'site/$name.html has no contact address, which Play requires a '
+            'privacy policy to carry',
       );
     }
   });

@@ -45,19 +45,40 @@ describe("the Worker is wired up", () => {
     expect(health.status).toBe(200);
   });
 
-  it("serves a single-page-application deep link from the app document", async () => {
+  /**
+   * These three run against `test/fixtures/assets`, not the real bundle — see
+   * vitest.config.ts. What they pin down is which document each kind of miss
+   * is answered with, which is the whole of `app.ts`'s catch-all and the
+   * reason `assets.not_found_handling` is left off: every setting it offers
+   * would answer at least one of these with the wrong one.
+   */
+  it("serves a deep link from the client's own document", async () => {
     const response = await workerExports.default.fetch("https://opensplit.test/app/join/some-token");
 
     // 200 rather than 404: go_router reads the path and decides, and it can
     // only do that if the document arrives.
     expect(response.status).toBe(200);
-    expect(await response.text()).toContain("opensplit-app-shell");
+    expect(await response.text()).toContain("Client shell");
   });
 
-  it("does not answer a missing site page with the app document", async () => {
+  it("answers a missing site page with the 404 page, and a 404", async () => {
     const response = await workerExports.default.fetch("https://opensplit.test/nonsense");
+    const body = await response.text();
 
     expect(response.status).toBe(404);
+    // The status and the document have to disagree with each other in exactly
+    // this way: a real 404 for a crawler, a readable page for a person. The
+    // asset store holds /404.html with a 200, so the Worker restamps it.
+    expect(body).toContain("Not found");
+    expect(body).not.toContain("Client shell");
+  });
+
+  it("does not answer a missing site page with the landing page", async () => {
+    // What `not_found_handling: "single-page-application"` would do, and it
+    // would do it to /app/join/xyz as well.
+    const response = await workerExports.default.fetch("https://opensplit.test/nonsense");
+
+    expect(await response.text()).not.toContain("Site root");
   });
 });
 

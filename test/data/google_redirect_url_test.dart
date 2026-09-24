@@ -15,17 +15,17 @@ void main() {
       () {
         expect(
           googleRedirectUrl(
-            Uri.parse('https://opensplit.web.app/app/welcome'),
+            Uri.parse('https://opensplit.eigeninteractive.com/app/welcome'),
             '/',
           ),
-          'https://opensplit.web.app/app/welcome?from=%2F',
+          'https://opensplit.eigeninteractive.com/app/welcome?from=%2F',
         );
         expect(
           googleRedirectUrl(
-            Uri.parse('https://opensplit.web.app/welcome'),
+            Uri.parse('https://opensplit.eigeninteractive.com/welcome'),
             '/',
           ),
-          'https://opensplit.web.app/welcome?from=%2F',
+          'https://opensplit.eigeninteractive.com/welcome?from=%2F',
         );
       },
     );
@@ -36,10 +36,12 @@ void main() {
       // to end on the invite rather than on the home screen.
       expect(
         googleRedirectUrl(
-          Uri.parse('https://opensplit.web.app/app/welcome?from=/join/abc123'),
+          Uri.parse(
+            'https://opensplit.eigeninteractive.com/app/welcome?from=/join/abc123',
+          ),
           '/join/abc123',
         ),
-        'https://opensplit.web.app/app/welcome?from=%2Fjoin%2Fabc123',
+        'https://opensplit.eigeninteractive.com/app/welcome?from=%2Fjoin%2Fabc123',
       );
     });
 
@@ -47,10 +49,10 @@ void main() {
       // `Uri.base` on a deep route must not leak that route into the target.
       expect(
         googleRedirectUrl(
-          Uri.parse('https://opensplit.web.app/app/g/42/settings'),
+          Uri.parse('https://opensplit.eigeninteractive.com/app/g/42/settings'),
           '/g/42/settings',
         ),
-        'https://opensplit.web.app/app/welcome?from=%2Fg%2F42%2Fsettings',
+        'https://opensplit.eigeninteractive.com/app/welcome?from=%2Fg%2F42%2Fsettings',
       );
     });
   });

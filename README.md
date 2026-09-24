@@ -50,6 +50,7 @@ flutter run
 The local backend:
 
 ```bash
+dart run tool/build_web.dart --site-only   # the Worker serves a front end too
 cd server
 npm ci
 npm run db:migrate:local           # applies server/migrations to local D1
@@ -60,6 +61,13 @@ npm test                           # the Durable Object and the routes
 `wrangler dev` runs the real Worker over local D1, KV and Durable Object
 storage. Nothing it does touches a Cloudflare account, and it needs no
 credentials beyond `cp .dev.vars.example .dev.vars`.
+
+The first line is there because the Worker serves the site and the client as
+well as the API, and it refuses to start at all without an assets directory.
+`--site-only` builds the static root in about a second and skips the Flutter
+client; drop the flag when you want `/app` too. `npm test` needs neither — the
+server suite serves a three-file fixture it owns, so it never depends on which
+build ran last.
 
 The server tests are not optional decoration. They cover the balance invariant
 rejecting an expense that does not add up, that a stale edit is refused only
@@ -85,9 +93,15 @@ group's rows, so all three become function calls with the before-and-after
 values in hand.
 
 ```bash
+dart run tool/build_web.dart                           # the whole front end
 cd server && npm run db:migrate:local && npm run dev   # in one terminal
 flutter test test/data/cloudflare_integration_test.dart
 ```
+
+The full build and not `--site-only`, because this suite also asserts that a
+cold deep link into `/app` arrives cross-origin isolated — which is a fact
+about the Worker and the asset router together, and the only place it is
+checked.
 
 That runs the real adapter against a local `wrangler dev` — the actual Worker,
 over local D1, KV and Durable Object storage. Nothing in it touches a
@@ -251,8 +265,9 @@ The source service workers intentionally contain unresolved placeholders. Only
 configuration, injects Firebase's public identifiers, and keys the offline cache
 to the commit being built. CI uses structurally valid inert identifiers to prove
 the release build. After every CI gate passes, pushes to `main` build with real
-production variables, deploy Firebase Hosting, and distribute a signed AAB to
-Play closed testing. Release reruns the same CI checks before publishing.
+production variables, deploy the Worker and the bundle together, and distribute
+a signed AAB to Play closed testing. Release reruns the same CI checks before
+publishing.
 A manual **Release** run with **deploy unchecked** creates
 artifacts only, for first-upload bootstrap.
 
@@ -581,12 +596,14 @@ The usual working setup: the API, the database and auth all local, but push
 going through the real FCM project, because there is no local FCM.
 
 ```bash
+dart run tool/build_web.dart --site-only
 cd server && npm run db:migrate:local && npm run dev
 ```
 
 `wrangler dev` runs the real Worker over local D1, KV and Durable Object
 storage. Nothing it does touches a Cloudflare account and it needs no
-credentials.
+credentials. It does need an assets directory to exist, which is what the first
+line is for.
 
 Config files are merged in order and **later files win**, so a local override
 goes last:
@@ -675,20 +692,48 @@ path URL strategy, so go_router still sees `/g/123` while the browser shows
 holds them together: the invite URL in `lib/domain/repositories/invite_api.dart`
 and the App Links `pathPrefix` in `AndroidManifest.xml`.
 
-Any host works, provided it serves an SPA fallback under `/app` —
-`/app/join/<token>` must return the app shell rather than a 404, since that is
-the entire point of an invite link — and serves `site/` as real files at the
-root. `firebase.json` does both.
+Both halves are served by the Worker, from the same origin as the API. There is
+no separate hosting product and no CORS, which is what lets the web build keep
+its session in a first-party `HttpOnly` cookie rather than a token JavaScript
+can read.
 
 ```bash
-firebase use --add                 # writes .firebaserc, which is gitignored
-dart run tool/build_web.dart       # builds /app/, then copies site/ over the root
-firebase deploy --only hosting
+dart run tool/build_web.dart          # builds /app/, then copies site/ over the root
+cd server && npx wrangler deploy      # script and bundle, one version
 ```
 
-`opensplit.web.app` is the official domain, and the only one. It hosts the web
-app, it is the host written into every invite link (`LINK_HOST` in
+`build/web` is the Worker's `assets.directory`, so those two commands are one
+deploy: the script and the front end go up together and become live together,
+and a client that is newer or older than the API it talks to is a state this
+arrangement cannot reach. `docs/cloudflare-runbook.md` has the account-level
+steps that have to happen once before the second command works at all.
+
+Three parts of serving are configuration rather than code, and they live beside
+the pages they describe:
+
+- `site/_headers` — security headers for everything, and cross-origin isolation
+  for `/app/*` only. Cloudflare parses it and never serves it. It is a third the
+  length of the Firebase config it replaced, because most of that file was
+  spelling out per path what Workers already does to every asset: revalidate
+  always, with an ETag.
+- `site/_redirects` — the client routes that used to live at the host root,
+  permanently redirected under `/app`. Those URLs are in other people's chat
+  histories.
+- `server/src/app.ts` — the deep-link fallback, by hand. `/app/join/<token>` has
+  to return the client's document rather than a 404, since that is the entire
+  point of an invite link, and none of the platform's three `not_found_handling`
+  settings answers the right document: two of them would hand a deep link the
+  landing page or the 404 page instead.
+
+For work on the server alone, `dart run tool/build_web.dart --site-only` builds
+the static root in about a second and skips the Flutter client. `wrangler dev`
+refuses to start without an assets directory, and a two-minute Flutter build is
+a strange price for editing a route handler.
+
+`opensplit.eigeninteractive.com` is the official domain, and the only one. It
+hosts the web app, it is the host written into every invite link (`LINK_HOST` in
 `lib/config.dart`), and it is the single entry in the App Links intent filter.
+`workers.dev` is switched off so that there is no second address at all.
 
 That is a deliberate commitment rather than a default. Every host the app has
 ever claimed has to keep serving, keep resolving, and keep an
@@ -698,20 +743,20 @@ host doubles that obligation and buys nothing, since both would serve the same
 build.
 
 A vanity domain may point here later. If one does it should **redirect** to
-`opensplit.web.app` rather than serve alongside it. A redirect leaves one URL
-that links are minted with and one origin that owns the stored data — which
-matters here, because this is a local-first app whose database is keyed to its
-origin, so a second origin is a second, empty copy of the app.
+`opensplit.eigeninteractive.com` rather than serve alongside it. A redirect
+leaves one URL that links are minted with and one origin that owns the stored
+data — which matters here, because this is a local-first app whose database is
+keyed to its origin, so a second origin is a second, empty copy of the app.
 
 After the first deploy, confirm the file actually shipped, because the failure
 mode is silence:
 
 ```bash
-curl -sI https://opensplit.web.app/.well-known/assetlinks.json
+curl -sI https://opensplit.eigeninteractive.com/.well-known/assetlinks.json
 ```
 
-It must return `200` and `content-type: application/json`. HTML means the SPA
-rewrite swallowed it, and App Links will not verify.
+It must return `200` and `content-type: application/json`. HTML means the
+deep-link fallback swallowed it, and App Links will not verify.
 
 **Before the first Play Store release**, read
 [`site/.well-known/README.md`](site/.well-known/README.md). `assetlinks.json`
