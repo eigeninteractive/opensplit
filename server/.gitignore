@@ -164,4 +164,10 @@ dist
 !.dev.vars.example
 .env*
 !.env.example
+
+# Secret NAMES only, and committed on purpose: `wrangler types` can only see
+# the secrets it is told about, so a developer's machine and CI would generate
+# different Env types from their own .dev.vars. Its own header says as much.
+!.env.types
+
 .wrangler/

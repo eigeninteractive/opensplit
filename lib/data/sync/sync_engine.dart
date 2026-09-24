@@ -257,11 +257,10 @@ class SyncEngine {
   /// wagging the dog.
   Future<void> pullReferenceData() async {
     try {
-      final currencies = await api.pullCurrencies();
-      final categories = await api.pullCategories();
+      final reference = await api.pullReference();
 
       await db.batch((batch) {
-        for (final currency in currencies) {
+        for (final currency in reference.currencies) {
           batch.insert(
             db.currencies,
             CurrenciesCompanion.insert(
@@ -279,7 +278,7 @@ class SyncEngine {
             ),
           );
         }
-        for (final category in categories) {
+        for (final category in reference.categories) {
           batch.insert(
             db.categories,
             CategoriesCompanion.insert(
@@ -666,20 +665,38 @@ class SyncEngine {
 
   /// Mirrors published exchange rates onto the device.
   ///
-  /// Rates are immutable once published, so this is a high-water mark rather
-  /// than a cursor: ask for everything on or after the newest date held, and on
-  /// a settled device that returns nothing. A device with no rates at all takes
-  /// a bounded window rather than all history, because a first sync should not
-  /// pull years of reference data to convert a dinner.
+  /// Rates are immutable once published, so the ordinary ask is a high-water
+  /// mark rather than a cursor: everything on or after the newest date held,
+  /// which on a settled device returns nothing. A device with no rates at all
+  /// takes a bounded window instead, because a first sync should not pull years
+  /// of reference data to convert a dinner.
+  ///
+  /// ## Why there is a second, backwards direction
+  ///
+  /// A high-water mark alone cannot deliver a rate for a day *older* than the
+  /// ones already held — and that is precisely what a backfill produces. The
+  /// app asks the server for a day it has never needed exactly when somebody
+  /// backdates an expense past the window, the server fetches it, and a pull
+  /// anchored to the newest date held would then never mention it. The request
+  /// would be decorative: fired, answered, and unreachable.
+  ///
+  /// So the ask reaches back to the oldest expense this device holds no rate
+  /// for, and [_fxFloor] records how far back it has already been so a date no
+  /// provider will ever answer widens the window once rather than on every
+  /// sync forever.
   ///
   /// Failure is swallowed. A missing rate costs an estimate, never a balance,
   /// and it must not be able to fail a sync that carries actual money.
   Future<int> pullFxRates() async {
     try {
       final newest = await _newestRateDate();
-      final since = newest ?? _isoDay(_clock().toUtc().subtract(_rateWindow));
+      final since =
+          await _oldestRateNeeded(newest) ??
+          newest ??
+          _isoDay(_clock().toUtc().subtract(_rateWindow));
 
       final rates = await api.pullFxRates(since: since).timeout(requestTimeout);
+      await _writeFxFloor(since);
       if (rates.isEmpty) return 0;
 
       await db.transaction(() async {
@@ -707,6 +724,55 @@ class SyncEngine {
 
   /// How far back a device with no rates at all reaches on its first sync.
   static const _rateWindow = Duration(days: 400);
+
+  /// The feed whose "cursor" runs backwards. See [pullFxRates].
+  static const _fxFloor = 'fx:floor';
+
+  /// The oldest day this device needs a rate for and has not already asked for.
+  ///
+  /// Null in the steady state, which is the point: the wide ask happens on the
+  /// sync after somebody backdates an expense, and not again. The floor is what
+  /// makes that true even when the answer is empty — a date before any
+  /// provider's history would otherwise widen the window on every sync, for
+  /// ever, and each of those is a full page of rates the device already has.
+  ///
+  /// Only entries in a currency that is not the group's own can need one: a
+  /// bill in the group's default currency is never converted.
+  Future<String?> _oldestRateNeeded(String? newest) async {
+    final floor = (await _readFeedCursor(_fxFloor)).$1;
+
+    final query =
+        db.select(db.entries).join([
+            innerJoin(db.groups, db.groups.id.equalsExp(db.entries.groupId)),
+          ])
+          ..where(
+            db.entries.deletedAt.isNull() &
+                db.entries.currency.isNotExp(db.groups.defaultCurrency),
+          )
+          ..orderBy([OrderingTerm.asc(db.entries.entryDate)])
+          ..limit(1);
+
+    final row = await query.getSingleOrNull();
+    final oldest = row?.readTable(db.entries).entryDate;
+    if (oldest == null) return null;
+
+    final wanted = _isoDay(oldest.toUtc());
+    if (newest != null && wanted.compareTo(newest) >= 0) return null;
+    if (floor != null && wanted.compareTo(_isoDay(floor.toUtc())) >= 0) {
+      return null;
+    }
+    return wanted;
+  }
+
+  /// Records how far back this device has reached, whatever came back.
+  ///
+  /// Written on an empty answer too — that is the whole reason it exists.
+  Future<void> _writeFxFloor(String since) async {
+    final at = DateTime.parse('${since}T00:00:00Z');
+    final held = (await _readFeedCursor(_fxFloor)).$1;
+    if (held != null && !at.isBefore(held)) return;
+    await _writeFeedCursor(_fxFloor, at, since);
+  }
 
   Future<String?> _newestRateDate() async {
     final row =

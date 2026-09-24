@@ -14,6 +14,7 @@ import 'package:opensplit_api/src/api/groups_api.dart';
 import 'package:opensplit_api/src/api/identity_api.dart';
 import 'package:opensplit_api/src/api/invites_api.dart';
 import 'package:opensplit_api/src/api/meta_api.dart';
+import 'package:opensplit_api/src/api/reference_api.dart';
 import 'package:opensplit_api/src/api/sync_api.dart';
 
 class OpensplitApi {
@@ -179,6 +180,12 @@ class OpensplitApi {
   /// by doing that all interceptors will not be executed
   MetaApi getMetaApi() {
     return MetaApi(dio);
+  }
+
+  /// Get ReferenceApi instance, base route and serializer can be overridden by a given but be careful,
+  /// by doing that all interceptors will not be executed
+  ReferenceApi getReferenceApi() {
+    return ReferenceApi(dio);
   }
 
   /// Get SyncApi instance, base route and serializer can be overridden by a given but be careful,

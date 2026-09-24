@@ -83,8 +83,16 @@
     }
   ],
 
-  // Exchange rates, one blob per month. Also a placeholder id.
-  "kv_namespaces": [{ "binding": "FX_RATES", "id": "0000000000000000000000000000000f" }],
+  /**
+   * Everything derived, global and rebuildable: one blob per month of exchange
+   * rates, and the FCM access token a hundred group objects would otherwise
+   * each mint for themselves.
+   *
+   * One namespace rather than two, because both hold the same kind of thing —
+   * identical for every user, reconstructible from its source, and wrong only
+   * until the next write. Also a placeholder id; see the runbook.
+   */
+  "kv_namespaces": [{ "binding": "CACHE", "id": "0000000000000000000000000000000f" }],
 
   /**
    * Two schedules, not three.

@@ -1326,6 +1326,154 @@
             "default": null
           }
         }
+      },
+      "Reference": {
+        "type": "object",
+        "properties": {
+          "currencies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Currency"
+            }
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Category"
+            }
+          }
+        },
+        "required": [
+          "currencies",
+          "categories"
+        ]
+      },
+      "Currency": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "example": "INR"
+          },
+          "exponent": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4
+          },
+          "symbol": {
+            "type": "string",
+            "nullable": true
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "exponent",
+          "symbol",
+          "name"
+        ]
+      },
+      "Category": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "name": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "icon"
+        ]
+      },
+      "FxPage": {
+        "type": "object",
+        "properties": {
+          "rates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FxRate"
+            }
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "rates",
+          "hasMore"
+        ]
+      },
+      "FxRate": {
+        "type": "object",
+        "properties": {
+          "asOf": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "example": "2026-09-23"
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "example": "INR"
+          },
+          "rate": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMinimum": true
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "asOf",
+          "currency",
+          "rate",
+          "source"
+        ]
+      },
+      "FxBackfillResponse": {
+        "type": "object",
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "accepted"
+        ]
+      },
+      "FxBackfillRequest": {
+        "type": "object",
+        "properties": {
+          "asOf": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "example": "2026-09-23"
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "example": "INR"
+          }
+        },
+        "required": [
+          "asOf",
+          "currency"
+        ]
       }
     },
     "parameters": {}
@@ -3436,6 +3584,175 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reference": {
+      "get": {
+        "operationId": "getReference",
+        "tags": [
+          "reference"
+        ],
+        "summary": "Every currency and category the server knows about",
+        "description": "Whole rather than paged, which is proportionate rather than lazy: there are a few dozen rows between them and they change about never. Send the `ETag` back as `If-None-Match` to get a 304. The client merges with an upsert and never deletes — a category withdrawn here is still on the entries that used it.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "if-none-match",
+            "in": "header"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Currencies and categories",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reference"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the ETag you sent."
+          }
+        }
+      }
+    },
+    "/api/fx": {
+      "get": {
+        "operationId": "getFxRates",
+        "tags": [
+          "reference"
+        ],
+        "summary": "Exchange rates published on or after a date",
+        "description": "Against USD, which is stored as exactly 1 — so any pair is a division and there is no such thing as a supported *pair*, only a supported currency. Rates are immutable once published, so a device keeps a high-water mark rather than a cursor and asks for everything after it.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "example": "2026-09-23"
+            },
+            "required": true,
+            "name": "since",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The rates, oldest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FxPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "That is not a date.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retry": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "retry"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fx/backfill": {
+      "post": {
+        "operationId": "requestFxBackfill",
+        "tags": [
+          "reference"
+        ],
+        "summary": "Ask for a day the server has never needed",
+        "description": "Fire and forget: a device recording an expense backdated past what the server holds says so, and the rate arrives on a later sync. It cannot wait, because a rate is display-only and must never be in the way of recording money. Heavily throttled — six devices in one group sync the same backdated expense within a second of each other.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FxBackfillRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Whether this request was taken up",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FxBackfillResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "That is not a date, or not a currency.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retry": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "retry"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
                 }
               }
             }

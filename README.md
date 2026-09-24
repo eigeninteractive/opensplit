@@ -274,23 +274,24 @@ front of anyone else. Everything is stored against a single base (USD), one row
 per currency per day, so any pair is a division and there is no such thing as a
 supported *pair*.
 
-```
-supabase functions deploy fetch-fx
-supabase secrets set FX_FETCH_SECRET="$(openssl rand -hex 32)" \
-                     EXCHANGERATE_API_KEY=<your key>
-
-# Point the scheduled job at the function:
-insert into app_settings (key, value) values
-  ('fx_function_url', 'https://<project>.supabase.co/functions/v1/fetch-fx'),
-  ('fx_fetch_secret', '<the same FX_FETCH_SECRET>');
-
-# Seed history so backdated entries can be converted from day one:
-select trigger_fx_fetch('{"backfill_days": 120}'::jsonb);
+```bash
+# Optional, and only for full coverage — see the table below.
+cd server && npx wrangler secret put EXCHANGERATE_API_KEY
 ```
 
-A daily `pg_cron` job (16:30 UTC, after ECB publishes) keeps today topped up.
-Two providers run in `priority` order, the second filling what the first could
-not:
+A daily cron (`0 4 * * *`, after ECB publishes) calls the `Fx` Durable Object,
+which is the **only writer** of rates. It holds the history in its own SQLite
+and publishes one blob per month to KV, where every device reads it through
+`GET /api/fx`.
+
+A singleton object rather than a scheduled function writing KV directly,
+because KV is last-write-wins: the daily run and an on-demand backfill
+rebuilding the same month from two reads would silently drop whichever rate
+landed first, and the only symptom would be a month missing a currency.
+Serializing writers is what the primitive is for. The object writes; the edge
+serves, so a rate pull never crosses the planet to reach it.
+
+Two providers run in order, the second filling what the first could not:
 
 | Provider | Covers | History |
 |---|---|---|
@@ -298,27 +299,41 @@ not:
 | ExchangeRate-API | 166 currencies | no — free plan is latest only |
 
 The ExchangeRate-API key is required for full coverage: without it only
-Frankfurter runs, and AED, KWD, BHD, LKR, NPR and VND get no rate at all.
-The free tier is 1,500 requests a month and the cron uses about 30.
+Frankfurter runs, and AED, KWD, BHD, LKR, NPR and VND get no rate at all. An
+unconfigured provider skips itself rather than failing the run, which is how a
+fork runs on Frankfurter alone. The free tier is 1,500 requests a month and the
+cron uses about 30.
 
-**Fetch once, keep forever.** A rate is immutable once published, so every
-fetched row is stored permanently and synced to every device — not scoped to
-whichever group happened to need it. Clients keep a high-water mark and only
-ask for what came after it.
+**Fetch once, keep forever.** A rate is immutable once published, so nothing
+already stored is ever overwritten — a second provider answering for a day we
+already covered would otherwise make the `source` stamped on somebody's
+converted expense quietly wrong.
 
 **Backdated entries fetch on demand.** Recording an expense on a date the app
-has never priced calls `request_fx_backfill(date, currency)`, which fetches
-that day and caches it for everyone. The server refuses dates it can already
-answer, repeats within a day, futures, anything over five years old, and more
-than twenty requests an hour.
+has never priced posts to `/api/fx/backfill`, which fetches that day and caches
+it for everyone. The object refuses dates it can already answer, repeats within
+the hour, futures, and dates chased more than five times — some days are
+unanswerable, and without a ceiling every device retries them forever against
+a quota. Six devices in one group sync the same backdated expense within a
+second of each other, so this is the common case rather than the edge one.
+
+The device reaches *backwards* for those. A high-water mark alone cannot
+deliver a rate older than the ones already held, which is exactly what a
+backfill produces — so the pull widens to the oldest expense it has no rate
+for, once, and records how far back it went.
 
 **Known limitation:** the ~136 currencies ECB does not publish have no free
 historical source, so an entry backdated before the daily job started
 accumulating gets no converted estimate for those. Balances are unaffected —
 they are per-currency and exact.
 
-Adding a provider is one adapter in `supabase/functions/fetch-fx/providers/`
-plus one row in `fx_providers`; reordering or disabling one is just the row.
+Adding a provider is one adapter in `server/src/fx/providers.ts` plus one entry
+in the array at the bottom of it. It used to be a row in an `fx_providers`
+table that could be reordered without a deploy; that bought nothing, because
+there was no interface to edit it with and every change was a migration
+anyway. What was worth keeping is the health record — each provider's last
+attempt, success and error — because "why is AED missing" is otherwise
+unanswerable from outside.
 
 ### Firebase, for push and Google sign-in
 
@@ -492,37 +507,40 @@ that reference data is per-account and re-pulled after a switch.
 
 ### Push notifications
 
-The client values above cover the app. The fan-out also needs a service account,
-three function secrets and a webhook. Project settings → Service accounts →
-Generate new private key gives you the JSON; unlike everything above, **it is a
-real secret**:
+The client values above cover the app. The fan-out also needs a service account.
+Project settings → Service accounts → Generate new private key gives you the
+JSON; unlike everything above, **it is a real secret**:
 
-```
-supabase functions deploy notify-event
-supabase secrets set FCM_PROJECT_ID=your-project \
-                     FCM_SERVICE_ACCOUNT="$(cat service-account.json)" \
-                     NOTIFY_WEBHOOK_SECRET="$(openssl rand -hex 32)"
-
-# Point the trigger at the function, exactly as the rate fetch is pointed:
-insert into app_settings (key, value) values
-  ('notify_function_url',
-   'https://<project>.supabase.co/functions/v1/notify-event'),
-  ('notify_webhook_secret', '<the same NOTIFY_WEBHOOK_SECRET>');
+```bash
+cd server
+npx wrangler secret put FCM_PROJECT_ID
+npx wrangler secret put FCM_SERVICE_ACCOUNT   # paste the whole JSON
 ```
 
-There is deliberately **no Database Webhook to create in the dashboard**. A
-Supabase webhook is a row that creates a trigger calling
-`supabase_functions.http_request()`; `trg_group_events_notify` is that trigger,
-declared in `20260101000008_push.sql` and applied by `db push` like everything
-else. So it cannot be lost, the secret lives beside `fx_fetch_secret` rather
-than in dashboard config, and the chain works on any Postgres with pg_net.
+There is no webhook, no shared secret and no trigger. The group's Durable
+Object sends directly, inside `waitUntil`, after its own write has committed —
+so the response goes back as soon as the expense is saved, and a person
+recording one never waits on Google. A function reached over HTTP has to prove
+who is calling it; a function the object calls in-process does not, which is
+how three secrets became one and a `pg_net` dispatch became a method call.
 
-Until both rows are set the trigger no-ops, which is why a deployment with no
-push configured still records expenses normally.
+With `FCM_PROJECT_ID` or `FCM_SERVICE_ACCOUNT` unset the send is skipped and
+nothing else changes, which is why a deployment with no push configured still
+records expenses normally.
 
-**The secret is not optional.** The function refuses to run without it, because
-otherwise anyone holding the publishable key — which is public by design —
-could drive the fan-out.
+**Three kinds wake a device:** an expense, somebody arriving, somebody leaving.
+Not renames, archives or links — those belong in the activity feed, which is
+read on purpose, rather than on a lock screen. `link_created` in particular
+would wake a whole group to say that one of them tapped Share.
+
+**The actor is excluded, not the author.** On an edit those are usually
+different people, and the author is precisely who needs to hear that somebody
+changed their expense.
+
+**The OAuth token lives in KV**, not in a module variable. There is one isolate
+in an Edge Function and potentially hundreds of group objects here, each in its
+own place: a per-instance cache would mint a token per active group per hour,
+which is hundreds of round trips to Google to say the same thing.
 
 For web push, `dart run tool/build_web.dart` injects the public Firebase values
 from the same configuration file as Flutter. Do not edit the worker by hand.
@@ -608,45 +626,33 @@ and scoped to the debug source set so release builds keep HTTPS mandatory. Witho
 it every request fails with `CLEARTEXT communication not permitted`, and the
 app shows a refresh failure while keeping saved data available.
 
-### Push, locally
+### Push and rates, locally
 
-Three terminals:
-
-```bash
-supabase start                                    # database, auth, storage
-supabase functions serve --env-file supabase/functions/.env
-./supabase/dev/local-notify.sh                    # points the trigger locally
-```
-
-`supabase/functions/.env` needs `NOTIFY_WEBHOOK_SECRET` (any random string
-locally), plus `FCM_PROJECT_ID` and `FCM_SERVICE_ACCOUNT` if you want the send
-to actually reach a device. Without the FCM pair the function still runs and
-answers `unconfigured`, which is enough to prove the wiring.
-
-The trigger comes from the migrations and is always present. What that script
-writes is the two `app_settings` rows it reads, pointing at the functions
-running on the host. **`supabase db reset` clears them** — rerun the script
-afterwards, or the trigger keeps firing into a URL it does not have and pushes
-silently stop.
-
-To check the chain without a device:
+One terminal. Both live inside the Worker now, so there is nothing separate to
+serve and no trigger to point anywhere:
 
 ```bash
-curl -s -X POST http://127.0.0.1:54321/functions/v1/notify-event \
-  -H 'Content-Type: application/json' \
-  -H "x-webhook-secret: $(grep '^NOTIFY_WEBHOOK_SECRET=' supabase/functions/.env | cut -d= -f2-)" \
-  -d '{"type":"UPDATE","table":"groups","record":null}'
-# -> ignored
-
-# And after adding an expense in the app, what the database got back:
-docker exec supabase_db_opensplit psql -U postgres \
-  -c "select status_code, content from net._http_response order by id desc limit 3;"
-# -> 200 | nobody to wake      (no devices registered yet)
-# -> 200 | ok                  (a device was notified)
+cd server && npm run dev
 ```
 
-A wrong secret returns `403`, which is the function refusing to be driven by
-anyone holding the publishable key.
+Put `FCM_PROJECT_ID` and `FCM_SERVICE_ACCOUNT` in `.dev.vars` if you want a
+send to actually reach a device. Without them the object still runs its write,
+skips the send, and logs nothing — which is the ordinary state for a fork and
+not a failure.
+
+The rate cron can be driven by hand, which is also what CI does before the
+adapter tests:
+
+```bash
+npx wrangler dev --test-scheduled          # exposes the handler
+curl 'http://127.0.0.1:8787/cdn-cgi/handler/scheduled?cron=0+4+*+*+*'
+curl 'http://127.0.0.1:8787/api/fx?since=2026-01-01'
+```
+
+This reaches the real ECB feed, and with no `EXCHANGERATE_API_KEY` set the log
+says which currencies went uncovered — `AED,VND,LKR,NPR,KWD,BHD`, which is
+exactly the set ECB does not publish, and the whole reason there is a second
+provider.
 
 ## Deploying
 

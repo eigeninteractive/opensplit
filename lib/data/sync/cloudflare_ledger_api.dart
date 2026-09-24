@@ -30,6 +30,7 @@ class CloudflareLedgerApi implements RemoteLedgerApi {
   api.SyncApi get _sync => _client.getSyncApi();
   api.GroupsApi get _groups => _client.getGroupsApi();
   api.EntriesApi get _entries => _client.getEntriesApi();
+  api.ReferenceApi get _reference => _client.getReferenceApi();
 
   @override
   Future<RemoteBootstrap> bootstrap() => _guard(() async {
@@ -259,20 +260,59 @@ class CloudflareLedgerApi implements RemoteLedgerApi {
   });
 
   @override
-  Future<List<Currency>> pullCurrencies() async => const [];
+  Future<ReferenceData> pullReference() => _guard(() async {
+    final body = _required(await _reference.getReference());
+    return ReferenceData(
+      currencies: [
+        for (final row in body.currencies)
+          Currency(
+            code: row.code,
+            exponent: row.exponent,
+            symbol: row.symbol,
+            name: row.name,
+          ),
+      ],
+      categories: [
+        for (final row in body.categories)
+          Category(id: row.id, name: row.name, icon: row.icon),
+      ],
+    );
+  });
 
   @override
-  Future<List<Category>> pullCategories() async => const [];
-
-  @override
-  Future<List<RemoteFxRate>> pullFxRates({required String since}) async =>
-      const [];
+  Future<List<RemoteFxRate>> pullFxRates({required String since}) =>
+      _guard(() async {
+        final page = _required(await _reference.getFxRates(since: since));
+        return [
+          for (final rate in page.rates)
+            RemoteFxRate(
+              asOf: rate.asOf,
+              currency: rate.currency,
+              rate: rate.rate.toDouble(),
+              // `source_`, with the underscore, because the generator escapes
+              // a field of that name. The wire field is `source`; this is the
+              // kind of detail that makes a generated client worth keeping
+              // behind an adapter rather than calling from the sync engine.
+              source: rate.source_,
+            ),
+        ];
+      });
 
   @override
   Future<void> requestFxBackfill({
     required DateTime asOf,
     required String currency,
-  }) async {}
+  }) => _guard(() async {
+    // Fire and forget from the caller's side, and the server answers whether
+    // it took the request up rather than whether a rate now exists. Neither
+    // end can act on it: the rate arrives on a later sync or it does not.
+    await _reference.requestFxBackfill(
+      fxBackfillRequest: api.FxBackfillRequest(
+        asOf: _day(asOf),
+        currency: currency,
+      ),
+    );
+  });
 
   // ------------------------------------------------------------- translation
 

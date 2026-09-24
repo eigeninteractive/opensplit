@@ -1,6 +1,7 @@
 import { app } from "./app";
+import { refreshRates, weeklySweep } from "./scheduled";
 
-export { Fx } from "./do/fx";
+export { Fx } from "./do/fx/index";
 export { Group } from "./do/group";
 
 /**
@@ -16,20 +17,24 @@ export default {
   fetch: app.fetch,
 
   /**
-   * Two schedules, dispatched on the cron expression that fired. Filled in
-   * across phases 5 and 7; see the plan.
+   * Two schedules, dispatched on the cron expression that fired.
    *
    * Archiving and collecting dormant groups used to be the third, and is not
    * here: every group sets its own alarm, so there is nothing central left to
    * sweep. See `src/do/group/upkeep.ts`.
+   *
+   * `waitUntil` rather than an awaited call, so the runtime keeps the
+   * invocation alive for the whole sweep — a scheduled handler that returns
+   * before its work finishes has that work cancelled, silently, and the only
+   * symptom is rates that stop arriving.
    */
-  async scheduled(controller, _env, _ctx): Promise<void> {
+  async scheduled(controller, env, ctx): Promise<void> {
     switch (controller.cron) {
       case "0 4 * * *":
-        // Exchange rates.
+        ctx.waitUntil(refreshRates(env));
         break;
       case "0 5 * * 0":
-        // Abandoned guest accounts, membership index reconciliation.
+        ctx.waitUntil(weeklySweep(env));
         break;
     }
   },

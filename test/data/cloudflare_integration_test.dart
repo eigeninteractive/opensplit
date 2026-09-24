@@ -585,6 +585,132 @@ void main() {
     });
   });
 
+  /// The two responses that are the same for everybody.
+  ///
+  /// No session anywhere in this group, deliberately: reference data and rates
+  /// are public, and a test that signed in first would not notice if they
+  /// stopped being.
+  group('reference data and rates against a live Worker', () {
+    late CloudflareLedgerApi public;
+
+    setUp(() {
+      if (!available) return;
+      public = CloudflareLedgerApi(
+        buildApiClient(baseUrl: _origin, token: () async => null),
+      );
+    });
+
+    test('the reference lists arrive whole, with no session', () async {
+      if (!available) return;
+
+      final reference = await public.pullReference();
+
+      // The exponent is the one field here that is not decoration: every
+      // amount in this app is an integer of minor units, so a wrong exponent
+      // is a factor-of-a-thousand error in a balance rather than a formatting
+      // quirk.
+      final jpy = reference.currencies.firstWhere((c) => c.code == 'JPY');
+      expect(jpy.exponent, 0);
+      final kwd = reference.currencies.firstWhere((c) => c.code == 'KWD');
+      expect(kwd.exponent, 3);
+
+      // Category ids are written onto entries, so one invented by a device
+      // would point at a category the server has never heard of.
+      expect(reference.categories, isNotEmpty);
+      expect(
+        reference.categories.every((c) => c.id.isNotEmpty && c.icon.isNotEmpty),
+        isTrue,
+      );
+    });
+
+    test('a device learns currencies before it can make a group', () async {
+      if (!available) return;
+
+      // The ordering this exists for: `groups.default_currency` references
+      // `currencies`, so a device that has not swept cannot create a group at
+      // all. This is that sweep, through the engine, into an empty database.
+      final device = AppDatabase(NativeDatabase.memory());
+      addTearDown(device.close);
+
+      final queue = OutboxQueue(device);
+      addTearDown(queue.dispose);
+      final engine = SyncEngine(db: device, api: public, outbox: queue);
+      addTearDown(engine.dispose);
+
+      expect(await device.select(device.currencies).get(), isEmpty);
+      await engine.pullReferenceData();
+
+      final learned = await device.select(device.currencies).get();
+      expect(learned.map((row) => row.code), contains('INR'));
+      expect(await device.select(device.categories).get(), isNotEmpty);
+    });
+
+    test('rates arrive against USD, stamped with who published them', () async {
+      if (!available) return;
+
+      // Needs the cron to have run against a live provider, which is not this
+      // test's business to arrange: an empty page is a correct answer for a
+      // Worker started a moment ago, and asserting on a number of rates would
+      // make this fail for a reason that is not about the client.
+      final rates = await public.pullFxRates(since: '2020-01-01');
+      if (rates.isEmpty) {
+        markTestSkipped('no rates published; run the 0 4 * * * trigger first');
+        return;
+      }
+
+      final usd = rates.where((rate) => rate.currency == 'USD');
+      expect(
+        usd.every((rate) => rate.rate == 1),
+        isTrue,
+        reason: 'the pivot is stored as exactly 1, so any pair is a division',
+      );
+
+      // The source is stamped onto any expense converted with this rate, so a
+      // converted amount can always say where its number came from.
+      expect(rates.every((rate) => rate.source.isNotEmpty), isTrue);
+      expect(rates.every((rate) => rate.rate > 0), isTrue);
+      expect(
+        rates.every(
+          (rate) => RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(rate.asOf),
+        ),
+        isTrue,
+      );
+    });
+
+    test('a backfill is fire and forget, and does not refuse', () async {
+      if (!available) return;
+
+      // The client cannot act on the answer either way — the rate arrives on a
+      // later sync or it does not — so what matters is that asking never
+      // throws into the editor that asked.
+      await public.requestFxBackfill(
+        asOf: DateTime.utc(2026, 8, 14),
+        currency: 'INR',
+      );
+      // Twice, because six devices in one group sync the same backdated
+      // expense within a second of each other.
+      await public.requestFxBackfill(
+        asOf: DateTime.utc(2026, 8, 14),
+        currency: 'INR',
+      );
+    });
+
+    test('a malformed date is refused rather than guessed at', () async {
+      if (!available) return;
+
+      await expectLater(
+        public.pullFxRates(since: 'last-tuesday'),
+        throwsA(
+          isA<RemoteRejected>().having(
+            (error) => error.kind,
+            'kind',
+            RejectionKind.permanent,
+          ),
+        ),
+      );
+    });
+  });
+
   /// Everything an account is, over the wire.
   ///
   /// Deliberately not built on the ledger group above: nothing here needs a

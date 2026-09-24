@@ -17,6 +17,7 @@
     "auth:generate": "auth generate --config src/auth.cli.ts --output src/auth-schema.ts --yes",
     "db:generate": "drizzle-kit generate --config drizzle.d1.config.ts",
     "db:generate:do": "drizzle-kit generate --config drizzle.do.config.ts",
+    "db:generate:fx": "drizzle-kit generate --config drizzle.fx.config.ts",
     "openapi": "tsx scripts/write-openapi.ts",
     "lint": "biome check",
     "format": "biome check --write"

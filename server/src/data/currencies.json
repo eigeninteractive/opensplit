@@ -1,0 +1,98 @@
+[
+  {
+    "code": "INR",
+    "exponent": 2,
+    "symbol": "₹",
+    "name": "Indian Rupee"
+  },
+  {
+    "code": "USD",
+    "exponent": 2,
+    "symbol": "$",
+    "name": "US Dollar"
+  },
+  {
+    "code": "EUR",
+    "exponent": 2,
+    "symbol": "€",
+    "name": "Euro"
+  },
+  {
+    "code": "GBP",
+    "exponent": 2,
+    "symbol": "£",
+    "name": "Pound Sterling"
+  },
+  {
+    "code": "SGD",
+    "exponent": 2,
+    "symbol": "S$",
+    "name": "Singapore Dollar"
+  },
+  {
+    "code": "AED",
+    "exponent": 2,
+    "symbol": "د.إ",
+    "name": "UAE Dirham"
+  },
+  {
+    "code": "AUD",
+    "exponent": 2,
+    "symbol": "A$",
+    "name": "Australian Dollar"
+  },
+  {
+    "code": "JPY",
+    "exponent": 0,
+    "symbol": "¥",
+    "name": "Japanese Yen"
+  },
+  {
+    "code": "KRW",
+    "exponent": 0,
+    "symbol": "₩",
+    "name": "South Korean Won"
+  },
+  {
+    "code": "VND",
+    "exponent": 0,
+    "symbol": "₫",
+    "name": "Vietnamese Dong"
+  },
+  {
+    "code": "IDR",
+    "exponent": 2,
+    "symbol": "Rp",
+    "name": "Indonesian Rupiah"
+  },
+  {
+    "code": "THB",
+    "exponent": 2,
+    "symbol": "฿",
+    "name": "Thai Baht"
+  },
+  {
+    "code": "LKR",
+    "exponent": 2,
+    "symbol": "Rs",
+    "name": "Sri Lankan Rupee"
+  },
+  {
+    "code": "NPR",
+    "exponent": 2,
+    "symbol": "Rs",
+    "name": "Nepalese Rupee"
+  },
+  {
+    "code": "KWD",
+    "exponent": 3,
+    "symbol": "د.ك",
+    "name": "Kuwaiti Dinar"
+  },
+  {
+    "code": "BHD",
+    "exponent": 3,
+    "symbol": ".د.ب",
+    "name": "Bahraini Dinar"
+  }
+]

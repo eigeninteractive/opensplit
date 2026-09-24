@@ -1143,6 +1143,81 @@ void main() {
       },
     );
 
+    test('reaches back for a day a backdated expense needs', () async {
+      // The case a high-water mark structurally cannot serve, and the reason
+      // `requestFxBackfill` is not decorative: the rate is older than anything
+      // this device holds, so a pull anchored to the newest date would never
+      // mention it however many times the server fetched it.
+      server.publishFxRate(asOf: '2026-08-20', currency: 'USD', rate: 1);
+
+      final created = await a.groups.createGroup(
+        name: 'Goa Trip',
+        defaultCurrency: 'INR',
+        creatorDisplayName: 'Ravi',
+        creatorProfileId: 'ravi',
+      );
+      await a.sync.syncGroup(created.group.id);
+      expect(server.lastFxSince, isNot('2024-03-11'));
+
+      // Backdated, and in a currency that is not the group's own — a bill in
+      // the group's own currency is never converted and needs no rate.
+      await a.entries.create(
+        EntryDraft(
+          groupId: created.group.id,
+          currency: 'USD',
+          amountMinor: 4200,
+          description: 'Last year',
+          entryDate: DateTime.utc(2024, 3, 11),
+          split: EqualSplit([created.creator.id]),
+          payerAmounts: {created.creator.id: 4200},
+        ),
+        createdBy: created.creator.id,
+      );
+      server.publishFxRate(asOf: '2024-03-11', currency: 'USD', rate: 1);
+
+      await a.sync.syncGroup(created.group.id);
+      expect(server.lastFxSince, '2024-03-11');
+      expect(
+        (await a.db.select(a.db.fxRates).get()).map((row) => row.asOf),
+        contains('2024-03-11'),
+      );
+    });
+
+    test('widens the window once, not on every sync forever', () async {
+      // A date no provider will ever answer — before their history begins —
+      // would otherwise make every sync ask for the whole window again and
+      // write back the same thousands of rows it already had.
+      final created = await a.groups.createGroup(
+        name: 'Goa Trip',
+        defaultCurrency: 'INR',
+        creatorDisplayName: 'Ravi',
+        creatorProfileId: 'ravi',
+      );
+      await a.entries.create(
+        EntryDraft(
+          groupId: created.group.id,
+          currency: 'USD',
+          amountMinor: 4200,
+          description: 'Long ago',
+          entryDate: DateTime.utc(1999, 1, 1),
+          split: EqualSplit([created.creator.id]),
+          payerAmounts: {created.creator.id: 4200},
+        ),
+        createdBy: created.creator.id,
+      );
+
+      await a.sync.syncGroup(created.group.id);
+      expect(server.lastFxSince, '1999-01-01');
+
+      server.lastFxSince = null;
+      await a.sync.syncGroup(created.group.id);
+      expect(
+        server.lastFxSince,
+        isNot('1999-01-01'),
+        reason: 'the floor records how far back it has already reached',
+      );
+    });
+
     test('a rate failure never fails a sync that carries money', () async {
       server.failFxPulls = true;
 

@@ -1,7 +1,9 @@
 import 'package:opensplit_api/src/model/account.dart';
 import 'package:opensplit_api/src/model/account_deletion.dart';
 import 'package:opensplit_api/src/model/bootstrap.dart';
+import 'package:opensplit_api/src/model/category.dart';
 import 'package:opensplit_api/src/model/change_page.dart';
+import 'package:opensplit_api/src/model/currency.dart';
 import 'package:opensplit_api/src/model/device.dart';
 import 'package:opensplit_api/src/model/device_forgotten.dart';
 import 'package:opensplit_api/src/model/email_start_request.dart';
@@ -12,6 +14,12 @@ import 'package:opensplit_api/src/model/entry_input.dart';
 import 'package:opensplit_api/src/model/error.dart';
 import 'package:opensplit_api/src/model/error_error.dart';
 import 'package:opensplit_api/src/model/event.dart';
+import 'package:opensplit_api/src/model/fx_backfill_request.dart';
+import 'package:opensplit_api/src/model/fx_backfill_response.dart';
+import 'package:opensplit_api/src/model/fx_page.dart';
+import 'package:opensplit_api/src/model/fx_rate.dart';
+import 'package:opensplit_api/src/model/get_fx_rates400_response.dart';
+import 'package:opensplit_api/src/model/get_fx_rates400_response_error.dart';
 import 'package:opensplit_api/src/model/google_identity_request.dart';
 import 'package:opensplit_api/src/model/group.dart';
 import 'package:opensplit_api/src/model/group_create.dart';
@@ -37,6 +45,7 @@ import 'package:opensplit_api/src/model/profile.dart';
 import 'package:opensplit_api/src/model/profile_list.dart';
 import 'package:opensplit_api/src/model/profile_page.dart';
 import 'package:opensplit_api/src/model/profile_update.dart';
+import 'package:opensplit_api/src/model/reference.dart';
 import 'package:opensplit_api/src/model/share.dart';
 
 final _regList = RegExp(r'^List<(.*)>$');
@@ -68,8 +77,12 @@ ReturnType deserialize<ReturnType, BaseType>(
           as ReturnType;
     case 'Bootstrap':
       return Bootstrap.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'Category':
+      return Category.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'ChangePage':
       return ChangePage.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'Currency':
+      return Currency.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'Device':
       return Device.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'DeviceForgotten':
@@ -97,6 +110,22 @@ ReturnType deserialize<ReturnType, BaseType>(
     case 'Event':
       return Event.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'EventKind':
+    case 'FxBackfillRequest':
+      return FxBackfillRequest.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
+    case 'FxBackfillResponse':
+      return FxBackfillResponse.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
+    case 'FxPage':
+      return FxPage.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'FxRate':
+      return FxRate.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'GetFxRates400Response':
+      return GetFxRates400Response.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
+    case 'GetFxRates400ResponseError':
+      return GetFxRates400ResponseError.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
     case 'GoogleIdentityRequest':
       return GoogleIdentityRequest.fromJson(value as Map<String, dynamic>)
           as ReturnType;
@@ -153,6 +182,8 @@ ReturnType deserialize<ReturnType, BaseType>(
     case 'ProfileUpdate':
       return ProfileUpdate.fromJson(value as Map<String, dynamic>)
           as ReturnType;
+    case 'Reference':
+      return Reference.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'Retry':
     case 'Share':
       return Share.fromJson(value as Map<String, dynamic>) as ReturnType;

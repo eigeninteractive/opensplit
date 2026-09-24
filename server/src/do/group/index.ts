@@ -6,6 +6,7 @@ import { migrate } from "drizzle-orm/durable-sqlite/migrator";
 
 import * as d1 from "../../db/d1/schema";
 import * as schema from "../../db/group/schema";
+import { wakeDevices } from "../../push/fcm";
 // `Group` is the wire shape of a group and also the name of the class below,
 // which wrangler binds by name. The record is the one that gets the alias.
 import type { ChangePage, Entry, EntryInput, GroupCreate, GroupPatch, Group as GroupRecord, Invite, LinkPreview, LinkRevocation, LiveLink, Member, MemberCreate, MemberPatch, MintedLink, Placeholder } from "../../schemas/ledger";
@@ -13,6 +14,7 @@ import { changesSince } from "./changes";
 import { createGroupLink, createInvite, join, liveLink, peek, placeholders, revokeGroupLink } from "./invites";
 import { deleteEntry, restoreEntry, upsertEntry } from "./ledger";
 import migrations from "./migrations/migrations";
+import { pendingNotices } from "./notices";
 import { attempt, type Result } from "./refusal";
 import { addMember, createGroup, forgetProfile, updateGroup, updateMember } from "./roster";
 import { nowIso, requireActiveMember, requireMeta, type Tx } from "./store";
@@ -130,6 +132,7 @@ export class Group extends DurableObject<Env> {
       }),
     );
     await this.settle();
+    if (result.ok) this.announce(profileId);
     return result;
   }
 
@@ -143,6 +146,7 @@ export class Group extends DurableObject<Env> {
       }),
     );
     await this.settle();
+    if (result.ok) this.announce(profileId);
     return result;
   }
 
@@ -150,6 +154,7 @@ export class Group extends DurableObject<Env> {
     const now = nowIso();
     const result = attempt(() => this.db.transaction((tx) => deleteEntry(tx, entryId, baseSeq, this.contextFor(tx, profileId, now)).entry));
     await this.settle();
+    if (result.ok) this.announce(profileId);
     return result;
   }
 
@@ -157,6 +162,7 @@ export class Group extends DurableObject<Env> {
     const now = nowIso();
     const result = attempt(() => this.db.transaction((tx) => restoreEntry(tx, entryId, baseSeq, this.contextFor(tx, profileId, now)).entry));
     await this.settle();
+    if (result.ok) this.announce(profileId);
     return result;
   }
 
@@ -252,6 +258,9 @@ export class Group extends DurableObject<Env> {
       }),
     );
     await this.settle();
+    // The arrival is the actor, even though the event records no one: nobody
+    // did this to them, and they do not need telling they just joined.
+    if (result.ok) this.announce(profileId);
     return result;
   }
 
@@ -344,6 +353,29 @@ export class Group extends DurableObject<Env> {
   private async settle(): Promise<void> {
     await this.flush();
     await this.armAlarm();
+  }
+
+  /**
+   * Wake the other members, if this change was worth waking them for.
+   *
+   * Read from what was appended rather than from what the caller intended —
+   * see `notices.ts` — and dispatched through `waitUntil`, so the response goes
+   * back as soon as the write has committed. A person recording an expense
+   * should not wait on Google to hear that it saved.
+   *
+   * Nothing here can fail the write. It runs after the transaction, its errors
+   * are swallowed inside `wakeDevices`, and push is the one feature this app is
+   * entirely usable without.
+   */
+  private announce(actorProfileId: string | null): void {
+    const notices = this.db.transaction((tx) => pendingNotices(tx, this.groupId(tx), actorProfileId));
+    if (notices.length === 0) return;
+
+    this.ctx.waitUntil(
+      wakeDevices(this.env, notices).catch((error) => {
+        console.error("[group] push failed", error);
+      }),
+    );
   }
 
   private async armAlarm(): Promise<void> {

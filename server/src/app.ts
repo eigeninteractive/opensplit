@@ -2,6 +2,7 @@ import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { accountRoutes } from "./api/account";
 import { inviteRoutes, linkRoutes } from "./api/invites";
 import { ledgerRoutes } from "./api/ledger";
+import { referenceRoutes } from "./api/reference";
 import { type AppEnv, type AuthedEnv, requireSession, services } from "./context";
 import { identityRoutes } from "./identity/routes";
 import { openApiDocument } from "./openapi";
@@ -102,6 +103,15 @@ app.route("/api", authed);
 
 // Spending a link: arriving, which starts before anybody has said who they are.
 app.route("/api/links", linkRoutes());
+
+/**
+ * Reference data and rates, outside the session boundary on purpose.
+ *
+ * Both are identical for every user — which is what `using (true)` said in SQL
+ * — so a session read before serving them would buy nothing and cost a D1
+ * round trip on the two responses most worth caching at the edge.
+ */
+app.route("/api", referenceRoutes());
 
 /**
  * The contract, served and committed.

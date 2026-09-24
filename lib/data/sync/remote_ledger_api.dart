@@ -230,8 +230,12 @@ abstract interface class RemoteLedgerApi {
   ///
   /// Whole rather than paged, which is proportionate rather than lazy: there
   /// are a couple of dozen rows between them and they change about never.
-  Future<List<Currency>> pullCurrencies();
-  Future<List<Category>> pullCategories();
+  ///
+  /// One call for both, because the server answers both from one response —
+  /// they are the same kind of thing, they change together, and they are the
+  /// two lists a device cannot create a group without. Two calls to one cached
+  /// route was the shape of the tables they used to be, not of the data.
+  Future<ReferenceData> pullReference();
 
   /// Exchange rates published on or after [since] (`yyyy-MM-dd`).
   ///
@@ -245,6 +249,23 @@ abstract interface class RemoteLedgerApi {
     required DateTime asOf,
     required String currency,
   });
+}
+
+/// The currencies and categories a device needs before it can do anything.
+///
+/// Not a page and not cursored: it is the whole of both lists, every time. They
+/// are a few dozen rows that change about never, and a device that has not
+/// learned what a currency is cannot create a group at all — so an incremental
+/// feed would be machinery in front of an answer that fits in one response.
+class ReferenceData {
+  const ReferenceData({required this.currencies, required this.categories});
+
+  const ReferenceData.empty()
+    : currencies = const <Currency>[],
+      categories = const <Category>[];
+
+  final List<Currency> currencies;
+  final List<Category> categories;
 }
 
 /// One page of the profile feed, with the keyset cursor it ended at.

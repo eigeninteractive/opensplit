@@ -446,13 +446,13 @@ class FakeRemoteLedger implements RemoteLedgerApi {
   ];
 
   @override
-  Future<List<Currency>> pullCurrencies() async => List.of(serverCurrencies);
-
-  @override
-  Future<List<Category>> pullCategories() async => [
-    for (final row in defaultCategories)
-      Category(id: row.id, name: row.name, icon: row.icon),
-  ];
+  Future<ReferenceData> pullReference() async => ReferenceData(
+    currencies: List.of(serverCurrencies),
+    categories: [
+      for (final row in defaultCategories)
+        Category(id: row.id, name: row.name, icon: row.icon),
+    ],
+  );
 
   @override
   Future<List<RemoteFxRate>> pullFxRates({required String since}) async {
