@@ -2,6 +2,7 @@ import { eq, inArray, isNull, sql } from "drizzle-orm";
 
 import * as schema from "../../db/group/schema";
 import { isGroupSettled } from "./balances";
+import { append } from "./events";
 import { hasAccountHolders, purge } from "./roster";
 import { findMeta, nextSeq, type Tx } from "./store";
 
@@ -127,13 +128,9 @@ export function runDormancy(tx: Tx, now: number): UpkeepOutcome {
      * archiving a group on purpose is a different event with a name on it.
      */
     const seq = nextSeq(tx);
-    tx.update(schema.meta)
-      .set({ archivedAt: new Date(now).toISOString(), updatedAt: new Date(now).toISOString(), seq })
-      .where(eq(schema.meta.id, meta.id))
-      .run();
-    tx.insert(schema.events)
-      .values({ id: crypto.randomUUID(), actorId: null, createdAt: new Date(now).toISOString(), kind: "group_archived", subjectId: null, payload: { name: meta.name, previousName: null }, seq, ordinal: 0 })
-      .run();
+    const at = new Date(now).toISOString();
+    tx.update(schema.meta).set({ archivedAt: at, updatedAt: at, seq }).where(eq(schema.meta.id, meta.id)).run();
+    append(tx, { seq, now: at, actorId: null, kind: "group_archived", payload: { name: meta.name, previousName: null } });
 
     outcome.archived = true;
     unschedule(tx, "archive");

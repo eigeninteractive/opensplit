@@ -63,7 +63,7 @@ CREATE TABLE `events` (
 	FOREIGN KEY (`actor_id`) REFERENCES `members`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-CREATE INDEX `events_seq` ON `events` (`seq`);--> statement-breakpoint
+CREATE UNIQUE INDEX `events_position` ON `events` (`seq`,`ordinal`);--> statement-breakpoint
 CREATE INDEX `events_subject` ON `events` (`subject_id`,`created_at`);--> statement-breakpoint
 CREATE TABLE `group_link` (
 	`id` text PRIMARY KEY NOT NULL,

@@ -445,7 +445,24 @@ export const events = sqliteTable(
      */
     ordinal: integer("ordinal").notNull().default(0),
   },
-  (table) => [index("events_seq").on(table.seq), index("events_subject").on(table.subjectId, table.createdAt)],
+  (table) => [
+    /**
+     * Unique, because the client's ordering depends on it being so.
+     *
+     * `append` derives the ordinal by counting what is already at this `seq`,
+     * which is correct only because a Durable Object runs one thing at a time.
+     * That is a true fact about the runtime and a bad place to leave an
+     * invariant: it holds by convention, and the failure it guards against —
+     * two lines claiming the same position — is invisible on the server, which
+     * can still fall back to `rowid`, and visible only on a device, as a feed
+     * that renders "archived" above "renamed" and reads backwards.
+     *
+     * So it is stated. A second writer of this table, today or in three years,
+     * fails loudly here rather than quietly on somebody's phone.
+     */
+    uniqueIndex("events_position").on(table.seq, table.ordinal),
+    index("events_subject").on(table.subjectId, table.createdAt),
+  ],
 );
 
 /**

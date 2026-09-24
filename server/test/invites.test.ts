@@ -146,6 +146,18 @@ describe("the group's one open link", () => {
     expect(second.superseded).toBe(first.token);
     expect(refusal(await object.join(first.token, ZARA, { displayName: "Zara" })).code).toBe("invite_invalid");
     expect(ok(await object.join(second.token, ZARA, { displayName: "Zara" })).displayName).toBe("Zara");
+
+    /**
+     * A rotation is one change that says two things, so both lines share a
+     * sequence number and a timestamp. `ordinal` is the only thing that keeps
+     * them from rendering as a link created and then immediately revoked,
+     * which reads as the opposite of what happened.
+     */
+    const page = ok(await object.changes(profile, 0, 500));
+    const rotation = page.events.filter((event) => event.kind === "link_revoked" || event.kind === "link_created");
+    const together = rotation.filter((event) => event.seq === rotation.at(-1)?.seq);
+    expect(together.map((event) => event.ordinal)).toEqual([0, 1]);
+    expect(together.map((event) => event.kind)).toEqual(["link_revoked", "link_created"]);
   });
 
   it("can be turned off outright, and the closing is on the record too", async () => {

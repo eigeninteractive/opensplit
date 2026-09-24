@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "9163566a-1b59-4603-9cd0-175bf5163878",
+  "id": "3266ec37-5e38-44d2-8612-90cf36d19291",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "counter": {
@@ -390,10 +390,10 @@
         }
       },
       "indexes": {
-        "events_seq": {
-          "name": "events_seq",
-          "columns": ["seq"],
-          "isUnique": false
+        "events_position": {
+          "name": "events_position",
+          "columns": ["seq", "ordinal"],
+          "isUnique": true
         },
         "events_subject": {
           "name": "events_subject",
