@@ -26,15 +26,19 @@ no real mobile app.
 
 A Flutter client (Riverpod, Drift, go_router) holds the entire journal in
 SQLite and does all computation locally — split arithmetic, the balance fold,
-debt simplification, analytics. Supabase is a paginated row feed behind a Dart
-repository interface: Postgres with row-level security and a deferred
-constraint trigger that enforces `sum(payers) = sum(shares) = amount` at commit.
-Reads outnumber writes roughly 50:1, so putting reads on devices people already
-own is what makes "free forever" credible rather than aspirational.
+debt simplification, analytics. The backend is a Cloudflare Worker behind a
+Dart repository interface: one Durable Object per group, which is that group's
+only writer and therefore the thing that can hand out a strictly increasing
+sequence number, enforce `sum(payers) = sum(shares) = amount` in ordinary code,
+and answer "are you a member" by reading its own table. D1 holds the handful of
+facts that are genuinely cross-group — profiles, which groups somebody is in,
+where to wake them, and what a link token points at. Reads outnumber writes
+roughly 50:1, so putting reads on devices people already own is what makes
+"free forever" credible rather than aspirational.
 
 ## Development
 
-Requires the Flutter SDK, Docker, and the Supabase CLI.
+Requires the Flutter SDK and Node.
 
 ```bash
 flutter pub get
@@ -46,27 +50,39 @@ flutter run
 The local backend:
 
 ```bash
-supabase start                     # applies supabase/migrations in order
-supabase db reset                  # rebuild from scratch
-supabase test db                   # pgTAP: invariants, RLS, invite claims
+cd server
+npm ci
+npm run db:migrate:local           # applies server/migrations to local D1
+npm run dev                        # the real Worker, on 127.0.0.1:8787
+npm test                           # the Durable Object and the routes
 ```
 
-The database tests are not optional decoration. They cover the deferred
-constraint trigger rejecting unbalanced entries, that `is_group_member` does
-not recurse through its own policy (Postgres 42P17, the standard failure for
-this shape of schema), that entries cannot be hard-deleted, that an anonymous
-account cannot destroy a group, and that an invite token can be spent exactly
-once by someone with no other access to the group.
+`wrangler dev` runs the real Worker over local D1, KV and Durable Object
+storage. Nothing it does touches a Cloudflare account, and it needs no
+credentials beyond `cp .dev.vars.example .dev.vars`.
+
+The server tests are not optional decoration. They cover the balance invariant
+rejecting an expense that does not add up, that a stale edit is refused only
+when applying it would move money, that entries cannot be hard-deleted, that an
+invite token can be spent exactly once by somebody with no other access to the
+group, and that a collected group answers everybody with a tombstone rather
+than refusing every device that still holds a copy.
 
 They also cover what one member of a group can do to another, which is a
 different question from what a stranger can do and has a much less obvious
-answer. An RLS policy chooses rows; it cannot say "this column, but only on
-your own row", and its `WITH CHECK` cannot see the old row at all. So the
-column rules live in `guard_member_update` instead, and the tests are what say
-that an ordinary member cannot promote themselves to owner, cannot blank
-somebody's `profile_id` and evict them, and — the one that moves real money —
-cannot rewrite another member's UPI handle so a settle-up handoff pays the
-wrong person.
+answer: that an ordinary member cannot blank somebody's account link and evict
+them, cannot remove a co-member who still owes or is owed, and — the one that
+moves real money — cannot rewrite another member's UPI handle so a settle-up
+handoff pays the wrong person.
+
+This is the part the object model made ordinary. In Postgres the same rules
+needed a deferred constraint trigger, a `SECURITY DEFINER` helper to stop
+`is_group_member` recursing through its own policy, and a `guard_member_update`
+trigger for the column rules — because an RLS policy chooses rows, cannot say
+"this column, but only on your own row", and its `WITH CHECK` cannot see the
+old row at all. A Durable Object runs one thing at a time and owns exactly one
+group's rows, so all three become function calls with the before-and-after
+values in hand.
 
 ```bash
 cd server && npm run db:migrate:local && npm run dev   # in one terminal
@@ -244,7 +260,7 @@ Every integration is off unless configured, and hidden rather than shown broken:
 
 | Key | Enables |
 |---|---|
-| `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` | Sync and accounts |
+| `API_BASE_URL` | Sync and accounts |
 | `GOOGLE_WEB_CLIENT_ID` | Sign in with Google |
 | `FCM_PROJECT_ID`, `FCM_SENDER_ID`, and the `ANDROID_`/`WEB_` key and app id | Push |
 | `FCM_VAPID_KEY` | Web push, in addition to the above |
@@ -351,18 +367,20 @@ wants the second. It is also the path segment in the console's own URL:
 ### Google sign-in
 
 **Nothing here is created for you.** Firebase auto-creates OAuth clients only
-when *Firebase Auth* is enabled, and this app authenticates through Supabase, so
-Firebase Auth is never switched on and Credentials stays empty. Create both
-clients by hand, in the same Google Cloud project the Firebase project made:
+when *Firebase Auth* is enabled, and this app authenticates through its own
+Worker, so Firebase Auth is never switched on and Credentials stays empty.
+Create both clients by hand, in the same Google Cloud project the Firebase
+project made:
 
 1. **Google Auth Platform → Branding** (formerly the OAuth consent screen).
    App name, support email, developer contact. Nothing works until this exists.
 2. **Credentials → Create credentials → OAuth client ID → Web application.**
-   Add `https://<project-ref>.supabase.co/auth/v1/callback` as an authorized
-   redirect URI, and your site origins under authorized JavaScript origins.
-   Its **Client ID** is `GOOGLE_WEB_CLIENT_ID` — one value, used on both
-   platforms, because Supabase verifies the ID token's audience against the web
-   client even when the token was minted on Android.
+   Add `https://<your host>/api/auth/callback/google` as an authorized redirect
+   URI, and your site origin under authorized JavaScript origins. Its
+   **Client ID** is `GOOGLE_WEB_CLIENT_ID` — one value, used on both platforms,
+   because the Worker verifies the ID token's audience against the web client
+   even when the token was minted on Android. The same pair goes into the
+   Worker as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
 3. **Credentials → Create credentials → OAuth client ID → Android.** Package
    name `com.eigeninteractive.opensplit`, plus the SHA-1 of the signing key.
    Its id is never needed in the app, but the client is what binds the package
@@ -370,8 +388,10 @@ clients by hand, in the same Google Cloud project the Firebase project made:
    App Signing certificates: the original classical key and the new classical
    and post-quantum keys used by Android 17+. A missing client may surface as a
    `clientConfigurationError`, or even as `canceled`, in Credential Manager.
-4. **Supabase dashboard → Authentication → Providers → Google:** enable it, and
-   paste the *web* client's ID and secret.
+4. **The Worker's own secrets:** `wrangler secret put GOOGLE_CLIENT_ID` and
+   `GOOGLE_CLIENT_SECRET`, the *web* client's pair. Locally they live in
+   `server/.dev.vars`, which is gitignored; `server/.dev.vars.example` shows
+   the shape.
 
 ```bash
 # The debug SHA-1, for step 3 during development:
@@ -379,41 +399,53 @@ keytool -list -v -keystore ~/.android/debug.keystore \
   -alias androiddebugkey -storepass android | grep SHA1
 ```
 
-### Accounts: two settings that are not optional
+### Accounts: linking is not signing in
 
 A session begins because somebody chose one of three things — Google, an email
 code, or being a guest — and being a guest is a real account with no credential
 attached, not a lesser mode. Attaching a credential to a guest session later has
-to **link**: same user id, same rows, nothing to migrate. Two things on the
-Supabase side have to be right or that silently becomes something else entirely.
+to **link**: same account id, same rows, nothing to migrate. Signing in instead
+mints or resumes a *different* account and leaves the guest holding every group
+the person has created so far, at which point they are a stranger to their own
+data.
+
+That decision lives in `server/src/identity/routes.ts` rather than on the
+device, and the move is the point: each of the three entry points tries the
+linking call first and only falls back to signing in when the identity provably
+belongs to somebody already — and then only when the caller has said the cost
+has been explained. In TypeScript, inside the Worker, every one of those
+branches is reachable from `vitest`, including the one that fires when an
+identity is already claimed, which is exactly where the damage happens and
+exactly what no Flutter test could reach before.
 
 The app deliberately does *not* create a session on startup. It used to, and
 that broke the arrival it was meant to protect: somebody who already had an
 account and tapped an invite link had the single-use token spent by a throwaway
 anonymous account, and no way into the group afterwards. `/join/:token` now
-reads the link with `peek_invite` or `peek_group_link` — the two functions
-granted to `anon` — shows what it is for, and joins only after the identity
-question has an answer.
+reads the link with `GET /api/links/{token}`, which is the one route that runs
+with no session at all, shows what the link is for, and joins only after the
+identity question has an answer.
 
 ### Two kinds of link
 
 `/join/:token` serves both, so there is one URL shape, one App Links filter and
 one route; which kind a token names is the server's business.
 
-A **named invite** (`invites`) hands one unclaimed place to one person and is
-spent by being used. It is the right link when you know who is coming: they
+A **named invite** hands one unclaimed place to one person and is spent by
+being used. It is the right link when you know who is coming: they
 open it and become the "Priya" somebody already typed.
 
-A **group link** (`group_links`) lets anybody holding it join, until it expires
-after seven days or is revoked. It is the link you paste into the chat you
+A **group link** lets anybody holding it join, until it expires after seven days
+or is revoked. It is the link you paste into the chat you
 already have, for a trip whose guest list does not exist yet. Possession is the
 whole authorisation, which is a larger claim than an invite makes, so:
 
-* there is one live link per group, enforced by a partial unique index, and
-  minting revokes whatever preceded it;
+* there is one live link per group — a single row the group's Durable Object
+  overwrites, which needs no unique index because the object is its only
+  writer — and minting revokes whatever preceded it;
 * it can be turned off without minting another;
-* `link_created`, `link_revoked` and `member_joined` all land in
-  `group_events`, so the group can see the door open, close, and be walked
+* `link_created`, `link_revoked` and `member_joined` all land in the activity
+  feed, so the group can see the door open, close, and be walked
   through. A group that can see who arrived has a better remedy than an
   approval queue, which is why there is not one.
 
@@ -421,31 +453,24 @@ Arriving on a group link asks which of the group's unclaimed placeholders you
 are, if any. Claiming one is the same single-column update a named invite
 performs — no expense is rewritten and no balance moves — and it is what stops
 one shared link turning a group of six into a group of twelve.
-`list_link_placeholders` is deliberately **not** granted to `anon`: those are
-other people's names, which is more than the token itself implies, and it is
-asked after an account has been chosen rather than before.
+`GET /api/links/{token}/placeholders` deliberately **requires** a session,
+unlike the preview beside it: those are other people's names, which is more than
+the token itself implies, and it is asked after an account has been chosen
+rather than before.
 
-**1. Allow manual linking.** *Authentication → Providers → Allow manual
-linking*, and `enable_manual_linking = true` in `supabase/config.toml` for
-local. Attaching Google goes through `linkIdentityWithIdToken`, which is
-refused outright when this is off. Its cousin `signInWithIdToken` does not
-link: it signs in as a *different* user and leaves the anonymous one holding
-every group the person had created, at which point the new account is a
-stranger to its own data and every push is refused by RLS. The app refuses to
-fall back to it silently, and says which switch is off instead — but the switch
-still has to be on.
+Arriving as somebody new needs a name, and there is no sentinel. The name on the
+account is used when there is one — anybody who signed in with Google or an
+email address has one — and a guest who has never chosen one is asked on the
+join screen. "Someone" in a ledger is worse than a question, and a sentinel
+stored on a profile could never afterwards be told from a name somebody meant.
 
-**2. Email templates.** The app asks for an eight-digit code. Supabase's stock
-templates send a magic link and no token at all, so against them the "check
-your email" step waits for a number that is never sent. `supabase/templates/`
-holds three that carry `{{ .Token }}`; local picks them up from `config.toml`,
-and a hosted project needs them pasted into *Authentication → Emails →
-Templates* by hand, because templates are **not** deployed by `supabase db
-push`. See [`supabase/templates/README.md`](supabase/templates/README.md).
-
-Also leave `enable_confirmations = true`. With it off an email change is
-applied outright, so a guest session can claim any address at all, having proved
-nothing — and the real owner of that address finds it already spoken for.
+**Email codes, not magic links.** The app asks for an eight-digit code, because
+a magic link opens in whichever browser the mail app prefers, loses the app's
+context entirely, and is routinely consumed by corporate mail scanners before
+the recipient ever sees it. The Worker sends it through Resend; set
+`RESEND_API_KEY` as a secret. Without one, codes are logged rather than sent,
+which is right for local development and would be a silent failure in
+production — so the log line says so.
 
 ### One name, one ledger per account
 
@@ -516,14 +541,15 @@ is data-only, so nothing is drawn unless the app draws it — and a stub
 background handler therefore means the only notifications anyone ever sees are
 the ones that arrive while they are already looking at the app, which is the
 one case a notification is not for. `lib/data/push/background_handler.dart`
-runs in a background isolate with its own Firebase, its own Supabase client and
-a second connection to the SQLite file (which is why the database is opened in
+runs in a background isolate with its own Firebase, its own HTTP client and a
+second connection to the SQLite file (which is why the database is opened in
 WAL mode with a busy timeout). It syncs, then formats with the same Dart the
 screens use. It reloads the stored session for every message, honors the
-notification preference, and cannot resume an account cleared by sign-out.
-Token refresh and persistence belong only to the foreground SDK; background
-work with an expired session waits for the next app resume. Push is best-effort,
-not a delivery guarantee or the source of ledger correctness.
+notification preference, and cannot resume an account cleared by sign-out. It
+never refreshes or rotates that session — the foreground owns it, and a second
+writer could otherwise restore one after a sign-out — so background work with
+an expired session waits for the next app resume. Push is best-effort, not a
+delivery guarantee or the source of ledger correctness.
 
 On the web there is no equivalent — a service worker cannot run Dart — so
 `web/firebase-messaging-sw.js` deliberately draws nothing and web push only
@@ -531,10 +557,18 @@ wakes an open tab. Tapping any of these opens the entry it was about rather
 than the app's front door, on all three paths: foreground, backgrounded, and
 launched from cold.
 
-## Developing against local Supabase with the real Firebase
+## Developing against a local Worker with the real Firebase
 
-The usual working setup: Postgres, edge functions and auth all local, but push
+The usual working setup: the API, the database and auth all local, but push
 going through the real FCM project, because there is no local FCM.
+
+```bash
+cd server && npm run db:migrate:local && npm run dev
+```
+
+`wrangler dev` runs the real Worker over local D1, KV and Durable Object
+storage. Nothing it does touches a Cloudflare account and it needs no
+credentials.
 
 Config files are merged in order and **later files win**, so a local override
 goes last:
@@ -547,19 +581,26 @@ flutter run -d chrome \
   --dart-define-from-file=env/local.json
 ```
 
-`env/local.json` only needs to override `SUPABASE_URL` and
-`SUPABASE_PUBLISHABLE_KEY`. Later files win, so it goes last. The local publishable key is the same for everyone
-and is already the default in `lib/config.dart`, so a bare `flutter run` with no
-defines at all is already a local-Supabase build — just without Firebase.
+`env/local.json` only needs to override `API_BASE_URL`. Later files win, so it
+goes last. `http://127.0.0.1:8787` is already the default in `lib/config.dart`,
+so a bare `flutter run` against a local `wrangler dev` needs no defines at all —
+just no Firebase.
+
+There is no key to set alongside it. The backend is one origin serving the site,
+the app bundle and the API, and a request carries a session or it carries
+nothing, so there is no anonymous public identifier to configure.
 
 **The URL depends on where the app runs**, and this is the step that wastes an
 afternoon:
 
-| Running on | `SUPABASE_URL` |
+| Running on | `API_BASE_URL` |
 |---|---|
-| Chrome, on this machine | `http://127.0.0.1:54321` |
-| Android emulator | `http://10.0.2.2:54321` — the emulator's own 127.0.0.1 is the emulator |
-| Physical Android device | `http://<this machine's LAN address>:54321`, same Wi-Fi |
+| Chrome, on this machine | `http://127.0.0.1:8787` |
+| Android emulator | `http://10.0.2.2:8787` — the emulator's own 127.0.0.1 is the emulator |
+| Physical Android device | `http://<this machine's LAN address>:8787`, same Wi-Fi |
+
+For the last two, start the Worker with `npx wrangler dev --ip 0.0.0.0`, which
+it does not do by default.
 
 Android has blocked cleartext HTTP since API 28, so a debug build also needs
 `android/app/src/debug/res/xml/network_security_config.xml` — already committed,

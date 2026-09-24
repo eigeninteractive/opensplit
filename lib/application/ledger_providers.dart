@@ -72,14 +72,12 @@ class MyProfileController extends _$MyProfileController {
     if (accountId == null) return;
 
     final profiles = ref.read(profileRepositoryProvider);
-    final current = await profiles.byId(accountId);
     final handle = upiVpa?.trim();
 
     await profiles.upsert(
       Profile(
         id: accountId,
         displayName: displayName.trim(),
-        avatarUrl: current?.avatarUrl,
         upiVpa: handle == null || handle.isEmpty ? null : handle,
       ),
     );

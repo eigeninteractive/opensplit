@@ -253,7 +253,6 @@ Future<int> applyProfiles(AppDatabase db, List<Profile> rows) async {
       final row = ProfilesCompanion.insert(
         id: profile.id,
         displayName: Value(profile.displayName),
-        avatarUrl: Value(profile.avatarUrl),
         upiVpa: Value(profile.upiVpa),
         updatedAt: Value(profile.updatedAt ?? byId[profile.id]?.updatedAt),
       );

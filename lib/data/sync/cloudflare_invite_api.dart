@@ -118,8 +118,20 @@ class CloudflareInviteApi implements InviteApi {
   Future<Member> redeem(String token) => _join(token, api.JoinRequest());
 
   @override
-  Future<Member> joinWithLink(String token, {String? memberId}) =>
-      _join(token, api.JoinRequest(memberId: memberId));
+  Future<Member> joinWithLink(
+    String token, {
+    String? memberId,
+    String? displayName,
+  }) => _join(
+    token,
+    // Never both. Claiming a place keeps the name the group already knows, and
+    // sending one alongside a `memberId` would suggest otherwise to anybody
+    // reading the request.
+    api.JoinRequest(
+      memberId: memberId,
+      displayName: memberId == null ? displayName : null,
+    ),
+  );
 
   @override
   Future<GroupLink> createGroupLink(String groupId) => _guard(() async {

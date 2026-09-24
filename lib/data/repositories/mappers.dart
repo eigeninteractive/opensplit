@@ -45,7 +45,6 @@ extension ProfileRowMapper on ProfileRow {
   Profile toDomain() => Profile(
     id: id,
     displayName: displayName,
-    avatarUrl: avatarUrl,
     upiVpa: upiVpa,
     updatedAt: updatedAt,
   );

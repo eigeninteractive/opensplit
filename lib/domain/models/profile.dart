@@ -24,7 +24,6 @@ abstract class Profile with _$Profile {
     /// Display sites do not need to handle it: member-name resolution falls
     /// back to the group member row, which always has a name.
     String? displayName,
-    String? avatarUrl,
 
     /// UPI virtual payment address. Personal rather than group-scoped — you
     /// have one payment identity, not one per group.

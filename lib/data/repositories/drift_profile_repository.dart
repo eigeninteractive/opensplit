@@ -45,7 +45,6 @@ final class DriftProfileRepository {
           ProfilesCompanion.insert(
             id: profile.id,
             displayName: Value(profile.displayName),
-            avatarUrl: Value(profile.avatarUrl),
             upiVpa: Value(profile.upiVpa),
             updatedAt: Value(profile.updatedAt),
           ),
@@ -56,7 +55,6 @@ final class DriftProfileRepository {
   Profile _toDomain(ProfileRow row) => Profile(
     id: row.id,
     displayName: row.displayName,
-    avatarUrl: row.avatarUrl,
     upiVpa: row.upiVpa,
     updatedAt: row.updatedAt,
   );

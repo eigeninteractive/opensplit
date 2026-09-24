@@ -32,7 +32,6 @@ class Profiles extends Table {
 
   /// Null until somebody chooses one. See [Profile.displayName].
   TextColumn get displayName => text().nullable()();
-  TextColumn get avatarUrl => text().nullable()();
 
   /// UPI virtual payment address, used to build a settle-up handoff. Personal,
   /// not group-scoped.

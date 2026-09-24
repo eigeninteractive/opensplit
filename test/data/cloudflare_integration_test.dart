@@ -721,6 +721,40 @@ void main() {
       expect(await arriving.invites.placeholdersFor(link.token), isEmpty);
     });
 
+    test('somebody nobody typed in arrives under their own name', () async {
+      if (!available) return;
+
+      final g = await seededGroup(ravi);
+      final link = await ravi.invites.createGroupLink(g.groupId);
+
+      final stranger = await _Device.guest();
+      final joined = await stranger.invites.joinWithLink(
+        link.token,
+        displayName: 'Zara',
+      );
+      expect(joined.displayName, 'Zara');
+      expect(joined.id, isNot(g.priya), reason: 'a new place, not a claim');
+
+      // And it is a name, not a sentinel. A guest declining every placeholder
+      // has one nowhere — not on their account, not on a slot — so the server
+      // refuses rather than inventing "Someone", and the join screen asks.
+      final nameless = await _Device.guest();
+      await expectLater(
+        nameless.invites.joinWithLink(link.token),
+        throwsA(isA<InviteRejected>()),
+      );
+
+      // Whereas an account that already has a name needs no asking.
+      final named = await _Device.guest();
+      await named.ledger.pushProfile(
+        Profile(id: named.profileId, displayName: 'Meera'),
+      );
+      expect(
+        (await named.invites.joinWithLink(link.token)).displayName,
+        'Meera',
+      );
+    });
+
     test('revoking leaves the link able to explain itself', () async {
       if (!available) return;
 

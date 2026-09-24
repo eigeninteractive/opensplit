@@ -50,6 +50,19 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
   /// The place about to be claimed, or null for "I am not listed".
   String? _chosenMemberId;
 
+  /// The name to arrive under, for somebody who is not one of the places.
+  ///
+  /// Only ever read on that branch. Claiming a place keeps the name the group
+  /// already wrote on it, and the account adopts that name rather than the
+  /// other way round.
+  final _name = TextEditingController();
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -123,6 +136,7 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
         GroupLinkTarget() => await invites.joinWithLink(
           widget.token,
           memberId: _chosenMemberId,
+          displayName: _name.text.trim().isEmpty ? null : _name.text.trim(),
         ),
         // A named invite names the place; there is nothing to choose.
         _ => await invites.redeem(widget.token),
@@ -320,6 +334,11 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
             loading: _loadingPlaces,
             chosen: _chosenMemberId,
             joining: _joining,
+            // Asked for only when there is nowhere to take it from. Anybody
+            // who signed in with Google or an email address already has a
+            // name; a guest has none, and a member row without one is not a
+            // row this ledger can hold.
+            name: account.displayName == null ? _name : null,
             onChoose: (memberId) => setState(() => _chosenMemberId = memberId),
             onJoin: _join,
             onSwitchAccount: _switchAccount,
@@ -359,6 +378,7 @@ class _ChoosePlace extends StatelessWidget {
     required this.loading,
     required this.chosen,
     required this.joining,
+    required this.name,
     required this.onChoose,
     required this.onJoin,
     required this.onSwitchAccount,
@@ -368,6 +388,10 @@ class _ChoosePlace extends StatelessWidget {
   final bool loading;
   final String? chosen;
   final bool joining;
+
+  /// Where to put the arrival's own name, or null when the account has one.
+  final TextEditingController? name;
+
   final ValueChanged<String?> onChoose;
   final Future<void> Function() onJoin;
   final Future<void> Function() onSwitchAccount;
@@ -431,6 +455,27 @@ class _ChoosePlace extends StatelessWidget {
                   title: Text("I'm not listed — add me"),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+
+        // A guest arriving as somebody new has no name anywhere: not on their
+        // account, and not on a placeholder they are declining to claim. The
+        // server refuses the join rather than inventing one — "Someone" in a
+        // ledger is worse than being asked — so this is where the asking
+        // happens, and only in that case.
+        if (name != null && chosen == null) ...[
+          TextField(
+            controller: name,
+            autofocus: waiting.isEmpty,
+            enabled: !joining,
+            textCapitalization: TextCapitalization.words,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => joining ? null : onJoin(),
+            decoration: const InputDecoration(
+              labelText: 'Your name',
+              helperText: 'How the group will see you.',
             ),
           ),
           const SizedBox(height: 16),

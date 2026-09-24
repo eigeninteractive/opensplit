@@ -215,7 +215,19 @@ abstract interface class InviteApi {
   /// Walks in on [token], claiming [memberId] if it is one of the places the
   /// group was already holding.
   ///
+  /// [displayName] is the name to arrive under, and is consulted only when no
+  /// [memberId] is given — claiming a place keeps the name the group already
+  /// knows. Omitting it falls back to the name on the account, which anybody
+  /// who signed in with Google or an email address has; a guest who has never
+  /// chosen one has to supply it, because a member row with no name is not a
+  /// row this ledger can hold.
+  ///
   /// Throws [InviteRejected] if the link is unknown, revoked, expired, the
-  /// place is taken, or the caller is already in the group.
-  Future<Member> joinWithLink(String token, {String? memberId});
+  /// place is taken, the caller is already in the group, or there is no name to
+  /// arrive under.
+  Future<Member> joinWithLink(
+    String token, {
+    String? memberId,
+    String? displayName,
+  });
 }
