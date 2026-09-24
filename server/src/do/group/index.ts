@@ -8,9 +8,9 @@ import * as d1 from "../../db/d1/schema";
 import * as schema from "../../db/group/schema";
 // `Group` is the wire shape of a group and also the name of the class below,
 // which wrangler binds by name. The record is the one that gets the alias.
-import type { ChangePage, Entry, EntryInput, GroupCreate, GroupLink, GroupPatch, Group as GroupRecord, Invite, LinkPreview, Member, MemberCreate, MemberPatch, Placeholder } from "../../schemas/ledger";
+import type { ChangePage, Entry, EntryInput, GroupCreate, GroupPatch, Group as GroupRecord, Invite, LinkPreview, LinkRevocation, LiveLink, Member, MemberCreate, MemberPatch, MintedLink, Placeholder } from "../../schemas/ledger";
 import { changesSince } from "./changes";
-import { createGroupLink, createInvite, join, peek, placeholders, revokeGroupLink } from "./invites";
+import { createGroupLink, createInvite, join, liveLink, peek, placeholders, revokeGroupLink } from "./invites";
 import { deleteEntry, restoreEntry, upsertEntry } from "./ledger";
 import migrations from "./migrations/migrations";
 import { attempt, type Result } from "./refusal";
@@ -180,7 +180,7 @@ export class Group extends DurableObject<Env> {
     return result;
   }
 
-  async createLink(profileId: string): Promise<Result<GroupLink>> {
+  async createLink(profileId: string): Promise<Result<MintedLink>> {
     const now = nowIso();
     const result = attempt(() =>
       this.db.transaction((tx) => {
@@ -195,15 +195,37 @@ export class Group extends DurableObject<Env> {
     return result;
   }
 
-  async revokeLink(profileId: string): Promise<Result<{ revoked: string | null }>> {
-    const now = nowIso();
-    const result = attempt(() =>
+  /**
+   * Whether there is a link to share, asked by somebody already inside.
+   *
+   * Requires membership, which is the whole reason it is not simply `peek`
+   * with a null token: `peek` answers whoever holds a URL, and this hands a
+   * working URL *out*. Anyone who could call it could invite the world in.
+   */
+  async liveLink(profileId: string): Promise<Result<LiveLink>> {
+    return attempt(() =>
       this.db.transaction((tx) => {
-        const token = revokeGroupLink(tx, this.contextFor(tx, profileId, now));
-        if (token) stageLinkToken(tx, this.groupId(tx), token, "group_link", now, true);
-        return { revoked: token };
+        const now = nowIso();
+        this.contextFor(tx, profileId, now);
+        return { link: liveLink(tx, now) };
       }),
     );
+  }
+
+  /**
+   * The index deliberately keeps the token.
+   *
+   * Revoking sets a column; the object still holds the row and can still say
+   * what the link was and that it is off. Dropping it from `link_tokens` would
+   * strand that answer — the token would stop routing, and somebody tapping a
+   * link a friend shared last month would be told it was never valid rather
+   * than that the group turned it off. The row is not an authorization; the
+   * object refuses the join either way. It is cleared when a new link
+   * overwrites this one, which is the point at which the object does forget.
+   */
+  async revokeLink(profileId: string): Promise<Result<LinkRevocation>> {
+    const now = nowIso();
+    const result = attempt(() => this.db.transaction((tx) => ({ revoked: revokeGroupLink(tx, this.contextFor(tx, profileId, now)) })));
     await this.settle();
     return result;
   }

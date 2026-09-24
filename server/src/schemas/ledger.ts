@@ -279,14 +279,47 @@ export const InviteSchema = z
   })
   .openapi("Invite");
 
+/** A group's open link, as it stands. */
 export const GroupLinkSchema = z
   .object({
     token: IdSchema,
     expiresAt: TimestampSchema,
-    /** The link this one replaced, if there was a live one. */
-    superseded: IdSchema.nullable(),
   })
   .openapi("GroupLink");
+
+/**
+ * What minting one *did*, which is more than what a link *is*.
+ *
+ * `superseded` belongs to the act and not to the thing: it is meaningless on a
+ * read, and a single schema carrying it would have to answer null there and
+ * invite every reader to wonder whether null meant "nothing was replaced" or
+ * "we did not look".
+ */
+export const MintedLinkSchema = GroupLinkSchema.extend({
+  /** The link this one replaced, if there was a live one. */
+  superseded: IdSchema.nullable(),
+}).openapi("MintedLink");
+
+/**
+ * The group's live link, or the fact that there is not one.
+ *
+ * Wrapped rather than a nullable `GroupLink` at the top level, because a
+ * nullable `$ref` in OpenAPI 3.0.3 becomes an `allOf` the Dart generator
+ * flattens into a non-nullable class — so "no link yet", which is the state
+ * every group starts in, would arrive as a decode failure.
+ */
+export const LiveLinkSchema = z
+  .object({
+    link: GroupLinkSchema.nullable(),
+  })
+  .openapi("LiveLink");
+
+/** What revoking did. Null when there was nothing live to revoke. */
+export const LinkRevocationSchema = z
+  .object({
+    revoked: IdSchema.nullable(),
+  })
+  .openapi("LinkRevocation");
 
 /**
  * What a link is for, answered before anybody has said who they are.
@@ -331,6 +364,53 @@ export const PlaceholderSchema = z
     displayName: z.string(),
   })
   .openapi("Placeholder");
+
+/**
+ * The unclaimed places a link's group is holding.
+ *
+ * An object around the array rather than the array itself, matching every
+ * other response here. A bare array is a shape nothing can ever be added to
+ * without breaking every client that reads it.
+ */
+export const PlaceholderListSchema = z
+  .object({
+    placeholders: z.array(PlaceholderSchema),
+  })
+  .openapi("PlaceholderList");
+
+/**
+ * Where you ended up.
+ *
+ * The one response that names its group, and it has to: the caller held a
+ * token, which is deliberately opaque about what it points at, and the next
+ * thing they do is open the group and sync it. Everywhere else the group id is
+ * a property of the page rather than of a row — see `ChangePage` — because
+ * every other caller already had it.
+ */
+export const JoinedSchema = z
+  .object({
+    groupId: IdSchema,
+    member: MemberSchema,
+  })
+  .openapi("Joined");
+
+/**
+ * Walking in on a link.
+ *
+ * `memberId` names one of the unclaimed places to take over; `displayName` is
+ * for an arrival who is not one of them. Exactly one is used, decided by the
+ * link's kind and by what the person picked, and the Durable Object is what
+ * decides which — see `invites.ts`.
+ */
+export const JoinRequestSchema = z
+  .object({
+    /** One of the places from `PlaceholderList`, or null to arrive as new. */
+    memberId: IdSchema.nullable().default(null),
+
+    /** The name to arrive under. Ignored when `memberId` is set. */
+    displayName: z.string().trim().min(1).max(100).nullable().default(null),
+  })
+  .openapi("JoinRequest");
 
 /**
  * What an expense looked like after a change.
@@ -532,8 +612,14 @@ export type MemberCreate = z.infer<typeof MemberCreateSchema>;
 export type MemberPatch = z.infer<typeof MemberPatchSchema>;
 export type Invite = z.infer<typeof InviteSchema>;
 export type GroupLink = z.infer<typeof GroupLinkSchema>;
+export type MintedLink = z.infer<typeof MintedLinkSchema>;
+export type LiveLink = z.infer<typeof LiveLinkSchema>;
+export type LinkRevocation = z.infer<typeof LinkRevocationSchema>;
 export type LinkPreview = z.infer<typeof LinkPreviewSchema>;
 export type Placeholder = z.infer<typeof PlaceholderSchema>;
+export type PlaceholderList = z.infer<typeof PlaceholderListSchema>;
+export type JoinRequest = z.infer<typeof JoinRequestSchema>;
+export type Joined = z.infer<typeof JoinedSchema>;
 export type Event = z.infer<typeof EventSchema>;
 export type EntrySnapshot = z.infer<typeof EntrySnapshotSchema>;
 export type MemberEventPayload = z.infer<typeof MemberEventPayloadSchema>;

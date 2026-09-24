@@ -1,12 +1,11 @@
-import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
+import { createRoute, type OpenAPIHono, z } from "@hono/zod-openapi";
 import { and, eq, isNull } from "drizzle-orm";
-import type { Context } from "hono";
 
-import { type AuthedEnv, requireSession } from "../context";
+import type { AuthedEnv } from "../context";
 import { memberships, profiles } from "../db/d1/schema";
-import { kindOf, type Result, statusFor } from "../do/group/refusal";
-import { apiError, errorResponse, IdSchema, jsonResponse } from "../schemas/common";
+import { IdSchema, jsonResponse } from "../schemas/common";
 import { ChangePageSchema, EntryInputSchema, EntrySchema, GroupCreateSchema, GroupPatchSchema, GroupSchema, MemberCreateSchema, MemberPatchSchema, MemberSchema } from "../schemas/ledger";
+import { EntryPathSchema, GroupPathSchema, group, MemberPathSchema, refusals, respond, SeqQuerySchema } from "./routing";
 
 /**
  * The sync surface: one request per group, one integer cursor.
@@ -36,75 +35,6 @@ import { ChangePageSchema, EntryInputSchema, EntrySchema, GroupCreateSchema, Gro
  * am I in", which no single object can — and stops being an authorization.
  * The object was always the authority; now it is also the only one asked.
  */
-
-/**
- * A sequence number arriving in a query string.
- *
- * Coerced, because a query parameter is a string and `SeqSchema` is an
- * integer: without this every `?since=0` is a 400 that parses as an empty
- * page, which is exactly as confusing to debug as it sounds. Path and body
- * fields are not coerced — JSON already has numbers, and silently accepting
- * `"1000"` as an amount is not a kindness.
- */
-const SeqQuerySchema = z.coerce.number().int().nonnegative().openapi({ type: "integer", example: 412 });
-
-const GroupPathSchema = z.object({
-  groupId: IdSchema.openapi({ param: { name: "groupId", in: "path" } }),
-});
-
-const EntryPathSchema = GroupPathSchema.extend({
-  entryId: IdSchema.openapi({ param: { name: "entryId", in: "path" } }),
-});
-
-const MemberPathSchema = GroupPathSchema.extend({
-  memberId: IdSchema.openapi({ param: { name: "memberId", in: "path" } }),
-});
-
-/**
- * Every refusal the Durable Object can give, on every route that can reach it.
- *
- * Spread wholesale rather than picked per route, and that is honest rather
- * than lazy: the object decides, the handler cannot know which subset applies,
- * and a route that documented four of the six would be documenting a guess.
- *
- * Deliberately not `as const`. `@hono/zod-openapi` builds a handler's allowed
- * return type from the `responses` it can read, and `readonly` properties are
- * not among them — so with `as const` every error status vanished from the
- * union and returning one was a type error against the 200 alone. The failure
- * reads as "your refusal is missing fourteen properties of Group", which is a
- * long way from "this object is frozen".
- */
-const refusals = {
-  400: errorResponse("The request is malformed."),
-  401: errorResponse("No session."),
-  403: errorResponse("You are not a member of this group, or not allowed to change that."),
-  404: errorResponse("No such group, entry or member."),
-  409: errorResponse("The request conflicts with the group's current state. Read `error.retry` before retrying."),
-  410: errorResponse("The group was collected, or the link has expired."),
-  422: errorResponse("The expense does not add up."),
-};
-
-type RefusalStatus = 400 | 401 | 403 | 404 | 409 | 410 | 422;
-
-/**
- * One refusal vocabulary translated into another, in one place.
- *
- * The object speaks in codes because a code is the thing that survives being
- * read by a client. This adds the status, which is what makes the response an
- * HTTP response, and the retry kind, which is what the device acts on — see
- * `ErrorSchema`. None of the three is derived from the others.
- */
-function respond<T extends object>(c: Context<AuthedEnv>, result: Result<T>) {
-  if (result.ok) return c.json(result.value, 200);
-
-  const { code, message } = result.error;
-  return c.json(apiError(code, message, kindOf(code)), statusFor(code) as RefusalStatus);
-}
-
-/** The group's object, addressed by the id the client minted for it. */
-function group(c: Context<AuthedEnv>, groupId: string) {
-  return c.env.GROUP.getByName(groupId);
-}
 
 /**
  * What a device needs before it can sync anything: who it is, and which groups
@@ -225,27 +155,17 @@ const restoreEntryRoute = createRoute({
   responses: { 200: jsonResponse(EntrySchema, "The expense, restored"), ...refusals },
 });
 
-export function ledgerRoutes() {
-  const routes = new OpenAPIHono<AuthedEnv>({
-    defaultHook: (result, c) => {
-      if (result.success) return;
-      return c.json(apiError("malformed", result.error.issues[0]?.message ?? "Invalid.", "permanent"), 400);
-    },
-  });
-
-  /**
-   * Named path families rather than `use("*")`.
-   *
-   * This sub-app is mounted at `/api`, so a wildcard here claims every path
-   * under it — including ones it does not own. `/api/nope` then answers 401
-   * instead of 404, which is both wrong and inconsistent with `/api/health`
-   * and `/api/auth/*` sitting unauthenticated beside it. Naming the two
-   * families it actually owns keeps the refusal where it belongs.
-   */
-  routes.use("/bootstrap", requireSession);
-  routes.use("/groups", requireSession);
-  routes.use("/groups/*", requireSession);
-
+/**
+ * Registers the sync surface onto the app that already requires a session.
+ *
+ * Takes the app rather than building one, which is what keeps a request to one
+ * session read. A sub-app mounted at `/api` carries its own `use()` entries up
+ * to the parent as `/api/...` patterns, so two sub-apps each guarding
+ * `/groups/*` would resolve the session twice for every ledger request — two
+ * D1 reads to answer the same question. Where the boundary is drawn is an
+ * app-level fact, so `app.ts` draws it, once, for every module here.
+ */
+export function ledgerRoutes(routes: OpenAPIHono<AuthedEnv>) {
   routes.openapi(bootstrapRoute, async (c) => {
     const { userId, isAnonymous } = c.var.session;
 
@@ -310,6 +230,4 @@ export function ledgerRoutes() {
     const { groupId, entryId } = c.req.valid("param");
     return respond(c, await group(c, groupId).restoreEntry(entryId, c.req.valid("query").baseSeq, c.var.session.userId));
   });
-
-  return routes;
 }

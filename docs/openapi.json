@@ -921,6 +921,435 @@
           "payers",
           "shares"
         ]
+      },
+      "Invite": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "memberId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "createdBy": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "redeemedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "redeemedBy": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "superseded": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "token": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64,
+                  "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+                }
+              },
+              "required": [
+                "token"
+              ]
+            }
+          }
+        },
+        "required": [
+          "token",
+          "memberId",
+          "createdBy",
+          "createdAt",
+          "expiresAt",
+          "redeemedAt",
+          "redeemedBy",
+          "superseded"
+        ]
+      },
+      "MintedLink": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/GroupLink"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "superseded": {
+                "type": "string",
+                "nullable": true,
+                "minLength": 1,
+                "maxLength": 64,
+                "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+              }
+            },
+            "required": [
+              "superseded"
+            ]
+          }
+        ]
+      },
+      "GroupLink": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          }
+        },
+        "required": [
+          "token",
+          "expiresAt"
+        ]
+      },
+      "LiveLink": {
+        "type": "object",
+        "properties": {
+          "link": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GroupLink"
+              },
+              {
+                "nullable": true
+              }
+            ]
+          }
+        },
+        "required": [
+          "link"
+        ]
+      },
+      "LinkRevocation": {
+        "type": "object",
+        "properties": {
+          "revoked": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          }
+        },
+        "required": [
+          "revoked"
+        ]
+      },
+      "ProfilePage": {
+        "type": "object",
+        "properties": {
+          "profiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Profile"
+            }
+          },
+          "cursor": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "cursorId": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "profiles",
+          "cursor",
+          "cursorId",
+          "hasMore"
+        ]
+      },
+      "Profile": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "upiVpa": {
+            "type": "string",
+            "nullable": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "deletedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          }
+        },
+        "required": [
+          "id",
+          "displayName",
+          "upiVpa",
+          "updatedAt",
+          "deletedAt"
+        ]
+      },
+      "ProfileList": {
+        "type": "object",
+        "properties": {
+          "profiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Profile"
+            }
+          }
+        },
+        "required": [
+          "profiles"
+        ]
+      },
+      "ProfileUpdate": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "upiVpa": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^[a-zA-Z0-9._-]{2,64}@[a-zA-Z]{2,64}$",
+            "example": "ravi@okhdfcbank"
+          }
+        },
+        "required": [
+          "displayName",
+          "upiVpa"
+        ]
+      },
+      "Device": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "android",
+              "web"
+            ]
+          }
+        },
+        "required": [
+          "token",
+          "platform"
+        ]
+      },
+      "DeviceForgotten": {
+        "type": "object",
+        "properties": {
+          "forgotten": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "forgotten"
+        ]
+      },
+      "AccountDeletion": {
+        "type": "object",
+        "properties": {
+          "forgotten": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "purged": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "forgotten",
+          "purged"
+        ]
+      },
+      "LinkPreview": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "invite",
+              "group_link"
+            ]
+          },
+          "groupId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "groupName": {
+            "type": "string"
+          },
+          "inviterName": {
+            "type": "string",
+            "nullable": true
+          },
+          "memberCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "memberName": {
+            "type": "string",
+            "nullable": true
+          },
+          "isRedeemed": {
+            "type": "boolean"
+          },
+          "isExpired": {
+            "type": "boolean"
+          },
+          "isRevoked": {
+            "type": "boolean"
+          },
+          "isMember": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "groupId",
+          "groupName",
+          "inviterName",
+          "memberCount",
+          "memberName",
+          "isRedeemed",
+          "isExpired",
+          "isRevoked",
+          "isMember"
+        ]
+      },
+      "PlaceholderList": {
+        "type": "object",
+        "properties": {
+          "placeholders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Placeholder"
+            }
+          }
+        },
+        "required": [
+          "placeholders"
+        ]
+      },
+      "Placeholder": {
+        "type": "object",
+        "properties": {
+          "memberId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "displayName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "memberId",
+          "displayName"
+        ]
+      },
+      "Joined": {
+        "type": "object",
+        "properties": {
+          "groupId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "member": {
+            "$ref": "#/components/schemas/Member"
+          }
+        },
+        "required": [
+          "groupId",
+          "member"
+        ]
+      },
+      "JoinRequest": {
+        "type": "object",
+        "properties": {
+          "memberId": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 64,
+            "default": null,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 100,
+            "default": null
+          }
+        }
       }
     },
     "parameters": {}
@@ -1173,7 +1602,7 @@
             }
           },
           "404": {
-            "description": "No such group, entry or member.",
+            "description": "No such group, entry, member or link.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1275,7 +1704,7 @@
             }
           },
           "404": {
-            "description": "No such group, entry or member.",
+            "description": "No such group, entry, member or link.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1390,7 +1819,7 @@
             }
           },
           "404": {
-            "description": "No such group, entry or member.",
+            "description": "No such group, entry, member or link.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1505,7 +1934,7 @@
             }
           },
           "404": {
-            "description": "No such group, entry or member.",
+            "description": "No such group, entry, member or link.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1631,7 +2060,7 @@
             }
           },
           "404": {
-            "description": "No such group, entry or member.",
+            "description": "No such group, entry, member or link.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1746,7 +2175,7 @@
             }
           },
           "404": {
-            "description": "No such group, entry or member.",
+            "description": "No such group, entry, member or link.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1871,7 +2300,7 @@
             }
           },
           "404": {
-            "description": "No such group, entry or member.",
+            "description": "No such group, entry, member or link.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1995,7 +2424,1008 @@
             }
           },
           "404": {
-            "description": "No such group, entry or member.",
+            "description": "No such group, entry, member or link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The request conflicts with the group's current state. Read `error.retry` before retrying.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The group was collected, or the link has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The expense does not add up.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/groups/{groupId}/members/{memberId}/invite": {
+      "post": {
+        "operationId": "createInvite",
+        "tags": [
+          "invites"
+        ],
+        "summary": "Hand one unclaimed place to one person",
+        "description": "Only for a place nobody has claimed: handing out a link to a member who already has an account would be an account takeover with extra steps. Reissuing invalidates whatever was sent before, so an old link found in a chat history cannot still be spent.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            },
+            "required": true,
+            "name": "groupId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            },
+            "required": true,
+            "name": "memberId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The invite, and the links it replaced",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Invite"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "You are not a member of this group, or not allowed to change that.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such group, entry, member or link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The request conflicts with the group's current state. Read `error.retry` before retrying.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The group was collected, or the link has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The expense does not add up.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/groups/{groupId}/link": {
+      "post": {
+        "operationId": "createGroupLink",
+        "tags": [
+          "invites"
+        ],
+        "summary": "Mint the group's one open link",
+        "description": "Bearer authority over membership: whoever holds it may join, any number of times, until it expires or is revoked. One live link at a time — minting revokes the previous one — and both the minting and the revocation are written to the activity feed, because a group that cannot see its open door has no way to decide it should be shut.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            },
+            "required": true,
+            "name": "groupId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The link, and the one it replaced",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MintedLink"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "You are not a member of this group, or not allowed to change that.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such group, entry, member or link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The request conflicts with the group's current state. Read `error.retry` before retrying.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The group was collected, or the link has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The expense does not add up.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "getGroupLink",
+        "tags": [
+          "invites"
+        ],
+        "summary": "The group's open link, if it has a usable one",
+        "description": "Null when nobody has minted one, or the last one has expired or been revoked. Requires membership, because it hands a working URL out rather than describing one somebody already holds.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            },
+            "required": true,
+            "name": "groupId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The link, or null",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveLink"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "You are not a member of this group, or not allowed to change that.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such group, entry, member or link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The request conflicts with the group's current state. Read `error.retry` before retrying.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The group was collected, or the link has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The expense does not add up.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "revokeGroupLink",
+        "tags": [
+          "invites"
+        ],
+        "summary": "Turn the group's open link off",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            },
+            "required": true,
+            "name": "groupId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The token that is no longer live, or null",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkRevocation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "You are not a member of this group, or not allowed to change that.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such group, entry, member or link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The request conflicts with the group's current state. Read `error.retry` before retrying.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The group was collected, or the link has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The expense does not add up.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/profiles": {
+      "get": {
+        "operationId": "getProfiles",
+        "tags": [
+          "sync"
+        ],
+        "summary": "Everybody you share a group with, plus yourself",
+        "description": "The one feed still cursored on a timestamp rather than a sequence number, and honestly so: profiles live in a database that several requests write concurrently, so there is nothing there that can hand out a monotonic integer the way a group's Durable Object can. Send `cursor` and `cursorId` back next time.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "example": "2026-09-23T11:20:41.865Z"
+            },
+            "required": false,
+            "name": "since",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            },
+            "required": false,
+            "name": "sinceId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "example": 100
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The page, and where the feed stands",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfilePage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/profiles/by-ids": {
+      "get": {
+        "operationId": "getProfilesByIds",
+        "tags": [
+          "sync"
+        ],
+        "summary": "Exactly these profiles, cursor or no cursor",
+        "description": "The one thing the feed structurally cannot do. A cursor orders changes within what you can already see; it cannot surface a row that only just became visible to you. When somebody claims a placeholder, their account may have been named years ago — the row is old, the cursor is past it, and no incremental pull will ever mention it again. Same visibility rule as the feed: ids you cannot see are simply absent.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f,0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e70",
+              "description": "Comma-separated profile ids, at most 200."
+            },
+            "required": true,
+            "description": "Comma-separated profile ids, at most 200.",
+            "name": "ids",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Those of them you can see",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/profile": {
+      "put": {
+        "operationId": "updateProfile",
+        "tags": [
+          "sync"
+        ],
+        "summary": "Your own name and payment handle",
+        "description": "Singular, and with no id in it: the row written is the one the session names. An endpoint that took an id would be an endpoint somebody could point at a stranger's payment handle. Both fields are required — null clears one — because an optional field that means 'leave it alone' cannot be told from a null on the wire, and clearing a payment handle has to be expressible.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Your profile, as stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/devices": {
+      "put": {
+        "operationId": "registerDevice",
+        "tags": [
+          "devices"
+        ],
+        "summary": "Where to wake this account",
+        "description": "Idempotent, and a transfer rather than a refusal when the token already belongs to somebody else: a phone that changes hands keeps its registration token, so the previous owner's claim on it has to yield or their notifications follow the new one.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Device"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Registered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Device"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/devices/{token}": {
+      "delete": {
+        "operationId": "forgetDevice",
+        "tags": [
+          "devices"
+        ],
+        "summary": "Stop waking this device",
+        "description": "Only removes a token that belongs to this account, so signing out on one phone cannot silence somebody else's.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "required": true,
+            "name": "token",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Whether there was one to forget",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceForgotten"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/account": {
+      "delete": {
+        "operationId": "deleteAccount",
+        "tags": [
+          "account"
+        ],
+        "summary": "Delete this account, permanently",
+        "description": "Not a sign-out and not recoverable. It does not remove other people's ledgers: money you paid, money you owe and the settlements between you are facts about their group as much as yours, so your member row keeps its name and loses its account — exactly the state of somebody a friend added who never signed up. A group where you were the last account holder is collected outright instead, because nobody left could ever read it again. The session is left alone; the caller decides what to do with the device.",
+        "responses": {
+          "200": {
+            "description": "What it did, group by group",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountDeletion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/links/{token}": {
+      "get": {
+        "operationId": "peekLink",
+        "tags": [
+          "invites"
+        ],
+        "summary": "What a link is for, without spending it",
+        "description": "Works with no session, which is the point: whoever just tapped the link has not been asked who they are yet. A spent, expired or revoked token still describes itself, so a screen can say which of those it is rather than showing 'invalid link' for three different reasons.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            },
+            "required": true,
+            "name": "token",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "What the link names",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkPreview"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such group, entry, member or link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The group was collected, or the link has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/links/{token}/placeholders": {
+      "get": {
+        "operationId": "linkPlaceholders",
+        "tags": [
+          "invites"
+        ],
+        "summary": "The unclaimed places this link's group is holding",
+        "description": "Requires a session, unlike the preview: these are other people's names, which is more than the link implies to whoever holds it. It is asked after the arrival has chosen an account rather than before, which they have to do to join in any case.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            },
+            "required": true,
+            "name": "token",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Places nobody has claimed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaceholderList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "You are not a member of this group, or not allowed to change that.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such group, entry, member or link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The request conflicts with the group's current state. Read `error.retry` before retrying.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The group was collected, or the link has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The expense does not add up.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/links/{token}/join": {
+      "post": {
+        "operationId": "joinWithLink",
+        "tags": [
+          "invites"
+        ],
+        "summary": "Walk in on a link",
+        "description": "Claiming a place sets exactly one column on a member row that already has balances and history; arriving as somebody new inserts one. Never both, and never a second place for one account.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            },
+            "required": true,
+            "name": "token",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JoinRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The group, and your place in it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Joined"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "You are not a member of this group, or not allowed to change that.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such group, entry, member or link.",
             "content": {
               "application/json": {
                 "schema": {

@@ -1,6 +1,8 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
+import { accountRoutes } from "./api/account";
+import { inviteRoutes, linkRoutes } from "./api/invites";
 import { ledgerRoutes } from "./api/ledger";
-import { type AppEnv, services } from "./context";
+import { type AppEnv, type AuthedEnv, requireSession, services } from "./context";
 import { identityRoutes } from "./identity/routes";
 import { openApiDocument } from "./openapi";
 import { apiError, jsonResponse } from "./schemas/common";
@@ -56,8 +58,50 @@ app.on(["GET", "POST"], "/api/auth/*", (c) => c.var.auth.handler(c.req.raw));
 
 app.route("/api/identity", identityRoutes());
 
+/**
+ * Everything under `/api` that requires a session: one app, one session read.
+ *
+ * The modules below register onto this rather than each building their own,
+ * which is not tidiness. A sub-app mounted at `/api` carries its own `use()`
+ * entries up to the parent as `/api/...` patterns, so two sub-apps each
+ * guarding `/groups/*` would resolve the session twice for every ledger
+ * request — two D1 reads to answer one question. Where the boundary is drawn
+ * is an app-level fact, so it is drawn here.
+ */
+const authed = new OpenAPIHono<AuthedEnv>({
+  defaultHook: (result, c) => {
+    if (result.success) return;
+    return c.json(apiError("malformed", result.error.issues[0]?.message ?? "Invalid.", "permanent"), 400);
+  },
+});
+
+/**
+ * Named path families rather than `use("*")`.
+ *
+ * This app is mounted at `/api`, so a wildcard here would claim every path
+ * under it — including ones it does not own. `/api/nope` would then answer 401
+ * instead of 404, which is both wrong and inconsistent with `/api/health` and
+ * `/api/auth/*` sitting unauthenticated beside it.
+ *
+ * `/links/:token` is deliberately absent. Previewing a link runs with no
+ * session, because whoever just tapped it has not been asked who they are yet
+ * — see `api/invites.ts`.
+ */
+for (const family of ["/bootstrap", "/groups", "/groups/*", "/profile", "/profiles", "/profiles/*", "/devices", "/devices/*", "/account", "/links/:token/placeholders", "/links/:token/join"]) {
+  authed.use(family, requireSession);
+}
+
 // The sync surface. Everything about a group goes through its own object.
-app.route("/api", ledgerRoutes());
+ledgerRoutes(authed);
+// Minting links: handing authority out, which only a member may do.
+inviteRoutes(authed);
+// The person, their devices, and ending the whole thing.
+accountRoutes(authed);
+
+app.route("/api", authed);
+
+// Spending a link: arriving, which starts before anybody has said who they are.
+app.route("/api/links", linkRoutes());
 
 /**
  * The contract, served and committed.

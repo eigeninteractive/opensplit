@@ -9,23 +9,26 @@ import 'dart:convert';
 import 'package:opensplit_api/src/deserialize.dart';
 import 'package:dio/dio.dart';
 
-import 'package:opensplit_api/src/model/bootstrap.dart';
-import 'package:opensplit_api/src/model/change_page.dart';
 import 'package:opensplit_api/src/model/error.dart';
-import 'package:opensplit_api/src/model/profile.dart';
-import 'package:opensplit_api/src/model/profile_list.dart';
-import 'package:opensplit_api/src/model/profile_page.dart';
-import 'package:opensplit_api/src/model/profile_update.dart';
+import 'package:opensplit_api/src/model/invite.dart';
+import 'package:opensplit_api/src/model/join_request.dart';
+import 'package:opensplit_api/src/model/joined.dart';
+import 'package:opensplit_api/src/model/link_preview.dart';
+import 'package:opensplit_api/src/model/link_revocation.dart';
+import 'package:opensplit_api/src/model/live_link.dart';
+import 'package:opensplit_api/src/model/minted_link.dart';
+import 'package:opensplit_api/src/model/placeholder_list.dart';
 
-class SyncApi {
+class InvitesApi {
   final Dio _dio;
 
-  const SyncApi(this._dio);
+  const InvitesApi(this._dio);
 
-  /// Who I am, and which groups to ask
-  ///
+  /// Mint the group&#39;s one open link
+  /// Bearer authority over membership: whoever holds it may join, any number of times, until it expires or is revoked. One live link at a time — minting revokes the previous one — and both the minting and the revocation are written to the activity feed, because a group that cannot see its open door has no way to decide it should be shut.
   ///
   /// Parameters:
+  /// * [groupId]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -33,9 +36,10 @@ class SyncApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future] containing a [Response] with a [Bootstrap] as data
+  /// Returns a [Future] containing a [Response] with a [MintedLink] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<Bootstrap>> bootstrap({
+  Future<Response<MintedLink>> createGroupLink({
+    required String groupId,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -43,9 +47,14 @@ class SyncApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/bootstrap';
+    final _path = r'/api/groups/{groupId}/link'.replaceAll(
+      '{'
+      r'groupId'
+      '}',
+      groupId.toString(),
+    );
     final _options = Options(
-      method: r'GET',
+      method: r'POST',
       headers: <String, dynamic>{...?headers},
       extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
       validateStatus: validateStatus,
@@ -59,15 +68,15 @@ class SyncApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    Bootstrap? _responseData;
+    MintedLink? _responseData;
 
     try {
       final rawData = _response.data;
       _responseData = rawData == null
           ? null
-          : deserialize<Bootstrap, Bootstrap>(
+          : deserialize<MintedLink, MintedLink>(
               rawData,
-              'Bootstrap',
+              'MintedLink',
               growable: true,
             );
     } catch (error, stackTrace) {
@@ -80,7 +89,7 @@ class SyncApi {
       );
     }
 
-    return Response<Bootstrap>(
+    return Response<MintedLink>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,
@@ -92,13 +101,12 @@ class SyncApi {
     );
   }
 
-  /// Everything that changed in one group since a cursor
-  /// &#x60;limit&#x60; counts changes, not rows. Every row written by one call shares a sequence number and a page is only ever cut between numbers, so a device sees a whole write or none of it — it can never observe an expense whose shares have not arrived. Send &#x60;seq&#x60; back as &#x60;since&#x60; next time.
+  /// Hand one unclaimed place to one person
+  /// Only for a place nobody has claimed: handing out a link to a member who already has an account would be an account takeover with extra steps. Reissuing invalidates whatever was sent before, so an old link found in a chat history cannot still be spent.
   ///
   /// Parameters:
   /// * [groupId]
-  /// * [since]
-  /// * [limit]
+  /// * [memberId]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -106,12 +114,11 @@ class SyncApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future] containing a [Response] with a [ChangePage] as data
+  /// Returns a [Future] containing a [Response] with a [Invite] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<ChangePage>> getChanges({
+  Future<Response<Invite>> createInvite({
     required String groupId,
-    int? since,
-    int? limit,
+    required String memberId,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -119,7 +126,87 @@ class SyncApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/groups/{groupId}/changes'.replaceAll(
+    final _path = r'/api/groups/{groupId}/members/{memberId}/invite'
+        .replaceAll(
+          '{'
+          r'groupId'
+          '}',
+          groupId.toString(),
+        )
+        .replaceAll(
+          '{'
+          r'memberId'
+          '}',
+          memberId.toString(),
+        );
+    final _options = Options(
+      method: r'POST',
+      headers: <String, dynamic>{...?headers},
+      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    Invite? _responseData;
+
+    try {
+      final rawData = _response.data;
+      _responseData = rawData == null
+          ? null
+          : deserialize<Invite, Invite>(rawData, 'Invite', growable: true);
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<Invite>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// The group&#39;s open link, if it has a usable one
+  /// Null when nobody has minted one, or the last one has expired or been revoked. Requires membership, because it hands a working URL out rather than describing one somebody already holds.
+  ///
+  /// Parameters:
+  /// * [groupId]
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [LiveLink] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<LiveLink>> getGroupLink({
+    required String groupId,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/api/groups/{groupId}/link'.replaceAll(
       '{'
       r'groupId'
       '}',
@@ -132,29 +219,23 @@ class SyncApi {
       validateStatus: validateStatus,
     );
 
-    final _queryParameters = <String, dynamic>{
-      if (since != null) r'since': since,
-      if (limit != null) r'limit': limit,
-    };
-
     final _response = await _dio.request<Object>(
       _path,
       options: _options,
-      queryParameters: _queryParameters,
       cancelToken: cancelToken,
       onSendProgress: onSendProgress,
       onReceiveProgress: onReceiveProgress,
     );
 
-    ChangePage? _responseData;
+    LiveLink? _responseData;
 
     try {
       final rawData = _response.data;
       _responseData = rawData == null
           ? null
-          : deserialize<ChangePage, ChangePage>(
+          : deserialize<LiveLink, LiveLink>(
               rawData,
-              'ChangePage',
+              'LiveLink',
               growable: true,
             );
     } catch (error, stackTrace) {
@@ -167,7 +248,7 @@ class SyncApi {
       );
     }
 
-    return Response<ChangePage>(
+    return Response<LiveLink>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,
@@ -179,13 +260,12 @@ class SyncApi {
     );
   }
 
-  /// Everybody you share a group with, plus yourself
-  /// The one feed still cursored on a timestamp rather than a sequence number, and honestly so: profiles live in a database that several requests write concurrently, so there is nothing there that can hand out a monotonic integer the way a group&#39;s Durable Object can. Send &#x60;cursor&#x60; and &#x60;cursorId&#x60; back next time.
+  /// Walk in on a link
+  /// Claiming a place sets exactly one column on a member row that already has balances and history; arriving as somebody new inserts one. Never both, and never a second place for one account.
   ///
   /// Parameters:
-  /// * [since]
-  /// * [sinceId]
-  /// * [limit]
+  /// * [token]
+  /// * [joinRequest]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -193,12 +273,11 @@ class SyncApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future] containing a [Response] with a [ProfilePage] as data
+  /// Returns a [Future] containing a [Response] with a [Joined] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<ProfilePage>> getProfiles({
-    DateTime? since,
-    String? sinceId,
-    int? limit,
+  Future<Response<Joined>> joinWithLink({
+    required String token,
+    required JoinRequest joinRequest,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -206,163 +285,14 @@ class SyncApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/profiles';
+    final _path = r'/api/links/{token}/join'.replaceAll(
+      '{'
+      r'token'
+      '}',
+      token.toString(),
+    );
     final _options = Options(
-      method: r'GET',
-      headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
-      validateStatus: validateStatus,
-    );
-
-    final _queryParameters = <String, dynamic>{
-      if (since != null) r'since': since,
-      if (sinceId != null) r'sinceId': sinceId,
-      if (limit != null) r'limit': limit,
-    };
-
-    final _response = await _dio.request<Object>(
-      _path,
-      options: _options,
-      queryParameters: _queryParameters,
-      cancelToken: cancelToken,
-      onSendProgress: onSendProgress,
-      onReceiveProgress: onReceiveProgress,
-    );
-
-    ProfilePage? _responseData;
-
-    try {
-      final rawData = _response.data;
-      _responseData = rawData == null
-          ? null
-          : deserialize<ProfilePage, ProfilePage>(
-              rawData,
-              'ProfilePage',
-              growable: true,
-            );
-    } catch (error, stackTrace) {
-      throw DioException(
-        requestOptions: _response.requestOptions,
-        response: _response,
-        type: DioExceptionType.unknown,
-        error: error,
-        stackTrace: stackTrace,
-      );
-    }
-
-    return Response<ProfilePage>(
-      data: _responseData,
-      headers: _response.headers,
-      isRedirect: _response.isRedirect,
-      requestOptions: _response.requestOptions,
-      redirects: _response.redirects,
-      statusCode: _response.statusCode,
-      statusMessage: _response.statusMessage,
-      extra: _response.extra,
-    );
-  }
-
-  /// Exactly these profiles, cursor or no cursor
-  /// The one thing the feed structurally cannot do. A cursor orders changes within what you can already see; it cannot surface a row that only just became visible to you. When somebody claims a placeholder, their account may have been named years ago — the row is old, the cursor is past it, and no incremental pull will ever mention it again. Same visibility rule as the feed: ids you cannot see are simply absent.
-  ///
-  /// Parameters:
-  /// * [ids] - Comma-separated profile ids, at most 200.
-  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
-  /// * [headers] - Can be used to add additional headers to the request
-  /// * [extras] - Can be used to add flags to the request
-  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
-  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
-  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
-  ///
-  /// Returns a [Future] containing a [Response] with a [ProfileList] as data
-  /// Throws [DioException] if API call or serialization fails
-  Future<Response<ProfileList>> getProfilesByIds({
-    required String ids,
-    CancelToken? cancelToken,
-    Map<String, dynamic>? headers,
-    Map<String, dynamic>? extra,
-    ValidateStatus? validateStatus,
-    ProgressCallback? onSendProgress,
-    ProgressCallback? onReceiveProgress,
-  }) async {
-    final _path = r'/api/profiles/by-ids';
-    final _options = Options(
-      method: r'GET',
-      headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
-      validateStatus: validateStatus,
-    );
-
-    final _queryParameters = <String, dynamic>{r'ids': ids};
-
-    final _response = await _dio.request<Object>(
-      _path,
-      options: _options,
-      queryParameters: _queryParameters,
-      cancelToken: cancelToken,
-      onSendProgress: onSendProgress,
-      onReceiveProgress: onReceiveProgress,
-    );
-
-    ProfileList? _responseData;
-
-    try {
-      final rawData = _response.data;
-      _responseData = rawData == null
-          ? null
-          : deserialize<ProfileList, ProfileList>(
-              rawData,
-              'ProfileList',
-              growable: true,
-            );
-    } catch (error, stackTrace) {
-      throw DioException(
-        requestOptions: _response.requestOptions,
-        response: _response,
-        type: DioExceptionType.unknown,
-        error: error,
-        stackTrace: stackTrace,
-      );
-    }
-
-    return Response<ProfileList>(
-      data: _responseData,
-      headers: _response.headers,
-      isRedirect: _response.isRedirect,
-      requestOptions: _response.requestOptions,
-      redirects: _response.redirects,
-      statusCode: _response.statusCode,
-      statusMessage: _response.statusMessage,
-      extra: _response.extra,
-    );
-  }
-
-  /// Your own name and payment handle
-  /// Singular, and with no id in it: the row written is the one the session names. An endpoint that took an id would be an endpoint somebody could point at a stranger&#39;s payment handle. Both fields are required — null clears one — because an optional field that means &#39;leave it alone&#39; cannot be told from a null on the wire, and clearing a payment handle has to be expressible.
-  ///
-  /// Parameters:
-  /// * [profileUpdate]
-  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
-  /// * [headers] - Can be used to add additional headers to the request
-  /// * [extras] - Can be used to add flags to the request
-  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
-  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
-  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
-  ///
-  /// Returns a [Future] containing a [Response] with a [Profile] as data
-  /// Throws [DioException] if API call or serialization fails
-  Future<Response<Profile>> updateProfile({
-    required ProfileUpdate profileUpdate,
-    CancelToken? cancelToken,
-    Map<String, dynamic>? headers,
-    Map<String, dynamic>? extra,
-    ValidateStatus? validateStatus,
-    ProgressCallback? onSendProgress,
-    ProgressCallback? onReceiveProgress,
-  }) async {
-    final _path = r'/api/profile';
-    final _options = Options(
-      method: r'PUT',
+      method: r'POST',
       headers: <String, dynamic>{...?headers},
       extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
       contentType: 'application/json',
@@ -372,7 +302,7 @@ class SyncApi {
     dynamic _bodyData;
 
     try {
-      _bodyData = jsonEncode(profileUpdate);
+      _bodyData = jsonEncode(joinRequest);
     } catch (error, stackTrace) {
       throw DioException(
         requestOptions: _options.compose(_dio.options, _path),
@@ -391,13 +321,13 @@ class SyncApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    Profile? _responseData;
+    Joined? _responseData;
 
     try {
       final rawData = _response.data;
       _responseData = rawData == null
           ? null
-          : deserialize<Profile, Profile>(rawData, 'Profile', growable: true);
+          : deserialize<Joined, Joined>(rawData, 'Joined', growable: true);
     } catch (error, stackTrace) {
       throw DioException(
         requestOptions: _response.requestOptions,
@@ -408,7 +338,238 @@ class SyncApi {
       );
     }
 
-    return Response<Profile>(
+    return Response<Joined>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// The unclaimed places this link&#39;s group is holding
+  /// Requires a session, unlike the preview: these are other people&#39;s names, which is more than the link implies to whoever holds it. It is asked after the arrival has chosen an account rather than before, which they have to do to join in any case.
+  ///
+  /// Parameters:
+  /// * [token]
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [PlaceholderList] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<PlaceholderList>> linkPlaceholders({
+    required String token,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/api/links/{token}/placeholders'.replaceAll(
+      '{'
+      r'token'
+      '}',
+      token.toString(),
+    );
+    final _options = Options(
+      method: r'GET',
+      headers: <String, dynamic>{...?headers},
+      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    PlaceholderList? _responseData;
+
+    try {
+      final rawData = _response.data;
+      _responseData = rawData == null
+          ? null
+          : deserialize<PlaceholderList, PlaceholderList>(
+              rawData,
+              'PlaceholderList',
+              growable: true,
+            );
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<PlaceholderList>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// What a link is for, without spending it
+  /// Works with no session, which is the point: whoever just tapped the link has not been asked who they are yet. A spent, expired or revoked token still describes itself, so a screen can say which of those it is rather than showing &#39;invalid link&#39; for three different reasons.
+  ///
+  /// Parameters:
+  /// * [token]
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [LinkPreview] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<LinkPreview>> peekLink({
+    required String token,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/api/links/{token}'.replaceAll(
+      '{'
+      r'token'
+      '}',
+      token.toString(),
+    );
+    final _options = Options(
+      method: r'GET',
+      headers: <String, dynamic>{...?headers},
+      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    LinkPreview? _responseData;
+
+    try {
+      final rawData = _response.data;
+      _responseData = rawData == null
+          ? null
+          : deserialize<LinkPreview, LinkPreview>(
+              rawData,
+              'LinkPreview',
+              growable: true,
+            );
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<LinkPreview>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Turn the group&#39;s open link off
+  ///
+  ///
+  /// Parameters:
+  /// * [groupId]
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [LinkRevocation] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<LinkRevocation>> revokeGroupLink({
+    required String groupId,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/api/groups/{groupId}/link'.replaceAll(
+      '{'
+      r'groupId'
+      '}',
+      groupId.toString(),
+    );
+    final _options = Options(
+      method: r'DELETE',
+      headers: <String, dynamic>{...?headers},
+      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    LinkRevocation? _responseData;
+
+    try {
+      final rawData = _response.data;
+      _responseData = rawData == null
+          ? null
+          : deserialize<LinkRevocation, LinkRevocation>(
+              rawData,
+              'LinkRevocation',
+              growable: true,
+            );
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<LinkRevocation>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,

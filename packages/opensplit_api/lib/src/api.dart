@@ -7,9 +7,12 @@ import 'package:opensplit_api/src/auth/api_key_auth.dart';
 import 'package:opensplit_api/src/auth/basic_auth.dart';
 import 'package:opensplit_api/src/auth/bearer_auth.dart';
 import 'package:opensplit_api/src/auth/oauth.dart';
+import 'package:opensplit_api/src/api/account_api.dart';
+import 'package:opensplit_api/src/api/devices_api.dart';
 import 'package:opensplit_api/src/api/entries_api.dart';
 import 'package:opensplit_api/src/api/groups_api.dart';
 import 'package:opensplit_api/src/api/identity_api.dart';
+import 'package:opensplit_api/src/api/invites_api.dart';
 import 'package:opensplit_api/src/api/meta_api.dart';
 import 'package:opensplit_api/src/api/sync_api.dart';
 
@@ -136,6 +139,18 @@ class OpensplitApi {
     }
   }
 
+  /// Get AccountApi instance, base route and serializer can be overridden by a given but be careful,
+  /// by doing that all interceptors will not be executed
+  AccountApi getAccountApi() {
+    return AccountApi(dio);
+  }
+
+  /// Get DevicesApi instance, base route and serializer can be overridden by a given but be careful,
+  /// by doing that all interceptors will not be executed
+  DevicesApi getDevicesApi() {
+    return DevicesApi(dio);
+  }
+
   /// Get EntriesApi instance, base route and serializer can be overridden by a given but be careful,
   /// by doing that all interceptors will not be executed
   EntriesApi getEntriesApi() {
@@ -152,6 +167,12 @@ class OpensplitApi {
   /// by doing that all interceptors will not be executed
   IdentityApi getIdentityApi() {
     return IdentityApi(dio);
+  }
+
+  /// Get InvitesApi instance, base route and serializer can be overridden by a given but be careful,
+  /// by doing that all interceptors will not be executed
+  InvitesApi getInvitesApi() {
+    return InvitesApi(dio);
   }
 
   /// Get MetaApi instance, base route and serializer can be overridden by a given but be careful,

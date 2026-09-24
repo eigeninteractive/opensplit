@@ -1,6 +1,9 @@
 import 'package:opensplit_api/src/model/account.dart';
+import 'package:opensplit_api/src/model/account_deletion.dart';
 import 'package:opensplit_api/src/model/bootstrap.dart';
 import 'package:opensplit_api/src/model/change_page.dart';
+import 'package:opensplit_api/src/model/device.dart';
+import 'package:opensplit_api/src/model/device_forgotten.dart';
 import 'package:opensplit_api/src/model/email_start_request.dart';
 import 'package:opensplit_api/src/model/email_start_response.dart';
 import 'package:opensplit_api/src/model/email_verify_request.dart';
@@ -12,15 +15,30 @@ import 'package:opensplit_api/src/model/event.dart';
 import 'package:opensplit_api/src/model/google_identity_request.dart';
 import 'package:opensplit_api/src/model/group.dart';
 import 'package:opensplit_api/src/model/group_create.dart';
+import 'package:opensplit_api/src/model/group_link.dart';
 import 'package:opensplit_api/src/model/group_patch.dart';
 import 'package:opensplit_api/src/model/health.dart';
 import 'package:opensplit_api/src/model/identity_outcome.dart';
 import 'package:opensplit_api/src/model/identity_outcome_one_of.dart';
 import 'package:opensplit_api/src/model/identity_outcome_one_of1.dart';
+import 'package:opensplit_api/src/model/invite.dart';
+import 'package:opensplit_api/src/model/invite_superseded_inner.dart';
+import 'package:opensplit_api/src/model/join_request.dart';
+import 'package:opensplit_api/src/model/joined.dart';
+import 'package:opensplit_api/src/model/link_preview.dart';
+import 'package:opensplit_api/src/model/link_revocation.dart';
+import 'package:opensplit_api/src/model/live_link.dart';
 import 'package:opensplit_api/src/model/member.dart';
 import 'package:opensplit_api/src/model/member_create.dart';
 import 'package:opensplit_api/src/model/member_patch.dart';
+import 'package:opensplit_api/src/model/minted_link.dart';
 import 'package:opensplit_api/src/model/payer.dart';
+import 'package:opensplit_api/src/model/placeholder.dart';
+import 'package:opensplit_api/src/model/placeholder_list.dart';
+import 'package:opensplit_api/src/model/profile.dart';
+import 'package:opensplit_api/src/model/profile_list.dart';
+import 'package:opensplit_api/src/model/profile_page.dart';
+import 'package:opensplit_api/src/model/profile_update.dart';
 import 'package:opensplit_api/src/model/share.dart';
 
 final _regList = RegExp(r'^List<(.*)>$');
@@ -47,10 +65,18 @@ ReturnType deserialize<ReturnType, BaseType>(
       return (value is double ? value : double.parse('$value')) as ReturnType;
     case 'Account':
       return Account.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'AccountDeletion':
+      return AccountDeletion.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
     case 'Bootstrap':
       return Bootstrap.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'ChangePage':
       return ChangePage.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'Device':
+      return Device.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'DeviceForgotten':
+      return DeviceForgotten.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
     case 'EmailFlow':
     case 'EmailStartRequest':
       return EmailStartRequest.fromJson(value as Map<String, dynamic>)
@@ -80,6 +106,8 @@ ReturnType deserialize<ReturnType, BaseType>(
       return Group.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'GroupCreate':
       return GroupCreate.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'GroupLink':
+      return GroupLink.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'GroupPatch':
       return GroupPatch.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'Health':
@@ -93,14 +121,46 @@ ReturnType deserialize<ReturnType, BaseType>(
     case 'IdentityOutcomeOneOf1':
       return IdentityOutcomeOneOf1.fromJson(value as Map<String, dynamic>)
           as ReturnType;
+    case 'Invite':
+      return Invite.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'InviteSupersededInner':
+      return InviteSupersededInner.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
+    case 'JoinRequest':
+      return JoinRequest.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'Joined':
+      return Joined.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'LinkPreview':
+      return LinkPreview.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'LinkRevocation':
+      return LinkRevocation.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
+    case 'LiveLink':
+      return LiveLink.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'Member':
       return Member.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'MemberCreate':
       return MemberCreate.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'MemberPatch':
       return MemberPatch.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'MintedLink':
+      return MintedLink.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'Payer':
       return Payer.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'Placeholder':
+      return Placeholder.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'PlaceholderList':
+      return PlaceholderList.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
+    case 'Profile':
+      return Profile.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'ProfileList':
+      return ProfileList.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'ProfilePage':
+      return ProfilePage.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'ProfileUpdate':
+      return ProfileUpdate.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
     case 'Retry':
     case 'Share':
       return Share.fromJson(value as Map<String, dynamic>) as ReturnType;

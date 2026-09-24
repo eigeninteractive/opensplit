@@ -1,7 +1,7 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 
 import * as schema from "../../db/group/schema";
-import type { Invite, LinkPreview, Member, Placeholder } from "../../schemas/ledger";
+import type { GroupLink, Invite, LinkPreview, Member, MintedLink, Placeholder } from "../../schemas/ledger";
 import { append } from "./events";
 import { refuse } from "./refusal";
 import { type MemberRow, nextSeq, requireMember, requireMeta, type Tx } from "./store";
@@ -108,7 +108,7 @@ export function createInvite(tx: Tx, memberId: string, context: InviteContext, t
  * Here it is the shape of the table and the fact that this object does one
  * thing at a time.
  */
-export function createGroupLink(tx: Tx, context: InviteContext, ttl = LINK_TTL): { token: string; expiresAt: string; superseded: string | null } {
+export function createGroupLink(tx: Tx, context: InviteContext, ttl = LINK_TTL): MintedLink {
   requireMeta(tx);
 
   const previous = tx.select().from(schema.groupLink).get();
@@ -136,7 +136,34 @@ export function createGroupLink(tx: Tx, context: InviteContext, ttl = LINK_TTL):
   }
   append(tx, { seq, now: context.now, actorId: context.actor.id, kind: "link_created", subjectId: link.token, payload: { expiresAt: link.expiresAt } });
 
-  return { token: link.token, expiresAt: link.expiresAt, superseded: previous && previous.revokedAt === null ? previous.token : null };
+  /**
+   * Any previous token, not only a live one.
+   *
+   * The row above is `id: 'live'`, overwritten in place, so after this call
+   * the object has no memory of the old token at all — a revoked one included.
+   * The derived index has to forget exactly what the object has forgotten: a
+   * token still routing to a group that can no longer say anything about it is
+   * how a dead link comes back as "invalid" rather than as "turned off".
+   */
+  return { token: link.token, expiresAt: link.expiresAt, superseded: previous?.token ?? null };
+}
+
+/**
+ * The group's open link, if it has a usable one.
+ *
+ * Expiry is applied here rather than reported, which is the difference between
+ * this and `peek`. A member asking "is there a link" is asking whether there is
+ * one to share, and an expired token is not — whereas somebody holding a URL
+ * needs to be told *why* it does not work, which is a different question with a
+ * different answer.
+ */
+export function liveLink(tx: Tx, now: string): GroupLink | null {
+  requireMeta(tx);
+
+  const link = tx.select().from(schema.groupLink).where(isNull(schema.groupLink.revokedAt)).get();
+  if (!link || link.expiresAt < now) return null;
+
+  return { token: link.token, expiresAt: link.expiresAt };
 }
 
 export function revokeGroupLink(tx: Tx, context: InviteContext): string | null {
