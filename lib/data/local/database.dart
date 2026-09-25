@@ -101,7 +101,7 @@ class AppDatabase extends _$AppDatabase {
   /// See `docs/local-database.md`, which also carries the rule this file cannot
   /// enforce: never reuse the name of a removed table.
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   /// Timestamps are stored as ISO-8601 text rather than Unix seconds.
   ///

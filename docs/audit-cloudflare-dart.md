@@ -582,3 +582,14 @@ version back:
 
 Tests: two in `sync_test.dart` ("discarding a refused write"), one widget test
 in `unsynced_banner_test.dart`.
+
+## 10. The outbox key
+
+The outbox was keyed on a string built from two columns it also stored
+(`"entry:<id>"`, via `OutboxQueue.idFor`). It is now keyed on
+`(target, targetId)` directly. `complete`, `fail` and `isCurrent` take the
+row they were handed, and always match its revision too, so a response for an
+older edit can never complete or back off a newer one. Before, that check was
+optional (`revision: null` matched anything). `fail` also lost a redundant
+second read. Local schema v6: v5 was already pushed, so it was bumped rather
+than re-dumped.

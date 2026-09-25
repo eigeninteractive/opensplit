@@ -329,8 +329,6 @@ enum OutboxTarget { group, member, entry, profile }
 /// pusher reads the row's current state at send time.
 @DataClassName('OutboxRow')
 class Outbox extends Table {
-  /// `<target>:<targetId>`, so re-queuing coalesces.
-  TextColumn get id => text()();
   TextColumn get target => textEnum<OutboxTarget>()();
   TextColumn get targetId => text()();
 
@@ -347,7 +345,7 @@ class Outbox extends Table {
   DateTimeColumn get deadLetteredAt => dateTime().nullable()();
 
   @override
-  Set<Column> get primaryKey => {id};
+  Set<Column> get primaryKey => {target, targetId};
 }
 
 /// How far this device has read one group's history. Client-only.

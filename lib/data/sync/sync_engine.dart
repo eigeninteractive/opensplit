@@ -247,30 +247,25 @@ class SyncEngine {
       for (final item in due) {
         try {
           await _pushOne(item);
-          await outbox.complete(item.id, revision: item.revision);
+          await outbox.complete(item);
           sent++;
         } on ApiFailure catch (e) {
           switch (e.retry) {
             case api.Retry.stale:
               await _parkConflict(item);
             case api.Retry.transient:
-              await outbox.fail(item.id, e.message, revision: item.revision);
+              await outbox.fail(item, e.message);
               return (sent: sent, failed: failed + 1);
             // Refused identically next time; retrying would wedge everything
             // queued behind it. A retry kind this build does not know is
             // treated the same way.
             case api.Retry.permanent:
             case api.Retry.unknownDefaultOpenApi:
-              await outbox.fail(
-                item.id,
-                e.message,
-                permanent: true,
-                revision: item.revision,
-              );
+              await outbox.fail(item, e.message, permanent: true);
           }
           failed++;
         } catch (e) {
-          await outbox.fail(item.id, '$e', revision: item.revision);
+          await outbox.fail(item, '$e');
           // A connection failure affects the whole batch; do not spend one
           // timeout per queued row.
           return (sent: sent, failed: failed + 1);
@@ -306,7 +301,7 @@ class SyncEngine {
             ),
           );
       await _rewindCursor(entry.groupId, to: entry.seq ?? 0);
-      await outbox.complete(item.id, revision: item.revision);
+      await outbox.complete(item);
     });
   }
 
@@ -325,7 +320,7 @@ class SyncEngine {
     await db.transaction(() async {
       for (final item in refused) {
         await _discard(item.target, item.targetId);
-        await outbox.complete(item.id);
+        await outbox.complete(item);
       }
     });
     return const SyncReport(pushed: 0, pulled: 0, failed: 0);

@@ -10,14 +10,12 @@ import 'sync_session.dart';
 /// A write the server refused outright, named the way its author would name it.
 class FailedWrite {
   const FailedWrite({
-    required this.id,
     required this.target,
     required this.label,
     required this.reason,
     required this.failedAt,
   });
 
-  final String id;
   final OutboxTarget target;
 
   /// What the user called it: an expense description, a group or member name.
@@ -62,9 +60,6 @@ class OutboxQueue {
   /// Longest a failing item waits between attempts.
   static const Duration maxBackoff = Duration(minutes: 5);
 
-  static String idFor(OutboxTarget target, String targetId) =>
-      '${target.name}:$targetId';
-
   /// Marks [targetId] as dirty, coalescing with any item already waiting for
   /// the same row.
   ///
@@ -86,7 +81,6 @@ class OutboxQueue {
         .into(_db.outbox)
         .insert(
           OutboxCompanion.insert(
-            id: idFor(target, targetId),
             target: target,
             targetId: targetId,
             revision: revision,
@@ -186,7 +180,6 @@ class OutboxQueue {
 
   Future<FailedWrite> _describe(OutboxRow row) async {
     return FailedWrite(
-      id: row.id,
       target: row.target,
       label: await _labelFor(row.target, row.targetId),
       reason: row.lastError ?? 'The server refused it without saying why.',
@@ -239,24 +232,23 @@ class OutboxQueue {
     );
   }
 
+  /// The item exactly as [item] read it. A response for an older edit must
+  /// not complete or back off a newer one queued during the upload, and the
+  /// revision is what tells them apart.
+  Expression<bool> _sameEdit($OutboxTable t, OutboxRow item) =>
+      t.target.equalsValue(item.target) &
+      t.targetId.equals(item.targetId) &
+      t.revision.equals(item.revision);
+
   /// Whether an in-flight request still describes the latest local edit.
   Future<bool> isCurrent(OutboxRow item) async =>
-      await (_db.select(_db.outbox)..where(
-            (t) => t.id.equals(item.id) & t.revision.equals(item.revision),
-          ))
-          .getSingleOrNull() !=
+      await (_db.select(
+        _db.outbox,
+      )..where((t) => _sameEdit(t, item))).getSingleOrNull() !=
       null;
 
-  Future<void> complete(String id, {String? revision}) async {
-    await (_db.delete(_db.outbox)..where(
-          (t) =>
-              t.id.equals(id) &
-              (revision == null
-                  ? const Constant(true)
-                  : t.revision.equals(revision)),
-        ))
-        .go();
-  }
+  Future<void> complete(OutboxRow item) =>
+      (_db.delete(_db.outbox)..where((t) => _sameEdit(t, item))).go();
 
   /// Records a failed attempt and schedules the next one.
   ///
@@ -269,44 +261,27 @@ class OutboxQueue {
   /// A stale write is neither retried nor kept here — see [EntryConflicts]. It
   /// leaves the queue entirely, because what is left to do about it is not a
   /// send.
-  Future<void> fail(
-    String id,
-    String error, {
-    bool permanent = false,
-    String? revision,
-  }) => _db.transaction(() async {
-    final current = await (_db.select(
-      _db.outbox,
-    )..where((t) => t.id.equals(id))).getSingleOrNull();
-    if (current == null || (revision != null && current.revision != revision)) {
-      return;
-    }
+  Future<void> fail(OutboxRow item, String error, {bool permanent = false}) {
+    final update = _db.update(_db.outbox)..where((t) => _sameEdit(t, item));
     if (permanent) {
-      await (_db.update(_db.outbox)..where((t) => t.id.equals(id))).write(
+      return update.write(
         OutboxCompanion(
           deadLetteredAt: Value(_clock()),
           lastError: Value(error),
         ),
       );
-      return;
     }
 
-    final row = await (_db.select(
-      _db.outbox,
-    )..where((t) => t.id.equals(id))).getSingleOrNull();
-    if (row == null) return;
-
-    final attempts = row.attempts + 1;
+    final attempts = item.attempts + 1;
     final backoff = Duration(
       seconds: math.min(1 << math.min(attempts, 10), maxBackoff.inSeconds),
     );
-
-    await (_db.update(_db.outbox)..where((t) => t.id.equals(id))).write(
+    return update.write(
       OutboxCompanion(
         attempts: Value(attempts),
         nextAttemptAt: Value(_clock().add(backoff)),
         lastError: Value(error),
       ),
     );
-  });
+  }
 }

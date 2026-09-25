@@ -351,13 +351,8 @@ void main() {
       final old = (await a.outbox.due()).single;
       await a.outbox.enqueue(OutboxTarget.group, 'queued-group');
 
-      await a.outbox.fail(
-        old.id,
-        'refused',
-        permanent: true,
-        revision: old.revision,
-      );
-      await a.outbox.complete(old.id, revision: old.revision);
+      await a.outbox.fail(old, 'refused', permanent: true);
+      await a.outbox.complete(old);
 
       final current = (await a.outbox.due()).single;
       expect(current.revision, isNot(old.revision));
@@ -2224,10 +2219,7 @@ void main() {
         await outbox.enqueue(OutboxTarget.group, 'g1');
         await outbox.enqueue(OutboxTarget.member, 'm1');
         await outbox.enqueue(OutboxTarget.entry, 'e1');
-        await outbox.fail(
-          OutboxQueue.idFor(OutboxTarget.group, 'g1'),
-          'offline',
-        );
+        await outbox.fail((await outbox.due()).first, 'offline');
 
         // The member and entry have no deadline, but cannot overtake the group.
         expect(await outbox.due(), isEmpty);
@@ -2237,16 +2229,10 @@ void main() {
         );
 
         now = now.add(const Duration(seconds: 2));
-        expect((await outbox.due()).map((row) => row.targetId), [
-          'g1',
-          'm1',
-          'e1',
-        ]);
-        await outbox.complete(OutboxQueue.idFor(OutboxTarget.group, 'g1'));
-        await outbox.fail(
-          OutboxQueue.idFor(OutboxTarget.member, 'm1'),
-          'offline',
-        );
+        final due = await outbox.due();
+        expect(due.map((row) => row.targetId), ['g1', 'm1', 'e1']);
+        await outbox.complete(due[0]);
+        await outbox.fail(due[1], 'offline');
         expect(await outbox.due(), isEmpty);
 
         now = now.add(const Duration(seconds: 2));
@@ -2258,7 +2244,7 @@ void main() {
       await a.outbox.enqueue(OutboxTarget.group, 'g1');
       expect(await a.outbox.nextAttemptAt(), isNotNull);
       await a.outbox.fail(
-        OutboxQueue.idFor(OutboxTarget.group, 'g1'),
+        (await a.outbox.due()).single,
         'refused',
         permanent: true,
       );
@@ -2303,7 +2289,7 @@ void main() {
       final outbox = OutboxQueue(a.db);
       await outbox.enqueue(OutboxTarget.group, 'g1');
       await outbox.fail(
-        OutboxQueue.idFor(OutboxTarget.group, 'g1'),
+        (await outbox.due()).single,
         'refused',
         permanent: true,
       );

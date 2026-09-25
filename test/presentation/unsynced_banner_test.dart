@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:opensplit/application/providers.dart';
 import 'package:opensplit/data/local/database.dart';
-import 'package:opensplit/data/sync/outbox_queue.dart';
 import 'package:opensplit/domain/models/entry.dart';
 import 'package:opensplit/presentation/widgets/unsynced_changes_banner.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -92,7 +91,6 @@ Future<void> _deadLetter(
       .into(db.outbox)
       .insert(
         OutboxCompanion.insert(
-          id: OutboxQueue.idFor(OutboxTarget.entry, entryId),
           target: OutboxTarget.entry,
           revision: 'r1',
           targetId: entryId,
