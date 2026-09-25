@@ -26,9 +26,10 @@ ordinary code:
 - **`sum(payers) = sum(shares) = amount`** is an `if` inside the write, checked
   against every row the same change touches, before any of them commit.
 
-Every one of those is a thing a relational database with row-level security
-either cannot express or expresses through a second mechanism. Here they are
-where the data is, written once.
+Each of those is awkward wherever the check and the data live apart: the first
+needs a lookup across groups, the second needs both the old and new values, and
+the third cannot be judged until every row the change touches has arrived. Here
+they are three functions in the object that owns the rows.
 
 ---
 

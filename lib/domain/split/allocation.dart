@@ -1,9 +1,9 @@
 /// One participant in a weighted allocation.
 ///
-/// [weightMicros] is the weight scaled by 10^6, matching the `numeric(24,6)`
-/// precision of `entry_shares.weight` in Postgres. Keeping weights as integers
-/// rather than doubles is deliberate: floating point makes "every device
-/// produces identical paise" an aspiration rather than a guarantee.
+/// [weightMicros] is the weight scaled by 10^6, which is exactly how
+/// `entry_shares.weight_micros` is stored and sent. Keeping weights as
+/// integers rather than doubles is deliberate: floating point makes "every
+/// device produces identical paise" an aspiration rather than a guarantee.
 typedef WeightedParty = ({String memberId, int weightMicros});
 
 /// Scale factor between a weight and its integer micro representation.

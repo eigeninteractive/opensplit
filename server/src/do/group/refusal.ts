@@ -13,11 +13,11 @@
  * intact on the other side, which is exactly what the `{error:{code,message}}`
  * envelope needs.
  *
- * This replaces reading Postgres SQLSTATEs on the device: a lookup table that
- * had to know `23514` was the balance invariant, `42501` was a policy refusal,
- * and `PT409` had to be raised in place of `40001` because PostgREST would
- * otherwise retry a permanent refusal until the gateway timed out. The server
- * states the kind; the client reads it.
+ * And it puts the naming where the knowledge is. A client that has to map
+ * database error codes to meanings is keeping a second copy of the server's
+ * rules, in another language, updated by hand — and the failure mode is a
+ * permanent refusal classified as retryable, which wedges an outbox. The
+ * server states the kind; the client reads it.
  */
 export const refusalCodes = [
   /** No session, or one the group has never heard of. */

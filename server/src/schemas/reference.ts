@@ -7,9 +7,8 @@ import { CurrencySchema, DateSchema } from "./ledger";
  * everybody.
  *
  * Which is also what makes them the two worth caching at the edge. Everything
- * else in this API is scoped to who is asking; these are not scoped at all,
- * and in Postgres that was two policies reading `using (true)` — a long way of
- * saying the rows are public.
+ * else in this API is scoped to who is asking; these are public, so the
+ * session read before serving them would buy nothing.
  */
 
 export const CurrencySchemaRow = z

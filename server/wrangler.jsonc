@@ -129,12 +129,10 @@
   /**
    * Two schedules, not three.
    *
-   * There is deliberately no nightly sweep for dormancy. Postgres needed one
-   * because a table cannot schedule itself, so `archive_dormant_groups` and
-   * `purge_settled_dormant_groups` scanned every group every night. A Durable
-   * Object sets its own alarm, so each group carries its own clock: one
-   * wake-up in three months instead of ninety that find nothing to do, and no
-   * fan-out proportional to the number of groups.
+   * There is deliberately no nightly sweep for dormancy. A Durable Object
+   * sets its own alarm, so each group carries its own clock: one wake-up in
+   * three months instead of ninety that find nothing to do, and no fan-out
+   * proportional to the number of groups.
    *
    * What is left here is genuinely global — rates nobody owns, accounts that
    * belong to no group, and checking that D1's derived index still agrees with

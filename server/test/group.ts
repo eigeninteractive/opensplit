@@ -4,14 +4,13 @@ import type { Result } from "../src/do/group/refusal";
 import type { Entry, EntryInput, Group, Member } from "../src/schemas/ledger";
 
 /**
- * A group with people in it, for the suites that inherit from pgTAP.
+ * A group with people in it.
  *
- * The pgTAP fixtures wrote rows directly, as the service role, because that
- * was the only way to set up a state the policies would then be tested
- * against. Nothing here does: every row below is written through the same RPC
- * the app uses, by a caller who has to be allowed to write it. A fixture that
- * needs a privilege the app does not have is a fixture testing something the
- * app cannot reach.
+ * Every row below is written through the same method the app calls, by a
+ * caller who has to be allowed to write it — never by reaching past the rules
+ * to insert directly. A fixture that needs a privilege the app does not have
+ * is a fixture setting up a state the app cannot reach, and the test standing
+ * on it proves nothing about the product.
  */
 
 /** Stable ids, so a failure names a person rather than a UUID. */

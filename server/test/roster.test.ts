@@ -6,15 +6,11 @@ import { evenly, freshId, makeGroup, makeGroupOfTwo, ok, PRIYA, RAVI, refusal, s
  * What one member of a group can do to another, which is a different question
  * from what a stranger can do and has a much less obvious answer.
  *
- * That file spent half its length proving that `authenticated` held no direct
- * INSERT, UPDATE or DELETE on the ledger tables — because while direct DML was
- * reachable, every guarantee the RPCs offered was advisory. There is no such
- * thing to prove here: the only way to reach these rows is a method on this
- * object, and the ones that would be dangerous do not exist.
- *
- * What survives is the half that is about people: what one member of a group
- * may do to another. Those were reachable with a single PATCH under RLS, and
- * they are the tests worth keeping.
+ * There is nothing here about reaching the rows directly, because there is no
+ * way to: the only door is a method on this object, and the methods that would
+ * be dangerous do not exist. What is left is the part that is about people,
+ * and it is the part with teeth — an unguarded update over a group's member
+ * rows grants every one of these.
  */
 
 describe("what a member may change about somebody else", () => {
@@ -141,9 +137,9 @@ describe("the group itself", () => {
 
   /**
    * `id`, `createdAt` and `createdBy` are not fields on the patch, so they
-   * cannot be sent. In Postgres they were columns on a full-row upsert, which
-   * is why re-identifying a group, back-dating it into the dormancy purge, and
-   * writing yourself into `created_by` all needed a trigger to stop.
+   * cannot be sent. Were they — as they would be on a full-row upsert — this
+   * one call would re-identify a group, back-date it into the dormancy purge,
+   * and reassign its authorship.
    */
   it("cannot be re-identified, back-dated, or have its authorship reassigned", async () => {
     const { groupId, group } = await makeGroupOfTwo();
@@ -171,10 +167,10 @@ describe("the group itself", () => {
 
 describe("an expense", () => {
   /**
-   * Under RLS this was an account takeover: a member of one group could name
-   * an expense in a group they had never been in, and `on conflict (id) do
-   * update` rewrote its amount, description and every share in place. There is
-   * no shared id space any more — this object holds one group's rows.
+   * A shared id space makes this a takeover: name an expense belonging to a
+   * group you have never been in, and an upsert on its id rewrites the amount,
+   * the description and every share in place. There is no shared id space here
+   * — this object holds one group's rows and an id from another names nothing.
    */
   it("in another group cannot be hijacked by upserting its id", async () => {
     const victim = await makeGroup();

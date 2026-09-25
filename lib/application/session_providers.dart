@@ -63,10 +63,10 @@ class SessionController extends _$SessionController {
 
   /// Being a guest, chosen rather than assumed.
   ///
-  /// A real account with no credential attached: same uid, same rows, same
-  /// row-level security as anybody else. What it does not have is any way back
-  /// after losing the device, which is why it is offered as one of three
-  /// choices instead of happening on its own.
+  /// A real account with no credential attached: same id, same rows, same
+  /// permissions as anybody else. What it does not have is any way back after
+  /// losing the device, which is why it is offered as one of three choices
+  /// instead of happening on its own.
   Future<Account> continueAsGuest() async {
     final auth = ref.read(authServiceProvider);
     if (auth == null) {
@@ -135,9 +135,9 @@ bool signedIn(Ref ref) => ref.watch(sessionControllerProvider) != null;
 /// the user id, so every group, member and expense on this device stays exactly
 /// where it is. Signing in as an account that already exists replaces the
 /// session, and those rows are then unreachable: the server holds them under
-/// the anonymous user that wrote them, and row-level security refuses every
-/// write made under the new one. Keeping them on screen would produce a group
-/// list where some rows sync and some never can, with nothing to say which.
+/// the guest account that wrote them, and the new account is not a member of
+/// any of those groups. Keeping them on screen would produce a group list
+/// where some rows sync and some never can, with nothing to say which.
 ///
 /// So a sign-in wipes the device first — after the screen has said so and been
 /// answered — and re-syncs from the server as the account that now holds it.

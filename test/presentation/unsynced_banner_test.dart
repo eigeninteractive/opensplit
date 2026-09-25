@@ -143,7 +143,7 @@ void main() {
       db,
       entryId: 'e1',
       description: 'Taxi',
-      error: 'new row violates row-level security policy for table "entries"',
+      error: 'You are not a member of that group.',
     );
     await _pump(tester, db);
 
@@ -151,7 +151,7 @@ void main() {
     await _beats(tester);
 
     expect(
-      find.textContaining('row-level security'),
+      find.textContaining('not a member of that group'),
       findsOneWidget,
       reason: 'the one person who opens this is debugging a wrong balance',
     );

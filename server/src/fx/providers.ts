@@ -16,12 +16,12 @@
  *
  * ## Why the registry is code and not a table
  *
- * In Postgres it was `fx_providers`: rows that could be reordered, disabled or
- * reconfigured without a deploy. That flexibility bought nothing — there was no
- * interface to edit them with, so every change was a migration anyway — and it
- * cost a table, a trigger and a `SECURITY DEFINER` read from an edge function.
- * Here the order is an array, a provider with no key configured skips itself,
- * and changing either is a diff somebody reviews.
+ * Rows that can be reordered, disabled or reconfigured without a deploy sound
+ * flexible, but nothing here would ever edit them: there is no admin surface,
+ * so every change is a migration anyway. That is configuration with the cost
+ * of a schema and none of the benefit. The order is an array, a provider with
+ * no key configured skips itself, and changing either is a diff somebody
+ * reviews.
  *
  * What was worth keeping is the health record: the object stores each
  * provider's last attempt, last success and last error, because "why is AED

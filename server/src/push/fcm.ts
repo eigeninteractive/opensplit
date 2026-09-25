@@ -7,12 +7,10 @@ import { deviceTokens } from "../db/d1/schema";
 /**
  * Waking the other members' devices.
  *
- * Called by a group's Durable Object after its own write has committed, inside
- * `ctx.waitUntil`, which replaces the trigger on `group_events`, the `pg_net`
- * dispatch, the `notify-event` Edge Function and the shared secret that
- * function needed to know the caller was legitimate. A function reached over
- * HTTP has to prove who is calling it; a function the object calls in-process
- * does not.
+ * Called by a group's Durable Object after its own write has committed,
+ * inside `ctx.waitUntil`. In-process rather than over HTTP, which is what
+ * removes the shared secret: a function reached over the network has to prove
+ * who is calling it, and a function the object calls directly does not.
  *
  * ## The message carries ids and nothing else
  *

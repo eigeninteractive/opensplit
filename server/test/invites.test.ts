@@ -6,12 +6,10 @@ import { evenly, freshId, makeGroup, ok, PRIYA, RAVI, refusal, stub, sumOf, ZARA
  * Invites, links, and what a stranger can reach: a token spent exactly once,
  * an expired one, a revoked one, and a group nobody outside it can read.
  *
- * Half of that file tested RLS: that Zara, who is in no group, sees no groups,
- * no members, no entries, no balances and no invite rows. None of those are
- * separate questions any more — she reaches a group by calling its object, and
- * the object answers one way. That half is one test here, and the rest of this
- * file is the part that was always the interesting one: a token is the only
- * proof, and it has to be spendable exactly once.
+ * "Zara sees nothing" is one test rather than five, because there is one way
+ * to reach a group — calling its object — and it answers one way. The rest of
+ * this file is the interesting part: a token is the only proof of anything,
+ * and it has to be spendable exactly once.
  */
 
 describe("a stranger holding no token", () => {
@@ -19,8 +17,8 @@ describe("a stranger holding no token", () => {
     const { groupId, ravi, priya } = await makeGroup();
     ok(await stub(groupId).upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 1200), ravi.profileId ?? ""));
 
-    // One refusal, where Postgres needed five policies to produce five empty
-    // result sets that each had to be asserted separately.
+    // One refusal, four ways in. Nothing here can answer a stranger with an
+    // empty result that reads as "nothing to see" rather than "not for you".
     expect(refusal(await stub(groupId).changes(ZARA, 0, 100)).code).toBe("not_member");
     expect(refusal(await stub(groupId).createInvite(priya.id, ZARA)).code).toBe("not_member");
     expect(refusal(await stub(groupId).createLink(ZARA)).code).toBe("not_member");

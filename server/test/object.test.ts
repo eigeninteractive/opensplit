@@ -15,8 +15,8 @@ const DAYS = 24 * 60 * 60 * 1000;
  * its alarm, and the type its methods actually present across the RPC
  * boundary.
  *
- * None of this has a pgTAP ancestor. It is the part of the design that is new,
- * which is exactly the part with no existing tests to inherit.
+ * The parts with no ledger semantics at all, and therefore the parts nothing
+ * else in this suite would notice breaking.
  */
 
 describe("the schema this object migrates itself to", () => {

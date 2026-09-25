@@ -130,7 +130,8 @@ Iterable<FieldChange> _changed(String field, String? from, String? to) {
   ];
 }
 
-/// `entry_date` is a Postgres `date`, and the snapshot holds it as one.
+/// An expense belongs to a day rather than an instant, so `entryDate` travels
+/// as `YYYY-MM-DD` and the snapshot holds it the same way.
 String _dateOnly(DateTime date) =>
     '${date.year.toString().padLeft(4, '0')}-'
     '${date.month.toString().padLeft(2, '0')}-'

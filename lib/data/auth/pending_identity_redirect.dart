@@ -75,9 +75,9 @@ class PendingIdentityRedirect {
 ///
 /// `SharedPreferences` rather than anything in memory, for the obvious reason:
 /// on the web this is `localStorage`, same origin, and it is the only thing
-/// that survives the navigation. It sits beside the session GoTrue persists
-/// through the same mechanism, so a browser that loses one loses both and the
-/// flow fails closed rather than half-completing.
+/// that survives the navigation. The session itself comes back in a
+/// first-party cookie set on the same origin, so a browser that discards site
+/// data loses both and the flow fails closed rather than half-completing.
 class PendingIdentityRedirects {
   const PendingIdentityRedirects();
 

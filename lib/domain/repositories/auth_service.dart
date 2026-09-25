@@ -16,8 +16,9 @@ class Account {
   /// True for a session created by [AuthService.signInAnonymously].
   ///
   /// Anonymous means one device and no recovery: on the web, clearing site data
-  /// destroys the account permanently. It also gates destructive actions
-  /// server-side, via the `is_anonymous` claim in the JWT.
+  /// destroys the account permanently. The server reads the same flag off the
+  /// session, which is what lets the weekly sweep collect a guest who joined
+  /// no group and never came back.
   final bool isAnonymous;
 
   final String? email;
@@ -31,11 +32,10 @@ class Account {
 /// types, and verifying a code against the wrong one fails with a message
 /// about an expired token that has nothing to do with what went wrong. So the
 /// answer travels back with the code rather than being guessed at afterwards.
-/// There used to be a third case, `linked`: an address attached outright with
-/// no code, which GoTrue did when a deployment had email confirmation turned
-/// off. The Worker has no such setting — it always sends a code, because
-/// without one anybody can claim an address they do not own — so the case was
-/// unreachable and is gone. The screens that handled it are simpler for it.
+///
+/// Two cases and not three: there is no "attached outright, no code needed".
+/// A code is always sent, because without one anybody can claim an address
+/// they do not own.
 enum EmailFlow {
   /// A code was sent. Verifying it keeps the current user id, so every row on
   /// this device still belongs to it.
@@ -156,11 +156,12 @@ final class AttemptRedirected extends GoogleAttempt {
 ///
 /// The distinction runs through every method here and it is the one that was
 /// got wrong. Attaching Google or an email address to an anonymous session has
-/// to *link* — same user id, same rows, nothing to migrate. `signInWithIdToken`
-/// and `signInWithOtp` do not link: they authenticate, which means they sign
-/// in as a different user and leave the anonymous one behind holding every
-/// group the person had already created. The account is then a stranger to its
-/// own data, and every push is refused by row-level security.
+/// to *link* — same user id, same rows, nothing to migrate. An ordinary
+/// sign-in does not link: it authenticates, which means it establishes a
+/// different user and leaves the anonymous one behind holding every group the
+/// person had already created. The account is then a stranger to its own data:
+/// it is a member of none of those groups, so every write it makes against
+/// them is refused.
 ///
 /// So the linking calls are [continueWithGoogle] and [sendEmailCode] /
 /// [verifyEmailCode], each of which tries to link first and only falls back to

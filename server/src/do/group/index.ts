@@ -24,29 +24,24 @@ import { backoffOutbox, clearOutbox, nextDue, type OutboxRow, pendingOutbox, res
  * One group's ledger, and the authorization boundary for it.
  *
  * A Durable Object processes one request at a time and owns exactly one
- * group's rows, which is what lets three separate pieces of Postgres machinery
- * collapse into ordinary code: the deferred balance-invariant trigger becomes
- * a function call with the finished shape in hand, the column guards become
- * comparisons with real before-and-after values, and `is_group_member()`
- * becomes reading its own table — with no recursion to design around and no
- * `SECURITY DEFINER` helper to break the cycle.
+ * group's rows. Three rules that are awkward anywhere else are ordinary code
+ * here: the balance invariant is a function call with the finished shape in
+ * hand, the column guards are comparisons with real before-and-after values,
+ * and "are you a member" is reading its own table.
  *
- * And one thing that was not previously possible becomes free: a strictly
- * increasing sequence number per group, because there is exactly one writer.
- * The change feed is cursored on it.
+ * Being the only writer also buys a strictly increasing sequence number per
+ * group, for free. The change feed is cursored on it.
  *
  * ## Every method takes a profile id, and none takes a member id for "me"
  *
  * The Worker resolves the session and passes the profile id. This object
  * resolves that to its own member row and uses it for authorship. There is
- * deliberately no parameter for who the caller is, which is what made the
- * corresponding Postgres trigger necessary and is why there is no equivalent
- * here.
+ * deliberately no parameter for who the caller claims to be, so there is
+ * nothing to spoof and nothing to check.
  *
- * The Worker also checks D1's membership index first, and that check exists to
- * fail cheap rather than to decide. **This object re-checks membership itself
- * and is the authority** — the same defence in depth as the policy-plus-trigger
- * pair it replaces, relocated.
+ * The Worker also consults D1's membership index first, and that check exists
+ * to fail cheap rather than to decide. **This object re-checks membership
+ * itself and is the authority.**
  *
  * ## Refusals are values
  *

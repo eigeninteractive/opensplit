@@ -11,9 +11,8 @@ import { FxBackfillRequestSchema, FxBackfillResponseSchema, FxPageSchema, type F
  * The two responses that are the same for everybody.
  *
  * Which is what makes them the two worth caching, and the reason they are the
- * only routes under `/api` outside the session boundary. In Postgres both were
- * `using (true)` policies — the database saying, at some length, that these
- * rows are public.
+ * only routes under `/api` outside the session boundary: there is nothing here
+ * to scope to a reader.
  *
  * Neither touches D1, and neither wakes a Durable Object on the ordinary path.
  * Reference data is a JSON file in the bundle; rates are month blobs in KV,

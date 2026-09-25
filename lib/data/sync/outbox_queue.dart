@@ -275,10 +275,10 @@ class OutboxQueue {
   /// Puts refused writes back in the queue.
   ///
   /// "Permanent" only ever meant permanent against the server as it stood: a
-  /// membership row that had not been pushed yet, a group the user was removed
-  /// from and added back to, an RLS policy since corrected. Those change, and
-  /// when they do this is the only thing standing between the write and the
-  /// server.
+  /// membership row that had not been pushed yet, a group the person was
+  /// removed from and added back to, a guard since corrected. Those change,
+  /// and when they do this is the only thing standing between the write and
+  /// the server.
   Future<int> retryDeadLetters() async {
     return (_db.update(
       _db.outbox,

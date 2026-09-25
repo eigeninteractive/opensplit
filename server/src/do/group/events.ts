@@ -15,12 +15,9 @@ import type { EntryRow, Tx } from "./store";
  * Deriving the record here removes the claim from the wire: the client no
  * longer asserts what changed, it renders what the server observed.
  *
- * Why expenses are after-images and everything else is a named event: in
- * Postgres this was forced. One logical change to an expense spanned three
- * tables, so the only coherent moment to look was COMMIT, by which point the
- * before-image was gone. That constraint is gone here — `upsertEntry` holds
- * both images in local variables — but the shape it produced turns out to be
- * the right one anyway, for a reason that has nothing to do with triggers:
+ * Why expenses are after-images and everything else is a named event — given
+ * that `upsertEntry` holds both the before and after images and could record
+ * either:
  *
  *   an expense line has to read "Ravi's share, from ₹200 to ₹300", which is a
  *   field-level diff. A chain of after-images yields that for free and covers

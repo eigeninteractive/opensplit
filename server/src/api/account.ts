@@ -18,16 +18,15 @@ import { refusals } from "./routing";
  *
  * ## Who you can see
  *
- * Postgres answered this with a row-level-security policy: a profile is
- * visible if you share a group with its owner. That policy was a correlated
- * subquery evaluated per row, per request, and it was also the only place the
- * rule was written down — which meant reading it required reading SQL nobody
- * on the client could see.
+ * `visibleProfiles`, below: people you share a live membership with, plus
+ * yourself. Written as two reads — my groups, then their members — rather
+ * than as one query with a correlated subquery, because a subquery evaluated
+ * per row per request is the shape that stops being cheap exactly when
+ * somebody joins their tenth group.
  *
- * Here it is `visibleProfiles`, below, and it is the same rule: people you
- * share a live membership with, plus yourself. The derived index in D1 is what
- * makes it a plain query instead of a fan-out over every group's object, which
- * is the one question those objects genuinely cannot answer individually.
+ * The derived index in D1 is what makes this a query at all rather than a
+ * fan-out over every group's object, which is the one question those objects
+ * genuinely cannot answer individually.
  */
 
 const PROFILE_PAGE_MAX = 200;

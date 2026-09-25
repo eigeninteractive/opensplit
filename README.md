@@ -84,14 +84,11 @@ them, cannot remove a co-member who still owes or is owed, and — the one that
 moves real money — cannot rewrite another member's UPI handle so a settle-up
 handoff pays the wrong person.
 
-This is the part the object model made ordinary. In Postgres the same rules
-needed a deferred constraint trigger, a `SECURITY DEFINER` helper to stop
-`is_group_member` recursing through its own policy, and a `guard_member_update`
-trigger for the column rules — because an RLS policy chooses rows, cannot say
-"this column, but only on your own row", and its `WITH CHECK` cannot see the
-old row at all. A Durable Object runs one thing at a time and owns exactly one
-group's rows, so all three become function calls with the before-and-after
-values in hand.
+Those are the rules that get expensive when the check and the data are in
+different places. A Durable Object runs one thing at a time and owns exactly
+one group's rows, so each of them is a function with the before-and-after
+values in hand: no second mechanism for column-level rules, and no cross-table
+lookup to answer "is this person a member".
 
 ```bash
 dart run tool/build_web.dart                           # the whole front end
@@ -537,8 +534,8 @@ There is no webhook, no shared secret and no trigger. The group's Durable
 Object sends directly, inside `waitUntil`, after its own write has committed —
 so the response goes back as soon as the expense is saved, and a person
 recording one never waits on Google. A function reached over HTTP has to prove
-who is calling it; a function the object calls in-process does not, which is
-how three secrets became one and a `pg_net` dispatch became a method call.
+who is calling it; a function the object calls in-process does not, so there
+is one secret here rather than three.
 
 With `FCM_PROJECT_ID` or `FCM_SERVICE_ACCOUNT` unset the send is skipped and
 nothing else changes, which is why a deployment with no push configured still

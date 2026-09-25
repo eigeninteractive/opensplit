@@ -19,10 +19,10 @@ import { findMeta, type MemberRow, type MetaRow, nextSeq, requireMember, require
  * deleted their account, stranded a group nobody could then administer.
  *
  * What is left is one predicate, applied evenly, plus the column rules below.
- * Those are the part RLS could not express at all: a policy decides which rows
- * a statement may touch and cannot say "this column, but only on your own
- * row", and `WITH CHECK` cannot see the old values. Here both images are in
- * hand and a refusal can say what it refused.
+ * Those are the awkward half: "you may change this column, but only on your
+ * own row" needs both the old and the new values to decide, and most places
+ * that gate writes can see only one. Here both are in hand, so a refusal can
+ * say what it refused.
  */
 
 export interface WriteContext {
@@ -42,16 +42,15 @@ export function readGroup(meta: MetaRow): Group {
 /**
  * Creating the group, and its first member, in one statement each.
  *
- * This is where the Postgres bootstrap problem lived: gating member writes on
- * membership is unsatisfiable for the first member, because you become a
- * member by inserting the row the policy is refusing. `groups.created_by` was
- * the escape hatch — and because it was an escape hatch it was an
- * authorization, which meant a member could write themselves or a stranger
- * into one, seize a group, leave, and rejoin at will. Closing that took a
- * trigger.
+ * Both in one call, because that is what removes the bootstrap problem:
+ * gating member writes on membership is unsatisfiable for the first member,
+ * since you become a member by making the very row the rule would refuse.
  *
- * One call that writes both rows has no window to escape from, so
- * `created_by` goes back to being a description of who made this.
+ * Any escape hatch for that case — "the creator may also write members" — is
+ * an authorization in disguise, and one that can be re-entered: write yourself
+ * or a stranger in, seize the group, leave, rejoin. A call that writes both
+ * rows at once has no window to escape from, which is what lets `createdBy`
+ * stay a description of who made this rather than a permission.
  */
 export function createGroup(tx: Tx, input: GroupCreate, profileId: string, context: { now: string }): RosterWrite<Group> {
   const existing = findMeta(tx);
@@ -122,12 +121,11 @@ export function updateGroup(tx: Tx, patch: GroupPatch, context: WriteContext): R
   tx.update(schema.meta).set({ name, simplifyDebts, archivedAt, updatedAt: context.now, seq }).where(eq(schema.meta.id, meta.id)).run();
 
   /**
-   * One event per thing that actually happened, rather than the first one that
-   * matched. The Postgres version was an `if/elsif` chain in a row trigger and
-   * could only ever record one, so a patch that renamed and archived in the
-   * same statement reported the rename and dropped the archive on the floor.
-   * Nothing in the app sends both at once, but a record whose completeness
-   * depends on that is not a record.
+   * One event per thing that actually happened, rather than the first one
+   * that matched. An `if/elsif` chain records exactly one, so a patch that
+   * renames and archives in the same call reports the rename and drops the
+   * archive on the floor. Nothing in the app sends both at once, but a record
+   * whose completeness depends on that is not a record.
    */
   const shared = { seq, now: context.now, actorId: context.actor.id };
 
@@ -180,9 +178,9 @@ export function addMember(tx: Tx, input: MemberCreate, context: WriteContext): R
 /**
  * The column rules, which are most of what this file is for.
  *
- * Each one closes something that was reachable in the Postgres version with a
- * single PATCH, because `members_update` admitted any member of a group to
- * rewrite any other member of it:
+ * Each one closes something a single unguarded update would otherwise allow.
+ * Deciding access a row at a time — "you are in this group, so you may write
+ * this group's member rows" — admits all of them:
  *
  *   - rewrite somebody else's `upiVpa`, so the settle-up handoff pays you;
  *   - rename another account holder;
@@ -267,9 +265,9 @@ export function updateMember(tx: Tx, memberId: string, patch: MemberPatch, conte
  * A group where you were the only account holder is different. Nobody left can
  * ever read it again, so holding your expense descriptions forever in a group
  * with no living reader is the opposite of what was asked for. Those are
- * collected outright, and the object can decide that by itself because it can
- * see every member — which is the one part of this that Postgres needed a
- * correlated subquery over the whole members table to work out.
+ * collected outright, and this object can decide that by itself, because the
+ * question — is anybody left here with an account — is one scan of a table it
+ * already holds.
  */
 export function forgetProfile(tx: Tx, profileId: string, context: { now: string }): { forgotten: boolean; purged: boolean } {
   const meta = findMeta(tx);

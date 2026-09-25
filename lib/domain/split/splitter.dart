@@ -2,7 +2,8 @@ import 'allocation.dart';
 
 /// How the shares of an entry were specified by the user.
 ///
-/// Mirrors the `split_kind` enum in Postgres.
+/// Mirrors `SplitKind` on the wire; the server stores and returns these names
+/// verbatim, so adding a case here means adding it to the contract.
 enum SplitKind { equal, exact, shares, percent }
 
 /// A share after resolution: what this member owes, plus the rule that produced

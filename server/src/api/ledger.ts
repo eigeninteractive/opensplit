@@ -41,9 +41,9 @@ import { EntryPathSchema, GroupPathSchema, group, MemberPathSchema, refusals, re
  * to ask.
  *
  * The only thing here that cannot come from a group's object, because it is
- * the question no single group can answer. Postgres answered it with a join
- * across `members`; the object model answers it with the derived index, which
- * is the reason that index exists.
+ * the question no single group can answer: a group knows who is in it, and
+ * nothing asks a hundred groups whether they contain you. The derived index in
+ * D1 answers it instead, which is the reason that index exists at all.
  */
 const BootstrapSchema = z
   .object({

@@ -9,15 +9,11 @@ import { type EntryRow, type MemberRow, nextSeq, requireMeta, type Tx } from "./
 /**
  * The write path.
  *
- * In Postgres this was a `SECURITY DEFINER` function, two deferred constraint
- * triggers, three snapshot triggers, a column guard, a touch trigger, a
- * member-in-group check on each child table, and a transaction-local session
- * variable to stop the activity feed lying about why a group came back. All of
- * it was necessary, and all of it existed to get one thing: the finished shape
- * of an expense, examined once, by the only writer, before anybody could see
- * it.
- *
- * A Durable Object hands that over for free. This file is what is left.
+ * Everything an expense has to satisfy is checked here, in one place, against
+ * the finished shape: the balance invariant, who may be named, whether the
+ * edit was composed against a version that has since moved, and whether it
+ * changes anything at all. That is possible because there is one writer and it
+ * sees the whole change before anybody else sees any of it.
  */
 
 /** The shape a stale edit is judged against. Weights excluded on purpose. */
@@ -104,9 +100,9 @@ export function upsertEntry(tx: Tx, input: EntryInput, context: WriteContext): E
    * retry, so this is not the ordinary path — `on conflict (id)` is. But a key
    * that already names an expense here, on an id that does not, can only be a
    * push whose response was lost, and answering with the expense it already
-   * recorded is the whole point of the key existing. Postgres refused with a
-   * unique violation, which left the device's outbox wedged on a write the
-   * server had already accepted.
+   * recorded is the whole point of the key existing. Refusing it instead — on
+   * a uniqueness constraint, say — wedges the device's outbox on a write the
+   * server has already accepted.
    */
   if (!existing && input.clientKey !== null) {
     const byKey = tx.select().from(schema.entries).where(eq(schema.entries.clientKey, input.clientKey)).get();
@@ -138,9 +134,9 @@ export function upsertEntry(tx: Tx, input: EntryInput, context: WriteContext): E
    * the group" when Ravi added a dinner puts a false sentence in the one place
    * whose whole value is being true — and the revival is not lost by going
    * unrecorded, because the expense that caused it is one line further down
-   * with the same actor and the same timestamp. Postgres needed a
-   * transaction-local session variable to tell these two apart. Straight-line
-   * code knows which one it is doing.
+   * with the same actor and the same timestamp. Straight-line code knows which
+   * of the two it is doing; anything that has to infer it after the fact does
+   * not.
    */
   const unarchived = meta.archivedAt !== null;
   if (unarchived) {
@@ -274,12 +270,11 @@ function setDeleted(tx: Tx, entryId: string, baseSeq: number, context: WriteCont
 /**
  * `sum(payers) = sum(shares) = amount`.
  *
- * One function, called once, with the finished shape in hand. In Postgres this
- * was a deferred constraint trigger hung off all three tables — deferred
- * because an expense and its children arrive in several statements, and on all
- * three because hung off the children alone it never fired for `update entries
- * set amount_minor = <anything>`, or for an expense inserted with no children
- * at all.
+ * One function, called once, with the finished shape in hand — which is the
+ * only way to check it. An expense and its payers and shares are three tables;
+ * anything that validates them as they arrive has to be deferred to the end of
+ * the change anyway, and has to fire on all three, or an amount edited alone,
+ * or an expense saved with no children at all, slips past.
  *
  * It catches every rounding bug, every bad largest-remainder implementation
  * and every partial write, and it is what makes it safe for the client to
@@ -297,9 +292,9 @@ function assertBalanced(input: EntryInput): void {
 /**
  * Everybody named is somebody here, once.
  *
- * The group check that Postgres needed a trigger and a three-table join for is
- * an existence test now — this object holds one group's members and no others,
- * so "in this group" and "in this table" are the same statement.
+ * "Is this member in this group" is an existence test and nothing more: this
+ * object holds one group's members and no others, so "in this group" and "in
+ * this table" are the same statement.
  *
  * The duplicate check is new, and it is not theoretical: two payer rows for
  * one member collide on the primary key, which would surface as a constraint
@@ -362,9 +357,9 @@ function byMember(a: { memberId: string }, b: { memberId: string }): number {
  *
  * A push that changes nothing spends no sequence number, which is what keeps a
  * retried outbox item from re-notifying every device in the group on every
- * attempt. Postgres wrote unconditionally and bumped `updated_at`, and then
- * deduplicated the *event* afterwards — which kept the feed clean and left the
- * row itself travelling to every phone for no reason.
+ * attempt. Writing unconditionally and deduplicating the *event* afterwards
+ * keeps the activity feed clean and still sends the row to every phone in the
+ * group for no reason.
  */
 function differs(stored: Entry, input: EntryInput): boolean {
   return JSON.stringify(comparable(stored)) !== JSON.stringify(comparable(input));

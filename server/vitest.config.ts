@@ -8,9 +8,9 @@ import { defineConfig } from "vitest/config";
  * Tests run inside workerd, against real Durable Objects, a real D1 and a real
  * KV — the same Miniflare `wrangler dev` uses — rather than against mocks.
  *
- * That is what makes this a fair replacement for the pgTAP suite it inherits.
- * Those tests ran against a real Postgres, and a test double for a Durable
- * Object would not have caught any of the things they were written to catch.
+ * That matters here more than usual: most of what this server does is
+ * enforce rules at a write, and a test double for the thing doing the
+ * enforcing proves only that the double agrees with itself.
  *
  * Bindings come from wrangler.jsonc, so a binding that works here is a binding
  * that is actually configured, rather than one a test file invented.

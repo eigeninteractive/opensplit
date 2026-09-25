@@ -131,8 +131,8 @@ export const EntrySchema = z
  *
  * `createdBy` is absent, and its absence is the rule: authorship is the
  * caller's own member row, resolved by the Durable Object from the session.
- * There is no parameter to point at somebody else, which is what made the
- * corresponding Postgres trigger necessary and is why there is no trigger here.
+ * There is no parameter to point at somebody else, so there is nothing to
+ * validate and nothing to spoof.
  *
  * `fxAt` is absent for the same reason — it is when the rate was taken, which
  * only the server can say. `updatedAt` and `seq` are absent because they are
@@ -208,10 +208,10 @@ export const GroupCreateSchema = z
      * The creator's own member row, minted on the device alongside the group.
      *
      * Creating a group is one call that writes both rows in one transaction,
-     * which is what removes the bootstrap problem Postgres had: gating member
-     * writes on membership is unsatisfiable for the first member, so
-     * `groups.created_by` had to double as an authorization — and a column
-     * that is an authorization is a column somebody will write themselves into.
+     * which is what removes the bootstrap problem: gating member writes on
+     * membership is unsatisfiable for the first member, and every escape hatch
+     * for that case turns the creator column into an authorization — which is
+     * a column somebody will write themselves into.
      */
     memberId: IdSchema,
     displayName: z.string().trim().min(1).max(100),
@@ -222,10 +222,9 @@ export const GroupCreateSchema = z
  * Renaming, archiving, and the two settings.
  *
  * Every field is optional and an absent field means "leave it alone", so this
- * is a patch rather than the whole row. The Postgres version was a full upsert
- * of every column, which is what made `id`, `created_at` and `created_by`
- * rewritable and took a trigger to close. A patch that has no field for them
- * needs no trigger.
+ * is a patch rather than the whole row. A full-row upsert would make `id`,
+ * `createdAt` and `createdBy` writable and then need a guard to say they are
+ * not; a patch with no field for them needs no guard.
  */
 export const GroupPatchSchema = z
   .object({
@@ -326,8 +325,8 @@ export const LinkRevocationSchema = z
  *
  * One shape for both kinds, with `kind` saying which. The person holding the
  * URL cannot know which kind it is and should not have to: they tapped a link.
- * Postgres answered this with two functions returning two different row types,
- * which meant the client had to guess and then ask again.
+ * Two endpoints returning two row types would mean the client guessing first
+ * and asking again when it guessed wrong.
  *
  * Flat, with nullable fields, rather than a discriminated union. The Dart
  * generator's `oneOf` support is the weakest part of it, and the difference

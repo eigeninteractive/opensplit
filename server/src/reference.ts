@@ -5,20 +5,18 @@ import type { Category, Currency, Reference } from "./schemas/reference";
 /**
  * Currencies and categories, bundled rather than stored.
  *
- * A couple of dozen rows between them, identical for every user, changing about
- * never. In Postgres they were two tables with `using (true)` policies — which
- * is the database saying, at some length, that they are not really data. Here
- * they are two JSON files imported into the Worker bundle, which makes them
- * reviewable in a diff, deployed atomically with the code that reads them, and
- * free to serve: answering `/api/reference` touches nothing.
+ * A couple of dozen rows between them, identical for every user, changing
+ * about never — which is to say they are not really data. Two JSON files
+ * imported into the Worker bundle: reviewable in a diff, deployed atomically
+ * with the code that validates against them, and free to serve, because
+ * answering `/api/reference` touches no storage at all.
  *
  * ## The ids are load-bearing
  *
  * A category id is written onto entries. Changing one orphans every expense
  * that used it, on every device that has already synced, with no way to notice
- * except that a category stops rendering. They were minted once, for the
- * Postgres migration, and they are carried here unchanged for that reason
- * rather than out of sentiment.
+ * except that a category stops rendering. They were minted once and are
+ * carried unchanged for that reason rather than out of sentiment.
  *
  * ## Growing, never shrinking
  *

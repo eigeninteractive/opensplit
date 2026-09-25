@@ -13,12 +13,12 @@ export type OutboxPayload = MembershipWrite | LinkTokenWrite | PurgeWrite;
  * One group's ledger, inside one Durable Object.
  *
  * The largest thing to notice here is a column that is missing from every
- * table: `group_id`. A Durable Object *is* the group, so the scope that used
- * to be a column on six tables and a predicate in twenty policies is now the
- * address of the database itself.
+ * table: `group_id`. A Durable Object *is* the group, so the scope is the
+ * address of the database rather than a column on six tables and a predicate
+ * on every query that touches them.
  *
- * That is not tidiness. Three of the rules the Postgres schema had to enforce
- * with triggers were only expressible because the scope was data:
+ * That is not tidiness. Three rules stop needing to be written down at all,
+ * because they are only expressible as rules when the scope is data:
  *
  *   - "an entry cannot be moved into another group" — there is no column to
  *     move it with, and an id from another group simply names nothing here;
@@ -28,27 +28,25 @@ export type OutboxPayload = MembershipWrite | LinkTokenWrite | PurgeWrite;
  *
  * None of those has a guard in this codebase, and the absence is the point.
  *
- * Timestamps are ISO-8601 UTC strings, matching D1 and the wire. Postgres
- * rendered a date under `DateStyle` and an instant under the session's
- * `TimeZone`, which is why the event payload had to canonicalise both by hand
- * or a re-save would read as an edit. Storing the canonical form removes the
- * question.
+ * Timestamps are ISO-8601 UTC strings, matching D1 and the wire. One
+ * canonical rendering, stored and sent — which matters most for the activity
+ * snapshots, where a timestamp that renders differently on a re-read makes a
+ * re-save look like an edit.
  *
  * The CHECK constraints are honest about what they are. Nothing but the code
- * in `src/do/group/` can reach these tables — there is no PostgREST, no direct
- * DML, no second door — so a constraint here is not a security boundary the
- * way it was in Postgres. It is an assertion that catches *our* bugs at the
- * write that caused them, which is worth having and costs nothing.
+ * in `src/do/group/` can reach these tables — there is no query interface, no
+ * direct DML, no second door — so a constraint here is not a security
+ * boundary. It is an assertion that catches *our* bugs at the write that
+ * caused them, which is worth having and costs nothing.
  */
 
 /**
  * The sequence allocator, and the reason the sync protocol got simpler.
  *
  * A Durable Object has exactly one writer, so it can hand out a strictly
- * increasing integer. That replaces four `(updated_at, id)` keyset cursors,
- * the row-value comparison spelled out by hand because PostgREST had no syntax
- * for it, and the entire class of bug where a row bumped mid-sweep moves past
- * a cursor it has already been read by.
+ * increasing integer. That is one cursor per group instead of a keyset cursor
+ * per feed, and it closes the class of bug where a row bumped mid-sweep moves
+ * past a cursor that has already read it.
  *
  * One seq per committed change, not per row. A save that writes an entry, four
  * shares and an event stamps all of them with the same number, so a client
@@ -121,14 +119,15 @@ export const members = sqliteTable(
 /**
  * The group itself: one row, in a table named for what it is.
  *
- * `createdBy` is a **member** id here, where Postgres held a profile id. That
- * is a correction rather than a translation. In Postgres the column was an
- * authorization — `is_group_creator()` stood in for membership during the
- * window between creating a group and the creator's own member row landing,
- * which made it a permission a member could write themselves into, and took a
- * trigger to close. Creating a group is one call now, and it writes both rows
- * in one transaction, so the window does not exist and the column can go back
- * to being what its comment always claimed: a description of who made this.
+ * `createdBy` is a **member** id, and it is a description rather than a
+ * permission. Nothing reads it to decide anything.
+ *
+ * That distinction is the whole reason it is safe. A creator column becomes an
+ * authorization the moment it stands in for membership — which is tempting,
+ * because there is otherwise a window between a group existing and its
+ * creator's member row landing — and a column that is an authorization is a
+ * column somebody writes themselves into. Creating a group is one call that
+ * writes both rows, so there is no window and no temptation.
  *
  * It also survives account deletion for free. The member row is demoted to a
  * placeholder and keeps its name, so "Ravi made this group" stays true when
@@ -189,10 +188,12 @@ export const meta = sqliteTable(
  * group's name and who made it would be retaining exactly what was supposed
  * to go.
  *
- * It exists so the end of a group is something a device is *told*. Postgres
- * deleted the rows and said nothing, so a phone that had synced the group kept
- * it forever with no way to learn it went. A feed cursored on a sequence
- * number can carry the news, so it does.
+ * It exists so the end of a group is something a device is *told*. Deleting
+ * the rows and saying nothing leaves a phone that had synced the group holding
+ * it forever, with no way to learn it went — and "the server does not have
+ * this" cannot be read as "delete it", because that is also what a permissions
+ * problem looks like. A feed cursored on a sequence number can carry the news,
+ * so it does.
  */
 export const tombstone = sqliteTable("tombstone", {
   /** Always `'purged'`. There is one of these, or there is none. */
@@ -254,11 +255,10 @@ export const entries = sqliteTable(
      * it stood on `entryDate`. Never re-fetched: what a rupee was worth on the
      * night of the dinner is a fact about the transaction, not a live quote.
      *
-     * `real` rather than the `numeric(24,12)` Postgres held, because the value
-     * is a double on the wire, a double in Drift and a double in the Dart
-     * model. Storing more precision than any reader can hold was only ever
-     * ceremony — and it never enters a balance, which is the one place a
-     * double would be unacceptable.
+     * `real`, because the value is a double on the wire, a double in Drift
+     * and a double in the Dart model. Storing more precision than any reader
+     * can hold would be ceremony — and it never enters a balance, which is
+     * the one place a double would be unacceptable.
      */
     fxRate: real("fx_rate"),
     fxSource: text("fx_source"),
@@ -350,9 +350,9 @@ export const entryShares = sqliteTable(
      * The original input, scaled by a million: "2:1:1" or "50/30/20". Null for
      * an exact split, where the amount was the input.
      *
-     * An integer, where Postgres held `numeric(24,6)`. The client has always
-     * modelled this as `weightMicros`, an int, and converted at the boundary;
-     * the conversion was the only thing the numeric type bought.
+     * An integer rather than a decimal, because the client models it as an
+     * integer: `weightMicros` all the way from the split editor to this
+     * column, with no conversion at either boundary to get wrong.
      */
     weightMicros: integer("weight_micros"),
   },
@@ -507,10 +507,10 @@ export const invites = sqliteTable(
  * link per group means the link in a chat is always the current link or no
  * link.
  *
- * "One live link" is a partial unique index in Postgres. Here it is the shape
- * of the table: the group has one, so the row is a singleton keyed on a
- * constant. Two members tapping "share" at the same moment are serialized by
- * the object, and the second replaces the first — which is what minting means.
+ * "One live link" is the shape of the table: the group has one, so the row is
+ * a singleton keyed on a constant. Two members tapping "share" at the same
+ * moment are serialized by the object, and the second replaces the first —
+ * which is what minting means.
  */
 export const groupLink = sqliteTable("group_link", {
   /** Always `'live'`. There is one link, or there is none. */
@@ -567,11 +567,11 @@ export const outbox = sqliteTable("outbox", {
  * purging it long after that. So the deadlines are rows and the alarm is
  * armed at the earliest of them.
  *
- * This is why there is no cron sweep for dormancy. Postgres had to scan every
- * group daily because a table cannot schedule itself; an object can, and one
- * that has been quiet for three months costs exactly one alarm rather than
- * ninety wake-ups that find nothing to do. The reconciliation cron survives,
- * because checking that D1 agrees with every object is genuinely a sweep.
+ * This is why there is no cron sweep for dormancy. An object schedules
+ * itself, so one that has been quiet for three months costs exactly one alarm
+ * rather than ninety nightly wake-ups that find nothing to do. The
+ * reconciliation cron stays, because checking that D1 agrees with every object
+ * is genuinely a sweep.
  */
 export const schedule = sqliteTable("schedule", {
   name: text("name", { enum: ["outbox", "archive", "purge"] }).primaryKey(),

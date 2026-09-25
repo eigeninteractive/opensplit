@@ -29,12 +29,11 @@ import { type MemberRow, nextSeq, requireMember, requireMeta, type Tx } from "./
  *
  * ## One peek, one join
  *
- * Postgres had `peek_invite`, `peek_group_link`, `redeem_invite`,
- * `list_link_placeholders` and `join_with_link` — five functions for what is,
- * to the person holding the URL, one thing: I tapped a link, tell me what it
- * is, then let me in. The token says which kind it is; the caller should not
- * have to know before asking. So there are two functions here, and the shape
- * of the answer carries the difference.
+ * Two kinds of link and two operations, not one pair of each. To the person
+ * holding a URL it is one thing — I tapped a link, tell me what it is, then
+ * let me in — and the token itself says which kind it is, so the caller should
+ * not have to know before asking. Splitting it by kind instead would be four
+ * entry points and a decision the client is not equipped to make.
  *
  * ## Peeking before deciding who you are
  *
@@ -102,11 +101,11 @@ export function createInvite(tx: Tx, memberId: string, context: InviteContext, t
 /**
  * Minting the group's one open link, revoking whatever preceded it.
  *
- * "One live link" was a partial unique index in Postgres, because two members
- * tapping share at the same moment would otherwise both insert and the group
- * would have two open doors while everybody involved believed there was one.
- * Here it is the shape of the table and the fact that this object does one
- * thing at a time.
+ * "One live link" is the shape of the table plus the fact that this object
+ * does one thing at a time. Anywhere that admits concurrent writers needs a
+ * constraint for it, because two members tapping share at the same moment both
+ * insert, and the group has two open doors while everybody involved believes
+ * there is one.
  */
 export function createGroupLink(tx: Tx, context: InviteContext, ttl = LINK_TTL): MintedLink {
   requireMeta(tx);

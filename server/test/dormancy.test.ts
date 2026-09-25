@@ -7,12 +7,10 @@ import { evenly, freshId, makeGroup, makeGroupOfTwo, ok, PRIYA, RAVI, refusal, s
  * Dormancy and account deletion: what an idle group does to itself, and what
  * survives somebody deleting the account that made it.
  *
- * The scheduling model is the one thing here that is not a port. Postgres had
- * to scan every group nightly because a table cannot schedule itself, so
- * `archive_dormant_groups` and `purge_settled_dormant_groups` were sweeps over
- * the whole database. An object can set its own alarm, so each group carries
- * its own clock and a quiet one costs one wake-up in three months instead of
- * ninety that find nothing to do.
+ * Both happen on the object's own alarm rather than on a sweep, so each group
+ * carries its own clock: a quiet one costs a single wake-up in three months
+ * instead of ninety nightly checks that find nothing to do. These tests drive
+ * that clock directly rather than waiting for it.
  *
  * `runUpkeep` takes the instant to reason about, which is what lets these tests
  * ask what happens in a year without waiting or back-dating rows.
@@ -94,9 +92,9 @@ describe("a group long dead", () => {
     expect(outcome.purged).toBe(true);
 
     /**
-     * The part Postgres could not do. It deleted the rows and told nobody, so
-     * a phone that had synced the group kept it forever. Here the end of a
-     * group is a change with a sequence number, which means it travels.
+     * The end of a group is a change with a sequence number, which means it
+     * travels. Deleting the rows and telling nobody would leave a phone that
+     * had synced the group holding it forever.
      */
     const page = ok(await object.changes(RAVI, 0, 500));
     expect(page.purgedAt).not.toBeNull();

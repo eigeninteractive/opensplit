@@ -10,18 +10,15 @@ import { findMemberByProfile, findMeta, findTombstone, type Tx } from "./store";
 /**
  * One group's changes since a cursor. One request, one integer.
  *
- * What this replaces is worth stating, because none of it was bad code. It was
- * the cost of paging a multi-writer store by timestamp: four requests per
- * group per sync, each with an `(updated_at, id)` keyset cursor; a row-value
- * comparison spelled out by hand because PostgREST has no syntax for
- * `(updated_at, id) > (?, ?)`; a quoting rule that made an unquoted ISO-8601
- * timestamp inside an `or=(…)` group silently match nothing; `ascending: true`
- * stated explicitly because the SDK defaults to descending; and the whole
- * class of bug where a row bumped mid-sweep moves past a cursor that has
- * already passed it.
+ * Worth appreciating, because the alternative is not bad code so much as a
+ * lot of it. Paging a store with several writers means a keyset cursor per
+ * feed — `(updated_at, id)`, because a timestamp alone cannot break a tie —
+ * one request per feed per group per sync, and a standing exposure to the row
+ * that gets bumped mid-sweep and moves past a cursor that has already passed
+ * it.
  *
  * A single writer can hand out a strictly increasing integer, so all of that
- * becomes `where seq > ?`.
+ * is `where seq > ?`.
  */
 
 const CHANGE_LIMIT = { min: 1, max: 500, fallback: 200 } as const;

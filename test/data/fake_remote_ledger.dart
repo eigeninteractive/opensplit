@@ -21,11 +21,10 @@ import 'server_reference_data.dart';
 ///  * it enforces `sum(payers) = sum(shares) = amount`;
 ///  * a stale base is refused only when applying the write would move money.
 ///
-/// It is much shorter than the fake it replaced, and the missing parts are the
-/// interesting bit. That one had to model Postgres transaction time — a whole
-/// `inOneTransaction` hook existed so a batch could share an `updated_at`,
-/// because the composite `(timestamp, id)` cursor existed to survive exactly
-/// that. There is no such thing to model here.
+/// Deliberately small. A fake for a timestamp-cursored feed has to model when
+/// writes share an instant, because that is the case the cursor's tiebreak
+/// exists for; a fake for a sequence number has nothing equivalent to model,
+/// which is itself the argument for the sequence number.
 class FakeRemoteLedger implements RemoteLedgerApi {
   FakeRemoteLedger({DateTime? start})
     : _now = start ?? DateTime.utc(2026, 8, 21, 12);

@@ -64,14 +64,11 @@ Future<void> _registerDeviceToken(Ref ref, String token) async {
     return;
   }
 
-  // An RPC rather than an upsert, because a device changes hands. Signing in
-  // as a different account, or reinstalling, gets the same registration back
-  // from FCM while the stored row still names the previous owner — and RLS
-  // evaluates an upsert's UPDATE half against that row and refuses it. The
-  // symptom is a device that silently stops receiving anything.
-  //
-  // register_device_token always writes auth.uid(), so the takeover is the
-  // only thing it can do.
+  // Unconditional, because a device changes hands. Signing in as a different
+  // account, or reinstalling, gets the same registration token back from FCM
+  // while the stored row still names the previous owner. The server takes the
+  // token over rather than refusing it, for the reason that a refusal here is
+  // a device which silently stops receiving anything.
   await tokens.register(
     token: token,
     platform: ref.read(pushServiceProvider).platform,

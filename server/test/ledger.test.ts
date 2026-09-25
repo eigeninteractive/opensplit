@@ -73,10 +73,9 @@ describe("an expense has to add up", () => {
   });
 
   /**
-   * The Postgres version of this test named a member of a *different* group,
-   * and needed a three-table join in a trigger to catch it. There is no such
-   * member to name here: this object holds one group's members and no others,
-   * so a foreign id is simply an id nobody has.
+   * There is no member of another group to name here: this object holds one
+   * group's members and no others, so an id from elsewhere is simply an id
+   * nobody has. The check is existence rather than a join.
    */
   it("refuses a share for somebody who is not in this group", async () => {
     const { groupId, ravi } = await makeGroup();

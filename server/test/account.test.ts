@@ -10,12 +10,10 @@ import { type Guest, signInAsGuest } from "./session";
  * The person, rather than the ledger.
  *
  * Three things live here and they are connected by one rule: **who you can
- * see**. Postgres expressed it as a row-level-security policy — a profile is
- * visible if you share a group with its owner — and that policy was both a
- * correlated subquery per row and the only place the rule was written down.
- * Here it is a function, and these are the tests that hold it to the same
- * promise, because a visibility bug in a profile feed is somebody's payment
- * handle shown to a stranger.
+ * see**. A profile is visible if you share a live membership with its owner,
+ * plus your own. These are the tests that hold `visibleProfiles` to that,
+ * because a visibility bug in a profile feed is somebody's payment handle
+ * shown to a stranger.
  *
  * Account deletion is the other half. It is the one operation in this API that
  * destroys data, and the thing it must *not* destroy is everybody else's

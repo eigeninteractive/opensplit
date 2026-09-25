@@ -445,11 +445,10 @@ class Outbox extends Table {
 /// is the only thing that writes it, so it can hand out a strictly increasing
 /// number — and a number that is unique per change needs no tiebreak.
 ///
-/// That is what removed the second column. A Postgres `now()` is transaction
-/// time, so every row written in one transaction shared an `updated_at`: a
-/// `>` cursor would skip the rest of a batch forever and a `>=` cursor would
-/// re-read it forever, and the only fix was to order on the pair. None of that
-/// arises here.
+/// That is what removed the second column. A timestamp cursor needs the
+/// tiebreak because rows written together can share one: a `>` cursor skips
+/// the rest of the batch forever and a `>=` cursor re-reads it forever. A
+/// sequence number that is unique per change has neither problem.
 @DataClassName('GroupCursorRow')
 class GroupCursors extends Table {
   TextColumn get groupId =>

@@ -75,8 +75,8 @@ export class Fx extends DurableObject<Env> {
   /**
    * A day nobody has needed before, asked for by a device.
    *
-   * Throttled here rather than in a table plus a trigger, which is what
-   * Postgres needed. Three limits, and each answers a real pattern:
+   * Throttled in code, against a small table of attempts. Three limits, and
+   * each answers a real pattern:
    *
    * - **Already covered.** The commonest case by a distance: six devices in one
    *   group all sync the same backdated expense within a second of each other.

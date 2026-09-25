@@ -13,11 +13,10 @@ import { z } from "@hono/zod-openapi";
 /**
  * Every failure crosses the wire in this shape.
  *
- * It replaces reading Postgres SQLSTATEs on the device and inferring from them
- * whether a retry is worth attempting — a lookup table that had to know that
- * `23514` was the balance invariant, that `42501` was a policy refusal, and
- * that `PT409` had to be raised in place of `40001` because PostgREST would
- * otherwise retry a permanent refusal until the gateway timed out.
+ * A code the server chose, rather than a status the client interprets. The
+ * alternative is a lookup table on the device that maps the storage layer's
+ * error numbers to meanings — a second copy of the server's rules, in another
+ * language, maintained by hand.
  *
  * The server states both the kind and what to do about it, and `retry` is the
  * second half of that. Leaving it to the client meant inferring intent from a

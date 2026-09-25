@@ -84,9 +84,9 @@ export function findMemberByProfile(tx: Tx, profileId: string): MemberRow | unde
  * out to be either destructive enough that nobody should hold them over
  * somebody else, or harmless enough that everybody should.
  *
- * Note what is not a parameter: which member the caller *is*. Postgres had to
- * forbid that with a trigger on every write path, because `upsert_entry` could
- * otherwise have taken an author. Resolving it here means there is nothing to
+ * Note what is not a parameter: which member the caller *is*. A write path
+ * that accepts an author has to forbid a false one on every route that reaches
+ * it. Resolving it here, once, from the session, means there is nothing to
  * forbid.
  */
 export function requireActiveMember(tx: Tx, profileId: string): MemberRow {

@@ -837,15 +837,14 @@ void main() {
     });
 
     test('gives every committed change a number of its own', () async {
-      // What replaced the composite cursor, and the reason it could be
-      // replaced. Postgres `now()` was transaction time, so a batch written in
-      // one transaction shared an `updated_at` exactly, and a cursor on the
-      // timestamp alone either skipped the rest of that batch forever or
-      // re-read it forever -- which is what `(updated_at, id)` was for.
+      // The property a timestamp cursor cannot have. Rows written together
+      // can share a timestamp exactly, and a cursor on one either skips the
+      // rest of that batch forever or re-reads it forever -- which is why such
+      // a cursor needs a tiebreak column at all.
       //
       // A sequence number is issued once per committed change by the one
-      // writer there is, so the tie it tie-broke cannot arise. Twelve pushes
-      // are twelve numbers, strictly increasing, whatever order they drain in.
+      // writer there is, so the tie cannot arise. Twelve pushes are twelve
+      // numbers, strictly increasing, whatever order they drain in.
       final g = await seedGroup();
       for (var i = 0; i < 12; i++) {
         await a.entries.create(

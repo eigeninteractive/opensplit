@@ -6,9 +6,9 @@ import '../sync/sync_session.dart';
 ///
 /// Called on exactly one path: signing in as an account that already exists,
 /// on a device that had been recording anonymously. Those rows belong to the
-/// anonymous account — the server has them under that user id, and row-level
-/// security will refuse every push made under the new one — so carrying them
-/// across is not a migration, it is a set of writes that cannot land. Leaving
+/// anonymous account — the server holds them in groups the new account is not
+/// a member of — so carrying them across is not a migration, it is a set of
+/// writes that cannot land. Leaving
 /// them on screen would be worse still: a group list where some entries sync
 /// and some silently never will.
 ///
