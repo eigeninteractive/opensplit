@@ -1,16 +1,16 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'member_patch.dart';
+part of 'member_update.dart';
 
 // **************************************************************************
 // JsonSerializableGenerator
 // **************************************************************************
 
-MemberPatch _$MemberPatchFromJson(Map<String, dynamic> json) =>
-    $checkedCreate('MemberPatch', json, ($checkedConvert) {
-      $checkKeys(json, requiredKeys: const ['upiVpa', 'leftAt']);
-      final val = MemberPatch(
-        displayName: $checkedConvert('displayName', (v) => v as String?),
+MemberUpdate _$MemberUpdateFromJson(Map<String, dynamic> json) =>
+    $checkedCreate('MemberUpdate', json, ($checkedConvert) {
+      $checkKeys(json, requiredKeys: const ['displayName', 'upiVpa', 'leftAt']);
+      final val = MemberUpdate(
+        displayName: $checkedConvert('displayName', (v) => v as String),
         upiVpa: $checkedConvert('upiVpa', (v) => v as String?),
         leftAt: $checkedConvert(
           'leftAt',
@@ -20,9 +20,9 @@ MemberPatch _$MemberPatchFromJson(Map<String, dynamic> json) =>
       return val;
     });
 
-Map<String, dynamic> _$MemberPatchToJson(MemberPatch instance) =>
+Map<String, dynamic> _$MemberUpdateToJson(MemberUpdate instance) =>
     <String, dynamic>{
-      'displayName': ?instance.displayName,
+      'displayName': instance.displayName,
       'upiVpa': instance.upiVpa,
       'leftAt': instance.leftAt?.toIso8601String(),
     };

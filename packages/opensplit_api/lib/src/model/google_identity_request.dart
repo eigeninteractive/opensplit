@@ -18,24 +18,19 @@ class GoogleIdentityRequest {
   GoogleIdentityRequest({
     required this.idToken,
 
-    this.nonce,
+    required this.nonce,
 
-    this.allowSignIn = false,
+    required this.allowSignIn,
   });
 
   @JsonKey(name: r'idToken', required: true, includeIfNull: false)
   final String idToken;
 
-  @JsonKey(name: r'nonce', required: false, includeIfNull: false)
+  @JsonKey(name: r'nonce', required: true, includeIfNull: true)
   final String? nonce;
 
-  @JsonKey(
-    defaultValue: false,
-    name: r'allowSignIn',
-    required: false,
-    includeIfNull: false,
-  )
-  final bool? allowSignIn;
+  @JsonKey(name: r'allowSignIn', required: true, includeIfNull: false)
+  final bool allowSignIn;
 
   @override
   bool operator ==(Object other) =>
@@ -46,7 +41,10 @@ class GoogleIdentityRequest {
           other.allowSignIn == allowSignIn;
 
   @override
-  int get hashCode => idToken.hashCode + nonce.hashCode + allowSignIn.hashCode;
+  int get hashCode =>
+      idToken.hashCode +
+      (nonce == null ? 0 : nonce.hashCode) +
+      allowSignIn.hashCode;
 
   factory GoogleIdentityRequest.fromJson(Map<String, dynamic> json) =>
       _$GoogleIdentityRequestFromJson(json);

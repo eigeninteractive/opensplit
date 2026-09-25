@@ -1,75 +1,53 @@
 import { z } from "@hono/zod-openapi";
 
+import * as tables from "../db/group/schema";
 import { entryKinds, eventKinds, splitKinds } from "../db/group/schema";
-import { IdSchema, TimestampSchema } from "./common";
+import { createSelectSchema, IdSchema, TimestampSchema } from "./common";
 
 /**
  * The ledger, on the wire.
  *
- * These schemas are the contract in all three senses at once: the validator
- * the Worker runs before a Durable Object is ever woken, the TypeScript types
- * the object's own methods are written against, and the OpenAPI definitions
- * the Dart client is generated from. There is no second description of the
- * wire format, so there is nowhere for one to drift from another.
+ * Shape lives here; meaning (membership, balance, staleness) lives in the
+ * group's Durable Object, which is the only place that can answer it.
  *
- * The division of labour with the Durable Object is deliberate. Shape lives
- * here — is this a string, is that a positive integer, is this a plausible UPI
- * handle. Meaning lives in the object — are you a member, does this balance,
- * has somebody else changed it since. The first can be answered without
- * touching storage and so should be, on the cheapest thing in the path; the
- * second cannot be answered anywhere else.
+ * A row the server returns is derived from its table, so a column exists in
+ * one place. The overrides give a column its wire type where SQLite has none
+ * (a timestamp, a date, a named enum). Request bodies are written out, because
+ * they are deliberately narrower than the rows they write and carry the
+ * validation.
+ *
+ * Every body field is required, and null is the only way to say "none". The
+ * generated Dart client drops a null optional field, so an optional field
+ * would be three states on the server and two on the device.
  */
 
 /** A calendar date, `YYYY-MM-DD`. An expense happens on a day, not at an instant. */
-export const DateSchema = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/)
-  .openapi({ example: "2026-09-23" });
+export const DateSchema = z.iso.date().openapi({ example: "2026-09-23" });
 
-/**
- * A UPI virtual payment address.
- *
- * Checked here rather than by a CHECK constraint, because SQLite has no
- * regular expressions and `GLOB` cannot express this. One regex in the schema
- * that already validates the request beats an approximation in the storage
- * layer that would have to be kept in step with it.
- */
+/** A UPI virtual payment address. SQLite has no regular expressions, so this is the only check. */
 export const UpiVpaSchema = z
   .string()
   .regex(/^[a-zA-Z0-9._-]{2,64}@[a-zA-Z]{2,64}$/)
   .openapi({ example: "ravi@okhdfcbank" });
 
-/** ISO 4217. Validated against the bundled currency list at the edge. */
-export const CurrencySchema = z
+/** ISO 4217. */
+export const CurrencyCodeSchema = z
   .string()
   .regex(/^[A-Z]{3}$/)
   .openapi({ example: "INR" });
 
 /**
- * Registered as named schemas rather than left inline, for two reasons.
- *
- * One shared `EntryKind` across `Entry`, `EntryInput` and `EntrySnapshot`
- * beats three structurally identical `EntryInputKindEnum`-style classes that
- * cannot be assigned to one another.
- *
- * And an inline enum carrying a `default` makes the Dart generator emit
- * `const EntryInputKindEnum._('expense')` as a parameter default, which is a
- * generative enum constructor call and does not compile. A `$ref` gives it a
- * real enum value to point at.
+ * Named, so `Entry`, `EntryInput` and `EntrySnapshot` share one Dart enum
+ * rather than three structurally identical ones.
  */
 export const EntryKindSchema = z.enum(entryKinds).openapi("EntryKind");
 export const SplitKindSchema = z.enum(splitKinds).openapi("SplitKind");
-
 export const EventKindSchema = z.enum(eventKinds).openapi("EventKind");
 
 /**
- * The sequence number a change was committed at.
- *
- * One integer per committed change, strictly increasing, handed out by the
- * group's Durable Object because it is the only writer. It is the sync cursor,
- * the version a conflicting edit is judged against, and the total order the
- * activity feed is read in — three jobs that used to need `updated_at`, a
- * `(timestamp, id)` keyset pair, and `clock_timestamp()` respectively.
+ * The sequence number a change was committed at: one per change, strictly
+ * increasing, handed out by the group's Durable Object. It is the sync
+ * cursor, the version an edit is judged against, and the feed's order.
  */
 export const SeqSchema = z.int().nonnegative().openapi({ example: 412 });
 
@@ -84,7 +62,7 @@ export const MoneyRowSchema = z
 export const PayerSchema = z
   .object({
     memberId: IdSchema,
-    /** Zero is not a payment. Somebody who put nothing down is not a payer. */
+    /** Zero is not a payment. */
     amountMinor: z.int().positive(),
   })
   .openapi("Payer");
@@ -92,188 +70,134 @@ export const PayerSchema = z
 export const ShareSchema = z
   .object({
     memberId: IdSchema,
-    /**
-     * Zero is legitimate — somebody present who owes nothing for this bill —
-     * but negative would manufacture a debt out of a balancing pair.
-     */
+    /** Zero is somebody present who owes nothing; negative would invent a debt. */
     amountMinor: z.int().nonnegative(),
     /** The original weight scaled by a million. Null for an exact split. */
-    weightMicros: z.int().nullable().default(null),
+    weightMicros: z.int().nullable(),
   })
   .openapi("Share");
 
-export const EntrySchema = z
-  .object({
-    id: IdSchema,
-    kind: EntryKindSchema,
-    description: z.string(),
-    categoryId: IdSchema.nullable(),
-    currency: CurrencySchema,
-    amountMinor: z.int().positive(),
-    entryDate: DateSchema,
-    splitKind: SplitKindSchema,
-    fxRate: z.number().positive().nullable(),
-    fxSource: z.string().nullable(),
-    fxAt: TimestampSchema.nullable(),
-    notes: z.string().nullable(),
-    createdBy: IdSchema,
-    clientKey: IdSchema.nullable(),
-    createdAt: TimestampSchema,
-    updatedAt: TimestampSchema,
-    deletedAt: TimestampSchema.nullable(),
-    payers: z.array(PayerSchema),
-    shares: z.array(ShareSchema),
-    seq: SeqSchema,
-  })
+export const EntrySchema = createSelectSchema(tables.entries, {
+  kind: EntryKindSchema,
+  amountMinor: z.int().positive(),
+  fxRate: z.number().positive().nullable(),
+  entryDate: DateSchema,
+  splitKind: SplitKindSchema,
+  fxAt: TimestampSchema.nullable(),
+  createdAt: TimestampSchema,
+  updatedAt: TimestampSchema,
+  deletedAt: TimestampSchema.nullable(),
+  seq: SeqSchema,
+})
+  .extend({ payers: z.array(PayerSchema), shares: z.array(ShareSchema) })
   .openapi("Entry");
 
 /**
  * What a device sends to record or edit an expense.
  *
- * `createdBy` is absent, and its absence is the rule: authorship is the
- * caller's own member row, resolved by the Durable Object from the session.
- * There is no parameter to point at somebody else, so there is nothing to
- * validate and nothing to spoof.
- *
- * `fxAt` is absent for the same reason — it is when the rate was taken, which
- * only the server can say. `updatedAt` and `seq` are absent because they are
- * the server's bookkeeping about the write, not facts the writer supplies.
+ * No `createdBy`: authorship is the caller's own member row, resolved from the
+ * session, so there is nothing to spoof. No `fxAt`, `updatedAt` or `seq`:
+ * those are the server's bookkeeping about the write.
  */
 export const EntryInputSchema = z
   .object({
     id: IdSchema,
-    kind: EntryKindSchema.default("expense"),
-    description: z.string().max(500).default(""),
-    categoryId: IdSchema.nullable().default(null),
-    currency: CurrencySchema,
+    kind: EntryKindSchema,
+    description: z.string().max(500),
+    categoryId: IdSchema.nullable(),
+    currency: CurrencyCodeSchema,
     amountMinor: z.int().positive(),
     entryDate: DateSchema,
-    splitKind: SplitKindSchema.default("equal"),
-    fxRate: z.number().positive().nullable().default(null),
-    fxSource: z.string().max(64).nullable().default(null),
-    notes: z.string().max(2000).nullable().default(null),
-    clientKey: IdSchema.nullable().default(null),
+    splitKind: SplitKindSchema,
+    fxRate: z.number().positive().nullable(),
+    fxSource: z.string().max(64).nullable(),
+    notes: z.string().max(2000).nullable(),
+    clientKey: IdSchema.nullable(),
     payers: z.array(PayerSchema).min(1),
     shares: z.array(ShareSchema).min(1),
 
     /**
-     * The version this edit was composed against, or null for a row this
-     * device invented.
-     *
-     * A stale base is refused only when applying the write would move money —
-     * two people fixing a typo do not have to arbitrate, an edit carrying a
-     * stale amount does. See `ledger.ts` for the comparison.
+     * The version this edit was composed against, or null for a new row. A
+     * stale base is refused only when the write would move money.
      */
-    baseSeq: SeqSchema.nullable().default(null),
+    baseSeq: SeqSchema.nullable(),
   })
   .openapi("EntryInput");
 
-export const MemberSchema = z
-  .object({
-    id: IdSchema,
-    /** Null means a placeholder: a real person with no account, yet. */
-    profileId: IdSchema.nullable(),
-    displayName: z.string(),
-    upiVpa: z.string().nullable(),
-    joinedAt: TimestampSchema,
-    leftAt: TimestampSchema.nullable(),
-    updatedAt: TimestampSchema,
-    seq: SeqSchema,
-  })
-  .openapi("Member");
+/** A null `profileId` is a placeholder: a real person with no account yet. */
+export const MemberSchema = createSelectSchema(tables.members, {
+  joinedAt: TimestampSchema,
+  leftAt: TimestampSchema.nullable(),
+  updatedAt: TimestampSchema,
+  seq: SeqSchema,
+}).openapi("Member");
 
-export const GroupSchema = z
-  .object({
-    id: IdSchema,
-    name: z.string(),
-    defaultCurrency: CurrencySchema,
-    isDirect: z.boolean(),
-    simplifyDebts: z.boolean(),
-    createdBy: IdSchema,
-    createdAt: TimestampSchema,
-    archivedAt: TimestampSchema.nullable(),
-    updatedAt: TimestampSchema,
-    seq: SeqSchema,
-  })
-  .openapi("Group");
+export const GroupSchema = createSelectSchema(tables.meta, {
+  createdAt: TimestampSchema,
+  archivedAt: TimestampSchema.nullable(),
+  updatedAt: TimestampSchema,
+  seq: SeqSchema,
+}).openapi("Group");
+
+const NameSchema = z.string().trim().min(1).max(100);
 
 export const GroupCreateSchema = z
   .object({
     id: IdSchema,
-    name: z.string().trim().min(1).max(100),
-    defaultCurrency: CurrencySchema,
-    isDirect: z.boolean().default(false),
-    simplifyDebts: z.boolean().default(true),
+    name: NameSchema,
+    defaultCurrency: CurrencyCodeSchema,
+    isDirect: z.boolean(),
+    simplifyDebts: z.boolean(),
 
     /**
-     * The creator's own member row, minted on the device alongside the group.
-     *
-     * Creating a group is one call that writes both rows in one transaction,
-     * which is what removes the bootstrap problem: gating member writes on
-     * membership is unsatisfiable for the first member, and every escape hatch
-     * for that case turns the creator column into an authorization — which is
-     * a column somebody will write themselves into.
+     * The creator's own member row, written in the same transaction. Gating
+     * member writes on membership is otherwise unsatisfiable for the first
+     * member.
      */
     memberId: IdSchema,
-    displayName: z.string().trim().min(1).max(100),
+    displayName: NameSchema,
   })
   .openapi("GroupCreate");
 
 /**
- * Renaming, archiving, and the two settings.
- *
- * There are no fields for `id`, `createdAt` or `createdBy`, so nothing needs
- * to forbid rewriting them. An absent `name` or `simplifyDebts` is left alone.
- *
- * `archivedAt` is required because null is a value here (restore), and a
- * generated client omits a null optional field — so an optional one could
- * never say "restore".
+ * A group's editable fields, all of them. There are no fields for `id`,
+ * `createdAt` or `createdBy`, so nothing needs to forbid rewriting them.
  */
-export const GroupPatchSchema = z
+export const GroupUpdateSchema = z
   .object({
-    name: z.string().trim().min(1).max(100).optional(),
-    simplifyDebts: z.boolean().optional(),
+    name: NameSchema,
+    simplifyDebts: z.boolean(),
     /** An instant to archive, or null to restore. */
     archivedAt: TimestampSchema.nullable(),
   })
-  .openapi("GroupPatch");
+  .openapi("GroupUpdate");
 
 export const MemberCreateSchema = z
   .object({
     id: IdSchema,
-    displayName: z.string().trim().min(1).max(100),
-    upiVpa: UpiVpaSchema.nullable().default(null),
+    displayName: NameSchema,
+    upiVpa: UpiVpaSchema.nullable(),
   })
   .openapi("MemberCreate");
 
 /**
- * What one member may have changed about another, or about themselves.
- *
- * `profileId` is absent: claiming a place is what an invite does, and it is
- * the one transition this column is allowed to make. Exposing it here would
- * be exposing "hand your seat to somebody else", which nothing should.
+ * A member's editable fields, all of them. No `profileId`: claiming a place
+ * is what an invite does, and nothing else may hand a seat to somebody.
  */
-export const MemberPatchSchema = z
+export const MemberUpdateSchema = z
   .object({
-    displayName: z.string().trim().min(1).max(100).optional(),
-    /** Required for the same reason as `GroupPatch.archivedAt`: null clears it. */
+    displayName: NameSchema,
     upiVpa: UpiVpaSchema.nullable(),
     /** An instant to leave or remove, or null to rejoin. */
     leftAt: TimestampSchema.nullable(),
   })
-  .openapi("MemberPatch");
+  .openapi("MemberUpdate");
 
-export const InviteSchema = z
-  .object({
-    token: IdSchema,
-    memberId: IdSchema,
-    createdBy: IdSchema,
-    createdAt: TimestampSchema,
-    expiresAt: TimestampSchema,
-    redeemedAt: TimestampSchema.nullable(),
-    redeemedBy: IdSchema.nullable(),
-  })
-  .openapi("Invite");
+export const InviteSchema = createSelectSchema(tables.invites, {
+  createdAt: TimestampSchema,
+  expiresAt: TimestampSchema,
+  redeemedAt: TimestampSchema.nullable(),
+}).openapi("Invite");
 
 /** A group's open link, as it stands. */
 export const GroupLinkSchema = z
@@ -388,10 +312,10 @@ export const JoinedSchema = z
 export const JoinRequestSchema = z
   .object({
     /** One of the places from `PlaceholderList`, or null to arrive as new. */
-    memberId: IdSchema.nullable().default(null),
+    memberId: IdSchema.nullable(),
 
     /** The name to arrive under. Ignored when `memberId` is set. */
-    displayName: z.string().trim().min(1).max(100).nullable().default(null),
+    displayName: NameSchema.nullable(),
   })
   .openapi("JoinRequest");
 
@@ -411,7 +335,7 @@ export const EntrySnapshotSchema = z
   .object({
     kind: EntryKindSchema,
     description: z.string(),
-    currency: CurrencySchema,
+    currency: CurrencyCodeSchema,
     amountMinor: z.int().positive(),
     entryDate: DateSchema,
     splitKind: SplitKindSchema,
@@ -450,17 +374,21 @@ export const LinkEventPayloadSchema = z
  * `z.custom` rather than `z.union`, because the union emits `oneOf`, which the
  * Dart generator flattens into one class with every branch's fields required.
  * The four shapes are registered as components in `app.ts`, so the generated
- * client has a class for each and decodes `payload` per `kind`.
+ * client has a class for each and decodes `payload` per `kind`. The check
+ * function is what makes the field required: a bare `z.custom` accepts
+ * `undefined`, so it would be emitted as optional.
  *
  * `additionalProperties: {nullable: true}` rather than `true`: the latter
  * generates `Map<String, Object>`, whose lazy cast throws on the first null
  * value, and every payload has one.
  */
-export const EventPayloadSchema = z.custom<EntrySnapshot | MemberEventPayload | GroupEventPayload | LinkEventPayload>().openapi({
-  type: "object",
-  additionalProperties: { nullable: true },
-  description: "The after-image, in whatever shape `kind` calls for: EntrySnapshot, MemberEventPayload, GroupEventPayload or LinkEventPayload.",
-});
+export const EventPayloadSchema = z
+  .custom<EntrySnapshot | MemberEventPayload | GroupEventPayload | LinkEventPayload>((value) => typeof value === "object" && value !== null)
+  .openapi({
+    type: "object",
+    additionalProperties: { nullable: true },
+    description: "The after-image, in whatever shape `kind` calls for: EntrySnapshot, MemberEventPayload, GroupEventPayload or LinkEventPayload.",
+  });
 
 /**
  * Reading a payload back, at the one place the type system cannot help.
@@ -486,26 +414,14 @@ export function isLinkEvent(event: Event): event is Event & { payload: LinkEvent
   return event.kind === "link_created" || event.kind === "link_revoked";
 }
 
-export const EventSchema = z
-  .object({
-    id: IdSchema,
-    actorId: IdSchema.nullable(),
-    createdAt: TimestampSchema,
-    kind: EventKindSchema,
-    subjectId: IdSchema.nullable(),
-    payload: EventPayloadSchema,
-    seq: SeqSchema,
-
-    /**
-     * Position within `seq`. Read the feed ordered by `(seq, ordinal)`.
-     *
-     * One change can append more than one line, and those lines share a `seq`
-     * and a `createdAt` because both are taken once per change. Without this
-     * the only tiebreak is a random id.
-     */
-    ordinal: z.int().nonnegative(),
-  })
-  .openapi("Event");
+/** Read the feed ordered by `(seq, ordinal)`: one change can append several lines at one `seq`. */
+export const EventSchema = createSelectSchema(tables.events, {
+  createdAt: TimestampSchema,
+  kind: EventKindSchema,
+  payload: EventPayloadSchema,
+  seq: SeqSchema,
+  ordinal: z.int().nonnegative(),
+}).openapi("Event");
 
 /**
  * One group's changes since a cursor. One request, one integer, one page.
@@ -519,19 +435,9 @@ export const EventSchema = z
 export const ChangePageSchema = z
   .object({
     /**
-     * Which group this page describes, stated by the server.
-     *
-     * Not on each row, and that is the point. The group id is a property of
-     * the page, not of an entry — repeating it two hundred times per sync
-     * would be seven kilobytes of pure redundancy, and it would put back on
-     * the wire exactly the column the storage design removed, inviting anyone
-     * reading the contract to assume it is stored that way.
-     *
-     * Stated once, though, rather than left implicit: a device needs it to
-     * write rows into a local database that *is* multi-group, and taking it
-     * from the response instead of from its own request is what makes a page
-     * that answers for the wrong group detectable rather than silently
-     * merged.
+     * Which group this page describes. Stated once per page rather than on
+     * each row: the Durable Object *is* the group, so its rows have no such
+     * column.
      */
     groupId: IdSchema,
 
@@ -564,9 +470,9 @@ export type EntryInput = z.infer<typeof EntryInputSchema>;
 export type Member = z.infer<typeof MemberSchema>;
 export type Group = z.infer<typeof GroupSchema>;
 export type GroupCreate = z.infer<typeof GroupCreateSchema>;
-export type GroupPatch = z.infer<typeof GroupPatchSchema>;
+export type GroupUpdate = z.infer<typeof GroupUpdateSchema>;
 export type MemberCreate = z.infer<typeof MemberCreateSchema>;
-export type MemberPatch = z.infer<typeof MemberPatchSchema>;
+export type MemberUpdate = z.infer<typeof MemberUpdateSchema>;
 export type Invite = z.infer<typeof InviteSchema>;
 export type GroupLink = z.infer<typeof GroupLinkSchema>;
 export type LiveLink = z.infer<typeof LiveLinkSchema>;

@@ -49,6 +49,7 @@ async function continueWithGoogle(idToken: string, options: { token?: string; al
     },
     body: JSON.stringify({
       idToken,
+      nonce: null,
       allowSignIn: options.allowSignIn ?? false,
     }),
   });

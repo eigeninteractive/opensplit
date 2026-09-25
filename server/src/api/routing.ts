@@ -26,6 +26,12 @@ import { apiError, errorResponse, IdSchema } from "../schemas/common";
  */
 export const SeqQuerySchema = z.coerce.number().int().nonnegative().openapi({ type: "integer", example: 412 });
 
+/**
+ * The same, where it must be sent. Stated, because coercion turns `null` into
+ * 0, so the generator reads the schema as nullable and documents it optional.
+ */
+export const RequiredSeqQuerySchema = SeqQuerySchema.openapi({ param: { required: true } });
+
 export const GroupPathSchema = z.object({
   groupId: IdSchema.openapi({ param: { name: "groupId", in: "path" } }),
 });

@@ -27,7 +27,7 @@ class Event {
 
     required this.subjectId,
 
-    this.payload,
+    required this.payload,
 
     required this.seq,
 
@@ -55,8 +55,8 @@ class Event {
   final String? subjectId;
 
   /// The after-image, in whatever shape `kind` calls for: EntrySnapshot, MemberEventPayload, GroupEventPayload or LinkEventPayload.
-  @JsonKey(name: r'payload', required: false, includeIfNull: false)
-  final Map<String, Object?>? payload;
+  @JsonKey(name: r'payload', required: true, includeIfNull: false)
+  final Map<String, Object?> payload;
 
   // minimum: 0
   @JsonKey(name: r'seq', required: true, includeIfNull: false)

@@ -1,3 +1,4 @@
+import 'calendar_date.dart';
 import 'models/entry.dart';
 import 'split/splitter.dart';
 
@@ -109,7 +110,7 @@ Entry composeEntry(
     categoryId: draft.categoryId,
     currency: draft.currency,
     amountMinor: draft.amountMinor,
-    entryDate: draft.entryDate ?? DateTime.utc(now.year, now.month, now.day),
+    entryDate: draft.entryDate ?? calendarDay(now),
     splitKind: draft.split.kind,
     payers: [
       for (final p in payers)

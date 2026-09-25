@@ -46,15 +46,10 @@ Future<void> main() async {
 
   final prefs = await SharedPreferences.getInstance();
 
-  // Nothing to initialise for the backend, and that is the shape of it now.
-  //
-  // There used to be a network-capable SDK to stand up here, inside a
-  // try/catch, because launching must not depend on reaching a server. The
-  // session is now a stored token and a cached account that
-  // `BetterAuthService` reads synchronously from the preferences already
-  // loaded above, and revalidates against the Worker afterwards. A device with
-  // no connectivity launches exactly as it did before and simply does not
-  // sync.
+  // Nothing to initialise for the backend: the session is a stored token and
+  // a cached account that `BetterAuthService` reads synchronously from the
+  // preferences above and revalidates later. A device with no connectivity
+  // launches normally and simply does not sync.
 
   // A build that cannot reach its backend says so, rather than looking correct
   // and quietly doing nothing. See [configurationProblem]: this only ever fires

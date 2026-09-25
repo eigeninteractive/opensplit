@@ -16,7 +16,11 @@ import '../harness.dart';
 /// server. Everything upstream of it — the dead letter, the recorded reason —
 /// already existed and told nobody, which is exactly the failure these tests
 /// exist to keep fixed.
-Future<void> _pump(WidgetTester tester, AppDatabase db) async {
+Future<void> _pump(
+  WidgetTester tester,
+  AppDatabase db, {
+  _RecordingSync? sync,
+}) async {
   SharedPreferences.setMockInitialValues({});
   final prefs = await SharedPreferences.getInstance();
 
@@ -25,6 +29,7 @@ Future<void> _pump(WidgetTester tester, AppDatabase db) async {
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         appDatabaseProvider.overrideWithValue(db),
+        if (sync != null) syncControllerProvider.overrideWith(() => sync),
       ],
       child: const MaterialApp(home: Scaffold(body: UnsyncedChangesBanner())),
     ),
@@ -88,7 +93,8 @@ Future<void> _deadLetter(
       .insert(
         OutboxCompanion.insert(
           id: OutboxQueue.idFor(OutboxTarget.entry, entryId),
-          operation: OutboxTarget.entry,
+          target: OutboxTarget.entry,
+          revision: 'r1',
           targetId: entryId,
           createdAt: DateTime.utc(2026, 8, 21),
           lastError: Value(error),
@@ -157,6 +163,31 @@ void main() {
     await _teardown(tester);
   });
 
+  testWidgets('discarding asks first, and only then discards', (tester) async {
+    await _deadLetter(
+      db,
+      entryId: 'e1',
+      description: 'Taxi',
+      error: 'You are not a member of that group.',
+    );
+    final sync = _RecordingSync();
+    await _pump(tester, db, sync: sync);
+
+    await tester.tap(find.text('Discard'));
+    await _beats(tester);
+    expect(find.text('Discard this change?'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await _beats(tester);
+    expect(sync.calls, isEmpty);
+
+    await tester.tap(find.text('Discard'));
+    await _beats(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Discard'));
+    await _beats(tester);
+    expect(sync.calls, ['discard']);
+    await _teardown(tester);
+  });
+
   testWidgets('several refusals are counted, not just the first', (
     tester,
   ) async {
@@ -177,4 +208,14 @@ void main() {
     expect(find.text('2 changes could not be saved'), findsOneWidget);
     await _teardown(tester);
   });
+}
+
+class _RecordingSync extends SyncController {
+  final calls = <String>[];
+
+  @override
+  SyncStatus build() => const SyncStatus(hasCompletedFullSync: true);
+
+  @override
+  Future<void> discardFailed() async => calls.add('discard');
 }

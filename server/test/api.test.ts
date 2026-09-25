@@ -36,7 +36,7 @@ async function makeGroup(guest: Guest, name = "Goa trip") {
   const id = freshId("api");
   const response = await call("/api/groups", guest, {
     method: "POST",
-    body: JSON.stringify({ id, name, defaultCurrency: "INR", memberId: `${id}-me`, displayName: "Ravi" }),
+    body: JSON.stringify({ id, name, defaultCurrency: "INR", isDirect: false, simplifyDebts: true, memberId: `${id}-me`, displayName: "Ravi" }),
   });
 
   expect(response.status).toBe(200);
@@ -46,9 +46,18 @@ async function makeGroup(guest: Guest, name = "Goa trip") {
 function expense(overrides: Record<string, unknown> = {}) {
   return {
     id: freshId("api-e"),
+    kind: "expense",
+    description: "",
+    categoryId: null,
     currency: "INR",
     amountMinor: 1000,
     entryDate: "2026-09-23",
+    splitKind: "exact",
+    fxRate: null,
+    fxSource: null,
+    notes: null,
+    clientKey: null,
+    baseSeq: null,
     payers: [],
     shares: [],
     ...overrides,
@@ -137,7 +146,7 @@ describe("recording an expense over HTTP", () => {
 
     const response = await call(`/api/groups/${id}/entries`, ravi, {
       method: "POST",
-      body: JSON.stringify(expense({ payers: [{ memberId: me.id, amountMinor: 1000 }], shares: [{ memberId: me.id, amountMinor: 1000 }] })),
+      body: JSON.stringify(expense({ payers: [{ memberId: me.id, amountMinor: 1000 }], shares: [{ memberId: me.id, amountMinor: 1000, weightMicros: null }] })),
     });
 
     expect(response.status).toBe(200);
@@ -162,7 +171,7 @@ describe("recording an expense over HTTP", () => {
 
     const response = await call(`/api/groups/${id}/entries`, ravi, {
       method: "POST",
-      body: JSON.stringify(expense({ payers: [{ memberId: me.id, amountMinor: 999 }], shares: [{ memberId: me.id, amountMinor: 1000 }] })),
+      body: JSON.stringify(expense({ payers: [{ memberId: me.id, amountMinor: 999 }], shares: [{ memberId: me.id, amountMinor: 1000, weightMicros: null }] })),
     });
 
     expect(response.status).toBe(422);
@@ -181,7 +190,7 @@ describe("recording an expense over HTTP", () => {
     const me = page.members[0];
     if (!me) expect.unreachable("The group has no members.");
 
-    const body = (amount: number) => expense({ id: entryId, amountMinor: amount, payers: [{ memberId: me.id, amountMinor: amount }], shares: [{ memberId: me.id, amountMinor: amount }] });
+    const body = (amount: number) => expense({ id: entryId, amountMinor: amount, payers: [{ memberId: me.id, amountMinor: amount }], shares: [{ memberId: me.id, amountMinor: amount, weightMicros: null }] });
     const entryId = freshId("api-e");
 
     const first = await json<Entry>(await call(`/api/groups/${id}/entries`, ravi, { method: "POST", body: JSON.stringify(body(1000)) }));
@@ -215,7 +224,7 @@ describe("recording an expense over HTTP", () => {
     const entry = await json<Entry>(
       await call(`/api/groups/${id}/entries`, ravi, {
         method: "POST",
-        body: JSON.stringify(expense({ payers: [{ memberId: me.id, amountMinor: 1000 }], shares: [{ memberId: me.id, amountMinor: 1000 }] })),
+        body: JSON.stringify(expense({ payers: [{ memberId: me.id, amountMinor: 1000 }], shares: [{ memberId: me.id, amountMinor: 1000, weightMicros: null }] })),
       }),
     );
 
@@ -235,11 +244,11 @@ describe("the roster over HTTP", () => {
     const { id } = await makeGroup(ravi);
     const memberId = freshId("api-m");
 
-    const added = await call(`/api/groups/${id}/members`, ravi, { method: "POST", body: JSON.stringify({ id: memberId, displayName: "Priya" }) });
+    const added = await call(`/api/groups/${id}/members`, ravi, { method: "POST", body: JSON.stringify({ id: memberId, displayName: "Priya", upiVpa: null }) });
     expect(added.status).toBe(200);
     expect((await json<Member>(added)).profileId).toBeNull();
 
-    const patched = await call(`/api/groups/${id}/members/${memberId}`, ravi, { method: "PATCH", body: JSON.stringify({ upiVpa: "priya@okaxis", leftAt: null }) });
+    const patched = await call(`/api/groups/${id}/members/${memberId}`, ravi, { method: "PUT", body: JSON.stringify({ displayName: "Priya", upiVpa: "priya@okaxis", leftAt: null }) });
     expect(patched.status).toBe(200);
     expect((await json<Member>(patched)).upiVpa).toBe("priya@okaxis");
   });
@@ -247,19 +256,19 @@ describe("the roster over HTTP", () => {
   it("refuses a payment handle that is not one, before the object sees it", async () => {
     const { id } = await makeGroup(ravi);
     const memberId = freshId("api-m");
-    await call(`/api/groups/${id}/members`, ravi, { method: "POST", body: JSON.stringify({ id: memberId, displayName: "Priya" }) });
+    await call(`/api/groups/${id}/members`, ravi, { method: "POST", body: JSON.stringify({ id: memberId, displayName: "Priya", upiVpa: null }) });
 
-    const response = await call(`/api/groups/${id}/members/${memberId}`, ravi, { method: "PATCH", body: JSON.stringify({ upiVpa: "not a handle", leftAt: null }) });
+    const response = await call(`/api/groups/${id}/members/${memberId}`, ravi, { method: "PUT", body: JSON.stringify({ displayName: "Priya", upiVpa: "not a handle", leftAt: null }) });
     expect(response.status).toBe(400);
   });
 
   it("renames a group, and refuses a blank name", async () => {
     const { id } = await makeGroup(ravi);
 
-    const renamed = await call(`/api/groups/${id}`, ravi, { method: "PATCH", body: JSON.stringify({ name: "Goa, take two", archivedAt: null }) });
+    const renamed = await call(`/api/groups/${id}`, ravi, { method: "PUT", body: JSON.stringify({ name: "Goa, take two", simplifyDebts: true, archivedAt: null }) });
     expect((await json<Group>(renamed)).name).toBe("Goa, take two");
 
-    const blank = await call(`/api/groups/${id}`, ravi, { method: "PATCH", body: JSON.stringify({ name: "   ", archivedAt: null }) });
+    const blank = await call(`/api/groups/${id}`, ravi, { method: "PUT", body: JSON.stringify({ name: "   ", simplifyDebts: true, archivedAt: null }) });
     expect(blank.status).toBe(400);
   });
 });

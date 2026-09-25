@@ -8,6 +8,7 @@ part of 'join_request.dart';
 
 JoinRequest _$JoinRequestFromJson(Map<String, dynamic> json) =>
     $checkedCreate('JoinRequest', json, ($checkedConvert) {
+      $checkKeys(json, requiredKeys: const ['memberId', 'displayName']);
       final val = JoinRequest(
         memberId: $checkedConvert('memberId', (v) => v as String?),
         displayName: $checkedConvert('displayName', (v) => v as String?),
@@ -17,6 +18,6 @@ JoinRequest _$JoinRequestFromJson(Map<String, dynamic> json) =>
 
 Map<String, dynamic> _$JoinRequestToJson(JoinRequest instance) =>
     <String, dynamic>{
-      'memberId': ?instance.memberId,
-      'displayName': ?instance.displayName,
+      'memberId': instance.memberId,
+      'displayName': instance.displayName,
     };

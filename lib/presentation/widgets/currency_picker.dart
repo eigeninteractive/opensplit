@@ -35,7 +35,7 @@ class CurrencyPicker extends ConsumerWidget {
       enableFilter: true,
       requestFocusOnTap: true,
       menuHeight: 320,
-      // Fills whatever the parent gives it, the way the old form field did.
+      // Fills whatever width the parent gives it.
       expandedInsets: EdgeInsets.zero,
       dropdownMenuEntries: [
         for (final code in codes)

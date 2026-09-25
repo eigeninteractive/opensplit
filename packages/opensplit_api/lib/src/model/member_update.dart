@@ -5,7 +5,7 @@
 // ignore_for_file: unused_element
 import 'package:json_annotation/json_annotation.dart';
 
-part 'member_patch.g.dart';
+part 'member_update.g.dart';
 
 @JsonSerializable(
   checked: true,
@@ -13,12 +13,18 @@ part 'member_patch.g.dart';
   disallowUnrecognizedKeys: false,
   explicitToJson: true,
 )
-class MemberPatch {
-  /// Returns a new [MemberPatch] instance.
-  MemberPatch({this.displayName, required this.upiVpa, required this.leftAt});
+class MemberUpdate {
+  /// Returns a new [MemberUpdate] instance.
+  MemberUpdate({
+    required this.displayName,
 
-  @JsonKey(name: r'displayName', required: false, includeIfNull: false)
-  final String? displayName;
+    required this.upiVpa,
+
+    required this.leftAt,
+  });
+
+  @JsonKey(name: r'displayName', required: true, includeIfNull: false)
+  final String displayName;
 
   @JsonKey(name: r'upiVpa', required: true, includeIfNull: true)
   final String? upiVpa;
@@ -29,7 +35,7 @@ class MemberPatch {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is MemberPatch &&
+      other is MemberUpdate &&
           other.displayName == displayName &&
           other.upiVpa == upiVpa &&
           other.leftAt == leftAt;
@@ -40,10 +46,10 @@ class MemberPatch {
       (upiVpa == null ? 0 : upiVpa.hashCode) +
       (leftAt == null ? 0 : leftAt.hashCode);
 
-  factory MemberPatch.fromJson(Map<String, dynamic> json) =>
-      _$MemberPatchFromJson(json);
+  factory MemberUpdate.fromJson(Map<String, dynamic> json) =>
+      _$MemberUpdateFromJson(json);
 
-  Map<String, dynamic> toJson() => _$MemberPatchToJson(this);
+  Map<String, dynamic> toJson() => _$MemberUpdateToJson(this);
 
   @override
   String toString() {

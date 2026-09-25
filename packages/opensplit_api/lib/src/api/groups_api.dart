@@ -12,10 +12,10 @@ import 'package:dio/dio.dart';
 import 'package:opensplit_api/src/model/error.dart';
 import 'package:opensplit_api/src/model/group.dart';
 import 'package:opensplit_api/src/model/group_create.dart';
-import 'package:opensplit_api/src/model/group_patch.dart';
+import 'package:opensplit_api/src/model/group_update.dart';
 import 'package:opensplit_api/src/model/member.dart';
 import 'package:opensplit_api/src/model/member_create.dart';
-import 'package:opensplit_api/src/model/member_patch.dart';
+import 'package:opensplit_api/src/model/member_update.dart';
 
 class GroupsApi {
   final Dio _dio;
@@ -196,11 +196,11 @@ class GroupsApi {
   }
 
   /// Rename, archive or change a setting
-  /// A patch, not a whole row. There are no fields for &#x60;id&#x60;, &#x60;createdAt&#x60; or &#x60;createdBy&#x60;, which is why nothing needs to forbid rewriting them.
+  /// Every editable field, every time. There are no fields for &#x60;id&#x60;, &#x60;createdAt&#x60; or &#x60;createdBy&#x60;, which is why nothing needs to forbid rewriting them.
   ///
   /// Parameters:
   /// * [groupId]
-  /// * [groupPatch]
+  /// * [groupUpdate]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -212,7 +212,7 @@ class GroupsApi {
   /// Throws [DioException] if API call or serialization fails
   Future<Response<Group>> updateGroup({
     required String groupId,
-    required GroupPatch groupPatch,
+    required GroupUpdate groupUpdate,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -227,7 +227,7 @@ class GroupsApi {
       groupId.toString(),
     );
     final _options = Options(
-      method: r'PATCH',
+      method: r'PUT',
       headers: <String, dynamic>{...?headers},
       extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
       contentType: 'application/json',
@@ -237,7 +237,7 @@ class GroupsApi {
     dynamic _bodyData;
 
     try {
-      _bodyData = jsonEncode(groupPatch);
+      _bodyData = jsonEncode(groupUpdate);
     } catch (error, stackTrace) {
       throw DioException(
         requestOptions: _options.compose(_dio.options, _path),
@@ -291,7 +291,7 @@ class GroupsApi {
   /// Parameters:
   /// * [groupId]
   /// * [memberId]
-  /// * [memberPatch]
+  /// * [memberUpdate]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -304,7 +304,7 @@ class GroupsApi {
   Future<Response<Member>> updateMember({
     required String groupId,
     required String memberId,
-    required MemberPatch memberPatch,
+    required MemberUpdate memberUpdate,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -326,7 +326,7 @@ class GroupsApi {
           memberId.toString(),
         );
     final _options = Options(
-      method: r'PATCH',
+      method: r'PUT',
       headers: <String, dynamic>{...?headers},
       extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
       contentType: 'application/json',
@@ -336,7 +336,7 @@ class GroupsApi {
     dynamic _bodyData;
 
     try {
-      _bodyData = jsonEncode(memberPatch);
+      _bodyData = jsonEncode(memberUpdate);
     } catch (error, stackTrace) {
       throw DioException(
         requestOptions: _options.compose(_dio.options, _path),

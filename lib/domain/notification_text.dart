@@ -16,9 +16,8 @@ import 'money_format.dart';
 /// [shareMinor] is read straight off the recipient's `entry_shares` row — a
 /// column lookup, not a recomputation.
 ///
-/// [kind] is what happened, not what the expense is. Notifications used to fire
-/// only for creations and so could hardcode "added"; they now fire for every
-/// recorded change, and a banner that says somebody added an expense they
+/// [kind] is what happened, not what the expense is: notifications fire for
+/// every recorded change, and a banner saying somebody added an expense they
 /// actually deleted is worse than no banner.
 ///
 /// [actorName] is who made THIS change, which on an edit is usually not whoever

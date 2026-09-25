@@ -176,11 +176,7 @@ class _GroupTile extends ConsumerWidget {
     final currencies = ref.watch(currenciesProvider).value ?? const {};
     final scheme = Theme.of(context).colorScheme;
 
-    // A real ListTile rather than a Row dressed as one. It used to be the
-    // latter, which meant re-deriving the leading gap, the vertical padding and
-    // the title-to-subtitle spacing by hand -- and getting the behaviour that
-    // is not a measurement at all: minimum touch target, density, and how a
-    // two-line tile grows under a large system font size.
+    // A real ListTile, for its touch target, density and large-font growth.
     return Card.outlined(
       clipBehavior: Clip.antiAlias,
       child: ListTile(

@@ -96,11 +96,8 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
     ];
   }
 
-  /// Leaving is always available, settled or not.
-  ///
-  /// There used to be a check here refusing to let the last owner leave until
-  /// they had promoted somebody. With no roles there is nothing to hand over
-  /// and nothing to strand — which is most of the reason the role went.
+  /// Leaving is always available, settled or not. There are no roles, so there
+  /// is nothing to hand over first.
   Future<void> _leave(GroupLedger ledger, Member me) async {
     final debts = _outstanding(ledger, me);
     final confirmed = await showDialog<bool>(

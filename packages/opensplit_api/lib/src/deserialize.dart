@@ -24,7 +24,7 @@ import 'package:opensplit_api/src/model/group.dart';
 import 'package:opensplit_api/src/model/group_create.dart';
 import 'package:opensplit_api/src/model/group_event_payload.dart';
 import 'package:opensplit_api/src/model/group_link.dart';
-import 'package:opensplit_api/src/model/group_patch.dart';
+import 'package:opensplit_api/src/model/group_update.dart';
 import 'package:opensplit_api/src/model/health.dart';
 import 'package:opensplit_api/src/model/identity_outcome.dart';
 import 'package:opensplit_api/src/model/invite.dart';
@@ -37,7 +37,7 @@ import 'package:opensplit_api/src/model/live_link.dart';
 import 'package:opensplit_api/src/model/member.dart';
 import 'package:opensplit_api/src/model/member_create.dart';
 import 'package:opensplit_api/src/model/member_event_payload.dart';
-import 'package:opensplit_api/src/model/member_patch.dart';
+import 'package:opensplit_api/src/model/member_update.dart';
 import 'package:opensplit_api/src/model/money_row.dart';
 import 'package:opensplit_api/src/model/payer.dart';
 import 'package:opensplit_api/src/model/placeholder.dart';
@@ -137,8 +137,8 @@ ReturnType deserialize<ReturnType, BaseType>(
           as ReturnType;
     case 'GroupLink':
       return GroupLink.fromJson(value as Map<String, dynamic>) as ReturnType;
-    case 'GroupPatch':
-      return GroupPatch.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'GroupUpdate':
+      return GroupUpdate.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'Health':
       return Health.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'IdentityOutcome':
@@ -167,8 +167,8 @@ ReturnType deserialize<ReturnType, BaseType>(
     case 'MemberEventPayload':
       return MemberEventPayload.fromJson(value as Map<String, dynamic>)
           as ReturnType;
-    case 'MemberPatch':
-      return MemberPatch.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'MemberUpdate':
+      return MemberUpdate.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'MoneyRow':
       return MoneyRow.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'Payer':

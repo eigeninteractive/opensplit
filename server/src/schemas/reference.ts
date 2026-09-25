@@ -1,6 +1,7 @@
 import { z } from "@hono/zod-openapi";
-import { IdSchema } from "./common";
-import { CurrencySchema, DateSchema } from "./ledger";
+import { fxRates } from "../db/fx/schema";
+import { createSelectSchema, IdSchema } from "./common";
+import { CurrencyCodeSchema, DateSchema } from "./ledger";
 
 /**
  * Reference data and exchange rates: the two responses that are the same for
@@ -11,9 +12,9 @@ import { CurrencySchema, DateSchema } from "./ledger";
  * session read before serving them would buy nothing.
  */
 
-export const CurrencySchemaRow = z
+export const CurrencySchema = z
   .object({
-    code: CurrencySchema,
+    code: CurrencyCodeSchema,
 
     /**
      * How many minor units make a major one, as ISO 4217 defines it.
@@ -48,7 +49,7 @@ export const CategorySchema = z
 
 export const ReferenceSchema = z
   .object({
-    currencies: z.array(CurrencySchemaRow),
+    currencies: z.array(CurrencySchema),
     categories: z.array(CategorySchema),
   })
   .openapi("Reference");
@@ -59,27 +60,7 @@ export const ReferenceSchema = z
  * USD is the pivot and is stored as exactly 1, so any pair is a division and
  * there is no such thing as a supported *pair* — only a supported currency.
  */
-export const FxRateSchema = z
-  .object({
-    /** Publication date, `YYYY-MM-DD`. A rate belongs to a day, not an instant. */
-    asOf: DateSchema,
-    currency: CurrencySchema,
-
-    /** Units of `currency` per one USD. */
-    rate: z.number().positive(),
-
-    /**
-     * Which provider supplied this row.
-     *
-     * Rows for one day can come from different providers, because the
-     * waterfall fills gaps rather than stopping at the first success. Carried
-     * to the device because it is stamped onto any expense converted with it —
-     * a converted amount that cannot say where its rate came from is a number
-     * nobody can check afterwards.
-     */
-    source: z.string(),
-  })
-  .openapi("FxRate");
+export const FxRateSchema = createSelectSchema(fxRates, { asOf: DateSchema, rate: z.number().positive() }).omit({ createdAt: true }).openapi("FxRate");
 
 export const FxPageSchema = z
   .object({
@@ -107,7 +88,7 @@ export const FxPageSchema = z
 export const FxBackfillRequestSchema = z
   .object({
     asOf: DateSchema,
-    currency: CurrencySchema,
+    currency: CurrencyCodeSchema,
   })
   .openapi("FxBackfillRequest");
 
@@ -125,7 +106,7 @@ export const FxBackfillResponseSchema = z
   })
   .openapi("FxBackfillResponse");
 
-export type Currency = z.infer<typeof CurrencySchemaRow>;
+export type Currency = z.infer<typeof CurrencySchema>;
 export type Category = z.infer<typeof CategorySchema>;
 export type Reference = z.infer<typeof ReferenceSchema>;
 export type FxRate = z.infer<typeof FxRateSchema>;

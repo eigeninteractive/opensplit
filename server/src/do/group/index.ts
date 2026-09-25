@@ -9,7 +9,7 @@ import * as schema from "../../db/group/schema";
 import { wakeDevices } from "../../push/fcm";
 // `Group` is the wire shape of a group and also the name of the class below,
 // which wrangler binds by name. The record is the one that gets the alias.
-import type { ChangePage, Entry, EntryInput, GroupCreate, GroupLink, GroupPatch, Group as GroupRecord, Invite, LinkPreview, LinkRevocation, LiveLink, Member, MemberCreate, MemberPatch, Placeholder } from "../../schemas/ledger";
+import type { ChangePage, Entry, EntryInput, GroupCreate, GroupLink, Group as GroupRecord, GroupUpdate, Invite, LinkPreview, LinkRevocation, LiveLink, Member, MemberCreate, MemberUpdate, Placeholder } from "../../schemas/ledger";
 import { changesSince } from "./changes";
 import { createGroupLink, createInvite, join, liveLink, peek, placeholders, revokeGroupLink } from "./invites";
 import { deleteEntry, restoreEntry, upsertEntry } from "./ledger";
@@ -101,7 +101,7 @@ export class Group extends DurableObject<Env> {
     return result;
   }
 
-  async update(patch: Partial<GroupPatch>, profileId: string): Promise<Result<GroupRecord>> {
+  async update(patch: Partial<GroupUpdate>, profileId: string): Promise<Result<GroupRecord>> {
     const result = attempt(() => this.db.transaction((tx) => updateGroup(tx, patch, this.contextFor(tx, profileId)).value));
     await this.settle();
     return result;
@@ -113,7 +113,7 @@ export class Group extends DurableObject<Env> {
     return result;
   }
 
-  async updateMember(memberId: string, patch: Partial<MemberPatch>, profileId: string): Promise<Result<Member>> {
+  async updateMember(memberId: string, patch: Partial<MemberUpdate>, profileId: string): Promise<Result<Member>> {
     const now = nowIso();
     const result = attempt(() =>
       this.db.transaction((tx) => {

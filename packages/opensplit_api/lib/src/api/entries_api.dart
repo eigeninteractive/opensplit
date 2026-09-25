@@ -37,7 +37,7 @@ class EntriesApi {
   Future<Response<Entry>> deleteEntry({
     required String groupId,
     required String entryId,
-    int? baseSeq,
+    required int baseSeq,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -65,9 +65,7 @@ class EntriesApi {
       validateStatus: validateStatus,
     );
 
-    final _queryParameters = <String, dynamic>{
-      if (baseSeq != null) r'baseSeq': baseSeq,
-    };
+    final _queryParameters = <String, dynamic>{r'baseSeq': baseSeq};
 
     final _response = await _dio.request<Object>(
       _path,
@@ -126,7 +124,7 @@ class EntriesApi {
   Future<Response<Entry>> restoreEntry({
     required String groupId,
     required String entryId,
-    int? baseSeq,
+    required int baseSeq,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -154,9 +152,7 @@ class EntriesApi {
       validateStatus: validateStatus,
     );
 
-    final _queryParameters = <String, dynamic>{
-      if (baseSeq != null) r'baseSeq': baseSeq,
-    };
+    final _queryParameters = <String, dynamic>{r'baseSeq': baseSeq};
 
     final _response = await _dio.request<Object>(
       _path,

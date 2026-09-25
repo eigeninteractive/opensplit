@@ -22,12 +22,9 @@ void recordHasGroups(bool hasGroups) {
 
 /// Tells the next cold start whether to draw the app or the welcome screen.
 ///
-/// The loader used to draw the app bar, the rail, the button and the
-/// navigation bar for everybody, on the grounds that they are on the screen in
-/// every state. They are not: `WelcomeScreen` is a bare `Scaffold` with a
-/// centred column and none of that chrome, so somebody arriving signed out —
-/// the person with the emptiest cache and the longest wait — watched a full
-/// app layout paint and then vanish.
+/// `WelcomeScreen` has none of the app's chrome, so a loader that drew the app
+/// bar and navigation for everybody would show a signed-out arrival a full
+/// layout that then vanishes.
 ///
 /// Signing out clears the group hint too. Chrome with cards under it is the
 /// most confident thing this loader can draw, and it would be drawn for

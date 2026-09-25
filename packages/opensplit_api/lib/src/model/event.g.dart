@@ -16,6 +16,7 @@ Event _$EventFromJson(Map<String, dynamic> json) =>
           'createdAt',
           'kind',
           'subjectId',
+          'payload',
           'seq',
           'ordinal',
         ],
@@ -36,7 +37,7 @@ Event _$EventFromJson(Map<String, dynamic> json) =>
           ),
         ),
         subjectId: $checkedConvert('subjectId', (v) => v as String?),
-        payload: $checkedConvert('payload', (v) => v as Map<String, dynamic>?),
+        payload: $checkedConvert('payload', (v) => v as Map<String, dynamic>),
         seq: $checkedConvert('seq', (v) => (v as num).toInt()),
         ordinal: $checkedConvert('ordinal', (v) => (v as num).toInt()),
       );
@@ -49,7 +50,7 @@ Map<String, dynamic> _$EventToJson(Event instance) => <String, dynamic>{
   'createdAt': instance.createdAt.toIso8601String(),
   'kind': _$EventKindEnumMap[instance.kind]!,
   'subjectId': instance.subjectId,
-  'payload': ?instance.payload,
+  'payload': instance.payload,
   'seq': instance.seq,
   'ordinal': instance.ordinal,
 };

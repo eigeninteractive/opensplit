@@ -29,9 +29,9 @@ Entry _$EntryFromJson(
       'createdAt',
       'updatedAt',
       'deletedAt',
+      'seq',
       'payers',
       'shares',
-      'seq',
     ],
   );
   final val = Entry(
@@ -72,6 +72,7 @@ Entry _$EntryFromJson(
       'deletedAt',
       (v) => v == null ? null : DateTime.parse(v as String),
     ),
+    seq: $checkedConvert('seq', (v) => (v as num).toInt()),
     payers: $checkedConvert(
       'payers',
       (v) => (v as List<dynamic>)
@@ -84,7 +85,6 @@ Entry _$EntryFromJson(
           .map((e) => Share.fromJson(e as Map<String, dynamic>))
           .toList(),
     ),
-    seq: $checkedConvert('seq', (v) => (v as num).toInt()),
   );
   return val;
 });
@@ -107,9 +107,9 @@ Map<String, dynamic> _$EntryToJson(Entry instance) => <String, dynamic>{
   'createdAt': instance.createdAt.toIso8601String(),
   'updatedAt': instance.updatedAt.toIso8601String(),
   'deletedAt': instance.deletedAt?.toIso8601String(),
+  'seq': instance.seq,
   'payers': instance.payers.map((e) => e.toJson()).toList(),
   'shares': instance.shares.map((e) => e.toJson()).toList(),
-  'seq': instance.seq,
 };
 
 const _$EntryKindEnumMap = {

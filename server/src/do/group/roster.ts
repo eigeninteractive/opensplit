@@ -1,7 +1,7 @@
 import { eq, isNotNull, sql } from "drizzle-orm";
 
 import * as schema from "../../db/group/schema";
-import type { Group, GroupCreate, GroupPatch, Member, MemberCreate, MemberPatch } from "../../schemas/ledger";
+import type { Group, GroupCreate, GroupUpdate, Member, MemberCreate, MemberUpdate } from "../../schemas/ledger";
 import { isSettled } from "./balances";
 import { append } from "./events";
 import { refuse } from "./refusal";
@@ -106,7 +106,7 @@ export function createGroup(tx: Tx, input: GroupCreate, profileId: string, conte
  * reversible by anybody who disagrees, and all of it is visible — which is the
  * test for whether something needs a rank behind it.
  */
-export function updateGroup(tx: Tx, patch: Partial<GroupPatch>, context: WriteContext): RosterWrite<Group> {
+export function updateGroup(tx: Tx, patch: Partial<GroupUpdate>, context: WriteContext): RosterWrite<Group> {
   const meta = requireMeta(tx);
 
   const name = patch.name ?? meta.name;
@@ -191,7 +191,7 @@ export function addMember(tx: Tx, input: MemberCreate, context: WriteContext): R
  * is why. Rewriting another member's payment handle is the one power here that
  * can redirect real money. Nobody needs it, so nobody has it.
  */
-export function updateMember(tx: Tx, memberId: string, patch: Partial<MemberPatch>, context: WriteContext): RosterWrite<Member> {
+export function updateMember(tx: Tx, memberId: string, patch: Partial<MemberUpdate>, context: WriteContext): RosterWrite<Member> {
   requireMeta(tx);
   const target = requireMember(tx, memberId);
 

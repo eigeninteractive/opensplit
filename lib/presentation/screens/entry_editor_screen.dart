@@ -58,10 +58,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
 
   /// Who is in the split, who paid, and the relative weights.
   ///
-  /// Replaced rather than mutated. They used to be `final` collections handed
-  /// down to the two section widgets, which edited them in place and then asked
-  /// for a rebuild — so a widget declaring itself immutable was the thing
-  /// changing this screen's state, and the fields lied about who owned them.
+  /// Replaced rather than mutated, so only this state object changes them.
   Set<String> _participants = {};
   Map<String, int> _shares = {};
   Set<String> _payers = {};

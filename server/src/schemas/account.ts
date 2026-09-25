@@ -1,6 +1,7 @@
 import { z } from "@hono/zod-openapi";
 
-import { IdSchema, TimestampSchema } from "./common";
+import { profiles } from "../db/d1/schema";
+import { createSelectSchema, IdSchema, TimestampSchema } from "./common";
 import { UpiVpaSchema } from "./ledger";
 
 /**
@@ -13,34 +14,16 @@ import { UpiVpaSchema } from "./ledger";
  * without disturbing anybody else's balances.
  */
 
-export const ProfileSchema = z
-  .object({
-    id: IdSchema,
-
-    /**
-     * Null until somebody chooses one, and the null is load-bearing rather
-     * than lazy. "Nobody has said who this is" and "this person is called
-     * Someone" are different facts that the app acts on differently, and a
-     * sentinel string cannot tell them apart.
-     */
-    displayName: z.string().nullable(),
-
-    /** The payment handle a settle-up hands off to. Only its owner may set it. */
-    upiVpa: z.string().nullable(),
-
-    /** The server's clock, and what the profile feed's cursor advances on. */
-    updatedAt: TimestampSchema,
-
-    /**
-     * Set when the account behind this row was deleted.
-     *
-     * The row survives so co-members' history still resolves a name. A device
-     * reading this stops offering to pay them — a payment handle belonging to
-     * an account that no longer exists is money sent nowhere.
-     */
-    deletedAt: TimestampSchema.nullable(),
-  })
-  .openapi("Profile");
+/**
+ * A person across the app. A null `displayName` means nobody has said who
+ * this is, which the app treats differently from any name. A set `deletedAt`
+ * means the account is gone: the row stays so history still resolves a name,
+ * and a device stops offering to pay them.
+ */
+export const ProfileSchema = createSelectSchema(profiles, {
+  updatedAt: TimestampSchema,
+  deletedAt: TimestampSchema.nullable(),
+}).openapi("Profile");
 
 /**
  * Your own name and payment handle, both of them, every time.
@@ -50,18 +33,7 @@ export const ProfileSchema = z
  * stranger's payment handle, and the only defence would be a check that this
  * shape makes unnecessary.
  *
- * ## Why both fields are required, rather than a patch
- *
- * A patch has to distinguish "leave it alone" from "delete it", and the second
- * is something people genuinely do — a bank account closes and the UPI handle
- * with it. That distinction is absent-versus-null, and it does not survive the
- * Dart client: `json_serializable` emits every optional field with
- * `includeIfNull: false`, so a null is indistinguishable from an omission on
- * the wire and clearing a handle would silently do nothing.
- *
- * Requiring both removes the ambiguity instead of encoding around it, and it
- * matches what the app does anyway — the screen edits the name and the handle
- * together and saves them together.
+ * Both fields, every time, like every other body here (see `ledger.ts`).
  */
 export const ProfileUpdateSchema = z
   .object({

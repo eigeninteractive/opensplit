@@ -39,14 +39,14 @@ abstract interface class RemoteLedgerApi {
   /// Creates the group and its creator's member row in one change.
   Future<api.Group> createGroup(api.GroupCreate input);
 
-  Future<api.Group> updateGroup(String groupId, api.GroupPatch patch);
+  Future<api.Group> updateGroup(String groupId, api.GroupUpdate update);
 
   Future<api.Member> addMember(String groupId, api.MemberCreate input);
 
   Future<api.Member> updateMember(
     String groupId,
     String memberId,
-    api.MemberPatch patch,
+    api.MemberUpdate update,
   );
 
   /// Profiles changed after the `(since, sinceId)` keyset cursor. Both halves
@@ -122,8 +122,8 @@ class CloudflareLedgerApi implements RemoteLedgerApi {
       fetch(_groups.createGroup(groupCreate: input));
 
   @override
-  Future<api.Group> updateGroup(String groupId, api.GroupPatch patch) =>
-      fetch(_groups.updateGroup(groupId: groupId, groupPatch: patch));
+  Future<api.Group> updateGroup(String groupId, api.GroupUpdate update) =>
+      fetch(_groups.updateGroup(groupId: groupId, groupUpdate: update));
 
   @override
   Future<api.Member> addMember(String groupId, api.MemberCreate input) =>
@@ -133,12 +133,12 @@ class CloudflareLedgerApi implements RemoteLedgerApi {
   Future<api.Member> updateMember(
     String groupId,
     String memberId,
-    api.MemberPatch patch,
+    api.MemberUpdate update,
   ) => fetch(
     _groups.updateMember(
       groupId: groupId,
       memberId: memberId,
-      memberPatch: patch,
+      memberUpdate: update,
     ),
   );
 

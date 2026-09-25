@@ -38,7 +38,7 @@ async function makeGroup(host: Guest) {
   const id = freshId("acct");
   const created = await call("/api/groups", host, {
     method: "POST",
-    body: JSON.stringify({ id, name: "Goa trip", defaultCurrency: "INR", memberId: `${id}-host`, displayName: "Ravi" }),
+    body: JSON.stringify({ id, name: "Goa trip", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, memberId: `${id}-host`, displayName: "Ravi" }),
   });
   expect(created.status).toBe(200);
   return id;
@@ -49,7 +49,7 @@ async function share(host: Guest, guest: Guest, name: string) {
   const groupId = await makeGroup(host);
   const link = await json<GroupLink>(await call(`/api/groups/${groupId}/link`, host, { method: "POST" }));
 
-  const joined = await call(`/api/links/${link.token}/join`, guest, { method: "POST", body: JSON.stringify({ displayName: name }) });
+  const joined = await call(`/api/links/${link.token}/join`, guest, { method: "POST", body: JSON.stringify({ memberId: null, displayName: name }) });
   expect(joined.status).toBe(200);
 
   return { groupId, member: (await json<Joined>(joined)).member };
@@ -147,7 +147,7 @@ describe("the profile feed", () => {
     const groupId = await makeGroup(host);
     const link = await json<GroupLink>(await call(`/api/groups/${groupId}/link`, host, { method: "POST" }));
     for (const [index, friend] of friends.entries()) {
-      await call(`/api/links/${link.token}/join`, friend, { method: "POST", body: JSON.stringify({ displayName: `Friend ${index}` }) });
+      await call(`/api/links/${link.token}/join`, friend, { method: "POST", body: JSON.stringify({ memberId: null, displayName: `Friend ${index}` }) });
       await named(friend, `Friend ${index}`);
     }
 

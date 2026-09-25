@@ -8,7 +8,10 @@ part of 'share.dart';
 
 Share _$ShareFromJson(Map<String, dynamic> json) =>
     $checkedCreate('Share', json, ($checkedConvert) {
-      $checkKeys(json, requiredKeys: const ['memberId', 'amountMinor']);
+      $checkKeys(
+        json,
+        requiredKeys: const ['memberId', 'amountMinor', 'weightMicros'],
+      );
       final val = Share(
         memberId: $checkedConvert('memberId', (v) => v as String),
         amountMinor: $checkedConvert('amountMinor', (v) => (v as num).toInt()),
@@ -23,5 +26,5 @@ Share _$ShareFromJson(Map<String, dynamic> json) =>
 Map<String, dynamic> _$ShareToJson(Share instance) => <String, dynamic>{
   'memberId': instance.memberId,
   'amountMinor': instance.amountMinor,
-  'weightMicros': ?instance.weightMicros,
+  'weightMicros': instance.weightMicros,
 };

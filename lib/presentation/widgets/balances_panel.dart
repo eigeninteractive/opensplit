@@ -303,18 +303,9 @@ class _TransferTile extends StatelessWidget {
         : '$from pays ${transfer.toMemberId == ledger.me?.id ? 'you' : to}';
 
     // One control in `trailing`, which is all a Material list item has room
-    // for. This used to hold a help IconButton and the Settle button side by
-    // side in a Wrap: two targets competing for a slot sized for one, which on
-    // a narrow phone wrapped to a second line and dragged the row out of
-    // alignment with every other row in the card.
-    //
-    // The explanation moves onto the row itself — tapping a list item to see
-    // more about it is the ordinary gesture, and it gives the reasoning a far
-    // bigger target than a 24dp icon. The icon stays as a hint that there is
-    // something to tap, but it is no longer a separate button.
+    // for. The explanation is on the row itself: tapping a list item to see
+    // more is the ordinary gesture, and the icon is only a hint.
     return Semantics(
-      // The tooltip that used to say this belonged to the help button, which
-      // is gone; the row carries the affordance now, so it carries the words.
       hint: 'Shows how this payment was worked out',
       child: ListTile(
         onTap: () => _explain(context),

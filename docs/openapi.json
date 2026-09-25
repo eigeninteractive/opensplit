@@ -28,7 +28,7 @@
           },
           "entryDate": {
             "type": "string",
-            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "format": "date",
             "example": "2026-09-23"
           },
           "splitKind": {
@@ -314,15 +314,17 @@
             "minLength": 1
           },
           "nonce": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "allowSignIn": {
-            "type": "boolean",
-            "default": false
+            "type": "boolean"
           }
         },
         "required": [
-          "idToken"
+          "idToken",
+          "nonce",
+          "allowSignIn"
         ]
       },
       "EmailStartResponse": {
@@ -477,18 +479,13 @@
         "nullable": true,
         "properties": {
           "id": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 64,
-            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            "type": "string"
           },
           "name": {
             "type": "string"
           },
           "defaultCurrency": {
-            "type": "string",
-            "pattern": "^[A-Z]{3}$",
-            "example": "INR"
+            "type": "string"
           },
           "isDirect": {
             "type": "boolean"
@@ -497,10 +494,7 @@
             "type": "boolean"
           },
           "createdBy": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 64,
-            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            "type": "string"
           },
           "createdAt": {
             "type": "string",
@@ -541,17 +535,11 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 64,
-            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            "type": "string"
           },
           "profileId": {
             "type": "string",
-            "nullable": true,
-            "minLength": 1,
-            "maxLength": 64,
-            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            "nullable": true
           },
           "displayName": {
             "type": "string"
@@ -597,10 +585,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 64,
-            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            "type": "string"
           },
           "kind": {
             "$ref": "#/components/schemas/EntryKind"
@@ -610,15 +595,10 @@
           },
           "categoryId": {
             "type": "string",
-            "nullable": true,
-            "minLength": 1,
-            "maxLength": 64,
-            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            "nullable": true
           },
           "currency": {
-            "type": "string",
-            "pattern": "^[A-Z]{3}$",
-            "example": "INR"
+            "type": "string"
           },
           "amountMinor": {
             "type": "integer",
@@ -627,7 +607,7 @@
           },
           "entryDate": {
             "type": "string",
-            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "format": "date",
             "example": "2026-09-23"
           },
           "splitKind": {
@@ -654,17 +634,11 @@
             "nullable": true
           },
           "createdBy": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 64,
-            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            "type": "string"
           },
           "clientKey": {
             "type": "string",
-            "nullable": true,
-            "minLength": 1,
-            "maxLength": 64,
-            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            "nullable": true
           },
           "createdAt": {
             "type": "string",
@@ -682,6 +656,11 @@
             "format": "date-time",
             "example": "2026-09-23T11:20:41.865Z"
           },
+          "seq": {
+            "type": "integer",
+            "minimum": 0,
+            "example": 412
+          },
           "payers": {
             "type": "array",
             "items": {
@@ -693,11 +672,6 @@
             "items": {
               "$ref": "#/components/schemas/Share"
             }
-          },
-          "seq": {
-            "type": "integer",
-            "minimum": 0,
-            "example": 412
           }
         },
         "required": [
@@ -718,9 +692,9 @@
           "createdAt",
           "updatedAt",
           "deletedAt",
+          "seq",
           "payers",
-          "shares",
-          "seq"
+          "shares"
         ]
       },
       "Payer": {
@@ -758,30 +732,24 @@
           },
           "weightMicros": {
             "type": "integer",
-            "nullable": true,
-            "default": null
+            "nullable": true
           }
         },
         "required": [
           "memberId",
-          "amountMinor"
+          "amountMinor",
+          "weightMicros"
         ]
       },
       "Event": {
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 64,
-            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            "type": "string"
           },
           "actorId": {
             "type": "string",
-            "nullable": true,
-            "minLength": 1,
-            "maxLength": 64,
-            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            "nullable": true
           },
           "createdAt": {
             "type": "string",
@@ -793,10 +761,7 @@
           },
           "subjectId": {
             "type": "string",
-            "nullable": true,
-            "minLength": 1,
-            "maxLength": 64,
-            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            "nullable": true
           },
           "payload": {
             "type": "object",
@@ -821,6 +786,7 @@
           "createdAt",
           "kind",
           "subjectId",
+          "payload",
           "seq",
           "ordinal"
         ]
@@ -860,12 +826,10 @@
             "example": "INR"
           },
           "isDirect": {
-            "type": "boolean",
-            "default": false
+            "type": "boolean"
           },
           "simplifyDebts": {
-            "type": "boolean",
-            "default": true
+            "type": "boolean"
           },
           "memberId": {
             "type": "string",
@@ -883,11 +847,13 @@
           "id",
           "name",
           "defaultCurrency",
+          "isDirect",
+          "simplifyDebts",
           "memberId",
           "displayName"
         ]
       },
-      "GroupPatch": {
+      "GroupUpdate": {
         "type": "object",
         "properties": {
           "name": {
@@ -906,6 +872,8 @@
           }
         },
         "required": [
+          "name",
+          "simplifyDebts",
           "archivedAt"
         ]
       },
@@ -927,16 +895,16 @@
             "type": "string",
             "nullable": true,
             "pattern": "^[a-zA-Z0-9._-]{2,64}@[a-zA-Z]{2,64}$",
-            "default": null,
             "example": "ravi@okhdfcbank"
           }
         },
         "required": [
           "id",
-          "displayName"
+          "displayName",
+          "upiVpa"
         ]
       },
-      "MemberPatch": {
+      "MemberUpdate": {
         "type": "object",
         "properties": {
           "displayName": {
@@ -958,6 +926,7 @@
           }
         },
         "required": [
+          "displayName",
           "upiVpa",
           "leftAt"
         ]
@@ -976,15 +945,13 @@
           },
           "description": {
             "type": "string",
-            "maxLength": 500,
-            "default": ""
+            "maxLength": 500
           },
           "categoryId": {
             "type": "string",
             "nullable": true,
             "minLength": 1,
             "maxLength": 64,
-            "default": null,
             "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
           },
           "currency": {
@@ -999,7 +966,7 @@
           },
           "entryDate": {
             "type": "string",
-            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "format": "date",
             "example": "2026-09-23"
           },
           "splitKind": {
@@ -1009,27 +976,23 @@
             "type": "number",
             "nullable": true,
             "minimum": 0,
-            "exclusiveMinimum": true,
-            "default": null
+            "exclusiveMinimum": true
           },
           "fxSource": {
             "type": "string",
             "nullable": true,
-            "maxLength": 64,
-            "default": null
+            "maxLength": 64
           },
           "notes": {
             "type": "string",
             "nullable": true,
-            "maxLength": 2000,
-            "default": null
+            "maxLength": 2000
           },
           "clientKey": {
             "type": "string",
             "nullable": true,
             "minLength": 1,
             "maxLength": 64,
-            "default": null,
             "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
           },
           "payers": {
@@ -1050,39 +1013,38 @@
             "type": "integer",
             "nullable": true,
             "minimum": 0,
-            "default": null,
             "example": 412
           }
         },
         "required": [
           "id",
+          "kind",
+          "description",
+          "categoryId",
           "currency",
           "amountMinor",
           "entryDate",
+          "splitKind",
+          "fxRate",
+          "fxSource",
+          "notes",
+          "clientKey",
           "payers",
-          "shares"
+          "shares",
+          "baseSeq"
         ]
       },
       "Invite": {
         "type": "object",
         "properties": {
           "token": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 64,
-            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            "type": "string"
           },
           "memberId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 64,
-            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            "type": "string"
           },
           "createdBy": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 64,
-            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            "type": "string"
           },
           "createdAt": {
             "type": "string",
@@ -1102,10 +1064,7 @@
           },
           "redeemedBy": {
             "type": "string",
-            "nullable": true,
-            "minLength": 1,
-            "maxLength": 64,
-            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            "nullable": true
           }
         },
         "required": [
@@ -1208,10 +1167,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 64,
-            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            "type": "string"
           },
           "displayName": {
             "type": "string",
@@ -1440,17 +1396,19 @@
             "nullable": true,
             "minLength": 1,
             "maxLength": 64,
-            "default": null,
             "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
           },
           "displayName": {
             "type": "string",
             "nullable": true,
             "minLength": 1,
-            "maxLength": 100,
-            "default": null
+            "maxLength": 100
           }
-        }
+        },
+        "required": [
+          "memberId",
+          "displayName"
+        ]
       },
       "Reference": {
         "type": "object",
@@ -1546,13 +1504,11 @@
         "properties": {
           "asOf": {
             "type": "string",
-            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "format": "date",
             "example": "2026-09-23"
           },
           "currency": {
-            "type": "string",
-            "pattern": "^[A-Z]{3}$",
-            "example": "INR"
+            "type": "string"
           },
           "rate": {
             "type": "number",
@@ -1586,7 +1542,7 @@
         "properties": {
           "asOf": {
             "type": "string",
-            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "format": "date",
             "example": "2026-09-23"
           },
           "currency": {
@@ -1996,13 +1952,13 @@
       }
     },
     "/api/groups/{groupId}": {
-      "patch": {
+      "put": {
         "operationId": "updateGroup",
         "tags": [
           "groups"
         ],
         "summary": "Rename, archive or change a setting",
-        "description": "A patch, not a whole row. There are no fields for `id`, `createdAt` or `createdBy`, which is why nothing needs to forbid rewriting them.",
+        "description": "Every editable field, every time. There are no fields for `id`, `createdAt` or `createdBy`, which is why nothing needs to forbid rewriting them.",
         "parameters": [
           {
             "schema": {
@@ -2021,7 +1977,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/GroupPatch"
+                "$ref": "#/components/schemas/GroupUpdate"
               }
             }
           }
@@ -2226,7 +2182,7 @@
       }
     },
     "/api/groups/{groupId}/members/{memberId}": {
-      "patch": {
+      "put": {
         "operationId": "updateMember",
         "tags": [
           "groups"
@@ -2262,7 +2218,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MemberPatch"
+                "$ref": "#/components/schemas/MemberUpdate"
               }
             }
           }
@@ -2502,7 +2458,7 @@
               "type": "integer",
               "example": 412
             },
-            "required": false,
+            "required": true,
             "name": "baseSeq",
             "in": "query"
           }
@@ -2626,7 +2582,7 @@
               "type": "integer",
               "example": 412
             },
-            "required": false,
+            "required": true,
             "name": "baseSeq",
             "in": "query"
           }
@@ -3763,7 +3719,7 @@
           {
             "schema": {
               "type": "string",
-              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "format": "date",
               "example": "2026-09-23"
             },
             "required": true,

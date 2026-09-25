@@ -1,8 +1,17 @@
 /// Where the generated wire types meet local storage, in both directions.
 ///
-/// The only translation between the two. The one local-only fact a wire row
-/// lacks is its `groupId`: the server scopes every row by the group it lives
-/// in, so the group comes from the page or the request.
+/// The only translation between the two, and it exists because a local row is
+/// not a server row:
+///
+/// - it can exist before the server has seen it, so `seq` is nullable here
+///   and required on the wire;
+/// - one local database holds every group, so rows carry the `groupId` that
+///   the server states once per page;
+/// - an expense is three tables here and one nested object on the wire;
+/// - a calendar date is a `DateTime` here and `yyyy-MM-dd` on the wire.
+///
+/// Requests are built from the current local row at push time, which is why
+/// the outbound half is here too.
 library;
 
 import 'package:opensplit_api/opensplit_api.dart' as api;
@@ -83,7 +92,7 @@ extension EventFromWire on api.Event {
     createdAt: createdAt,
     kind: kind,
     subjectId: subjectId,
-    payload: payload ?? const {},
+    payload: payload,
     seq: seq,
     ordinal: ordinal,
     isProvisional: false,
@@ -156,7 +165,7 @@ extension GroupToWire on Group {
     displayName: creator.displayName,
   );
 
-  api.GroupPatch toPatch() => api.GroupPatch(
+  api.GroupUpdate toUpdate() => api.GroupUpdate(
     name: name,
     simplifyDebts: simplifyDebts,
     archivedAt: archivedAt,
@@ -167,8 +176,11 @@ extension MemberToWire on Member {
   api.MemberCreate toCreate() =>
       api.MemberCreate(id: id, displayName: displayName, upiVpa: upiVpa);
 
-  api.MemberPatch toPatch() =>
-      api.MemberPatch(displayName: displayName, upiVpa: upiVpa, leftAt: leftAt);
+  api.MemberUpdate toUpdate() => api.MemberUpdate(
+    displayName: displayName,
+    upiVpa: upiVpa,
+    leftAt: leftAt,
+  );
 }
 
 extension ProfileToWire on Profile {

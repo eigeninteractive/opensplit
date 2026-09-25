@@ -80,8 +80,7 @@ const paidFieldPrefix = 'paid';
 
 /// Who owes what, and who put money down, member by member.
 ///
-/// The half that used to be missing entirely, and the half that matters most.
-/// An edit that rewrites the split while leaving the total alone moves real
+/// The half that matters most. An edit that rewrites the split while leaving the total alone moves real
 /// money between people, satisfies the balance invariant, and changes no number
 /// a casual reader would think to check. Reported per member rather than as
 /// "the split changed", because the useful sentence names who gained and who

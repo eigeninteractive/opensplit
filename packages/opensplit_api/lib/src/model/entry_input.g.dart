@@ -12,31 +12,40 @@ EntryInput _$EntryInputFromJson(Map<String, dynamic> json) =>
         json,
         requiredKeys: const [
           'id',
+          'kind',
+          'description',
+          'categoryId',
           'currency',
           'amountMinor',
           'entryDate',
+          'splitKind',
+          'fxRate',
+          'fxSource',
+          'notes',
+          'clientKey',
           'payers',
           'shares',
+          'baseSeq',
         ],
       );
       final val = EntryInput(
         id: $checkedConvert('id', (v) => v as String),
         kind: $checkedConvert(
           'kind',
-          (v) => $enumDecodeNullable(
+          (v) => $enumDecode(
             _$EntryKindEnumMap,
             v,
             unknownValue: EntryKind.unknownDefaultOpenApi,
           ),
         ),
-        description: $checkedConvert('description', (v) => v as String? ?? ''),
+        description: $checkedConvert('description', (v) => v as String),
         categoryId: $checkedConvert('categoryId', (v) => v as String?),
         currency: $checkedConvert('currency', (v) => v as String),
         amountMinor: $checkedConvert('amountMinor', (v) => (v as num).toInt()),
         entryDate: $checkedConvert('entryDate', (v) => v as String),
         splitKind: $checkedConvert(
           'splitKind',
-          (v) => $enumDecodeNullable(
+          (v) => $enumDecode(
             _$SplitKindEnumMap,
             v,
             unknownValue: SplitKind.unknownDefaultOpenApi,
@@ -66,20 +75,20 @@ EntryInput _$EntryInputFromJson(Map<String, dynamic> json) =>
 Map<String, dynamic> _$EntryInputToJson(EntryInput instance) =>
     <String, dynamic>{
       'id': instance.id,
-      'kind': ?_$EntryKindEnumMap[instance.kind],
-      'description': ?instance.description,
-      'categoryId': ?instance.categoryId,
+      'kind': _$EntryKindEnumMap[instance.kind]!,
+      'description': instance.description,
+      'categoryId': instance.categoryId,
       'currency': instance.currency,
       'amountMinor': instance.amountMinor,
       'entryDate': instance.entryDate,
-      'splitKind': ?_$SplitKindEnumMap[instance.splitKind],
-      'fxRate': ?instance.fxRate,
-      'fxSource': ?instance.fxSource,
-      'notes': ?instance.notes,
-      'clientKey': ?instance.clientKey,
+      'splitKind': _$SplitKindEnumMap[instance.splitKind]!,
+      'fxRate': instance.fxRate,
+      'fxSource': instance.fxSource,
+      'notes': instance.notes,
+      'clientKey': instance.clientKey,
       'payers': instance.payers.map((e) => e.toJson()).toList(),
       'shares': instance.shares.map((e) => e.toJson()).toList(),
-      'baseSeq': ?instance.baseSeq,
+      'baseSeq': instance.baseSeq,
     };
 
 const _$EntryKindEnumMap = {

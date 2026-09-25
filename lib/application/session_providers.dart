@@ -38,15 +38,9 @@ Stream<Account?> account(Ref ref) {
 /// somebody chose Google, an email code, or [continueAsGuest].
 @Riverpod(keepAlive: true)
 class SessionController extends _$SessionController {
-  /// Synchronous, and that is the whole point.
-  ///
-  /// This used to be `Future<Account?> build() async` with no `await` in it —
-  /// a synchronous read dressed as an asynchronous one. Riverpod honours the
-  /// signature rather than the body, so the first state was always
-  /// `AsyncLoading`, and every reader had to decide what a loading session
-  /// meant. The router decided it meant "signed out" and navigated, which put
-  /// a flash of the welcome screen in front of everybody who was already
-  /// signed in, on every load.
+  /// Synchronous, deliberately. An async `build` would start in
+  /// `AsyncLoading`, and the router would read a loading session as signed
+  /// out and flash the welcome screen at everybody already signed in.
   ///
   /// `BetterAuthService` restores the stored session in its constructor before
   /// `runApp`, so by the time anything can ask, `currentUser` answers from

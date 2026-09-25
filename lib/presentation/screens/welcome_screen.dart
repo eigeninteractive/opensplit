@@ -1,29 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../domain/repositories/auth_service.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/identity_choices.dart';
 import '../widgets/page_body.dart';
 
 /// Where somebody with no session lands.
 ///
-/// It exists because the app used to answer this question on the user's behalf,
-/// signing in anonymously the moment it opened. That was defended as removing a
-/// wall from the invite path, and the wall really is worth removing — but the
-/// implementation put a throwaway account in the way of everyone who already
-/// had a real one, which is most people arriving from a link. They could not
-/// sign in to what was already theirs without first being somebody else.
+/// The three routes are offered together and none of them is a wall: being a
+/// guest is one tap, it is a real account, and everything works afterwards.
+/// See [AuthService] for why the app never picks for them.
 ///
-/// So the three routes are offered together and none of them is a wall: being
-/// a guest is one tap, it is a real account, and everything works afterwards.
-///
-/// Nothing here navigates once one of them succeeds, and that is deliberate.
-/// The router's guard already sends a signed-in visitor from `/welcome` to
-/// wherever they were headed — see [redirectAppRoute] — so a `context.go` here
-/// as well would be a second answer to a question that already has one. It used
-/// to do exactly that, and the two raced: the screen moved first, the guard
-/// re-ran behind it, and the welcome screen was left animating out over the
-/// group list for the better part of a second.
+/// Nothing here navigates once one of them succeeds. The router's guard
+/// already sends a signed-in visitor from `/welcome` to wherever they were
+/// headed — see [redirectAppRoute] — and a second `context.go` here would race
+/// it.
 class WelcomeScreen extends ConsumerWidget {
   const WelcomeScreen({super.key});
 

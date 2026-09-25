@@ -1,3 +1,4 @@
+import '../calendar_date.dart';
 import '../models/currency.dart';
 import '../models/entry.dart';
 
@@ -45,7 +46,7 @@ String entriesToCsv(
 
     buffer.writeln(
       _row([
-        entry.entryDate.toIso8601String().split('T').first,
+        calendarDate(entry.entryDate),
         entry.kind.name,
         entry.description,
         entry.categoryId == null ? '' : categoryNames[entry.categoryId] ?? '',

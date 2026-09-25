@@ -91,8 +91,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 ///
 /// Settings pages put the account first because it is the thing a user checks
 /// rather than changes, and because "am I actually signed in?" is the question
-/// this screen most often gets opened to answer. It used to be answerable only
-/// by scrolling past three other sections to a form.
+/// this screen most often gets opened to answer.
 ///
 /// Leads to a screen rather than expanding in place. The linking flow has its
 /// own state — an email field, a sent code, an error — and a settings list is

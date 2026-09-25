@@ -74,19 +74,10 @@ class BrandLockup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Taken from the text style actually in force, not from a named one in the
-    // theme.
-    //
-    // It used to read `textTheme.titleLarge` directly, which was right in the
-    // only place it was used -- a small app bar -- and wrong the moment there
-    // was a second. A Material 3 large app bar animates its title between
-    // titleLarge collapsed and headlineMedium expanded, so a hardcoded size
-    // would have left the ring at its small-bar size while the word beside it
-    // grew by six points and then shrank back on every scroll.
-    //
-    // DefaultTextStyle is what AppBar and FlexibleSpaceBar both set, and what
-    // they animate, so reading it makes the lockup scale with whatever is
-    // rendering it and keeps the ratio the designer's at every size.
+    // Taken from the text style in force rather than a named theme style: a
+    // large app bar animates its title between two sizes, and DefaultTextStyle
+    // is what AppBar and FlexibleSpaceBar set and animate, so the ring scales
+    // with the word beside it.
     final fontSize = DefaultTextStyle.of(context).style.fontSize ?? 22;
     final size =
         MediaQuery.textScalerOf(context).scale(fontSize) * _boxPerFontSize;
@@ -123,10 +114,7 @@ class BrandLockup extends StatelessWidget {
 /// The mark, the name and a line of explanation, stacked — what an arrival
 /// sees before they are asked anything.
 ///
-/// Used on the two screens somebody can reach without a session. Both used to
-/// open on a bare [Text] of the word "OpenSplit", which said the name and
-/// nothing else: the first screen of an app whose whole pitch is that it is not
-/// the incumbent looked like an untitled form.
+/// Used on the two screens somebody can reach without a session.
 ///
 /// The mark sits in a [ColorScheme.primaryContainer] disc rather than on the
 /// page. A knockout ring drawn straight onto `surface` reads as a stray glyph

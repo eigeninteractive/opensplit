@@ -13,17 +13,11 @@ import 'session_store.dart';
 
 /// Identity, against the Worker.
 ///
-/// ## Why this is so much thinner than what it replaces
+/// The distinction auth turns on — attaching an identity to the session you
+/// already have, versus authenticating as whoever owns it — is decided by the
+/// server in `identity/routes.ts`, where every branch is testable.
 ///
-/// The distinction the whole of auth turns on — attaching an identity to the
-/// session you already have, versus authenticating as whoever owns it — used to
-/// live here, in four hundred lines of Dart that no test could reach without a
-/// live backend. It now lives in `identity/routes.ts`, where every branch is
-/// reachable from `vitest`, including the one that only fires when an identity
-/// already belongs to somebody. That is exactly where the damage happens, and
-/// exactly what was previously untestable.
-///
-/// So what is left here is three things: carrying the session, translating the
+/// What is left here is three things: carrying the session, translating the
 /// server's answer into the sum type the app is written against, and the one
 /// decision that genuinely cannot be made on a server — which of two Google
 /// flows this platform can run.

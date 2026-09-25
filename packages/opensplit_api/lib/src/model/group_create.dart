@@ -22,9 +22,9 @@ class GroupCreate {
 
     required this.defaultCurrency,
 
-    this.isDirect = false,
+    required this.isDirect,
 
-    this.simplifyDebts = true,
+    required this.simplifyDebts,
 
     required this.memberId,
 
@@ -40,21 +40,11 @@ class GroupCreate {
   @JsonKey(name: r'defaultCurrency', required: true, includeIfNull: false)
   final String defaultCurrency;
 
-  @JsonKey(
-    defaultValue: false,
-    name: r'isDirect',
-    required: false,
-    includeIfNull: false,
-  )
-  final bool? isDirect;
+  @JsonKey(name: r'isDirect', required: true, includeIfNull: false)
+  final bool isDirect;
 
-  @JsonKey(
-    defaultValue: true,
-    name: r'simplifyDebts',
-    required: false,
-    includeIfNull: false,
-  )
-  final bool? simplifyDebts;
+  @JsonKey(name: r'simplifyDebts', required: true, includeIfNull: false)
+  final bool simplifyDebts;
 
   @JsonKey(name: r'memberId', required: true, includeIfNull: false)
   final String memberId;

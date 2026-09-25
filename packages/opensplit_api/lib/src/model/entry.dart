@@ -54,11 +54,11 @@ class Entry {
 
     required this.deletedAt,
 
+    required this.seq,
+
     required this.payers,
 
     required this.shares,
-
-    required this.seq,
   });
 
   @JsonKey(name: r'id', required: true, includeIfNull: false)
@@ -124,15 +124,15 @@ class Entry {
   @JsonKey(name: r'deletedAt', required: true, includeIfNull: true)
   final DateTime? deletedAt;
 
+  // minimum: 0
+  @JsonKey(name: r'seq', required: true, includeIfNull: false)
+  final int seq;
+
   @JsonKey(name: r'payers', required: true, includeIfNull: false)
   final List<Payer> payers;
 
   @JsonKey(name: r'shares', required: true, includeIfNull: false)
   final List<Share> shares;
-
-  // minimum: 0
-  @JsonKey(name: r'seq', required: true, includeIfNull: false)
-  final int seq;
 
   @override
   bool operator ==(Object other) =>
@@ -155,9 +155,9 @@ class Entry {
           other.createdAt == createdAt &&
           other.updatedAt == updatedAt &&
           other.deletedAt == deletedAt &&
+          other.seq == seq &&
           other.payers == payers &&
-          other.shares == shares &&
-          other.seq == seq;
+          other.shares == shares;
 
   @override
   int get hashCode =>
@@ -178,9 +178,9 @@ class Entry {
       createdAt.hashCode +
       updatedAt.hashCode +
       (deletedAt == null ? 0 : deletedAt.hashCode) +
+      seq.hashCode +
       payers.hashCode +
-      shares.hashCode +
-      seq.hashCode;
+      shares.hashCode;
 
   factory Entry.fromJson(Map<String, dynamic> json) => _$EntryFromJson(json);
 

@@ -17,9 +17,7 @@ import 'tables.dart';
 -- migration drops and recreates it like anything else instead of needing to
 -- know it exists.
 --
--- There is no Postgres counterpart to keep this in step with. Server-side full
--- text search is a `tsvector` column and a GIN index rather than a table, and
--- this app does not use it: search never leaves the device.
+-- Search never leaves the device, so there is no server counterpart.
 CREATE VIRTUAL TABLE entries_fts USING fts5(
   description,
   notes,

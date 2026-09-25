@@ -45,10 +45,6 @@ Stream<Profile?> profile(Ref ref, String? profileId) => profileId == null
 /// That is what makes a rename propagate: co-members can already read each
 /// other's profiles, so the name travels with the next sync instead of being
 /// a copy frozen into whichever group happened to be open when it was typed.
-///
-/// It also means there is exactly one name. There used to be three — a
-/// preference, a `profiles` row mirrored from it, and a `members.display_name`
-/// per group — and nothing kept them in step.
 @riverpod
 Stream<Profile?> myProfile(Ref ref) {
   final accountId = ref.watch(currentAccountIdProvider);
@@ -298,8 +294,7 @@ GroupLedger? groupLedger(Ref ref, String groupId) {
 /// case rather than a zero, because "we could not convert this" and "you are
 /// settled" are very different statements to make about someone's money.
 ///
-/// Synchronous, and no longer touches the rate table: every rate it needs is
-/// already stamped on the entry that used it.
+/// Synchronous: every rate it needs is stamped on the entry that used it.
 @riverpod
 EstimatedTotal? groupEstimate(Ref ref, String groupId) {
   final ledger = ref.watch(groupLedgerProvider(groupId));

@@ -341,12 +341,9 @@ accumulating gets no converted estimate for those. Balances are unaffected —
 they are per-currency and exact.
 
 Adding a provider is one adapter in `server/src/fx/providers.ts` plus one entry
-in the array at the bottom of it. It used to be a row in an `fx_providers`
-table that could be reordered without a deploy; that bought nothing, because
-there was no interface to edit it with and every change was a migration
-anyway. What was worth keeping is the health record — each provider's last
-attempt, success and error — because "why is AED missing" is otherwise
-unanswerable from outside.
+in the array at the bottom of it. Each provider's last attempt, success and
+error are recorded, because "why is AED missing" is otherwise unanswerable
+from outside.
 
 ### Firebase, for push and Google sign-in
 
@@ -679,10 +676,9 @@ The deployed tree is two things, and the split is the point:
 ```
 
 `site/` needs no engine, no session and no JavaScript, so a crawler, a Play
-reviewer and a Google OAuth reviewer can all read what the app is. The client
-used to sit at the root, which meant the public face of the product was a
-sign-in screen — the router sends anyone without a session to `/welcome` — and
-OAuth branding verification failed on exactly that.
+reviewer and a Google OAuth reviewer can all read what the app is. With the
+client at the root, the public face would be a sign-in screen, which OAuth
+branding verification rejects.
 
 Nothing in Dart knows about the prefix. `--base-href=/app/` puts it below the
 path URL strategy, so go_router still sees `/g/123` while the browser shows

@@ -194,13 +194,13 @@ class FakeRemoteLedger implements RemoteLedgerApi {
   ) => Entry(
     id: input.id,
     groupId: groupId,
-    kind: input.kind ?? api.EntryKind.expense,
-    description: input.description ?? '',
+    kind: input.kind,
+    description: input.description,
     categoryId: input.categoryId,
     currency: input.currency,
     amountMinor: input.amountMinor,
     entryDate: parseCalendarDate(input.entryDate),
-    splitKind: input.splitKind ?? api.SplitKind.equal,
+    splitKind: input.splitKind,
     payers: [
       for (final payer in input.payers)
         EntryPayer(memberId: payer.memberId, amountMinor: payer.amountMinor),
@@ -285,8 +285,8 @@ class FakeRemoteLedger implements RemoteLedgerApi {
       id: input.id,
       name: input.name,
       defaultCurrency: input.defaultCurrency,
-      isDirect: input.isDirect ?? false,
-      simplifyDebts: input.simplifyDebts ?? true,
+      isDirect: input.isDirect,
+      simplifyDebts: input.simplifyDebts,
       createdBy: input.memberId,
       createdAt: at,
       seq: seq,
@@ -303,12 +303,12 @@ class FakeRemoteLedger implements RemoteLedgerApi {
   }
 
   @override
-  Future<api.Group> updateGroup(String groupId, api.GroupPatch patch) async {
+  Future<api.Group> updateGroup(String groupId, api.GroupUpdate update) async {
     final fake = _group(groupId);
     fake.meta = fake.meta.copyWith(
-      name: patch.name ?? fake.meta.name,
-      simplifyDebts: patch.simplifyDebts ?? fake.meta.simplifyDebts,
-      archivedAt: Value(patch.archivedAt),
+      name: update.name,
+      simplifyDebts: update.simplifyDebts,
+      archivedAt: Value(update.archivedAt),
       seq: Value(fake.nextSeq()),
     );
     return _group$(fake.meta);
@@ -333,7 +333,7 @@ class FakeRemoteLedger implements RemoteLedgerApi {
   Future<api.Member> updateMember(
     String groupId,
     String memberId,
-    api.MemberPatch patch,
+    api.MemberUpdate update,
   ) async {
     final fake = _group(groupId);
     final stored =
@@ -345,9 +345,9 @@ class FakeRemoteLedger implements RemoteLedgerApi {
         ));
 
     final written = stored.copyWith(
-      displayName: patch.displayName ?? stored.displayName,
-      upiVpa: Value(patch.upiVpa),
-      leftAt: Value(patch.leftAt),
+      displayName: update.displayName,
+      upiVpa: Value(update.upiVpa),
+      leftAt: Value(update.leftAt),
       seq: Value(fake.nextSeq()),
     );
     fake.members[memberId] = written;

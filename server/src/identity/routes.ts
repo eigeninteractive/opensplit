@@ -34,11 +34,8 @@ import { type Account, type IdentityOutcome, outcomeFor, toAccount } from "./out
  * signing in when the identity provably belongs to somebody already — and
  * reports which of the two happened, because the caller has to say so.
  *
- * ## Why it is here and not in Dart
- *
- * It used to be four hundred lines of Dart that no test could reach without a
- * live backend. In TypeScript, inside the Worker, every branch is reachable
- * from `vitest` — including the ones that only fire when an identity is already
+ * Decided here rather than on the device so every branch is reachable from
+ * `vitest`, including the ones that only fire when an identity is already
  * claimed, which is exactly where the damage happens.
  */
 
@@ -109,7 +106,7 @@ export function identityRoutes() {
     const before = session?.userId ?? null;
     const credential = {
       provider: "google" as const,
-      idToken: { token: idToken, nonce },
+      idToken: { token: idToken, nonce: nonce ?? undefined },
     };
 
     // Nobody is signed in, so there is nothing to attach this to and nothing

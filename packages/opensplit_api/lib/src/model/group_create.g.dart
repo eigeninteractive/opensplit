@@ -14,6 +14,8 @@ GroupCreate _$GroupCreateFromJson(Map<String, dynamic> json) =>
           'id',
           'name',
           'defaultCurrency',
+          'isDirect',
+          'simplifyDebts',
           'memberId',
           'displayName',
         ],
@@ -22,11 +24,8 @@ GroupCreate _$GroupCreateFromJson(Map<String, dynamic> json) =>
         id: $checkedConvert('id', (v) => v as String),
         name: $checkedConvert('name', (v) => v as String),
         defaultCurrency: $checkedConvert('defaultCurrency', (v) => v as String),
-        isDirect: $checkedConvert('isDirect', (v) => v as bool? ?? false),
-        simplifyDebts: $checkedConvert(
-          'simplifyDebts',
-          (v) => v as bool? ?? true,
-        ),
+        isDirect: $checkedConvert('isDirect', (v) => v as bool),
+        simplifyDebts: $checkedConvert('simplifyDebts', (v) => v as bool),
         memberId: $checkedConvert('memberId', (v) => v as String),
         displayName: $checkedConvert('displayName', (v) => v as String),
       );
@@ -38,8 +37,8 @@ Map<String, dynamic> _$GroupCreateToJson(GroupCreate instance) =>
       'id': instance.id,
       'name': instance.name,
       'defaultCurrency': instance.defaultCurrency,
-      'isDirect': ?instance.isDirect,
-      'simplifyDebts': ?instance.simplifyDebts,
+      'isDirect': instance.isDirect,
+      'simplifyDebts': instance.simplifyDebts,
       'memberId': instance.memberId,
       'displayName': instance.displayName,
     };

@@ -1,16 +1,19 @@
 import { z } from "@hono/zod-openapi";
+import { createSchemaFactory } from "drizzle-zod";
 
 import { refusalCodes } from "../do/group/refusal";
 
 /**
  * The wire format, declared once.
  *
- * Each schema here is three things at once: the runtime validator that rejects
- * a malformed request, the TypeScript type the handler is written against, and
- * the OpenAPI definition the Dart client is generated from. There is no second
- * place the wire format is described, so there is nowhere for it to drift —
- * which is the whole reason for the dependency.
+ * Each schema here is the runtime validator, the TypeScript type the handler
+ * is written against, and the OpenAPI definition the Dart client is generated
+ * from. A row the server returns is derived from its Drizzle table with
+ * [createSelectSchema], so a column is declared in exactly one place.
  */
+
+/** drizzle-zod, building on the Zod that `@hono/zod-openapi` extends with `.openapi()`. */
+export const { createSelectSchema } = createSchemaFactory({ zodInstance: z });
 
 /**
  * Every failure crosses the wire in this shape.

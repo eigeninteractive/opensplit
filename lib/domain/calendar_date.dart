@@ -1,18 +1,19 @@
 /// An expense happens on a day, not at an instant.
 ///
-/// A day is held as a `DateTime` at UTC midnight and written `yyyy-MM-dd`, as
-/// on the wire. [calendarDate] reads the value's own fields rather than
-/// converting through a time zone, so it gives the same day for a value at
-/// local midnight too; converting first would move it to the previous day
-/// anywhere east of Greenwich.
+/// Dart has no date-only type, so a day is a `DateTime` at UTC midnight,
+/// written `yyyy-MM-dd` on the wire and in the local database.
+/// [calendarDate] formats the value's own fields rather than converting
+/// through a time zone, so a value at local midnight gives the same day.
 library;
 
-String calendarDate(DateTime day) =>
-    '${day.year.toString().padLeft(4, '0')}-'
-    '${day.month.toString().padLeft(2, '0')}-'
-    '${day.day.toString().padLeft(2, '0')}';
+import 'package:intl/intl.dart';
 
-DateTime parseCalendarDate(String day) => DateTime.parse('${day}T00:00:00Z');
+/// Fixed to `en_US` so no locale can swap in its own digits.
+final _format = DateFormat('yyyy-MM-dd', 'en_US');
+
+String calendarDate(DateTime day) => _format.format(day);
+
+DateTime parseCalendarDate(String day) => _format.parseUtc(day);
 
 /// The day [instant] falls on where it happened, at UTC midnight.
 DateTime calendarDay(DateTime instant) =>

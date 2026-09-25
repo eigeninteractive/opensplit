@@ -453,12 +453,132 @@ threw into an unawaited future (now `.ignore()`d).
 
 ### Deliberately not done
 
-- **F12** (derive Zod from Drizzle): needs the `drizzle-zod` dependency. The
-  enum lists are shared, which was the largest part of the duplication.
+- **F12** (derive Zod from Drizzle): done in §8.
 - **F15**: `securitySchemes` in the spec, and the `DateTime` query interceptor.
   Both are small and would change generated code; left as they are.
 - **Q4**: localising error codes (see §6).
 - **Dead letters** still block remote updates to their row until retried.
   That was the design already ("kept, not deleted"); worth a product decision.
-- **`Outbox.payload`** column is unused; removing it needs a migration.
+  (Decided in §9: a Discard action.)
+- **`Outbox.payload`** column is unused; removing it needs a migration. (Done in §8.)
 - Comments outside the audited layers (presentation, scheduler) were not swept.
+
+## 8. Second pass
+
+Prompted by five questions: why `wire.dart` exists; whether required,
+nullable and optional mean one thing everywhere; dates; whether riverpod,
+freezed and drift are all needed; and which way Drizzle and Zod should derive.
+
+### Required, nullable, optional: one rule
+
+Before, the spec mixed four states across bodies: required, required-nullable,
+optional-with-default (`EntryInput.kind`, `GroupCreate.isDirect`, …) and
+optional-meaning-"leave it" (`GroupPatch.name`). The generated Dart client
+cannot say "absent" as distinct from null, so every optional field was
+three states on the server and two on the device. F19 was one instance.
+Three more were found:
+
+- `Event.payload` was optional in the spec (a bare `z.custom` accepts
+  `undefined`), so the Dart field was nullable and `wire.dart` papered over it
+  with `?? const {}`.
+- `Share.weightMicros` was optional in *responses* because one schema served
+  both directions with a default.
+- `baseSeq` on delete/restore was documented optional though the server
+  refuses without it (coercion turns `null` into 0, so the generator reads
+  the schema as nullable).
+
+The rule now, stated at the top of `schemas/ledger.ts`: **every body field is
+required, and `.nullable()` is the only way to say "none".** Optional is only
+for query parameters, where a default is ordinary HTTP. Consequences:
+
+- `GroupPatch`/`MemberPatch` became `GroupUpdate`/`MemberUpdate` on `PUT`
+  (every editable field, every time), matching `ProfileUpdate`. The app
+  already sent every field, so behaviour is unchanged, including that two
+  devices editing different fields of one group is last-writer-wins by row.
+  The Durable Object keeps a `Partial<>` API internally, where TypeScript can
+  tell absent from null.
+- No `.default()` in any body schema. The generated Dart constructors now
+  require every field, so forgetting one is a compile error, and the compiler
+  flagged every `?? default` in the fake server as dead code.
+
+### Drizzle → Zod
+
+Drizzle is the source, through `drizzle-zod` (Drizzle's own package; built
+into `drizzle-orm` from v1). Nothing derives Drizzle from Zod. Response rows
+that are table rows are derived: `Group`, `Member`, `Entry` (plus payers and
+shares), `Event`, `Invite`, `Profile`, `FxRate`. Overrides give a column its
+wire type where SQLite has none (timestamps, dates, named enums) or state a
+meaningful range (`seq` ≥ 0, positive amounts). Request bodies stay written
+out: they are deliberately narrower than rows and carry the validation. IDs
+and currency codes on responses lose their `example`/`pattern`, which were
+only documentation there.
+
+### Dates
+
+- `DateSchema` is `z.iso.date()`, not a hand regex that accepted month 13.
+- The generator maps `format: date` to `String` (`tool/openapi_dart.yaml`):
+  as `DateTime`, json_serializable would parse local midnight and send a full
+  timestamp, which the server now refuses.
+- `calendar_date.dart` uses `intl`'s `DateFormat('yyyy-MM-dd', 'en_US')`,
+  already a dependency. Dart has no date-only type, so the one convention
+  stays: a day is a `DateTime` at UTC midnight.
+- `entries.entry_date` is stored as `yyyy-MM-dd` text (a Drift
+  `CalendarDateConverter`), like `fx_rates.as_of` and the server.
+- Four more ad-hoc formatters removed (`_iso` in analytics, both exports, the
+  export filename).
+
+### Local schema (v5)
+
+`Outbox.payload` removed; `operation` renamed `target` (it holds an
+`OutboxTarget`); `revision` required rather than defaulting to `''`;
+`entry_date` as above. `schemaVersion` 5, snapshot and helpers committed.
+
+### Comments
+
+Every comment narrating history ("this used to…", past bugs, removed
+backends) was rewritten as the present-day reason or deleted: about 45 across
+`lib/`, `server/src/`, `tool/`, and two in the README. `tool/verify_config.dart`
+ended in a doc comment attached to nothing; removed.
+
+### Kept, and why
+
+- **`wire.dart`.** A local row is not a server row: it can exist before the
+  server has seen it (nullable `seq`), one database holds every group
+  (`groupId`), an expense is three tables, and a date is a `DateTime`. Using
+  the generated classes as Drift row classes (`@UseRowClass`) fails on the
+  first two. The header now says so.
+- **Drift, Riverpod.** Core, not remnants: the local-first database (native
+  and web), and the app's dependency injection across ~100 providers.
+- **freezed.** Down to seven value types (`Entry`, `EntryPayer`,
+  `EntryShare`, `FxQuote`, `MemberBalance`, `Transfer`, `FieldChange`).
+  `Entry` needs deep equality and `copyWith`, which is what freezed is for;
+  build_runner already runs for Drift and Riverpod, so it costs nothing extra.
+
+### Verification
+
+198 server tests, biome, typecheck; generated-client check; `dart format`;
+`dart analyze --fatal-infos`; 475 Dart tests including 32 against a live
+local Worker; Chrome (136 + 12) and browser-DB (3) suites.
+
+## 9. Discarding a refused write
+
+A write the server refuses outright (a "dead letter") stays in the outbox, and
+while it is there the pull skips that row, so this device keeps showing its own
+version and ignores everybody else's changes to it. The banner offered only
+"Try again", so a refusal that would never succeed left the row stuck.
+
+The banner now also offers **Discard**, behind a confirmation.
+`SyncEngine.discardRefused` drops every dead letter and puts the server's
+version back:
+
+- A row the server has: its group's cursor is rewound to `seq - 1`, so the next
+  pull delivers the row even when the server's copy has not moved since (a
+  rewind to `seq` would not, and the regression test fails with it).
+- A row the server never had: deleted, since it exists nowhere else. A local
+  member that an expense still names is kept rather than breaking the expense.
+- A profile: its local timestamp is cleared and the profile feed re-read, so
+  the server's copy wins.
+- Provisional feed lines for the discarded change are removed.
+
+Tests: two in `sync_test.dart` ("discarding a refused write"), one widget test
+in `unsynced_banner_test.dart`.

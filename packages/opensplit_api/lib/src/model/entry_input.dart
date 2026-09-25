@@ -22,11 +22,11 @@ class EntryInput {
   EntryInput({
     required this.id,
 
-    this.kind,
+    required this.kind,
 
-    this.description = '',
+    required this.description,
 
-    this.categoryId,
+    required this.categoryId,
 
     required this.currency,
 
@@ -34,21 +34,21 @@ class EntryInput {
 
     required this.entryDate,
 
-    this.splitKind,
+    required this.splitKind,
 
-    this.fxRate,
+    required this.fxRate,
 
-    this.fxSource,
+    required this.fxSource,
 
-    this.notes,
+    required this.notes,
 
-    this.clientKey,
+    required this.clientKey,
 
     required this.payers,
 
     required this.shares,
 
-    this.baseSeq,
+    required this.baseSeq,
   });
 
   @JsonKey(name: r'id', required: true, includeIfNull: false)
@@ -56,21 +56,16 @@ class EntryInput {
 
   @JsonKey(
     name: r'kind',
-    required: false,
+    required: true,
     includeIfNull: false,
     unknownEnumValue: EntryKind.unknownDefaultOpenApi,
   )
-  final EntryKind? kind;
+  final EntryKind kind;
 
-  @JsonKey(
-    defaultValue: '',
-    name: r'description',
-    required: false,
-    includeIfNull: false,
-  )
-  final String? description;
+  @JsonKey(name: r'description', required: true, includeIfNull: false)
+  final String description;
 
-  @JsonKey(name: r'categoryId', required: false, includeIfNull: false)
+  @JsonKey(name: r'categoryId', required: true, includeIfNull: true)
   final String? categoryId;
 
   @JsonKey(name: r'currency', required: true, includeIfNull: false)
@@ -85,23 +80,23 @@ class EntryInput {
 
   @JsonKey(
     name: r'splitKind',
-    required: false,
+    required: true,
     includeIfNull: false,
     unknownEnumValue: SplitKind.unknownDefaultOpenApi,
   )
-  final SplitKind? splitKind;
+  final SplitKind splitKind;
 
   // minimum: 0
-  @JsonKey(name: r'fxRate', required: false, includeIfNull: false)
+  @JsonKey(name: r'fxRate', required: true, includeIfNull: true)
   final num? fxRate;
 
-  @JsonKey(name: r'fxSource', required: false, includeIfNull: false)
+  @JsonKey(name: r'fxSource', required: true, includeIfNull: true)
   final String? fxSource;
 
-  @JsonKey(name: r'notes', required: false, includeIfNull: false)
+  @JsonKey(name: r'notes', required: true, includeIfNull: true)
   final String? notes;
 
-  @JsonKey(name: r'clientKey', required: false, includeIfNull: false)
+  @JsonKey(name: r'clientKey', required: true, includeIfNull: true)
   final String? clientKey;
 
   @JsonKey(name: r'payers', required: true, includeIfNull: false)
@@ -111,7 +106,7 @@ class EntryInput {
   final List<Share> shares;
 
   // minimum: 0
-  @JsonKey(name: r'baseSeq', required: false, includeIfNull: false)
+  @JsonKey(name: r'baseSeq', required: true, includeIfNull: true)
   final int? baseSeq;
 
   @override

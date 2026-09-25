@@ -8,7 +8,7 @@ part of 'member_create.dart';
 
 MemberCreate _$MemberCreateFromJson(Map<String, dynamic> json) =>
     $checkedCreate('MemberCreate', json, ($checkedConvert) {
-      $checkKeys(json, requiredKeys: const ['id', 'displayName']);
+      $checkKeys(json, requiredKeys: const ['id', 'displayName', 'upiVpa']);
       final val = MemberCreate(
         id: $checkedConvert('id', (v) => v as String),
         displayName: $checkedConvert('displayName', (v) => v as String),
@@ -21,5 +21,5 @@ Map<String, dynamic> _$MemberCreateToJson(MemberCreate instance) =>
     <String, dynamic>{
       'id': instance.id,
       'displayName': instance.displayName,
-      'upiVpa': ?instance.upiVpa,
+      'upiVpa': instance.upiVpa,
     };

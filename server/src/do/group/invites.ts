@@ -37,13 +37,10 @@ import { type MemberRow, nextSeq, requireMember, requireMeta, type Tx } from "./
  *
  * ## Peeking before deciding who you are
  *
- * Redemption and deciding who you are have to happen in that order, and they
- * used to happen in the wrong one: the app signed every arrival in anonymously
- * and claimed the slot immediately, so somebody who already had an account —
- * the overwhelmingly common case, since invites are how people arrive — had
- * their place taken by a throwaway account and no way in. `peek` is callable
- * with no session at all, because at that moment the caller is, by design,
- * nobody yet.
+ * Deciding who you are has to come before redemption, or somebody who already
+ * has an account could have their place taken by a throwaway one. `peek` is
+ * callable with no session at all, because at that moment the caller is, by
+ * design, nobody yet.
  */
 
 /** Clamped, because the caller supplies it and expiry is the only protection a bearer token has. */

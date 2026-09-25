@@ -163,17 +163,7 @@ export const meta = sqliteTable(
     /** Set by the dormancy alarm, or by somebody deliberately. Reversible. */
     archivedAt: text("archived_at"),
 
-    /**
-     * Descriptive, and no longer load-bearing.
-     *
-     * This column used to be the sync clock, which made it security-critical:
-     * a client that could write it could backdate a change behind everybody's
-     * cursor, or stamp one far enough ahead to pin every device's cursor there
-     * and stop the group syncing permanently. Both were reachable, and both
-     * took a trigger to close. `seq` is the cursor now, so this is just "when
-     * was this last touched" — still written by the server, because there is
-     * no reason to hand it over, but nothing depends on it being true.
-     */
+    /** When this was last touched, by the server's clock. Descriptive only: `seq` is the cursor. */
     updatedAt: text("updated_at").notNull(),
     seq: integer("seq").notNull(),
   },

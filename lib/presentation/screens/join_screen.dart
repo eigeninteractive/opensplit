@@ -13,19 +13,12 @@ import '../widgets/page_body.dart';
 /// The critical path: someone taps a link a friend sent them.
 ///
 /// It reads the invite before spending it, and that ordering is the whole
-/// screen. The previous version signed every arrival in anonymously and
-/// redeemed immediately, on the reasoning that a signup wall here is where
-/// people leave. The wall really is worth avoiding — but claiming first meant
-/// that anybody who already had an account, which is most people arriving from
-/// a link, had their place taken by a throwaway account and the single-use
-/// token spent. Signing in afterwards did not help: their real account had a
-/// different id, the member row pointed at the anonymous one, and a group
-/// refuses two places for the same person. Only the owner reissuing the link
-/// fixed it.
+/// screen: claiming first would let a throwaway guest account take the place
+/// of somebody who already has an account, and spend the single-use token.
 ///
 /// So: show what the link is for, ask who they are, then claim once. There is
-/// still no wall — being a guest is one of the three answers — and there is now
-/// a way to say no, which matters when the link was meant for somebody else.
+/// no wall — being a guest is one of the three answers — and there is a way
+/// to say no, for a link that was meant for somebody else.
 class JoinScreen extends ConsumerStatefulWidget {
   const JoinScreen({super.key, required this.token});
 

@@ -216,13 +216,3 @@ String? validateBackendUrl(String value) {
   }
   return null;
 }
-
-/// There is no key to check any more, and that is worth saying out loud.
-///
-/// This used to also verify a publishable key — that it was one, and above all
-/// that it was not a service-role key somebody had pasted in by mistake, which
-/// would have shipped full database access inside a web bundle.
-///
-/// The backend is now one origin serving the site, the app bundle and the API,
-/// and a request carries a session or it carries nothing. There is no anonymous
-/// public identifier to configure, so there is none to leak, rotate or check.

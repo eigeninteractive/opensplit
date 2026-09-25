@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart';
 
+import '../../domain/calendar_date.dart';
 import '../../domain/models/kinds.dart';
 
 /// The local mirror of the server's ledger, plus the client-only sync state.
@@ -44,6 +45,18 @@ class JsonMapConverter extends TypeConverter<Map<String, Object?>, String> {
 
   @override
   String toSql(Map<String, Object?> value) => jsonEncode(value);
+}
+
+/// A calendar date, stored as the `yyyy-MM-dd` text it is on the wire, so it
+/// sorts and compares as text in SQL.
+class CalendarDateConverter extends TypeConverter<DateTime, String> {
+  const CalendarDateConverter();
+
+  @override
+  DateTime fromSql(String fromDb) => parseCalendarDate(fromDb);
+
+  @override
+  String toSql(DateTime value) => calendarDate(value);
 }
 
 /// ISO 4217 reference data, refreshed from the server and never edited here.
@@ -208,8 +221,7 @@ class Entries extends Table {
   /// reaches; the products that could overflow use BigInt in the allocator.
   IntColumn get amountMinor => integer()();
 
-  /// A calendar date, held as UTC midnight. See `calendar_date.dart`.
-  DateTimeColumn get entryDate => dateTime()();
+  TextColumn get entryDate => text().map(const CalendarDateConverter())();
   TextColumn get splitKind => text().map(
     const WireEnumConverter(SplitKind.values, SplitKind.unknownDefaultOpenApi),
   )();
@@ -317,17 +329,14 @@ enum OutboxTarget { group, member, entry, profile }
 /// pusher reads the row's current state at send time.
 @DataClassName('OutboxRow')
 class Outbox extends Table {
-  /// `<operation>:<targetId>`, so re-queuing coalesces.
+  /// `<target>:<targetId>`, so re-queuing coalesces.
   TextColumn get id => text()();
-  TextColumn get operation => textEnum<OutboxTarget>()();
+  TextColumn get target => textEnum<OutboxTarget>()();
   TextColumn get targetId => text()();
 
   /// Identifies one edit, so a response for an older one is not applied over
   /// a newer one made during the upload.
-  TextColumn get revision => text().withDefault(const Constant(''))();
-
-  /// Unused; kept so the schema does not change.
-  TextColumn get payload => text().withDefault(const Constant('{}'))();
+  TextColumn get revision => text()();
   DateTimeColumn get createdAt => dateTime()();
   IntColumn get attempts => integer().withDefault(const Constant(0))();
   DateTimeColumn get nextAttemptAt => dateTime().nullable()();

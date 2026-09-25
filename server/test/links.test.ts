@@ -44,14 +44,14 @@ async function makeGroup(host: Guest, placeholder = "Priya") {
 
   const created = await call("/api/groups", host, {
     method: "POST",
-    body: JSON.stringify({ id, name: "Goa trip", defaultCurrency: "INR", memberId, displayName: "Ravi" }),
+    body: JSON.stringify({ id, name: "Goa trip", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, memberId, displayName: "Ravi" }),
   });
   expect(created.status).toBe(200);
 
   const slotId = `${id}-slot`;
   const slot = await call(`/api/groups/${id}/members`, host, {
     method: "POST",
-    body: JSON.stringify({ id: slotId, displayName: placeholder }),
+    body: JSON.stringify({ id: slotId, displayName: placeholder, upiVpa: null }),
   });
   expect(slot.status).toBe(200);
 
@@ -95,7 +95,7 @@ describe("an invite", () => {
       isMember: false,
     });
 
-    const joined = await json<Joined>(await call(`/api/links/${minted.token}/join`, priya, { method: "POST", body: "{}" }));
+    const joined = await json<Joined>(await call(`/api/links/${minted.token}/join`, priya, { method: "POST", body: JSON.stringify({ memberId: null, displayName: null }) }));
     expect(joined.member.id).toBe(slotId);
     expect(joined.member.profileId).toBe(priya.id);
 
@@ -109,10 +109,10 @@ describe("an invite", () => {
     const { id, slotId } = await makeGroup(ravi);
     const minted = await json<Invite>(await call(`/api/groups/${id}/members/${slotId}/invite`, ravi, { method: "POST" }));
 
-    expect((await call(`/api/links/${minted.token}/join`, priya, { method: "POST", body: "{}" })).status).toBe(200);
+    expect((await call(`/api/links/${minted.token}/join`, priya, { method: "POST", body: JSON.stringify({ memberId: null, displayName: null }) })).status).toBe(200);
 
     const again = await signInAsGuest();
-    const refused = await call(`/api/links/${minted.token}/join`, again, { method: "POST", body: "{}" });
+    const refused = await call(`/api/links/${minted.token}/join`, again, { method: "POST", body: JSON.stringify({ memberId: null, displayName: null }) });
     expect(refused.status).toBe(409);
     expect((await json<ApiError>(refused)).error.code).toBe("invite_spent");
 
@@ -185,7 +185,7 @@ describe("an open link", () => {
 
     // Claiming one is what stops a group of six becoming a group of twelve
     // when one link is pasted into a chat.
-    const joined = await json<Joined>(await call(`/api/links/${minted.token}/join`, priya, { method: "POST", body: JSON.stringify({ memberId: slotId }) }));
+    const joined = await json<Joined>(await call(`/api/links/${minted.token}/join`, priya, { method: "POST", body: JSON.stringify({ memberId: slotId, displayName: null }) }));
     expect(joined.member.id).toBe(slotId);
 
     const after = await json<PlaceholderList>(await call(`/api/links/${minted.token}/placeholders`, ravi));
@@ -197,7 +197,7 @@ describe("an open link", () => {
     const minted = await json<GroupLink>(await call(`/api/groups/${id}/link`, ravi, { method: "POST" }));
 
     const zara = await signInAsGuest();
-    const joined = await json<Joined>(await call(`/api/links/${minted.token}/join`, zara, { method: "POST", body: JSON.stringify({ displayName: "Zara" }) }));
+    const joined = await json<Joined>(await call(`/api/links/${minted.token}/join`, zara, { method: "POST", body: JSON.stringify({ memberId: null, displayName: "Zara" }) }));
 
     expect(joined.member.displayName).toBe("Zara");
     expect(joined.member.profileId).toBe(zara.id);
@@ -209,7 +209,7 @@ describe("an open link", () => {
     // No sentinel. "Someone" in a ledger is worse than being asked, and a
     // sentinel in the profile could never be told from a name somebody meant.
     const nameless = await signInAsGuest();
-    const refused = await call(`/api/links/${minted.token}/join`, nameless, { method: "POST", body: "{}" });
+    const refused = await call(`/api/links/${minted.token}/join`, nameless, { method: "POST", body: JSON.stringify({ memberId: null, displayName: null }) });
     expect(refused.status).toBe(400);
     expect((await json<ApiError>(refused)).error.code).toBe("malformed");
   });
@@ -223,7 +223,7 @@ describe("an open link", () => {
     const known = await signInAsGuest();
     await call("/api/profile", known, { method: "PUT", body: JSON.stringify({ displayName: "Zara", upiVpa: null }) });
 
-    const joined = await json<Joined>(await call(`/api/links/${minted.token}/join`, known, { method: "POST", body: "{}" }));
+    const joined = await json<Joined>(await call(`/api/links/${minted.token}/join`, known, { method: "POST", body: JSON.stringify({ memberId: null, displayName: null }) }));
     expect(joined.member.displayName).toBe("Zara");
   });
 });
@@ -234,7 +234,7 @@ describe("the name, travelling the other way", () => {
     const minted = await json<Invite>(await call(`/api/groups/${id}/members/${slotId}/invite`, ravi, { method: "POST" }));
 
     const arriving = await signInAsGuest();
-    await call(`/api/links/${minted.token}/join`, arriving, { method: "POST", body: "{}" });
+    await call(`/api/links/${minted.token}/join`, arriving, { method: "POST", body: JSON.stringify({ memberId: null, displayName: null }) });
 
     // Somebody arriving on an invite signed in as a guest a moment earlier and
     // has no name at all, while the group already knows them as whatever was
@@ -250,7 +250,7 @@ describe("the name, travelling the other way", () => {
 
     const arriving = await signInAsGuest();
     await call("/api/profile", arriving, { method: "PUT", body: JSON.stringify({ displayName: "Priya Sharma", upiVpa: null }) });
-    const claimed = await json<Joined>(await call(`/api/links/${minted.token}/join`, arriving, { method: "POST", body: "{}" }));
+    const claimed = await json<Joined>(await call(`/api/links/${minted.token}/join`, arriving, { method: "POST", body: JSON.stringify({ memberId: null, displayName: null }) }));
 
     // The slot keeps the name the group knows, and the account keeps its own.
     // That "only if it has none" is the entire check, and it is why a guest's
@@ -268,7 +268,7 @@ describe("the name, travelling the other way", () => {
     const preview = await json<LinkPreview>(await call(`/api/links/${minted.token}`, ravi));
     expect(preview.isMember).toBe(true);
 
-    const refused = await call(`/api/links/${minted.token}/join`, ravi, { method: "POST", body: JSON.stringify({ displayName: "Ravi again" }) });
+    const refused = await call(`/api/links/${minted.token}/join`, ravi, { method: "POST", body: JSON.stringify({ memberId: null, displayName: "Ravi again" }) });
     expect(refused.status).toBe(409);
     expect((await json<ApiError>(refused)).error.code).toBe("already_member");
   });
@@ -280,7 +280,7 @@ describe("a token that names nothing", () => {
 
     expect((await call(`/api/links/${unknown}`, null)).status).toBe(404);
     expect((await call(`/api/links/${unknown}/placeholders`, priya)).status).toBe(404);
-    expect((await call(`/api/links/${unknown}/join`, priya, { method: "POST", body: "{}" })).status).toBe(404);
+    expect((await call(`/api/links/${unknown}/join`, priya, { method: "POST", body: JSON.stringify({ memberId: null, displayName: null }) })).status).toBe(404);
 
     // The same answer a wrong token gets, deliberately: telling the two apart
     // turns the endpoint into an oracle for which tokens exist.

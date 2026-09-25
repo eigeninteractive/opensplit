@@ -310,6 +310,101 @@ class SyncEngine {
     });
   }
 
+  /// Drops every write the server refused outright, and puts the server's
+  /// version of those rows back.
+  ///
+  /// A row the server has is read again: its group's cursor goes back to just
+  /// before this device's copy, so the next pull delivers the current one. A
+  /// row the server never had exists nowhere else, so it is deleted. The
+  /// exception is a member an expense still names, which is kept rather than
+  /// breaking that expense.
+  Future<SyncReport> discardRefused() => _serialized(() async {
+    final refused = await outbox.deadLetters();
+    // Expenses before the members they name, members before their group.
+    refused.sort((a, b) => b.target.index.compareTo(a.target.index));
+    await db.transaction(() async {
+      for (final item in refused) {
+        await _discard(item.target, item.targetId);
+        await outbox.complete(item.id);
+      }
+    });
+    return const SyncReport(pushed: 0, pulled: 0, failed: 0);
+  });
+
+  Future<void> _discard(OutboxTarget target, String id) async {
+    switch (target) {
+      case OutboxTarget.entry:
+        final row = await (db.select(
+          db.entries,
+        )..where((t) => t.id.equals(id))).getSingleOrNull();
+        if (row == null) return;
+        await _dropProvisionalLines(row.groupId, subjectId: id);
+        if (row.seq case final seq?) {
+          return _rewindCursor(row.groupId, to: seq - 1);
+        }
+        await (db.delete(db.entries)..where((t) => t.id.equals(id))).go();
+      case OutboxTarget.member:
+        final row = await (db.select(
+          db.members,
+        )..where((t) => t.id.equals(id))).getSingleOrNull();
+        if (row == null) return;
+        await _dropProvisionalLines(row.groupId, subjectId: id);
+        if (row.seq case final seq?) {
+          return _rewindCursor(row.groupId, to: seq - 1);
+        }
+        if (await _isNamedByAnExpense(id)) return;
+        await (db.delete(db.members)..where((t) => t.id.equals(id))).go();
+      case OutboxTarget.group:
+        final row = await (db.select(
+          db.groups,
+        )..where((t) => t.id.equals(id))).getSingleOrNull();
+        if (row == null) return;
+        await _dropProvisionalLines(id, subjectId: null);
+        if (row.seq case final seq?) return _rewindCursor(id, to: seq - 1);
+        await (db.delete(db.groups)..where((t) => t.id.equals(id))).go();
+      case OutboxTarget.profile:
+        // The profile feed is cursored on time, not on seq: forget this
+        // copy's timestamp and re-read the feed, so the server's copy wins.
+        await (db.update(db.profiles)..where((t) => t.id.equals(id))).write(
+          const ProfilesCompanion(updatedAt: Value(null)),
+        );
+        await (db.delete(
+          db.feedCursors,
+        )..where((t) => t.feed.equals(_profileFeed))).go();
+    }
+  }
+
+  /// Removes the feed lines this device wrote for a change the server never
+  /// accepted. A null [subjectId] means lines about the group itself.
+  Future<void> _dropProvisionalLines(
+    String groupId, {
+    required String? subjectId,
+  }) =>
+      (db.delete(db.groupEvents)..where(
+            (t) =>
+                t.groupId.equals(groupId) &
+                t.isProvisional &
+                (subjectId == null
+                    ? t.subjectId.isNull()
+                    : t.subjectId.equals(subjectId)),
+          ))
+          .go();
+
+  Future<bool> _isNamedByAnExpense(String memberId) async {
+    final payer =
+        await (db.select(db.entryPayers)
+              ..where((t) => t.memberId.equals(memberId))
+              ..limit(1))
+            .getSingleOrNull();
+    if (payer != null) return true;
+    final share =
+        await (db.select(db.entryShares)
+              ..where((t) => t.memberId.equals(memberId))
+              ..limit(1))
+            .getSingleOrNull();
+    return share != null;
+  }
+
   Future<void> _rewindCursor(String groupId, {required int to}) =>
       (db.update(db.groupCursors)..where(
             (t) => t.groupId.equals(groupId) & t.seq.isBiggerThanValue(to),
@@ -317,7 +412,7 @@ class SyncEngine {
           .write(GroupCursorsCompanion(seq: Value(to)));
 
   Future<void> _pushOne(OutboxRow item) async {
-    switch (item.operation) {
+    switch (item.target) {
       case OutboxTarget.entry:
         // Read now, not at queue time: it may have been edited since.
         final entry = await _snapshot(item, () => _loadEntry(item.targetId));
@@ -355,7 +450,7 @@ class SyncEngine {
         final creator = group.seq == null ? await _creatorOf(group) : null;
         final stored =
             await (creator == null
-                    ? remote.updateGroup(group.id, group.toPatch())
+                    ? remote.updateGroup(group.id, group.toUpdate())
                     : remote.createGroup(group.toCreate(creator)))
                 .timeout(requestTimeout);
 
@@ -386,7 +481,7 @@ class SyncEngine {
                     : remote.updateMember(
                         member.groupId,
                         member.id,
-                        member.toPatch(),
+                        member.toUpdate(),
                       ))
                 .timeout(requestTimeout);
 
@@ -499,8 +594,7 @@ class SyncEngine {
 
   /// The profile feed, on a `(timestamp, id)` keyset cursor.
   Future<int> pullProfiles() async {
-    const feed = 'profiles';
-    var (cursor, cursorId) = await _readFeedCursor(feed);
+    var (cursor, cursorId) = await _readFeedCursor(_profileFeed);
     var applied = 0;
 
     while (true) {
@@ -520,7 +614,9 @@ class SyncEngine {
       applied += await db.transaction(() async {
         await _assertActive();
         final count = await applyProfiles(db, page.profiles);
-        if (at != null && id != null) await _writeFeedCursor(feed, at, id);
+        if (at != null && id != null) {
+          await _writeFeedCursor(_profileFeed, at, id);
+        }
         return count;
       });
 
@@ -582,6 +678,9 @@ class SyncEngine {
 
   /// The [FeedCursors] row recording how far back rates have been asked for.
   static const _fxFloor = 'fx:floor';
+
+  /// The [FeedCursors] row for the profile feed.
+  static const _profileFeed = 'profiles';
 
   /// The oldest day this device needs a rate for and has not asked about, or
   /// null in the steady state. Only entries in a currency other than their

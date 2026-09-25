@@ -5,7 +5,7 @@
 // ignore_for_file: unused_element
 import 'package:json_annotation/json_annotation.dart';
 
-part 'group_patch.g.dart';
+part 'group_update.g.dart';
 
 @JsonSerializable(
   checked: true,
@@ -13,15 +13,21 @@ part 'group_patch.g.dart';
   disallowUnrecognizedKeys: false,
   explicitToJson: true,
 )
-class GroupPatch {
-  /// Returns a new [GroupPatch] instance.
-  GroupPatch({this.name, this.simplifyDebts, required this.archivedAt});
+class GroupUpdate {
+  /// Returns a new [GroupUpdate] instance.
+  GroupUpdate({
+    required this.name,
 
-  @JsonKey(name: r'name', required: false, includeIfNull: false)
-  final String? name;
+    required this.simplifyDebts,
 
-  @JsonKey(name: r'simplifyDebts', required: false, includeIfNull: false)
-  final bool? simplifyDebts;
+    required this.archivedAt,
+  });
+
+  @JsonKey(name: r'name', required: true, includeIfNull: false)
+  final String name;
+
+  @JsonKey(name: r'simplifyDebts', required: true, includeIfNull: false)
+  final bool simplifyDebts;
 
   @JsonKey(name: r'archivedAt', required: true, includeIfNull: true)
   final DateTime? archivedAt;
@@ -29,7 +35,7 @@ class GroupPatch {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is GroupPatch &&
+      other is GroupUpdate &&
           other.name == name &&
           other.simplifyDebts == simplifyDebts &&
           other.archivedAt == archivedAt;
@@ -40,10 +46,10 @@ class GroupPatch {
       simplifyDebts.hashCode +
       (archivedAt == null ? 0 : archivedAt.hashCode);
 
-  factory GroupPatch.fromJson(Map<String, dynamic> json) =>
-      _$GroupPatchFromJson(json);
+  factory GroupUpdate.fromJson(Map<String, dynamic> json) =>
+      _$GroupUpdateFromJson(json);
 
-  Map<String, dynamic> toJson() => _$GroupPatchToJson(this);
+  Map<String, dynamic> toJson() => _$GroupUpdateToJson(this);
 
   @override
   String toString() {

@@ -15,7 +15,13 @@ part 'member_create.g.dart';
 )
 class MemberCreate {
   /// Returns a new [MemberCreate] instance.
-  MemberCreate({required this.id, required this.displayName, this.upiVpa});
+  MemberCreate({
+    required this.id,
+
+    required this.displayName,
+
+    required this.upiVpa,
+  });
 
   @JsonKey(name: r'id', required: true, includeIfNull: false)
   final String id;
@@ -23,7 +29,7 @@ class MemberCreate {
   @JsonKey(name: r'displayName', required: true, includeIfNull: false)
   final String displayName;
 
-  @JsonKey(name: r'upiVpa', required: false, includeIfNull: false)
+  @JsonKey(name: r'upiVpa', required: true, includeIfNull: true)
   final String? upiVpa;
 
   @override

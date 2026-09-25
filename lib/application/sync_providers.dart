@@ -120,6 +120,13 @@ class SyncController extends _$SyncController {
     await ref.read(outboxQueueProvider).retryDeadLetters();
     await syncAll();
   }
+
+  /// Throws away everything the server refused, and shows the group's
+  /// version of those rows instead. See [SyncEngine.discardRefused].
+  Future<void> discardFailed() async {
+    await ref.read(syncEngineProvider)?.discardRefused();
+    await syncAll();
+  }
 }
 
 /// Whether the device has a network, as it changes. See [NetworkSignal].

@@ -15,7 +15,13 @@ part 'share.g.dart';
 )
 class Share {
   /// Returns a new [Share] instance.
-  Share({required this.memberId, required this.amountMinor, this.weightMicros});
+  Share({
+    required this.memberId,
+
+    required this.amountMinor,
+
+    required this.weightMicros,
+  });
 
   @JsonKey(name: r'memberId', required: true, includeIfNull: false)
   final String memberId;
@@ -24,7 +30,7 @@ class Share {
   @JsonKey(name: r'amountMinor', required: true, includeIfNull: false)
   final int amountMinor;
 
-  @JsonKey(name: r'weightMicros', required: false, includeIfNull: false)
+  @JsonKey(name: r'weightMicros', required: true, includeIfNull: true)
   final int? weightMicros;
 
   @override

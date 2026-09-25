@@ -258,11 +258,6 @@ GoRouter buildRouter({
 /// down the side once there is room. Both are driven by the same
 /// [StatefulNavigationShell], so "which destination am I on" has exactly one
 /// answer and neither can disagree with the URL.
-///
-/// There used to be no third option — a settings button in the app bar, which
-/// pushed a screen that was not on top of anything, on a route that then had
-/// to suppress its own transition to avoid looking like a drill-down. That is
-/// the arrangement this replaces.
 class AdaptiveNavigation extends StatelessWidget {
   const AdaptiveNavigation({super.key, required this.shell});
 

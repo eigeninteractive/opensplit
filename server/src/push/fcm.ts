@@ -97,10 +97,7 @@ export async function wakeDevices(env: Env, notices: Notice[]): Promise<void> {
     try {
       token = await accessToken(env);
     } catch (cause) {
-      // Loudly, and once. A failed mint used to yield `undefined`, every send
-      // went out as `Bearer undefined`, and the 401s were invisible because
-      // nothing inspected them — a broken deploy that silently stopped
-      // notifying anybody.
+      // Loudly, and once, rather than sending every notice unauthenticated.
       console.error("[push] could not mint an FCM access token", cause);
       return;
     }

@@ -275,12 +275,8 @@ class _Section extends StatelessWidget {
 /// A bar rather than a pie: comparing lengths is far easier than comparing
 /// angles.
 ///
-/// Not a [LinearProgressIndicator], which is what this used to be. That widget
-/// means "this task is 40% finished" — it announces itself to assistive tech as
-/// a progress bar, and Material's own styling for it is now a moving thing with
-/// a gap and a stop indicator at the end of the track. None of that is true of
-/// a spend figure, which is finished, static, and already stated in full as
-/// text on the line above.
+/// Not a [LinearProgressIndicator]: that announces itself to assistive tech as
+/// a task in progress, and a spend figure is finished and static.
 ///
 /// So this is drawn plainly, from the same scheme roles, and hidden from
 /// assistive tech entirely: the label and the amount beside it already say

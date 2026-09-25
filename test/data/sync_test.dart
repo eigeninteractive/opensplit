@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
+import 'package:drift/drift.dart'
+    show BooleanExpressionOperators, Value, driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/local/local_reset.dart';
@@ -702,13 +703,7 @@ void main() {
         expect(await a.outbox.pendingCount(), 0);
 
         // ...but not silently discarded. A write the user believes they made
-        // must remain accounted for somewhere.
-        //
-        // One row. A save used to queue two -- the expense and the line
-        // describing it, which the server then refused in turn for naming an
-        // entry it did not have -- so a single refused save produced two dead
-        // letters and needed filtering before anybody could be told. The server
-        // writes the history now, so there is only the expense.
+        // must remain accounted for somewhere, and one save is one record.
         final dead = await a.outbox.deadLetters();
         expect(dead, hasLength(1));
         expect(
@@ -789,6 +784,69 @@ void main() {
       expect(await a.outbox.deadLetters(), isEmpty);
       expect(await a.outbox.pendingCount(), 0, reason: 'it landed');
       expect(await a.outbox.watchDeadLetters().first, isEmpty);
+    });
+
+    group('discarding a refused write', () {
+      const refused = ApiFailure('Refused.', retry: api.Retry.permanent);
+
+      EntryDraft dinner(
+        ({String groupId, String ravi, String priya, String arun}) g,
+        int amount,
+      ) => EntryDraft(
+        groupId: g.groupId,
+        currency: 'INR',
+        amountMinor: amount,
+        description: 'Dinner',
+        split: EqualSplit([g.ravi, g.priya]),
+        payerAmounts: {g.ravi: amount},
+      );
+
+      Future<List<GroupEventRow>> provisionalLines(String entryId) =>
+          (a.db.select(
+            a.db.groupEvents,
+          )..where((t) => t.subjectId.equals(entryId) & t.isProvisional)).get();
+
+      test('puts back the server\'s version of an edit', () async {
+        final g = await seedGroup();
+        final entry = await a.entries.create(
+          dinner(g, 60000),
+          createdBy: g.ravi,
+        );
+        await a.sync.syncGroup(g.groupId);
+
+        // The server's copy does not move, so only a cursor rewound to before
+        // it can deliver it again.
+        server.beforeUpsertEntry = (_) async => throw refused;
+        await a.entries.update(entry.id, dinner(g, 90000), actorId: g.ravi);
+        await a.sync.syncGroup(g.groupId);
+        expect(await a.outbox.deadLetters(), hasLength(1));
+        expect((await a.entries.getEntry(entry.id))!.amountMinor, 90000);
+
+        await a.sync.discardRefused();
+        await a.sync.syncGroup(g.groupId);
+
+        expect((await a.entries.getEntry(entry.id))!.amountMinor, 60000);
+        expect(await a.outbox.deadLetters(), isEmpty);
+        expect(await a.outbox.pendingCount(), 0);
+        expect(await provisionalLines(entry.id), isEmpty);
+      });
+
+      test('removes a row the server never had', () async {
+        final g = await seedGroup();
+        server.beforeUpsertEntry = (_) async => throw refused;
+        final entry = await a.entries.create(
+          dinner(g, 60000),
+          createdBy: g.ravi,
+        );
+        await a.sync.syncGroup(g.groupId);
+        expect(await a.outbox.deadLetters(), hasLength(1));
+
+        await a.sync.discardRefused();
+
+        expect(await a.entries.getEntry(entry.id), isNull);
+        expect(await provisionalLines(entry.id), isEmpty);
+        expect(await a.outbox.deadLetters(), isEmpty);
+      });
     });
 
     test('a retried push does not create a second entry', () async {
@@ -1017,7 +1075,7 @@ void main() {
       await a.groups.renameMember(g.priya, 'Priya S');
 
       expect(
-        [for (final row in await a.outbox.due()) row.operation],
+        [for (final row in await a.outbox.due()) row.target],
         [
           OutboxTarget.group,
           OutboxTarget.member,

@@ -17,11 +17,8 @@ export default {
   fetch: app.fetch,
 
   /**
-   * Two schedules, dispatched on the cron expression that fired.
-   *
-   * Archiving and collecting dormant groups used to be the third, and is not
-   * here: every group sets its own alarm, so there is nothing central left to
-   * sweep. See `src/do/group/upkeep.ts`.
+   * Two schedules, dispatched on the cron expression that fired. Dormant
+   * groups are not swept here: each sets its own alarm (`do/group/upkeep.ts`).
    *
    * `waitUntil` rather than an awaited call, so the runtime keeps the
    * invocation alive for the whole sweep — a scheduled handler that returns

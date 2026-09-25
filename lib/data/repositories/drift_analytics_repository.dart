@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 
+import '../../domain/calendar_date.dart';
 import '../../domain/models/entry.dart';
 import '../../domain/analytics/analytics_query.dart';
 import '../local/database.dart';
@@ -57,11 +58,11 @@ final class DriftAnalyticsRepository {
     }
     if (filter.from != null) {
       clauses.add('$alias.entry_date >= ?');
-      vars.add(Variable<String>(_iso(filter.from!)));
+      vars.add(Variable<String>(calendarDate(filter.from!)));
     }
     if (filter.to != null) {
       clauses.add('$alias.entry_date <= ?');
-      vars.add(Variable<String>(_iso(filter.to!)));
+      vars.add(Variable<String>(calendarDate(filter.to!)));
     }
     if (filter.memberId != null) {
       clauses.add(
@@ -99,9 +100,6 @@ final class DriftAnalyticsRepository {
     return terms.map((t) => '"$t"*').join(' ');
   }
 
-  static String _iso(DateTime date) =>
-      DateTime.utc(date.year, date.month, date.day).toIso8601String();
-
   Stream<List<Entry>> search(AnalyticsFilter filter) {
     final where = _where(filter);
     return _db
@@ -112,9 +110,8 @@ final class DriftAnalyticsRepository {
           readsFrom: {_db.entries, _db.entryShares},
         )
         .watch()
-        // Hydrating only what matched, rather than the group's whole journal
-        // and then discarding most of it. A search for one restaurant used to
-        // load every expense in the group on every keystroke.
+        // Hydrating only what matched, not the group's whole journal, since
+        // this runs on every keystroke.
         .asyncMap(
           (rows) => _entries.getByIds([
             for (final row in rows) row.read<String>('id'),

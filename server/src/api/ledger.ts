@@ -4,8 +4,8 @@ import { and, eq, isNull } from "drizzle-orm";
 import type { AuthedEnv } from "../context";
 import { memberships, profiles } from "../db/d1/schema";
 import { IdSchema, jsonResponse } from "../schemas/common";
-import { ChangePageSchema, EntryInputSchema, EntrySchema, GroupCreateSchema, GroupPatchSchema, GroupSchema, MemberCreateSchema, MemberPatchSchema, MemberSchema } from "../schemas/ledger";
-import { EntryPathSchema, GroupPathSchema, group, MemberPathSchema, refusals, respond, SeqQuerySchema } from "./routing";
+import { ChangePageSchema, EntryInputSchema, EntrySchema, GroupCreateSchema, GroupSchema, GroupUpdateSchema, MemberCreateSchema, MemberSchema, MemberUpdateSchema } from "../schemas/ledger";
+import { EntryPathSchema, GroupPathSchema, group, MemberPathSchema, RequiredSeqQuerySchema, refusals, respond, SeqQuerySchema } from "./routing";
 
 /**
  * The sync surface: one request per group, one integer cursor.
@@ -86,14 +86,14 @@ const createGroupRoute = createRoute({
   responses: { 200: jsonResponse(GroupSchema, "The group"), ...refusals },
 });
 
-const patchGroupRoute = createRoute({
-  method: "patch",
+const updateGroupRoute = createRoute({
+  method: "put",
   operationId: "updateGroup",
   path: "/groups/{groupId}",
   tags: ["groups"],
   summary: "Rename, archive or change a setting",
-  description: "A patch, not a whole row. There are no fields for `id`, `createdAt` or `createdBy`, which is why nothing needs to forbid rewriting them.",
-  request: { params: GroupPathSchema, body: { required: true, content: { "application/json": { schema: GroupPatchSchema } } } },
+  description: "Every editable field, every time. There are no fields for `id`, `createdAt` or `createdBy`, which is why nothing needs to forbid rewriting them.",
+  request: { params: GroupPathSchema, body: { required: true, content: { "application/json": { schema: GroupUpdateSchema } } } },
   responses: { 200: jsonResponse(GroupSchema, "The group"), ...refusals },
 });
 
@@ -108,14 +108,14 @@ const addMemberRoute = createRoute({
   responses: { 200: jsonResponse(MemberSchema, "The member"), ...refusals },
 });
 
-const patchMemberRoute = createRoute({
-  method: "patch",
+const updateMemberRoute = createRoute({
+  method: "put",
   operationId: "updateMember",
   path: "/groups/{groupId}/members/{memberId}",
   tags: ["groups"],
   summary: "Change a name, a payment handle, or whether somebody is still here",
   description: "Your own row and any placeholder are editable; another account holder's are not — including by whoever made the group. Leaving is always yours to do; removing somebody else requires them to be settled in every currency.",
-  request: { params: MemberPathSchema, body: { required: true, content: { "application/json": { schema: MemberPatchSchema } } } },
+  request: { params: MemberPathSchema, body: { required: true, content: { "application/json": { schema: MemberUpdateSchema } } } },
   responses: { 200: jsonResponse(MemberSchema, "The member"), ...refusals },
 });
 
@@ -137,7 +137,7 @@ const deleteEntryRoute = createRoute({
   tags: ["entries"],
   summary: "Soft-delete an expense",
   description: "Deleting always moves money, so unlike a prose edit it must carry the exact version the device last saw. The row stays in the feed with `deletedAt` set; nothing here can remove it.",
-  request: { params: EntryPathSchema, query: z.object({ baseSeq: SeqQuerySchema }) },
+  request: { params: EntryPathSchema, query: z.object({ baseSeq: RequiredSeqQuerySchema }) },
   responses: { 200: jsonResponse(EntrySchema, "The expense, now deleted"), ...refusals },
 });
 
@@ -147,7 +147,7 @@ const restoreEntryRoute = createRoute({
   path: "/groups/{groupId}/entries/{entryId}/restore",
   tags: ["entries"],
   summary: "Put a deleted expense back",
-  request: { params: EntryPathSchema, query: z.object({ baseSeq: SeqQuerySchema }) },
+  request: { params: EntryPathSchema, query: z.object({ baseSeq: RequiredSeqQuerySchema }) },
   responses: { 200: jsonResponse(EntrySchema, "The expense, restored"), ...refusals },
 });
 
@@ -197,7 +197,7 @@ export function ledgerRoutes(routes: OpenAPIHono<AuthedEnv>) {
     return respond(c, await group(c, input.id).create(input, c.var.session.userId));
   });
 
-  routes.openapi(patchGroupRoute, async (c) => {
+  routes.openapi(updateGroupRoute, async (c) => {
     const { groupId } = c.req.valid("param");
     return respond(c, await group(c, groupId).update(c.req.valid("json"), c.var.session.userId));
   });
@@ -207,7 +207,7 @@ export function ledgerRoutes(routes: OpenAPIHono<AuthedEnv>) {
     return respond(c, await group(c, groupId).addMember(c.req.valid("json"), c.var.session.userId));
   });
 
-  routes.openapi(patchMemberRoute, async (c) => {
+  routes.openapi(updateMemberRoute, async (c) => {
     const { groupId, memberId } = c.req.valid("param");
     return respond(c, await group(c, groupId).updateMember(memberId, c.req.valid("json"), c.var.session.userId));
   });

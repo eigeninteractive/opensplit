@@ -17,33 +17,27 @@ additionalProperties:
   pubLibrary: opensplit_api
   pubVersion: 1.0.0
 
-  # json_serializable, not built_value. Both are available on this generator;
-  # built_value drags its own immutable-collection types (BuiltList, BuiltMap)
-  # through every call site, which is a second modelling vocabulary in an app
-  # that already has freezed.
+  # json_serializable, not built_value, whose BuiltList and BuiltMap would
+  # follow the generated types into every call site.
   serializationLibrary: json_serializable
 
-  # copyWith on a wire DTO is not useful here. The domain models are freezed
-  # and own that job; a DTO is read once, mapped, and discarded.
+  # copyWith on a wire DTO is not useful: it is read once and stored, or
+  # built once and sent.
   skipCopyWith: true
 
-  # The reason this generator was chosen over the plain `dart` one.
-  #
-  # It adds an `unknownDefaultOpenApi` member to every enum, and
-  # json_serializable decodes an unrecognised value into it via
-  # `@JsonKey(unknownEnumValue: ...)`. The plain `dart` generator emits the
-  # member too, but nothing maps unknown strings to it — its decoder returns
-  # null and the model does `EnumType.fromJson(json[r'kind'])!`, so one new
-  # event kind from a newer server throws and takes the whole sync page with
-  # it.
-  #
-  # That is the exact failure GroupEventKind.parse exists to prevent: a server
-  # that has learned a new kind will send it to clients that have not, and the
-  # right answer for an old build is to leave that line out of the feed, not
-  # to stop the feed updating at all. The sentinel is read-side only —
-  # serialising it emits a value the API does not accept, which is correct,
-  # because a client should never originate a kind it does not understand.
+  # Every enum gets an `unknownDefaultOpenApi` member, and an unrecognised
+  # value decodes into it. The plain `dart` generator emits the member but
+  # returns null and force-unwraps it, so one new event kind from a newer
+  # server would throw and take the whole sync page with it. The sentinel is
+  # read-side only: serialising it emits a value the API rejects.
   enumUnknownDefaultCase: true
+
+# A calendar date stays the `YYYY-MM-DD` string it is on the wire. As a
+# DateTime, json_serializable would parse it as local midnight and send it
+# back as a full timestamp, which the server refuses. It becomes a DateTime at
+# the one edge where it meets local storage (lib/data/sync/wire.dart).
+typeMappings:
+  date: String
 
 globalProperties:
   # No generated tests asserting that generated constructors construct, and no

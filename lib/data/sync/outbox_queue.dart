@@ -53,13 +53,6 @@ class OutboxQueue {
   /// settlements, group and member edits and your own profile — and covers
   /// whatever is added next without anybody remembering to.
   ///
-  /// The alternative was a sync call at each save site, which is how this went
-  /// unnoticed for so long: there was one, on opening a group screen, and
-  /// saving an expense returned to a screen that was already mounted, so it
-  /// never ran again. The expense sat on the phone until something else
-  /// happened to trigger a sync — nobody else in the group was told, and no
-  /// notification was sent.
-  ///
   /// Carries no payload. A listener's job is to drain the queue, and the queue
   /// already knows what is in it.
   Stream<void> get queued => _queued.stream;
@@ -82,8 +75,8 @@ class OutboxQueue {
   ///
   /// [Outbox.createdAt] is deliberately left alone when the row is already
   /// queued: it records when the row first went dirty, and re-dirtying a row is
-  /// not the row becoming new. Rewriting it was how a second edit could
-  /// reorder a row ahead of something it depends on.
+  /// not the row becoming new. Rewriting it would let a second edit reorder a
+  /// row ahead of something it depends on.
   Future<void> enqueue(OutboxTarget target, String targetId) async {
     if (!(await readSyncSession(_db)).enabled) {
       throw StateError('This account session has ended.');
@@ -94,9 +87,9 @@ class OutboxQueue {
         .insert(
           OutboxCompanion.insert(
             id: idFor(target, targetId),
-            operation: target,
+            target: target,
             targetId: targetId,
-            revision: Value(revision),
+            revision: revision,
             createdAt: _clock(),
           ),
           onConflict: DoUpdate(
@@ -140,7 +133,7 @@ class OutboxQueue {
     )..where((t) => t.deadLetteredAt.isNull())).get();
 
     rows.sort((a, b) {
-      final byKind = a.operation.index.compareTo(b.operation.index);
+      final byKind = a.target.index.compareTo(b.target.index);
       return byKind != 0 ? byKind : a.createdAt.compareTo(b.createdAt);
     });
 
@@ -188,19 +181,14 @@ class OutboxQueue {
       ..where((t) => t.deadLetteredAt.isNotNull())
       ..orderBy([(t) => OrderingTerm.desc(t.deadLetteredAt)]);
 
-    // One refused write, one line. This used to need filtering: a save queued
-    // both the expense and the feed line describing it, so a refusal produced
-    // two dead letters for one user action -- the second of them about a row
-    // nobody had ever heard of. The server writes the history now, so there is
-    // only ever the expense to report.
     return query.watch().asyncMap((rows) => Future.wait(rows.map(_describe)));
   }
 
   Future<FailedWrite> _describe(OutboxRow row) async {
     return FailedWrite(
       id: row.id,
-      target: row.operation,
-      label: await _labelFor(row.operation, row.targetId),
+      target: row.target,
+      label: await _labelFor(row.target, row.targetId),
       reason: row.lastError ?? 'The server refused it without saying why.',
       failedAt: row.deadLetteredAt!,
     );

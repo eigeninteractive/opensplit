@@ -20,7 +20,7 @@ import 'wire.dart';
 Future<Set<String>> _dirtyIds(AppDatabase db, OutboxTarget target) async {
   final rows = await (db.select(
     db.outbox,
-  )..where((t) => t.operation.equalsValue(target))).get();
+  )..where((t) => t.target.equalsValue(target))).get();
   return {for (final row in rows) row.targetId};
 }
 

@@ -12,8 +12,7 @@ import '../widgets/page_body.dart';
 /// An open-source app that never links to its own source is asking to be taken
 /// on trust, which is the one thing this project's whole argument refuses to
 /// ask for. PRINCIPLES.md is published so it can be held against us; the repo
-/// is where somebody does the holding. Until now the only link to it was in the
-/// marketing site's footer, which nobody who installed the app ever sees again.
+/// is where somebody does the holding.
 ///
 /// It is also, more plainly, a licence obligation. AGPL-3.0 entitles a user
 /// running a modified OpenSplit to that modification's source, and a fork that

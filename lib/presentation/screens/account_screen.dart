@@ -8,17 +8,9 @@ import '../feedback.dart';
 import '../widgets/account_section.dart';
 import '../widgets/page_body.dart';
 
-/// Who you are, in one place.
-///
-/// Everything here used to be somewhere else and worse. Linking an account was
-/// three quarters of the way down Settings, below the notification switch —
-/// the wrong place for the one action that decides whether somebody's data
-/// survives losing their phone. The name and payment handle were device
-/// preferences mirrored into a profile row and copied again into every group's
-/// member row, so a rename was three writes that nothing kept in step, and it
-/// never reached the people who actually see the name.
-///
-/// One name now, on the account, read by everybody who shares a group with you.
+/// Who you are, in one place: linking the account, which decides whether
+/// somebody's data survives losing their phone, and the one name and payment
+/// handle everybody who shares a group with you reads.
 class AccountScreen extends ConsumerStatefulWidget {
   const AccountScreen({super.key});
 

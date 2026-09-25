@@ -15,12 +15,12 @@ part 'join_request.g.dart';
 )
 class JoinRequest {
   /// Returns a new [JoinRequest] instance.
-  JoinRequest({this.memberId, this.displayName});
+  JoinRequest({required this.memberId, required this.displayName});
 
-  @JsonKey(name: r'memberId', required: false, includeIfNull: false)
+  @JsonKey(name: r'memberId', required: true, includeIfNull: true)
   final String? memberId;
 
-  @JsonKey(name: r'displayName', required: false, includeIfNull: false)
+  @JsonKey(name: r'displayName', required: true, includeIfNull: true)
   final String? displayName;
 
   @override

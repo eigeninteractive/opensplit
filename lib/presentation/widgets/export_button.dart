@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../application/providers.dart';
+import '../../domain/calendar_date.dart';
 import '../../domain/export/csv_export.dart';
 import '../../domain/export/json_export.dart';
 
@@ -136,7 +137,7 @@ class _ExportButtonState extends ConsumerState<ExportButton> {
     final slug = (ledger?.group.name ?? 'opensplit')
         .replaceAll(RegExp(r'[^\w]+'), '-')
         .toLowerCase();
-    final day = DateTime.now().toIso8601String().split('T').first;
+    final day = calendarDate(DateTime.now());
     final name = '$slug-$day.$extension';
 
     await SharePlus.instance.share(

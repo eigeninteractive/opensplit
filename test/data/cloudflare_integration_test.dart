@@ -745,7 +745,11 @@ void main() {
 
       final priya = await host.ledger.addMember(
         groupId,
-        api.MemberCreate(id: '$groupId-priya', displayName: 'Priya'),
+        api.MemberCreate(
+          id: '$groupId-priya',
+          displayName: 'Priya',
+          upiVpa: null,
+        ),
       );
       return (groupId: groupId, priya: priya.id);
     }
@@ -933,29 +937,35 @@ void main() {
     test('restoring a group and clearing a handle reach the server', () async {
       if (!_available) return;
 
-      // Null is a value in both patches. A generated client drops a null
-      // optional field, and the server reads an absent one as "leave it", so
-      // these only work because the contract makes the fields required.
+      // Null is a value in both updates: restore, rejoin, clear.
       final g = await seededGroup(ravi);
       await ravi.ledger.updateGroup(
         g.groupId,
-        api.GroupPatch(archivedAt: DateTime.now().toUtc()),
+        api.GroupUpdate(
+          name: 'Goa',
+          simplifyDebts: true,
+          archivedAt: DateTime.now().toUtc(),
+        ),
       );
       final restored = await ravi.ledger.updateGroup(
         g.groupId,
-        api.GroupPatch(archivedAt: null),
+        api.GroupUpdate(name: 'Goa', simplifyDebts: true, archivedAt: null),
       );
       expect(restored.archivedAt, isNull);
 
       await ravi.ledger.updateMember(
         g.groupId,
         g.priya,
-        api.MemberPatch(upiVpa: 'priya@okaxis', leftAt: null),
+        api.MemberUpdate(
+          displayName: 'Priya',
+          upiVpa: 'priya@okaxis',
+          leftAt: null,
+        ),
       );
       final cleared = await ravi.ledger.updateMember(
         g.groupId,
         g.priya,
-        api.MemberPatch(upiVpa: null, leftAt: null),
+        api.MemberUpdate(displayName: 'Priya', upiVpa: null, leftAt: null),
       );
       expect(cleared.upiVpa, isNull);
     });

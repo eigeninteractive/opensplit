@@ -63,11 +63,10 @@ String returnDestination(Uri current) => current.path == '/welcome'
 /// stack, and a back button that can only pop is a dead control on exactly the
 /// screen a new user arrives at.
 ///
-/// A plain `go` is wrong everywhere else, and is what this app used to do. `go`
-/// replaces the whole route stack and reports the result to the engine as a
-/// forward navigation, so tapping back pushed a *new* browser history entry
-/// rather than returning to the previous one. The browser's own back button
-/// then went forward again, into the screen the user had just left.
+/// A plain `go` is wrong everywhere else: it replaces the whole route stack and
+/// reports a forward navigation, so back would push a *new* browser history
+/// entry and the browser's own back button would return to the screen just
+/// left.
 void goBack(BuildContext context, String fallback) {
   if (context.canPop()) {
     context.pop();

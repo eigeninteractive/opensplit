@@ -5,10 +5,7 @@ import { IdSchema } from "./common";
 /**
  * A signed-in identity, as the app sees it.
  *
- * Mirrors the Dart `Account` — named that rather than the obvious `User`
- * because the backend SDK used to export a class by that name and an
- * unqualified collision in generated code resolves to whichever the analyzer
- * reaches first.
+ * Generated into Dart as `Account`.
  */
 export const AccountSchema = z
   .object({
@@ -76,17 +73,18 @@ export const GoogleIdentityRequestSchema = z
   .object({
     /** A Google ID token, minted in-process by the native sign-in SDK. */
     idToken: z.string().min(1),
-    nonce: z.string().optional(),
+    /** The nonce the native sign-in was started with, if the platform used one. */
+    nonce: z.string().nullable(),
 
     /**
      * Whether the caller has already been told what signing in would cost.
      *
-     * False by default, and that default is the protection: when the Google
-     * account turns out to belong to somebody else, the request is refused so
-     * the app can stop and say that continuing leaves this device's ledger
-     * behind. By the time the session is replaced it is too late to ask.
+     * When false and the Google account belongs to somebody else, the
+     * request is refused so the app can say that continuing leaves this
+     * device's ledger behind. By the time the session is replaced it is too
+     * late to ask.
      */
-    allowSignIn: z.boolean().default(false),
+    allowSignIn: z.boolean(),
   })
   .openapi("GoogleIdentityRequest");
 

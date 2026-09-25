@@ -96,20 +96,11 @@ final class AttemptRedirected extends GoogleAttempt {
 ///
 /// Being a guest is a choice somebody makes, not a state they are put in.
 ///
-/// It used to be the latter: every launch with no session signed in
-/// anonymously, silently, before the user had expressed any intent at all.
-/// That quietly broke the most common arrival there is. Someone who already had
-/// an account and tapped a friend's invite link had the slot claimed by a
-/// throwaway account, the single-use token spent, and no way in afterwards —
-/// signing in gave them a different user id, the member row still pointed at
-/// the anonymous one, and the group refused a second slot for the same person.
-/// The only repair was the group's owner issuing a fresh link.
-///
-/// So a session is now established because somebody asked for one, by one of
-/// three routes offered together: Google, an email code, or being a guest.
-/// Guests remain first class — no wall, nothing gated, and an invite is shown
-/// before it is claimed — but the app no longer decides who you are before
-/// asking.
+/// A session starts because somebody asked for one: Google, an email code, or
+/// being a guest. Signing in silently as a guest would let a throwaway account
+/// claim an invite meant for somebody who already has an account, spending the
+/// single-use token. Guests are still first class — nothing is gated, and an
+/// invite is shown before it is claimed.
 ///
 /// ## Linking is not signing in
 ///

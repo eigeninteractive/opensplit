@@ -5,13 +5,8 @@ import { user } from "./auth-schema";
 import { memberships, profiles } from "./db/d1/schema";
 
 /**
- * The two things that are genuinely global.
- *
- * There used to be a third, `30 4 * * *`, for archiving and collecting dormant
- * groups. It is gone: every group sets its own alarm, so each carries its own
- * clock — one wake-up in three months instead of ninety nightly scans that find
- * nothing to do, and no fan-out proportional to the number of groups. What is
- * left here is what no single object can do for itself: rates nobody owns,
+ * The two things that are genuinely global: what no single group object can
+ * do for itself (each group sets its own alarm for dormancy): rates nobody owns,
  * accounts that belong to no group, and checking that the derived index still
  * agrees with the objects that are the truth.
  */

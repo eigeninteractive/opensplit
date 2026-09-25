@@ -10,10 +10,9 @@ import 'package:test/test.dart';
 import '../harness.dart';
 
 void main() {
-  group('patches', () {
-    // The server reads an absent field as "leave it alone", and a generated
-    // client drops a null optional field. So null has to be sent explicitly,
-    // or restoring, rejoining and clearing a handle never reach the server.
+  group('updates', () {
+    // Null is a value in an update (restore, rejoin, clear), so it has to be
+    // on the wire rather than dropped.
     test('restoring a group sends archivedAt: null', () {
       final group = Group(
         id: 'g',
@@ -23,7 +22,7 @@ void main() {
         simplifyDebts: true,
         createdAt: DateTime.utc(2026),
       );
-      expect(group.toPatch().toJson(), containsPair('archivedAt', null));
+      expect(group.toUpdate().toJson(), containsPair('archivedAt', null));
     });
 
     test('rejoining and clearing a handle send their nulls', () {
@@ -34,7 +33,7 @@ void main() {
         joinedAt: DateTime.utc(2026),
       );
       expect(
-        member.toPatch().toJson(),
+        member.toUpdate().toJson(),
         allOf(containsPair('leftAt', null), containsPair('upiVpa', null)),
       );
     });

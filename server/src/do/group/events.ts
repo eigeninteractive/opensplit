@@ -119,12 +119,9 @@ function byMember(a: { memberId: string }, b: { memberId: string }): number {
 /**
  * Appends a snapshot, unless it is already what the newest one says.
  *
- * The five-events-for-one-save problem this used to solve is gone: a save is
- * one call inside one transaction and writes one event, rather than firing a
- * deferred trigger once per affected row across three tables. What is left is
- * the smaller and still-real case — a re-saved editor, or a push retried after
- * the response was lost — where nothing this record describes has moved and a
- * feed full of "Ravi edited nothing" is worse than no feed.
+ * A re-saved editor, or a push retried after its response was lost, changes
+ * nothing this record describes, and a feed full of "Ravi edited nothing" is
+ * worse than no feed.
  *
  * Returns whether anything was written, which the caller uses to decide
  * whether the change is worth waking a phone for.

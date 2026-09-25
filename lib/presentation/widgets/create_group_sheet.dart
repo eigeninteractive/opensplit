@@ -14,19 +14,9 @@ Future<void> showCreateGroupSheet(BuildContext context) => showModalBottomSheet(
 
 /// Naming a group, and — exactly once, ever — naming yourself.
 ///
-/// The name field used to be unconditional, pre-filled from the account and
-/// written back to it on save. That made one name editable from two places
-/// with no indication that the second one was an account edit at all, and the
-/// write-back ran *before* the group was created, so a profile save that failed
-/// took the group down with it while still having changed the name. Reopening
-/// the sheet then pre-filled the new name, the comparison matched, the save was
-/// skipped, and the group appeared — which reads exactly like "it works the
-/// second time" and is impossible to reason about.
-///
-/// Now the field is shown only when the account genuinely has no name, which
-/// [Profile.displayName] can finally express, and answering it is understood as
-/// the account edit it always was. Once there is a name there is nothing to
-/// mismatch, because there is only one place holding it.
+/// The name field is shown only when the account has no name
+/// ([Profile.displayName] is null), and answering it is an account edit. Once
+/// there is a name it has one home, the account, and is not edited here.
 class _CreateGroupSheet extends ConsumerStatefulWidget {
   const _CreateGroupSheet();
 
@@ -97,9 +87,7 @@ class _CreateGroupSheetState extends ConsumerState<_CreateGroupSheet> {
       Navigator.of(context).pop();
       router.push('/g/${created.group.id}');
     } catch (error) {
-      // Shown rather than swallowed. This used to have a bare `finally`, so
-      // anything thrown here left the sheet open, the button live and no
-      // explanation anywhere on screen.
+      // Shown rather than swallowed.
       if (mounted) setState(() => _error = '$error');
     } finally {
       if (mounted) setState(() => _saving = false);

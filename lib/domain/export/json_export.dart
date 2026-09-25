@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../calendar_date.dart';
 import '../models/entry.dart';
 import '../models/group_event.dart';
 import '../models/group.dart';
@@ -75,7 +76,7 @@ String groupToJson({
           // table to be usable — losing exactness on the way for the currencies
           // where it matters most.
           'amount_minor': entry.amountMinor,
-          'date': entry.entryDate.toIso8601String().split('T').first,
+          'date': calendarDate(entry.entryDate),
           'split_kind': entry.splitKind.name,
           'notes': entry.notes,
           // What a unit of this currency was worth on the day, as recorded then
@@ -114,12 +115,7 @@ String groupToJson({
           'deleted_at': entry.deletedAt?.toIso8601String(),
         },
     ],
-    // The whole record, not just the expense half of it.
-    //
-    // It used to carry entry events alone, because those were the only ones
-    // there were. An export that promises "everything you can take with you"
-    // and silently drops who joined and when is a smaller promise than the one
-    // this project makes.
+    // The whole record: who joined and when, not only the expenses.
     'activity': [for (final event in activity) _eventToJson(event)],
   };
 
