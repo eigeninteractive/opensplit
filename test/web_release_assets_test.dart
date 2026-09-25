@@ -73,10 +73,10 @@ void main() {
     );
   });
 
-  test('every route the app used to own at the root still resolves', () {
-    // These URLs are in chat histories and browser histories from before the
-    // origin was split. A redirect that quietly stops being emitted is a link
-    // somebody else holds that now 404s.
+  test('the client routes resolve at the host root too', () {
+    // The /app/ split is ours, not the user's. Somebody who types or bookmarks
+    // the route the app shows them should land on it rather than a 404, and an
+    // invite path is the one where that matters most.
     final redirects = File('site/_redirects')
         .readAsLinesSync()
         .where((line) => line.startsWith('/'))

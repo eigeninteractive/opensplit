@@ -1213,7 +1213,7 @@ void _serving() {
     }
   });
 
-  test('routes the client used to own at the root still resolve', () async {
+  test('a client route resolves at the host root too', () async {
     if (!_available) return;
 
     final response = await get('/join/a-token-from-an-old-chat');

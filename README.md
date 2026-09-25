@@ -20,10 +20,9 @@ no real mobile app.
   netted across one.
 - **Your records do not depend on us.** The server stores rows and enforces one
   invariant; it computes nothing. The whole journal lives on your device, in
-  plain SQLite, and exports to CSV. The hosted backend runs on Cloudflare
-  Durable Objects, which you cannot stand up yourself — so
-  [PRINCIPLES.md](PRINCIPLES.md) #6 says that plainly rather than promising a
-  self-host path that does not exist.
+  plain SQLite, and exports to CSV. The backend runs on Cloudflare Durable
+  Objects, which you cannot stand up yourself; [PRINCIPLES.md](PRINCIPLES.md)
+  #6 states that limitation outright rather than implying a self-host path.
 
 ## Architecture in one paragraph
 

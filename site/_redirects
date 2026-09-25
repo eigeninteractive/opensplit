@@ -1,13 +1,14 @@
-# Client routes that used to live at the host root.
+# The client's routes, answered at the host root as well as under /app/.
 #
-# Before the origin was split into a static site and a client under /app/, the
-# app owned the whole host and every route was minted at it. Those URLs are in
-# chat histories and in browser histories, and a link pasted into a chat
-# outlives the layout that made it — so they keep resolving, to wherever the
-# route lives now.
+# Not a legacy mapping: this origin has never served anything, so no link at
+# these paths has ever been minted. It is here because the split between a
+# static root and a client under /app/ is ours rather than the user's, and a
+# person who types or bookmarks the route they see in the app should land on
+# it. The cost of being wrong in the other direction is a 404 on an invite.
 #
-# 301 and not 302: this is not a temporary arrangement. A permanent redirect is
-# what lets a browser stop asking and a crawler stop listing the old URL.
+# 301 and not 302: the split is not a temporary arrangement, and a permanent
+# redirect is what lets a browser stop asking and a crawler stop listing the
+# bare path as a separate page.
 #
 # Like _headers, this file is parsed rather than served, must sit at the root of
 # the assets directory, and does not apply to anything the Worker answers
