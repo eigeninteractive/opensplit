@@ -4,7 +4,48 @@ updates:
     directory: /
     schedule:
       interval: weekly
+
   - package-ecosystem: bundler
     directory: /
     schedule:
       interval: weekly
+
+  # The Worker. Better Auth and Wrangler both move fast, and this is the half
+  # of the project with no lockfile-enforcing CI step of its own -- `npm ci`
+  # takes whatever package-lock.json says, so nothing notices a version going
+  # stale until something breaks.
+  - package-ecosystem: npm
+    directory: /server
+    schedule:
+      interval: weekly
+    groups:
+      # One pull request for the toolchain, which moves constantly and whose
+      # updates are only ever interesting together: biome, vitest and the test
+      # pool have to agree with each other, and wrangler decides what the
+      # generated Env types look like.
+      toolchain:
+        dependency-type: development
+    # Runtime dependencies are deliberately ungrouped and arrive one at a
+    # time. Better Auth owns sessions and account linking, Hono owns routing,
+    # and drizzle owns the migration files -- each of those is worth reading a
+    # changelog for on its own rather than in a batch of five.
+
+  # The Flutter app. Separate from the Worker so a Dart bump and a Node bump
+  # are never the same pull request; they are reviewed by reading different
+  # things and break in different jobs.
+  - package-ecosystem: pub
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      codegen:
+        # build_runner and the generators it drives are version-locked to each
+        # other in practice: bumping freezed without build_runner produces an
+        # analyzer error in generated code rather than a clean failure.
+        patterns:
+          - build_runner
+          - build_*
+          - freezed*
+          - json_serializable
+          - riverpod_generator
+          - drift_dev

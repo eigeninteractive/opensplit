@@ -79,14 +79,13 @@ that fails loudly:
 
 - **It has to be uploaded.** `wrangler deploy` uploads the whole assets
   directory including dotfiles, and `tool/build_web.dart` copies `site/` — also
-  including dotfiles — over the built client. That was not free on the previous
-  host: Firebase Hosting's default `ignore` list contains `**/.*`, which matches
-  `.well-known`, so accepting the default silently never uploaded the directory
-  at all.
+  including dotfiles — over the built client. Not every host does this by
+  default; a glob that skips names beginning with a dot never uploads
+  `.well-known` at all, and nothing says so.
 - **It has to be `application/json`.** Wrangler infers the type from the
   extension, so `.json` is enough and there is no rule for it in `_headers`.
-- **It must not redirect.** Nothing in `_redirects` touches `.well-known`, and
-  the trailing-slash handling only applies to HTML.
+- **It must not redirect.** Nothing serves it but the asset router, and the
+  trailing-slash handling only applies to HTML.
 
 Check it is there before believing a deploy:
 

@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { evenly, freshId, makeGroup, ok, PRIYA, RAVI, refusal, stub, sumOf, ZARA } from "./group";
 
 /**
- * Ports `02_rls_and_invites_test.sql` from the pgTAP suite that came before
- * this one. See the porting table in `docs/cloudflare-migration-plan.md`.
+ * Invites, links, and what a stranger can reach: a token spent exactly once,
+ * an expired one, a revoked one, and a group nobody outside it can read.
  *
  * Half of that file tested RLS: that Zara, who is in no group, sees no groups,
  * no members, no entries, no balances and no invite rows. None of those are

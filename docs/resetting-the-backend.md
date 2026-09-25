@@ -131,7 +131,7 @@ So: **objects first, then D1** — or neither.
 
 Secrets survive a D1 reset, because they belong to the Worker. They do **not**
 survive `wrangler delete`. After one of those, all of step 4 in
-[the runbook](cloudflare-runbook.md) again.
+[the runbook](runbook.md) again.
 
 KV needs nothing. The rate blobs and the FCM token rebuild themselves — the
 token on the next push, the rates on the next 04:00 UTC run or whenever you ask:
@@ -149,10 +149,8 @@ Most of this is automatic. These are the three that fail quietly:
 ```sh
 base=https://opensplit.eigeninteractive.com
 
-# Reference data ships inside the Worker script, so this one cannot actually
-# be empty any more — it used to be a table, and an empty table meant nobody
-# could create a group at all. Worth a glance to confirm the deploy is the
-# build you think it is.
+# Reference data ships inside the Worker script, so this is really a check
+# that the deploy is the build you think it is.
 curl -s $base/api/reference | head -c 120
 
 # D1 is bound and writable. A guest sign-in writes a user and a session.

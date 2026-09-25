@@ -65,10 +65,10 @@ Future<void> main(List<String> args) async {
 /// Worker cannot start without an assets directory — `wrangler dev` refuses
 /// outright — and requiring a two-minute Flutter build before anyone can run
 /// the server would be a strange price for editing a route handler. What it
-/// produces is not a stub: the static root, `_headers` and `_redirects` are
-/// exactly what ships, so the parts of the serving layer that live in those
-/// files can be tested against a real Worker. Only `/app/` is missing, and a
-/// request for it answers 404 rather than pretending.
+/// produces is not a stub: the static root and `_headers` are exactly what
+/// ships, so the part of the serving layer that lives in that file can be
+/// tested against a real Worker. Only `/app/` is missing, and a request for it
+/// answers 404 rather than pretending.
 Future<void> _build(
   String configPath,
   String? requestedBuildId, {
@@ -122,22 +122,20 @@ Future<void> _build(
   stdout.writeln('  /app/  Flutter client');
 }
 
-/// Fails if the two files that configure serving did not reach the bundle.
+/// Fails if the file that configures response headers did not reach the bundle.
 ///
-/// Cloudflare parses `_headers` and `_redirects` from the root of the assets
-/// directory and never serves them, which means their absence produces no 404
-/// and no error anywhere — the site simply comes back without cross-origin
-/// isolation, and the client's database stops working in a way that looks like
-/// a Flutter bug. Both are copied from `site/`, so the way to lose them is a
-/// copy that skips names beginning with an underscore.
+/// Cloudflare parses `_headers` from the root of the assets directory and never
+/// serves it, which means its absence produces no 404 and no error anywhere —
+/// the site simply comes back without cross-origin isolation, and the client's
+/// database stops working in a way that looks like a Flutter bug. It is copied
+/// from `site/`, so the way to lose it is a copy that skips names beginning
+/// with an underscore.
 void _checkServingRules(Directory output) {
-  for (final name in ['_headers', '_redirects']) {
-    if (!File('${output.path}/$name').existsSync()) {
-      throw StateError(
-        '$name did not reach ${output.path}. Cloudflare reads it from the '
-        'root of the assets directory, and its absence is silent.',
-      );
-    }
+  if (!File('${output.path}/_headers').existsSync()) {
+    throw StateError(
+      '_headers did not reach ${output.path}. Cloudflare reads it from the '
+      'root of the assets directory, and its absence is silent.',
+    );
   }
 }
 

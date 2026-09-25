@@ -37,24 +37,17 @@ A hosted tier, a one-time purchase, sponsorship — all legitimate. A feature
 gate is not. The test is simple: does paying make something *easier*, or does
 not paying make something *impossible*? Only the first is allowed.
 
-### 6. Your records are portable, even though the server is not
+### 6. You can always leave, and take everything with you
 
-The hosted backend runs on Cloudflare Durable Objects, D1 and KV. Those are not
-products you can stand up yourself. There is no self-host path, we are not
-going to imply one by shipping a portability seam that nobody tests, and this
-is the only principle on this page that is a limitation rather than a promise.
+The journal is yours and it is already on your device: plain SQLite, exported to
+CSV whenever you ask. The backend stores rows and enforces one invariant; every
+number you see is computed on your device from data you already hold. The client
+reaches the server through a single interface over a published OpenAPI contract,
+so a fork points at a different server by writing one class.
 
-What protects you is the larger half, and it is not a consolation. The backend
-stores rows and enforces one invariant; it computes nothing. Every number you
-see — every split, every balance, every simplified debt — is worked out on your
-device from a journal that lives there, in plain SQLite, exports to CSV, and
-works with no server at all. See #7. The client reaches the server through one
-Dart interface over an HTTP API published as OpenAPI, so pointing it somewhere
-else is writing one class against a documented contract. And AGPL-3.0 obliges
-anyone running a modified OpenSplit as a service to publish their changes.
-
-We chose a backend we cannot hand you, and kept the thing that means you do not
-need one.
+The backend itself runs on Cloudflare Durable Objects, D1 and KV, which you
+cannot run yourself. There is no self-host path and we will not imply one with a
+portability layer nobody tests.
 
 ### 7. The app survives this project being abandoned
 

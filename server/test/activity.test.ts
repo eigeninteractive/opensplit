@@ -4,9 +4,8 @@ import { isEntryEvent, isGroupEvent, isMemberEvent } from "../src/schemas/ledger
 import { evenly, expense, freshId, makeGroup, makeGroupOfTwo, ok, PRIYA, RAVI, stub } from "./group";
 
 /**
- * Ports `06_activity_test.sql` from the pgTAP suite that came before this
- * one. That suite went with the Postgres backend; the porting table in
- * `docs/cloudflare-migration-plan.md` says where each file ended up.
+ * Activity events: that one save produces one event, that nothing produces
+ * none, and that the actor on it is the person who made the change.
  *
  * The record exists because editing an expense in place is the right model and
  * is silently destructive on its own: somebody who agreed a bill was ₹400 and

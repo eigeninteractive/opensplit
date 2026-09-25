@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { evenly, freshId, makeGroup, makeGroupOfTwo, ok, PRIYA, RAVI, refusal, stub, ZARA } from "./group";
 
 /**
- * Ports `04_adversarial_test.sql` from the pgTAP suite that came before this
- * one. See the porting table in `docs/cloudflare-migration-plan.md`.
+ * What one member of a group can do to another, which is a different question
+ * from what a stranger can do and has a much less obvious answer.
  *
  * That file spent half its length proving that `authenticated` held no direct
  * INSERT, UPDATE or DELETE on the ledger tables — because while direct DML was

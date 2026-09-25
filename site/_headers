@@ -3,14 +3,13 @@
 # Cloudflare parses this file and applies its rules; it is never served itself.
 # It has to sit at the root of the assets directory, which is build/web — so it
 # lives here in site/, and tool/build_web.dart copies site/ over the built
-# client. See docs/cloudflare-runbook.md.
+# client. See docs/runbook.md.
 #
-# This replaces firebase.json's `headers` block and is a third of its length,
-# because eleven of its fourteen rules were spelling out, one path at a time,
-# what Workers already does to every asset: `Cache-Control: public, max-age=0,
-# must-revalidate` with an ETag, so a service worker script, an index.html or a
-# manifest is revalidated on every load and can never be served stale. The
-# rules below are the ones that say something the default does not.
+# Short on purpose. Workers already sends `Cache-Control: public, max-age=0,
+# must-revalidate` with an ETag on every asset, so an index.html, a service
+# worker script or a manifest is revalidated on every load and can never be
+# served stale. Only rules that say something that default does not belong
+# here.
 #
 # One caution worth stating, because it is invisible until it bites: these
 # reach static assets only. Responses the Worker generates — the whole of
@@ -35,10 +34,10 @@
 # a pointless one to impose on marketing pages at the root that somebody else
 # designs and that embed Google Fonts.
 #
-# The pair is safe here only because no sign-in depends on a popup any more:
-# the web build hands the whole page to Google and comes back. Reinstating an
-# in-page Google button without first removing these breaks sign-in silently,
-# in release builds only.
+# The pair is safe here only because no sign-in depends on a popup: the web
+# build hands the whole page to Google and comes back. Adding an in-page Google
+# button without first removing these breaks sign-in silently, in release
+# builds only.
 /app/*
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: credentialless

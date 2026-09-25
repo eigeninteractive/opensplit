@@ -2,9 +2,9 @@
  * OpenSplit's backend: one Worker serving the static site, the Flutter web
  * bundle and the API, with one Durable Object per group.
  *
- * See docs/cloudflare-migration-plan.md for why it is shaped this way, and
- * docs/cloudflare-runbook.md for the commands that create the resources named
- * below. Nothing here is created automatically.
+ * See docs/architecture.md for why it is shaped this way, and docs/runbook.md
+ * for the commands that create the resources named below. Nothing here is
+ * created automatically.
  */
 {
   "$schema": "node_modules/wrangler/config-schema.json",
@@ -38,8 +38,8 @@
    * The whole front end, served from the same origin as the API.
    *
    * `directory` is the output of `dart run tool/build_web.dart`: the static
-   * site at the root and the Flutter client under `/app/`, with `_headers` and
-   * `_redirects` beside them. It is a build artifact and is not committed, so
+   * site at the root and the Flutter client under `/app/`, with `_headers`
+   * beside them. It is a build artifact and is not committed, so
    * `wrangler dev` needs it to exist — `--site-only` builds the root of it in
    * about a second, without a Flutter toolchain, which is what CI and anybody
    * working only on the server should run.
@@ -76,9 +76,9 @@
    * for the same reason.
    *
    * The custom domain is attached by `wrangler deploy` once the zone exists;
-   * see docs/cloudflare-runbook.md. A deploy before that fails loudly, which is
-   * the intent — the alternative is a Worker that is live on an address nobody
-   * has been told about.
+   * see docs/runbook.md. A deploy before that fails loudly, which is the
+   * intent — the alternative is a Worker that is live on an address nobody has
+   * been told about.
    */
   "workers_dev": false,
   "preview_urls": false,

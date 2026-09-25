@@ -3,9 +3,8 @@ import { describe, expect, it } from "vitest";
 import { evenly, expense, freshId, makeGroup, ok, PRIYA, refusal, stub, sumOf } from "./group";
 
 /**
- * Ports `01_schema_and_invariant_test.sql` from the pgTAP suite that came
- * before this one. See the porting table in
- * `docs/cloudflare-migration-plan.md`.
+ * The invariant and the write path: an expense that does not add up, a hard
+ * delete, an idempotent retry, and the stale-base predicate.
  *
  * The invariant it is named for — `sum(payers) = sum(shares) = amount` — was a
  * deferred constraint trigger hung off three tables. It is one function call

@@ -1,14 +1,12 @@
-# The backend, as built
+# The backend
 
 One Worker on one origin serves the static site, the Flutter client and the
 API. Behind it: one Durable Object per group, a single Durable Object for
 exchange rates, a D1 database for the handful of facts that are genuinely
 cross-group, and a KV namespace for things that are derived and rebuildable.
 
-This describes what runs. `docs/cloudflare-migration-plan.md` is the plan it was
-built from and the argument for each decision; where the two disagree, this one
-is right and the differences are listed at the end.
-`docs/cloudflare-runbook.md` is how to stand it up.
+`docs/runbook.md` is how to stand it up; `docs/resetting-the-backend.md` is how
+to tear it down and start again.
 
 ---
 
@@ -18,17 +16,19 @@ Not "which database" but **where the authorization boundary lives**. The answer
 is: one Durable Object per group, which is that group's only writer.
 
 Everything else follows. A Durable Object processes one request at a time and
-owns exactly one group's rows, so the three things Postgres needed extra
-machinery for become ordinary code:
+owns exactly one group's rows, so the three hardest rules in the product are
+ordinary code:
 
-| Postgres needed | Here it is |
-|---|---|
-| RLS policies plus `SECURITY DEFINER` helpers, because `is_group_member` recursed through its own policy | reading my own `members` table |
-| `guard_group_update` / `guard_member_update` triggers, because RLS gates rows but not columns and `WITH CHECK` cannot see `OLD` | a function with the old and new rows in hand |
-| A deferred constraint trigger for `sum(payers) = sum(shares) = amount` | an `if` inside the write |
+- **"Are you a member?"** is reading my own `members` table. No cross-table
+  lookup, no recursion to design around.
+- **"You may change this column, but only on your own row"** is a function with
+  the old and new rows in hand.
+- **`sum(payers) = sum(shares) = amount`** is an `if` inside the write, checked
+  against every row the same change touches, before any of them commit.
 
-None of that is cleverness recovered. It is the same rules, written once, where
-the data is.
+Every one of those is a thing a relational database with row-level security
+either cannot express or expresses through a second mechanism. Here they are
+where the data is, written once.
 
 ---
 
@@ -153,11 +153,12 @@ tokens.
 `0 4 * * *` refreshes exchange rates. `0 5 * * 0` collects abandoned guest
 accounts and reconciles a slice of the D1 index.
 
-There is deliberately no nightly dormancy sweep. Postgres needed one because a
-table cannot schedule itself, so a job scanned every group every night. A
-Durable Object sets its own alarm, so each group carries its own clock: one
-wake-up in three months instead of ninety that find nothing to do, and no
-fan-out proportional to the number of groups.
+There is deliberately no nightly dormancy sweep. A Durable Object sets its own
+alarm, so each group carries its own clock: one wake-up in three months rather
+than ninety nightly scans that find nothing to do. The alternative — a cron
+that asks every group whether it has gone quiet — is a fan-out proportional to
+the number of groups, paid every night, to discover that almost none of them
+have.
 
 ---
 
@@ -195,40 +196,37 @@ own is what makes "free forever" a structure rather than a hope.
 
 ---
 
-## Where this differs from the plan
+## Three places the obvious design is wrong
 
-Four things changed while building, and the plan still describes the original
-intent:
-
-- **Reference data is bundled, not in KV.** The plan put currencies and
-  categories in KV. They ship inside the Worker script instead, served with an
-  ETag and a day's cache — no read, no migration, no way for the two lists to
-  disagree with the code that validates against them.
-- **Dormancy is a per-object alarm, not a cron sweep.** The plan had a Cron
-  Trigger asking each candidate object to check itself, which is a fan-out
-  proportional to the number of groups. Each object schedules its own instead.
-- **`fx_providers` did not come across.** A table of provider rows, reorderable
-  without a deploy, bought nothing: there was no interface to edit it with, and
-  every change was a migration anyway. The waterfall is code. `provider_health`
-  did come across, because "why is AED missing" is otherwise unanswerable from
-  outside.
-- **The rate window reaches backwards.** A high-water mark cannot deliver a day
-  *older* than the ones already held, which is exactly what a backfill produces
-  — so backfill was structurally undeliverable in the design this inherited. The
-  client now reaches back once to the oldest expense holding no rate, with a
-  floor recording how far it went.
+- **The rate window has to reach backwards.** A high-water-mark cursor cannot
+  deliver a day *older* than the ones already held — which is exactly what a
+  backfill produces, since a backfill exists to fetch a date somebody backdated
+  past the window. A cursor alone makes the whole backfill path decorative:
+  requested, fetched, unreachable. The client reaches back once to the oldest
+  expense holding no rate, and records a floor so a date no provider will ever
+  answer widens the window one time instead of on every sync forever.
+- **The rate writer is a singleton, and has to be.** KV is last-write-wins, so
+  a daily run and an on-demand backfill rebuilding the same month from two
+  reads would silently drop whichever landed first, and the only symptom would
+  be a month quietly missing a currency. One writer removes the race instead of
+  detecting it.
+- **A table of rate providers would be worse than code.** Rows reorderable
+  without a deploy sound flexible, but there is no interface to edit them with
+  and every change is a migration anyway — so it is configuration with all the
+  cost of a schema and none of the benefit. The waterfall is a list in a file.
+  `provider_health` is a table, because "why is AED missing" has to be
+  answerable from outside the code.
 
 ---
 
 ## What is intentionally not here
 
-No RLS, no PostgREST, no `SECURITY DEFINER` RPCs, no `pg_cron`, no server-side
-balances view, no queue, no WebSocket, and no portability seam.
+No queue in front of push, no WebSocket, no server-side balances view, no
+cross-object aggregation, and no portability seam.
 
-That last one is a commitment rather than an omission: the object is written in
-the shape the platform wants, and PRINCIPLES.md #6 says so instead of promising
-a self-host path nobody tests.
+The last one is a commitment rather than an omission: the object is written in
+the shape the platform wants, and PRINCIPLES.md #6 states the consequence
+rather than implying a self-host path.
 
-One storage principle did carry over from Postgres, and it is the only one that
-mattered: derive from the ledger on every read, rather than storing a number
-that can drift.
+The one storage rule that governs everything else: derive from the ledger on
+every read, rather than storing a number that can drift.

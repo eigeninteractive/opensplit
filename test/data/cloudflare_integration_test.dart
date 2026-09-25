@@ -1141,12 +1141,12 @@ void main() {
 
 /// The serving layer, against the Worker that will serve it.
 ///
-/// Three files decide this and none of them is code: `site/_headers` and
-/// `site/_redirects` are parsed by Cloudflare and never served, and the
-/// deep-link fallback lives in `server/src/app.ts`. Unit tests elsewhere check
-/// that the rules *say* the right thing. Only a request can show they are
-/// applied — and the most consequential of them is applied by the Worker and
-/// the asset router together, which neither suite can see on its own.
+/// Two things decide this and only one is code: `site/_headers` is parsed by
+/// Cloudflare and never served, and the deep-link fallback lives in
+/// `server/src/app.ts`. Unit tests elsewhere check that the rules *say* the
+/// right thing. Only a request can show they are applied — and the most
+/// consequential of them is applied by the Worker and the asset router
+/// together, which neither suite can see on its own.
 void _serving() {
   late HttpClient http;
 
@@ -1211,19 +1211,6 @@ void _serving() {
       expect(response.statusCode, 200, reason: '$page did not serve directly');
       expect(response.headers.value('content-type'), contains('text/html'));
     }
-  });
-
-  test('a client route resolves at the host root too', () async {
-    if (!_available) return;
-
-    final response = await get('/join/a-token-from-an-old-chat');
-    await response.drain<void>();
-
-    expect(response.statusCode, 301);
-    expect(
-      response.headers.value('location'),
-      '/app/join/a-token-from-an-old-chat',
-    );
   });
 
   test(

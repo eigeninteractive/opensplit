@@ -137,7 +137,7 @@ jobs:
       # this arrangement simply does not have.
       #
       # The Worker, the D1 database, the KV namespace and the custom domain all
-      # have to exist already; see docs/cloudflare-runbook.md. Creating them is
+      # have to exist already; see docs/runbook.md. Creating them is
       # not something a push to main should be able to do.
       #
       # `npx wrangler` against the pinned devDependency rather than
