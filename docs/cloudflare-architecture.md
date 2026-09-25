@@ -1,162 +1,234 @@
-# The Cloudflare architecture (proposed)
+# The backend, as built
 
-This is not built. The app runs on Supabase today; this is the target shape
-if the backend ever moves, written down while the reasoning is fresh.
+One Worker on one origin serves the static site, the Flutter client and the
+API. Behind it: one Durable Object per group, a single Durable Object for
+exchange rates, a D1 database for the handful of facts that are genuinely
+cross-group, and a KV namespace for things that are derived and rebuildable.
 
----
-
-## Why not a lift-and-shift
-
-The current authorization model is not "RLS is on" — it is `auth.uid()`
-threaded through every policy, `SECURITY DEFINER` helper functions
-(`is_group_member`, `is_group_creator`), and trigger-based column guards
-(`guard_group_update`, `guard_member_update`) standing in for what RLS
-cannot express. None of that ports to Cloudflare: D1 is SQLite, with no
-roles, no RLS, and no `auth.uid()` equivalent.
-
-The real decision this architecture makes is not "which database" but
-**where the authorization boundary lives**. The answer here is: one Durable
-Object per group.
+This describes what runs. `docs/cloudflare-migration-plan.md` is the plan it was
+built from and the argument for each decision; where the two disagree, this one
+is right and the differences are listed at the end.
+`docs/cloudflare-runbook.md` is how to stand it up.
 
 ---
 
-## Core model: one Durable Object per group
+## The decision the whole design turns on
 
-Each group is a Durable Object, backed by its own SQLite storage, owning
-`members`, `entries`, `entry_payers`, `entry_shares`, `group_events`, and
-`invites` for that group only.
+Not "which database" but **where the authorization boundary lives**. The answer
+is: one Durable Object per group, which is that group's only writer.
 
-A Durable Object processes one request at a time, which replaces several
-things Postgres needed extra machinery for:
+Everything else follows. A Durable Object processes one request at a time and
+owns exactly one group's rows, so the three things Postgres needed extra
+machinery for become ordinary code:
 
-- The optimistic-concurrency check on entry writes (today's
-  `p_base_updated_at` compare in `upsert_entry`) becomes a plain conditional
-  in the handler — still necessary (a client can be stale against a
-  serialized writer), but with no transaction needed to make it safe.
-- The column guards (today's `guard_group_update` / `guard_member_update`
-  triggers, which exist because RLS can gate rows but not columns and
-  `WITH CHECK` cannot see `OLD`) become ordinary functions with real `OLD`
-  and `NEW` values.
-- Membership checks (today's `is_group_member()`) become "look at my own
-  member list" — no cross-table recursion to design around.
+| Postgres needed | Here it is |
+|---|---|
+| RLS policies plus `SECURITY DEFINER` helpers, because `is_group_member` recursed through its own policy | reading my own `members` table |
+| `guard_group_update` / `guard_member_update` triggers, because RLS gates rows but not columns and `WITH CHECK` cannot see `OLD` | a function with the old and new rows in hand |
+| A deferred constraint trigger for `sum(payers) = sum(shares) = amount` | an `if` inside the write |
 
-### Sync stays event-triggered, not polled
-
-The app already syncs on real triggers — screen open, pull-to-refresh, a
-data-only push waking the device (`SyncController.syncGroup` /
-`syncAll`) — never a fixed-interval loop. That carries over unchanged: the
-client asks a group's Durable Object for events after its cursor on those
-same triggers, as one-shot requests.
-
-This matters for cost, not just consistency: request volume from client
-sync traffic — not Durable Object compute, not storage, not push sends — is
-the line that actually scales with usage on Cloudflare. A fixed-interval
-foreground poll would turn "screen is open" into a steady stream of billed
-requests whether or not anything changed; event-triggered requests stay
-proportional to real activity, which is what keeps this cheap.
-
-No standing WebSocket to the Durable Object, even while the app is in the
-foreground. A Durable Object's job here is serializing writes correctly, not
-holding a connection — that guarantee holds whether it's reached over a
-socket or a plain request, so reaching it over a socket has to earn its
-keep on its own. It mostly doesn't: mobile suspends or drops sockets on
-backgrounding routinely, so a WebSocket would need to reconnect on almost
-every foreground resume anyway, at which point a plain fetch on that same
-resume event has done the same job without a reconnect state machine on the
-client or hibernation-aware handling on the object. Global data (the group
-index, reference data) is read the same way, from D1/KV, on the same
-triggers — one transport, one mental model, for both.
-
-Settled/dormant purge (today's `pg_cron` job calling
-`purge_settled_dormant_groups`) becomes a Cron Trigger Worker that asks each
-candidate DO to check its own state and delete its own storage.
+None of that is cleverness recovered. It is the same rules, written once, where
+the data is.
 
 ---
 
-## Global data: D1
+## The sequence number
 
-Small, genuinely cross-group data lives in one relational D1 database:
+Because the object is a group's only writer, it can hand out a strictly
+increasing integer. Every row written by one change shares one `seq`, and a page
+of changes is only ever cut between sequence numbers — so a device sees a whole
+change or none of it, and can never hold an expense whose shares have not
+arrived.
 
-- `profiles`, `device_tokens`
-- a `user_id -> group_ids` index, so listing "my groups" doesn't mean asking
-  every Durable Object
-- invite-token -> group-id lookup, for redemption before someone is a member
-  of anything
+That replaced four `(timestamp, id)` keyset cursors per group per sync, and with
+them the entire class of bug where two rows written in the same transaction
+straddle a page boundary because their timestamps differ by a microsecond.
 
----
-
-## Reference data: KV
-
-`currencies`, `categories`, and cached `fx_rates` — read-heavy, no
-per-user variation, matching today's `using (true)` policies. Refreshed by a
-Worker Cron Trigger hitting the FX provider, replacing the `fetch-fx` edge
-function and its `pg_cron` schedule.
+One feed still uses a timestamp cursor, and honestly: profiles live in D1, which
+several requests write concurrently, so there is nothing there that can issue a
+sequence number.
 
 ---
 
-## Push notifications: `ctx.waitUntil()`, not Queues
+## What each store holds
 
-A group's Durable Object calls FCM/APNs directly, wrapped in
-`ctx.waitUntil()`, right after its own write to storage has committed.
-Replaces `notify-event` and the `pg_net`-based fire-and-forget dispatch
-(`trg_group_events_notify`) that triggers it today.
+**The group object** (`server/src/db/group/schema.ts`) — `members`, `entries`,
+`entry_payers`, `entry_shares`, `events`, `invites`, `group_link`, plus four
+tables that exist because the object is a little machine as well as a table:
+`counter` (the sequence allocator), `meta` (the group row itself), `tombstone`
+(what is left after a purge, so a device that still holds a copy is told to drop
+it rather than being refused forever), `outbox` (writes owed to D1) and
+`schedule` (the dormancy alarm).
 
-This was a deliberate simplification over putting a Queue in front of it:
+**D1** (`server/src/db/d1/schema.ts`) — `profiles`, `memberships`,
+`device_tokens`, `link_tokens`, plus Better Auth's own four tables. Everything
+here except `profiles` is a **derived index**: the objects are the truth, and D1
+is what makes "which groups am I in" and "what does this token point at"
+answerable without asking every object in the account. A weekly sweep checks it
+still agrees.
 
-- Notification volume is proportional to ledger-write events, not to app
-  opens or sync checks, and is a small fraction of overall request volume —
-  it was never the cost driver, so Queues wasn't buying cost savings.
-- A Durable Object is single-threaded for its own JS, but that only blocks
-  on synchronous CPU work — an awaited `fetch()` yields the event loop, so a
-  pending push send does not stall the next expense write to the same
-  group.
-- What Queues actually bought was retry-with-backoff, durability across a
-  Durable Object eviction or crash, and backpressure against FCM at high
-  concurrency. None of those are worth the extra primitive here: an
-  occasional silently-dropped notification is an acceptable loss for this
-  app, in exchange for one fewer moving part.
+**The rate object** (`server/src/db/fx/schema.ts`) — `fx_rates`,
+`provider_health`, `backfill_requests`. A singleton, and that is deliberate: KV
+is last-write-wins, so a daily run and an on-demand backfill rebuilding the same
+month from two different reads would silently drop whichever landed first. One
+writer removes the race rather than detecting it.
 
-If push reliability ever needs to be tighter than that, this is a
-same-shaped swap: `ctx.waitUntil(fetch(...))` becomes `env.QUEUE.send(...)`
-behind the same call site, with a consumer Worker doing the actual send.
-Nothing upstream of it changes.
+**KV** (`CACHE`) — one blob per month of rates, and the FCM access token. Both
+are derived from something else and wrong only until the next write. The object
+writes; the edge serves.
 
----
-
-## Auth: Better Auth
-
-Runs in a Worker, sessions in D1. There is no JWT-to-Postgres-role bridge to
-build, because there is no RLS to feed it.
-
-Request flow: Worker resolves the session to a profile id, checks group
-membership (D1 index, or asks the Durable Object directly), then forwards
-the request to that group's DO stub. The Durable Object is the authoritative
-check; the Worker's is a first pass — the same defense-in-depth shape as
-today's policy-plus-trigger pair, just relocated.
+**The Worker bundle** — currencies and categories, as JSON files compiled into
+the script. They are a few dozen rows that change about never and that a device
+cannot create a group without. A table would have been a migration and a read
+for data that ships with the code anyway.
 
 ---
 
-## Cross-group aggregation: client-side, not server-side
+## Sync is event-triggered, never polled
 
-No cross-DO materialization, no denormalized balance tables in D1.
+The client syncs on real triggers — screen open, pull-to-refresh, a data-only
+push waking the device — and asks each group's object for everything after its
+cursor, as one-shot requests.
 
-The client already syncs every group it belongs to
-(`SyncController.syncAll()`), so any cross-group view — total owed overall,
-net balance with one person across several shared groups — is a wider fold
-over the same locally-synced entries, grouped by counterparty instead of by
-group. It carries the same guarantee `foldBalances` already gives per group:
-derived on every read, never stored, so two devices with the same synced
-data compute the same answer.
+This is a cost decision as much as a correctness one. Request volume from sync
+is the line that scales with usage here; Durable Object compute, storage and
+push sends are not. A fixed-interval poll turns "the screen is open" into billed
+requests whether or not anything changed.
 
-Anything that needs visibility beyond what the signed-in user can already
-see (platform-wide analytics, for instance) is a different, separate
-workload — not something this architecture needs to solve.
+There is no standing WebSocket, even in the foreground. An object's job is
+serializing writes correctly, and that guarantee holds over a plain request just
+as well as over a socket — so the socket has to earn its keep separately, and it
+does not: mobile drops sockets on backgrounding, so it would reconnect on nearly
+every resume, which is the same event a plain fetch already rides.
 
 ---
 
-## What is intentionally not carried over
+## Auth
 
-No RLS, no PostgREST, no `SECURITY DEFINER` RPCs, no `pg_cron`, and no
-server-side balances view. The one storage pattern that does carry over is
-philosophical, not literal: derive from the ledger on every read rather than
-storing a number that can drift.
+Better Auth on D1, with sessions in the same database. There is no
+JWT-to-database-role bridge to build, because nothing downstream reads a role.
+
+**Two transports, one session.** The web holds a first-party `HttpOnly` cookie —
+possible only because the site, the client and the API share an origin. Android
+holds a bearer token. The token arrives in the `set-auth-token` **response
+header**; the `token` field in the response body is the unsigned first half of
+one and is not a credential.
+
+**The three identity endpoints are ours, not Better Auth's** — `/api/identity/
+google`, `/email`, `/email/verify`. Attaching an identity to a guest session and
+signing in to an existing account are opposite outcomes: one keeps everything on
+this device, the other leaves it behind. Better Auth's own endpoints will do
+either without saying which happened, so these wrap it and report the outcome by
+comparing account ids, and refuse a sign-in that would strand a ledger until the
+caller has said it asked.
+
+The Worker resolves a session to a profile id and passes it to the group's
+object, which checks its own membership list. The Worker's check is a first
+pass; the object's is authoritative.
+
+---
+
+## Push
+
+The group's own object calls FCM directly, inside `ctx.waitUntil`, after its
+write has committed — and it reads the events it *actually appended*, so an edit
+that changed nothing notifies nobody without anyone having to arrange that.
+
+No queue in front of it. Notification volume is proportional to ledger writes,
+which is a small fraction of request volume, so a queue was never buying cost.
+What it would buy is retry, durability across an eviction, and backpressure —
+and an occasionally dropped notification is an acceptable loss here in exchange
+for one fewer moving part. If that ever stops being true it is a same-shaped
+swap: `ctx.waitUntil(send(...))` becomes `env.QUEUE.send(...)` behind the same
+call site.
+
+An access token is minted from the service-account key with `jose` and cached in
+KV under one key, so a hundred groups notified at once do not mint a hundred
+tokens.
+
+---
+
+## Cron: two schedules, not three
+
+`0 4 * * *` refreshes exchange rates. `0 5 * * 0` collects abandoned guest
+accounts and reconciles a slice of the D1 index.
+
+There is deliberately no nightly dormancy sweep. Postgres needed one because a
+table cannot schedule itself, so a job scanned every group every night. A
+Durable Object sets its own alarm, so each group carries its own clock: one
+wake-up in three months instead of ninety that find nothing to do, and no
+fan-out proportional to the number of groups.
+
+---
+
+## Serving
+
+Static assets are served ahead of the Worker script, so a request for
+`main.dart.js` never invokes it. `run_worker_first` is set for `/api/*` only, so
+an API call is never an asset lookup that misses first — and no file the web
+build emits can shadow an endpoint.
+
+A path under `/app` that matches no asset is answered by the Worker with the
+client's own document, by hand. None of the platform's three `not_found_handling`
+settings answers the right document: two of them would hand `/app/join/<token>`
+the landing page or the 404 page, and that URL is what an invite link *is*.
+
+`site/_headers` carries cross-origin isolation for `/app/*` only — it is what
+lets `sqlite3.wasm` use `SharedArrayBuffer`, and the marketing pages at the root
+neither need it nor want it. Those headers do survive the Worker-assembled
+fallback; that is measured rather than assumed, and asserted by the integration
+suite, because losing it would break the local-first database for exactly the
+people arriving by invite link.
+
+---
+
+## Cross-group totals are computed on the device
+
+No cross-object materialization and no denormalized balance table in D1. The
+client already holds every group it belongs to, so "what do I owe overall" is a
+wider fold over the same local entries, grouped by counterparty instead of by
+group — derived on every read, never stored, so two devices with the same data
+compute the same answer.
+
+Reads outnumber writes roughly 50:1. Putting the reads on devices people already
+own is what makes "free forever" a structure rather than a hope.
+
+---
+
+## Where this differs from the plan
+
+Four things changed while building, and the plan still describes the original
+intent:
+
+- **Reference data is bundled, not in KV.** The plan put currencies and
+  categories in KV. They ship inside the Worker script instead, served with an
+  ETag and a day's cache — no read, no migration, no way for the two lists to
+  disagree with the code that validates against them.
+- **Dormancy is a per-object alarm, not a cron sweep.** The plan had a Cron
+  Trigger asking each candidate object to check itself, which is a fan-out
+  proportional to the number of groups. Each object schedules its own instead.
+- **`fx_providers` did not come across.** A table of provider rows, reorderable
+  without a deploy, bought nothing: there was no interface to edit it with, and
+  every change was a migration anyway. The waterfall is code. `provider_health`
+  did come across, because "why is AED missing" is otherwise unanswerable from
+  outside.
+- **The rate window reaches backwards.** A high-water mark cannot deliver a day
+  *older* than the ones already held, which is exactly what a backfill produces
+  — so backfill was structurally undeliverable in the design this inherited. The
+  client now reaches back once to the oldest expense holding no rate, with a
+  floor recording how far it went.
+
+---
+
+## What is intentionally not here
+
+No RLS, no PostgREST, no `SECURITY DEFINER` RPCs, no `pg_cron`, no server-side
+balances view, no queue, no WebSocket, and no portability seam.
+
+That last one is a commitment rather than an omission: the object is written in
+the shape the platform wants, and PRINCIPLES.md #6 says so instead of promising
+a self-host path nobody tests.
+
+One storage principle did carry over from Postgres, and it is the only one that
+mattered: derive from the ledger on every read, rather than storing a number
+that can drift.

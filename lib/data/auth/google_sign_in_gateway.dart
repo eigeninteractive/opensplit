@@ -28,12 +28,6 @@ abstract interface class GoogleTokenSource {
 /// Cloud project. [isConfigured] gates the button so an unconfigured build
 /// simply does not offer it, rather than offering it and failing.
 class GoogleSignInGateway implements GoogleTokenSource {
-  /// Whether this build can complete a Google sign-in without leaving the app.
-  ///
-  /// False on the web, and not because the web is unconfigured: there the
-  /// browser is sent to Google and comes back with a session already made, so
-  /// there is no token for this class to fetch and no reason for it to exist.
-  /// [SupabaseAuthService] is handed null instead.
   /// Whether this build offers Google at all, on either platform.
   ///
   /// Distinct from [isConfigured], and a screen deciding whether to draw the
@@ -43,6 +37,12 @@ class GoogleSignInGateway implements GoogleTokenSource {
   static bool get isOffered =>
       kIsWeb ? googleWebClientId.isNotEmpty : isConfigured;
 
+  /// Whether this build can complete a Google sign-in without leaving the app.
+  ///
+  /// False on the web, and not because the web is unconfigured: there the
+  /// browser is sent to Google and comes back holding a session cookie, so
+  /// there is no token for this class to fetch and no reason for it to exist.
+  /// `BetterAuthService` is handed null instead.
   static bool get isConfigured {
     if (kIsWeb || googleWebClientId.isEmpty) return false;
     try {
@@ -65,13 +65,15 @@ class GoogleSignInGateway implements GoogleTokenSource {
   /// The nonce every Google token from this session is bound to.
   ///
   /// Generated once, because `initialize` fixes it for every token the plugin
-  /// mints afterwards. Google is given its SHA-256 digest and Supabase the
-  /// value itself: Supabase hashes what it receives and compares that against
-  /// the token's claim, so the two sides must be given different halves.
+  /// mints afterwards. Google is given its SHA-256 digest and the server the
+  /// value itself: the server hashes what it receives and compares that
+  /// against the token's claim, so the two sides must be given different
+  /// halves. That is the protocol rather than a quirk of any one backend — it
+  /// is what stops a token captured from one app being replayed into another.
   ///
   /// Supplying one is not optional. Asked for no nonce, `google_sign_in_web`
-  /// puts the *string* `"null"` in the token, and Supabase then rejects a
-  /// token whose nonce claim the request did not account for.
+  /// puts the *string* `"null"` in the token, and verification then fails on a
+  /// nonce claim the request did not account for.
   static final String _nonce = base64Url
       .encode(List<int>.generate(32, (_) => _random.nextInt(256)))
       .replaceAll('=', '');
@@ -81,8 +83,9 @@ class GoogleSignInGateway implements GoogleTokenSource {
   Future<void> _ensureInitialised() =>
       _ready ??= GoogleSignIn.instance.initialize(
         clientId: kIsWeb ? googleWebClientId : null,
-        // The same web client id on Android, deliberately: Supabase verifies
-        // the ID token against this audience whichever platform minted it.
+        // The same web client id on Android, deliberately: the Worker
+        // verifies the ID token against this audience whichever platform
+        // minted it.
         // Null on the web, where the plugin rejects it outright: there the
         // audience is already `clientId`, so naming it twice is meaningless.
         serverClientId: kIsWeb ? null : googleWebClientId,
@@ -114,8 +117,8 @@ class GoogleSignInGateway implements GoogleTokenSource {
     if (idToken == null) return null;
 
     // Best effort. The web hands back an ID token without an access token
-    // unless the user is asked separately, and Supabase only needs the former —
-    // it verifies the ID token's signature and audience itself.
+    // unless the user is asked separately, and the server only needs the
+    // former — it verifies the ID token's signature and audience itself.
     final authorization = await account.authorizationClient
         .authorizationForScopes(const ['email', 'profile']);
 
@@ -127,7 +130,7 @@ class GoogleSignInGateway implements GoogleTokenSource {
   }
 }
 
-/// What Supabase needs to turn a Google sign-in into a session.
+/// What the server needs to turn a Google sign-in into a session.
 typedef GoogleCredential = ({
   String idToken,
   String? accessToken,

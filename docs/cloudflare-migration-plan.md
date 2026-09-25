@@ -3,9 +3,14 @@
 A clean cutover, not a port. The Supabase backend is deleted, not adapted, and
 the Cloudflare one is written as though it had always been the backend.
 
-This document is the plan. `docs/cloudflare-architecture.md` is the design
-sketch it implements; that file gets rewritten from "proposed" to "this is what
-runs" in the final phase.
+**This was carried out. The document is kept as written, in the future tense,
+because it is the record of why each decision was made — and those arguments
+are worth more than a tidy rewrite would be.** For what actually runs, read
+`docs/cloudflare-architecture.md`, which also lists the four places the build
+departed from this plan. `docs/cloudflare-runbook.md` is how to stand it up.
+
+Anything here describing Supabase describes what was replaced. `supabase/` was
+deleted in the last phase and is in the git history.
 
 ---
 

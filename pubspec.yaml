@@ -10,7 +10,7 @@ environment:
 
 dependencies:
   # Runtime, not just tooling: the Google sign-in nonce is hashed for Google
-  # and sent unhashed to Supabase.
+  # and sent unhashed to the Worker.
   crypto: ^3.0.7
   drift: ^2.34.3
   drift_flutter: ^0.3.1

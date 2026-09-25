@@ -5,150 +5,177 @@ keeping, the answer to "the migrations changed shape" is to rebuild rather than
 to transform. This is that procedure, and the handful of things about it that
 are not obvious.
 
-It replaces a much longer document describing how to carry the old data across.
-That document is gone on purpose: it described machinery for a migration nobody
-is going to run, and a procedure that is never exercised is a procedure that is
-wrong by the time you need it.
+The short version: **D1 is easy and Durable Objects are not.** D1 has a delete
+command, an export, and point-in-time recovery. A Durable Object namespace has
+none of those, and there is no command that empties one. Getting that wrong
+leaves storage you are billed for and cannot reach.
 
 ---
 
-## The procedure
+## Why a reset is needed at all
 
-```bash
-supabase link --project-ref <ref>
+Forward migrations do not need one. `wrangler d1 migrations apply` runs whatever
+is new, and each group object applies its own outstanding migrations on first
+open after a deploy.
 
-# Insurance, not an input. Nothing below reads these; they exist so that
-# "it turned out to matter after all" is recoverable for a few days.
-supabase db dump --file backup-schema.sql
-supabase db dump --data-only --file backup-data.sql
-
-# Irreversible, and it will ask.
-supabase db reset --linked
-```
-
-Then the parts the migrations cannot carry:
-
-```bash
-supabase functions deploy notify-event
-supabase functions deploy fetch-fx
-
-# Secrets live on the platform, not in the database, so the reset did NOT
-# clear them -- but you cannot read one back either, only its digest. Rotating
-# is therefore easier than discovering what the old value was.
-supabase secrets set FX_FETCH_SECRET="$(openssl rand -hex 32)"
-supabase secrets set NOTIFY_WEBHOOK_SECRET="$(openssl rand -hex 32)"
-supabase secrets set FCM_PROJECT_ID=<project> \
-                     FCM_SERVICE_ACCOUNT="$(cat service-account.json)"
-```
-
-```sql
--- Four rows, not two. Each feature no-ops until its pair is set, silently --
--- which is the failure this list exists to prevent: push and the scheduled
--- rate fetch both come back dead from a reset and neither complains.
-insert into app_settings (key, value) values
-  ('fx_function_url',
-   'https://<ref>.supabase.co/functions/v1/fetch-fx'),
-  ('fx_fetch_secret',       '<the same FX_FETCH_SECRET>'),
-  ('notify_function_url',
-   'https://<ref>.supabase.co/functions/v1/notify-event'),
-  ('notify_webhook_secret', '<the same NOTIFY_WEBHOOK_SECRET>')
-on conflict (key) do update set value = excluded.value;
-```
-
-```bash
-supabase test db                        # the suite, against the real thing
-supabase functions delete notify-entry  # only once push is confirmed working
-```
-
-`notify-entry` is the old name and is not in this repo any more, so it will sit
-deployed and orphaned in the project until it is deleted by hand.
-
-### Check that it came back
-
-The migrations replay, so most of this is automatic. These three are worth
-looking at anyway, because each fails quietly rather than loudly:
-
-```sql
--- Reference data. Not a nicety: the client learns currencies and categories
--- from the server and `groups.default_currency` references `currencies`, so an
--- empty table here means nobody can create a group at all.
-select (select count(*) from currencies) as currencies,
-       (select count(*) from categories) as categories;
-
--- Scheduled jobs. `create extension pg_cron` is wrapped in an exception
--- handler that downgrades to `raise notice`, by design, so a project without
--- pg_cron still migrates -- and a project that failed to install it looks
--- identical to one that never had jobs.
-select jobname, schedule, active from cron.job order by jobname;
-
--- Operator configuration, which no migration can restore.
-select key from app_settings order by key;
-```
-
-Four job names (`opensplit-fetch-fx`, `opensplit-cleanup-anon`,
-`opensplit-archive-dormant`, `opensplit-purge-settled`) and four settings keys.
-
-### `seed.sql` runs against production
-
-`[db.seed] enabled = true` in `config.toml`, so `db reset --linked` applies
-`supabase/seed.sql` after the migrations — to whatever is linked. It is empty
-today, and the comment at the top of it says why: reference data belongs in the
-migrations because production needs it too. Keep it that way, or check it before
-every reset.
+A reset is for the other case: a migration file that has *already run* turning
+out to be wrong. There is no down migration on either side, and a group object
+that has applied `0003` will never apply a corrected `0003`. Rebuilding is the
+only honest answer, and it is cheap only while nobody's records matter.
 
 ---
 
-## The reset takes the accounts with it
+## 1. Take the backup you will not read
 
-Worth stating because the command is called `db reset` and the reasonable guess
-is that it leaves the platform's own schemas alone. It does not. The CLI runs
-`pkg/migration/queries/drop.sql` against the linked project, which drops user
-schemas and everything in `public`, and then:
-
-```sql
--- truncate tables in auth, webhooks, and migrations schema
-where (c.relnamespace::regnamespace::name = 'auth'
-       and c.relname != 'schema_migrations' or ...)
-  and c.relkind = 'r'
-...
-execute format('truncate %I.%I cascade', ...);
+```sh
+cd server
+npx wrangler d1 export opensplit --remote --output backup.sql
 ```
 
-Every table in `auth` except `auth.schema_migrations` — users, identities,
-sessions, refresh tokens. The schema survives, so GoTrue keeps working; the
-accounts in it do not.
+Insurance, not an input. Nothing below reads it; it exists so that "it turned
+out to matter after all" is recoverable.
 
-For a throw-it-away reset that is convenient: testers sign in fresh,
-`handle_new_user` fires on the new `auth.users` row and gives them a profile,
-and there is nothing to restore. Two consequences to know rather than discover:
+There is **no equivalent for the Durable Objects**, which is where every ledger
+actually lives. `wrangler d1 export` covers the index and the accounts and
+nothing else. If a group's contents matter, pull them through the API from a
+device before you start.
 
-- **Access tokens outlive the truncate.** A JWT is checked by signature, not by
-  a lookup, so a tester holding an unexpired one keeps making requests as a user
-  that no longer exists — up to an hour by default. Their writes fail on
-  `profiles` foreign keys rather than on auth, which surfaces as a sync error.
-  It clears itself when the refresh fails.
-- **Signing in again gives them a new `id`.** It is a new account that happens
-  to share an email address.
+D1 also has Time Travel, which is a better answer than a file for the thirty
+days it covers:
 
-There is no way to keep a scratch schema through this, either: the drop excludes
-a fixed list of platform schemas plus anything owned by `supabase_admin`, and a
-schema you create is owned by `postgres`. Anything you want to survive a reset
-has to leave the database.
+```sh
+npx wrangler d1 time-travel info opensplit
+npx wrangler d1 time-travel restore opensplit --timestamp <iso8601>
+```
+
+---
+
+## 2. Destroy the group objects
+
+This is the part with a sharp edge. A Durable Object namespace is deleted by
+deploying a `deleted` tombstone in `exports`, and the platform enforces that the
+class is **not present in the Worker code** when you do it. So it is two
+deploys, with the tree temporarily missing a class:
+
+```jsonc
+// server/wrangler.jsonc — temporarily
+"durable_objects": {
+  "bindings": [{ "name": "FX", "class_name": "Fx" }]   // GROUP removed
+},
+"exports": {
+  "Group": { "type": "durable-object", "state": "deleted" },
+  "Fx": { "type": "durable-object", "storage": "sqlite" }
+}
+```
+
+with `export { Group }` commented out of `src/index.ts`, then:
+
+```sh
+npx wrangler deploy      # the namespace and every group in it are gone
+```
+
+Then put both back as they were — `"Group": { "type": "durable-object",
+"storage": "sqlite" }` — and deploy again. The second deploy provisions a fresh,
+empty namespace under the same name.
+
+Three things worth knowing before you do it:
+
+- **It is not a soft delete and there is no trash.** Every group's members,
+  entries, payers, shares and history go at once.
+- **The Worker is briefly deployed without a `GROUP` binding.** Every ledger
+  request 500s until the second deploy. That is fine for a reset and would not
+  be fine for anything else, which is the reason to do both deploys back to
+  back and nothing else in between.
+- **Lifecycle changes cannot be part of a gradual rollout**, and a version
+  containing one cannot be rolled back past. Deploy it on its own.
+
+`npx wrangler delete` is the blunter alternative: it removes the whole Worker
+and its namespaces in one command. It also removes the secrets and detaches the
+custom domain, so the way back is most of the runbook. Prefer the tombstone.
+
+---
+
+## 3. Rebuild D1
+
+```sh
+npx wrangler d1 delete opensplit
+npx wrangler d1 create opensplit          # prints a NEW database_id
+```
+
+Put the new id in `server/wrangler.jsonc` and commit it, then:
+
+```sh
+npx wrangler d1 migrations apply opensplit --remote
+npx wrangler deploy
+```
+
+Recreating rather than dropping tables by hand, because the migration state
+lives in a table of its own and a partial drop leaves `d1_migrations` claiming
+work that is no longer there.
+
+### The trap: resetting D1 alone
+
+D1 is an index, not the truth. Wipe it while the group objects survive and every
+group still exists, still holds its ledger, and is still billed for its storage
+— but nothing can name it. `memberships` is how a device discovers which groups
+it is in, and the weekly reconciliation sweep reads that same table to decide
+which objects to check, so it cannot find them either.
+
+Nothing reports this. It looks like every account came back empty.
+
+So: **objects first, then D1** — or neither.
+
+---
+
+## 4. Put back what migrations cannot carry
+
+Secrets survive a D1 reset, because they belong to the Worker. They do **not**
+survive `wrangler delete`. After one of those, all of step 4 in
+[the runbook](cloudflare-runbook.md) again.
+
+KV needs nothing. The rate blobs and the FCM token rebuild themselves — the
+token on the next push, the rates on the next 04:00 UTC run or whenever you ask:
+
+```sh
+curl -s -X POST https://opensplit.eigeninteractive.com/api/fx/backfill \
+  -H 'content-type: application/json' \
+  -d "{\"asOf\":\"$(date -u -v-3d +%F)\",\"currency\":\"EUR\"}"
+```
+
+### Check it came back
+
+Most of this is automatic. These are the three that fail quietly:
+
+```sh
+base=https://opensplit.eigeninteractive.com
+
+# Reference data ships inside the Worker script, so this one cannot actually
+# be empty any more — it used to be a table, and an empty table meant nobody
+# could create a group at all. Worth a glance to confirm the deploy is the
+# build you think it is.
+curl -s $base/api/reference | head -c 120
+
+# D1 is bound and writable. A guest sign-in writes a user and a session.
+curl -s -X POST $base/api/auth/sign-in/anonymous -H 'content-type: application/json'
+
+# A group object can be created and reached at all.
+npx wrangler tail --format pretty
+```
 
 ---
 
 ## It does not reach the devices
 
 A tester's app holds its own copy of every group and expense and renders
-entirely from it. Wiping the server does not wipe the phones, and the app will
-go on showing groups the server has never heard of — indefinitely, because
-nothing treats "the server does not have this" as "delete it", and nothing
-should: that is the same signal a permissions problem gives.
+entirely from it. Wiping the server does not wipe the phones, and the app goes
+on showing groups the server has never heard of — indefinitely, because nothing
+treats "the server does not have this" as "delete it", and nothing should: that
+is the same signal a permissions problem gives.
 
 Their queued writes then reference ids that no longer exist. The server refuses
-those permanently — `23503` and `42501` are both in the client's permanent set —
-so they go to dead letters rather than retrying, and the person sees changes
-that look saved and never arrive.
+those permanently rather than transiently — a refusal carries its own kind, and
+a permanent one goes to dead letters instead of retrying — so the person sees
+changes that look saved and never arrive.
 
 So a reset needs the devices cleared too: **clear app storage, or uninstall and
 reinstall.**
@@ -172,8 +199,8 @@ Two things about how the client actually ships:
 
 - **Merging to `main` releases.** `release.yml` runs on every push to `main` and
   its deploy steps are gated on `github.event_name == 'push' || inputs.deploy`,
-  so a merge deploys web to Firebase Hosting and uploads to Play closed testing
-  with no further action. Reset the database before merging, not after.
+  so a merge deploys the Worker and the web bundle together and uploads to Play
+  closed testing with no further action. Reset before merging, not after.
 - **A merge cannot set the update priority from the workflow input.**
   `PLAY_UPDATE_PRIORITY` resolves as
   `inputs.update_priority || vars.PLAY_UPDATE_PRIORITY || '0'`, and on a push

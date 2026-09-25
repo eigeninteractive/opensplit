@@ -19,10 +19,12 @@ part 'local_providers.g.dart';
 ///
 /// Synchronous on purpose: the database is keyed on it, and a database that
 /// arrives one frame late would have every repository built against nothing.
-/// The Supabase client restores its stored session during `Supabase.initialize`
-/// — which `main` awaits — so by the time any of this runs the answer is
-/// already known. Following the session keeps routing, sync, and the ledger on
-/// the same identity, including immediately after a sign-in completes.
+/// `BetterAuthService` is handed the stored session when it is constructed,
+/// so by the time any of this runs the answer is already known — the server is
+/// asked afterwards, in the background, and only to find out whether that
+/// session is still good. Following the session keeps routing, sync, and the
+/// ledger on the same identity, including immediately after a sign-in
+/// completes.
 @Riverpod(keepAlive: true)
 String? currentAccountId(Ref ref) => ref.watch(sessionControllerProvider)?.id;
 

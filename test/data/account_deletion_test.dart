@@ -9,8 +9,8 @@ import '../harness.dart';
 ///
 /// The distinction it is drawing is the one people get wrong: a group nobody
 /// else has an account in disappears with them, and a shared one does not. The
-/// server makes the same distinction in delete_account(), and this is the
-/// client's copy of it — see supabase/tests/07_account_deletion_test.sql.
+/// server makes the same distinction when it forgets a profile, and this is
+/// the client's copy of it — see `server/test/dormancy.test.ts`.
 void main() {
   late AppDatabase db;
   late DriftGroupRepository groups;

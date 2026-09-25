@@ -111,8 +111,8 @@ refuses the `sqlite` field beside `sql`. Everything has to go under
 
 ### There is no server counterpart
 
-Postgres full-text search is a `tsvector` column and a GIN index rather than a
-table, and this app does not use it. Search never leaves the device: no endpoint,
-no query cost, and it works with no connection. The asymmetry between
-`search.drift` and the Supabase schema is inherent to the two engines, not an
-oversight.
+The server has no search of any kind and no index that would support one.
+Search never leaves the device: no endpoint, no query cost, and it works with no
+connection. That `search.drift` has no mirror on the server is the design, not
+an omission — a full-text index there would be a second copy of the journal that
+could disagree with the one people actually read from.

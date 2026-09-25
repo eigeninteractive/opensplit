@@ -266,8 +266,6 @@ final class BetterAuthService implements AuthService {
     required String code,
     required EmailFlow flow,
   }) async {
-    assert(flow != EmailFlow.linked, 'nothing to verify: already attached');
-
     return _settle(
       await _identity.verifyEmailCode(
         emailVerifyRequest: api.EmailVerifyRequest(

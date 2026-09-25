@@ -1,5 +1,5 @@
 tags:
-  # Needs a local Supabase instance (`supabase start`). The tests skip
+  # Needs a local Worker (`cd server && npm run dev`). The tests skip
   # themselves when nothing is listening, so a plain `flutter test` stays green
   # without it — but they are the only thing that can catch an adapter bug.
   integration:

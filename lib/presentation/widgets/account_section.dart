@@ -14,8 +14,7 @@ import '../navigation.dart';
 /// An eight-digit code, not a magic link. Magic links open in whichever browser
 /// the mail app prefers rather than the one holding the session, lose the app's
 /// context entirely on mobile, and are routinely followed and consumed by
-/// corporate mail scanners before the recipient ever sees them. That requires
-/// an email template carrying the token — see `supabase/templates/`.
+/// corporate mail scanners before the recipient ever sees them.
 ///
 /// No SMS either, despite being the Indian default: per-message cost scales
 /// linearly with signups and never goes away, and SMS pumping fraud can produce
@@ -157,13 +156,6 @@ class _AccountSectionState extends ConsumerState<AccountSection> {
         .sendEmailCode(_email.text.trim());
 
     if (!mounted) return;
-    // Nothing was sent and nothing is pending: this deployment attaches an
-    // address without confirming it. Already done.
-    if (flow == EmailFlow.linked) {
-      setState(() => _flow = null);
-      _saved();
-      return;
-    }
     setState(() => _flow = flow);
   });
 

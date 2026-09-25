@@ -37,12 +37,30 @@ A hosted tier, a one-time purchase, sponsorship — all legitimate. A feature
 gate is not. The test is simple: does paying make something *easier*, or does
 not paying make something *impossible*? Only the first is allowed.
 
-### 6. Self-hosting is a first-class path, not a courtesy
+### 6. Your records are portable, even though the server is not
 
-`docker compose up` gives you a working instance in under fifteen minutes. The
-backend is deliberately thin — it stores rows and enforces one invariant, and
-computes nothing — so that replacing it is a weekend's work rather than a
-reimplementation. Every release is tested against a self-hosted instance.
+This one used to promise self-hosting: `docker compose up`, a working instance
+in fifteen minutes, every release tested against one. That was true when the
+backend was Postgres. It is not true now, and saying so is the point of
+publishing this page.
+
+The hosted backend runs on Cloudflare Durable Objects, D1 and KV. Those are not
+products you can stand up yourself, there is no supported self-host path, and
+we are not going to imply one by shipping a portability seam that nobody
+tests.
+
+What is still true is the part that actually protects you, and it is the larger
+half. The backend stores rows and enforces one invariant; it computes nothing.
+Every number you see — every split, every balance, every simplified debt — is
+worked out on your device from a journal that lives there, in plain SQLite,
+exports to CSV, and works with no server at all. See #7. The client reaches the
+server through one Dart interface over an HTTP API published as OpenAPI, so
+pointing it somewhere else is writing one class against a documented contract.
+And AGPL-3.0 still obliges anyone running a modified OpenSplit as a service to
+publish their changes.
+
+The honest summary: we chose a backend we cannot hand you, and kept the thing
+that means you do not need one.
 
 ### 7. The app survives this project being abandoned
 

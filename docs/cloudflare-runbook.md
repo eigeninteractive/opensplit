@@ -185,8 +185,8 @@ trace on our side.
 `support.eigeninteractive.com` is already a verified sending domain. Create an
 API key scoped to sending only, and use it in step 4.
 
-The message itself is in `server/src/email/sender.ts` — a six-digit code, not a
-magic link. If you change the sending address, change it there too; it is not
+The message itself is in `server/src/email/sender.ts` — an eight-digit code,
+not a magic link. If you change the sending address, change it there too; it is not
 configurable, because an address that can be set wrong at deploy time is an
 address that silently sends from a domain with no SPF record.
 

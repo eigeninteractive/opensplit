@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { evenly, freshId, makeGroup, makeGroupOfTwo, ok, PRIYA, RAVI, refusal, stub, ZARA } from "./group";
 
 /**
- * Inherits `supabase/tests/04_adversarial_test.sql`.
+ * Ports `04_adversarial_test.sql` from the pgTAP suite that came before this
+ * one. See the porting table in `docs/cloudflare-migration-plan.md`.
  *
  * That file spent half its length proving that `authenticated` held no direct
  * INSERT, UPDATE or DELETE on the ledger tables — because while direct DML was

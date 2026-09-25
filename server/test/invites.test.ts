@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { evenly, freshId, makeGroup, ok, PRIYA, RAVI, refusal, stub, sumOf, ZARA } from "./group";
 
 /**
- * Inherits `supabase/tests/02_rls_and_invites_test.sql`.
+ * Ports `02_rls_and_invites_test.sql` from the pgTAP suite that came before
+ * this one. See the porting table in `docs/cloudflare-migration-plan.md`.
  *
  * Half of that file tested RLS: that Zara, who is in no group, sees no groups,
  * no members, no entries, no balances and no invite rows. None of those are

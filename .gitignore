@@ -69,23 +69,12 @@ gha-creds-*.json
 fastlane/report.xml
 fastlane/README.md
 
-# Supabase CLI local state
-supabase/.temp/
-supabase/.branches/
-supabase/functions/.env
-
 # Build-time configuration for real projects. Nothing here is a secret — the
-# publishable key and the Firebase ids are public identifiers — but they are
+# origin and the Firebase ids are public identifiers — but they are
 # per-deployment, and committing one means a fork silently builds against
 # somebody else's backend.
 env/*.json
 !env/*.example.json
-
-# Firebase Hosting. firebase.json is committed — it is the deploy contract, and
-# it is the same for anyone. .firebaserc just names one person's project, so
-# each deployer runs `firebase use --add` instead of inheriting a fork's.
-.firebaserc
-.firebase/
 
 # The brand kit exactly as the designer delivered it. Everything the app
 # actually uses has been moved into the tree — assets/brand/, assets/icon/,

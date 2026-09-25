@@ -4,8 +4,9 @@ import { describe, expect, it } from "vitest";
 import { evenly, freshId, makeGroup, makeGroupOfTwo, ok, PRIYA, RAVI, refusal, stub } from "./group";
 
 /**
- * Inherits the dormancy half of `supabase/tests/06_activity_test.sql` and all
- * of `supabase/tests/07_account_deletion_test.sql`.
+ * Ports the dormancy half of `06_activity_test.sql` and all of
+ * `07_account_deletion_test.sql` from the pgTAP suite that came before this
+ * one. See the porting table in `docs/cloudflare-migration-plan.md`.
  *
  * The scheduling model is the one thing here that is not a port. Postgres had
  * to scan every group nightly because a table cannot schedule itself, so

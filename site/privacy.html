@@ -55,7 +55,7 @@
 <main>
 <div class="eyebrow">LEGAL</div>
 <h1>Privacy Policy</h1>
-<p class="updated">Last updated 27 August 2026</p>
+<p class="updated">Last updated 25 September 2026</p>
 
 <p>OpenSplit is an expense splitter. It exists to answer one question — who owes
 whom — and it collects what it needs to answer that, and nothing else. There is
@@ -116,8 +116,10 @@ or clearing browser data can therefore leave the server data in place while
 you lose access to it.</p>
 
 <h2>Who can see what</h2>
-<p>Access is enforced in the database itself, by row-level security, rather than
-by the app asking politely.</p>
+<p>Access is enforced by the server, not by the app asking politely. Each group
+is a separate store with its own copy of its membership list, and a request for
+a group is answered by that store after it has checked its own list — so there
+is no query anybody can write that reaches a group they are not in.</p>
 <ul>
 <li>People who share a group with you can see your display name, your UPI ID if
 you set one, and the expenses in that group.</li>
@@ -131,10 +133,12 @@ whether to join. Nothing else.</li>
 <p>We do not sell your data and we do not share it for advertising. It is
 processed on our behalf by:</p>
 <ul>
-<li><strong>Supabase</strong> — database, authentication and hosting for the
-server.</li>
-<li><strong>Google Firebase</strong> — Cloud Messaging for notifications, and
-Hosting for the web app.</li>
+<li><strong>Cloudflare</strong> — the server: storage, authentication, and
+hosting for the website and the web app.</li>
+<li><strong>Resend</strong> — sending the sign-in code, if you sign in with an
+email address. They process the address and the message, nothing else.</li>
+<li><strong>Google Firebase</strong> — Cloud Messaging, and only if you turn
+notifications on.</li>
 <li><strong>Google Sign-In</strong> — only if you choose to sign in that way.</li>
 </ul>
 <p>We may also disclose data if the law genuinely requires it.</p>
@@ -149,7 +153,7 @@ brings it back — it simply moves out of your main list.</li>
 has had no activity for <strong>a year</strong>, is deleted. A group with money
 still outstanding is never deleted automatically, however old it is.</li>
 <li>A guest account that never joined a group and was never used again is
-deleted after <strong>30 days</strong>.</li>
+deleted after <strong>90 days</strong>.</li>
 </ul>
 
 <h2>Deleting your account</h2>
@@ -168,9 +172,11 @@ appear as a person with an account.</p>
 account</a>.</p>
 
 <h2>Security</h2>
-<p>Everything between the app and the server travels over HTTPS. Access to your
-rows is decided by the database, per row, on every read and write. The key the
-app ships with authorises nothing on its own.</p>
+<p>Everything between the app and the server travels over HTTPS. Every request
+carries your session or it carries nothing — the app ships with no key, and
+there is no anonymous credential to leak. Each group's data is held in its own
+store, which checks its own membership list before answering, so being signed
+in is not the same as being able to read a group.</p>
 
 <h2>Children</h2>
 <p>OpenSplit is not directed at children under 13, and we do not knowingly

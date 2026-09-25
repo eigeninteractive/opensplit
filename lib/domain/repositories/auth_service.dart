@@ -31,16 +31,12 @@ class Account {
 /// types, and verifying a code against the wrong one fails with a message
 /// about an expired token that has nothing to do with what went wrong. So the
 /// answer travels back with the code rather than being guessed at afterwards.
+/// There used to be a third case, `linked`: an address attached outright with
+/// no code, which GoTrue did when a deployment had email confirmation turned
+/// off. The Worker has no such setting — it always sends a code, because
+/// without one anybody can claim an address they do not own — so the case was
+/// unreachable and is gone. The screens that handled it are simpler for it.
 enum EmailFlow {
-  /// Attached outright, with no code — this deployment does not confirm email
-  /// changes. Nothing further to do, and nothing to prompt for.
-  ///
-  /// OpenSplit's own `config.toml` turns confirmations on, because without
-  /// them anybody can claim an address they do not own. A self-hosted
-  /// deployment may not have, and a screen that then waits forever for a code
-  /// is a worse answer than handling it.
-  linked,
-
   /// A code was sent. Verifying it keeps the current user id, so every row on
   /// this device still belongs to it.
   linkPending,
@@ -77,9 +73,9 @@ class IdentityAlreadyInUse implements Exception {
 /// Which case applies cannot be inferred from which code path ran, and that is
 /// why this is decided here rather than by the caller. Signing in with Google
 /// using the address an existing email account already owns lands on *that
-/// same account*: Supabase attaches the identity by matching a verified email,
-/// so the sign-in branch ran and yet nothing moved. Only the resulting id
-/// settles it.
+/// same account*: the server attaches the identity by matching a verified
+/// email, so the sign-in branch ran and yet nothing moved. Only the resulting
+/// id settles it.
 sealed class IdentityOutcome {
   const IdentityOutcome({required this.account});
 
@@ -225,17 +221,18 @@ abstract interface class AuthService {
   ///
   /// A code, not a magic link: magic links open in whichever browser the mail
   /// app prefers, lose the app's context entirely, and are routinely consumed
-  /// by corporate mail scanners before the recipient ever sees them. That
-  /// requires an email template carrying `{{ .Token }}` — the stock Supabase
-  /// ones do not, and against those no code is ever sent. See
-  /// `supabase/templates/README.md`.
+  /// by corporate mail scanners before the recipient ever sees them. The
+  /// Worker composes the message itself — see `server/src/email/sender.ts` —
+  /// so there is no template that can be configured into not carrying the
+  /// code, which is a failure the previous backend made easy.
   ///
-  /// The returned flow must be handed back to [verifyEmailCode], unless it is
-  /// [EmailFlow.linked], which is already finished.
+  /// The returned flow must be handed back to [verifyEmailCode].
   Future<EmailFlow> sendEmailCode(String email);
 
   /// Completes the flow [sendEmailCode] started. [flow] must be the value it
-  /// returned, and must not be [EmailFlow.linked].
+  /// returned: the two flows are different endpoints issuing different token
+  /// types, and verifying against the wrong one fails with a message about an
+  /// expired token that has nothing to do with what went wrong.
   Future<IdentityOutcome> verifyEmailCode({
     required String email,
     required String code,

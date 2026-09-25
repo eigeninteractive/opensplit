@@ -142,7 +142,7 @@ jobs:
             test/data/cloudflare_integration_test.dart
 
   tooling:
-    name: Release tooling and Edge Functions
+    name: Release tooling
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
@@ -162,11 +162,6 @@ jobs:
           bundler-cache: true
       - run: ruby -c fastlane/Fastfile
       - run: bundle exec fastlane lanes
-      - uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.9.3
-      - run: deno fmt --check supabase/functions
-      - run: deno check --config=supabase/functions/deno.json supabase/functions/fetch-fx/index.ts supabase/functions/notify-event/index.ts
       - name: Check tools did not mutate the checkout
         run: |
           git diff --exit-code

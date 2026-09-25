@@ -131,9 +131,9 @@ void main() {
 
 /// Signed out until somebody asks to be a guest.
 ///
-/// The auth event arrives a turn after the call returns, the way Supabase's
-/// does — the session is real before the stream says so, and nothing may depend
-/// on the order of those two.
+/// The auth event arrives a turn after the call returns, the way the real
+/// service's does — the session is real before the stream says so, and nothing
+/// may depend on the order of those two.
 class _BecomesGuest implements AuthService {
   static const _guest = Account(id: 'guest-1', isAnonymous: true);
 

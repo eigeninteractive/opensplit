@@ -48,7 +48,7 @@ class SessionController extends _$SessionController {
   /// a flash of the welcome screen in front of everybody who was already
   /// signed in, on every load.
   ///
-  /// `Supabase.initialize` restores the stored session in `main` before
+  /// `BetterAuthService` restores the stored session in its constructor before
   /// `runApp`, so by the time anything can ask, `currentUser` answers from
   /// memory. There is no moment where the answer is unknown, so there is no
   /// state to represent one.
