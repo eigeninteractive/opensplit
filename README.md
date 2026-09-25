@@ -27,13 +27,15 @@ no real mobile app.
 
 A Flutter client (Riverpod, Drift, go_router) holds the entire journal in
 SQLite and does all computation locally — split arithmetic, the balance fold,
-debt simplification, analytics. The backend is a Cloudflare Worker behind a
-Dart repository interface: one Durable Object per group, which is that group's
+debt simplification, analytics. The backend is a Cloudflare Worker whose Dart
+client is generated from its OpenAPI contract: one Durable Object per group, which is that group's
 only writer and therefore the thing that can hand out a strictly increasing
 sequence number, enforce `sum(payers) = sum(shares) = amount` in ordinary code,
 and answer "are you a member" by reading its own table. D1 holds the handful of
 facts that are genuinely cross-group — profiles, which groups somebody is in,
-where to wake them, and what a link token points at. Reads outnumber writes
+where to wake them, and what a link token points at. Types are declared once
+(Drizzle tables → Zod → OpenAPI → the generated Dart client); see
+[docs/architecture.md](docs/architecture.md). Reads outnumber writes
 roughly 50:1, so putting reads on devices people already own is what makes
 "free forever" credible rather than aspirational.
 
@@ -69,6 +71,13 @@ well as the API, and it refuses to start at all without an assets directory.
 client; drop the flag when you want `/app` too. `npm test` needs neither — the
 server suite serves a three-file fixture it owns, so it never depends on which
 build ran last.
+
+After changing a Drizzle table or a Zod schema, regenerate the contract and the
+Dart client (CI fails if they differ from what is committed):
+
+```bash
+dart run tool/generate_api_client.dart
+```
 
 The server tests are not optional decoration. They cover the balance invariant
 rejecting an expense that does not add up, that a stale edit is refused only
@@ -107,7 +116,10 @@ Cloudflare account and it needs no credentials.
 
 It skips itself when nothing is listening, so `flutter test` stays green
 without it — which is also why it has to be run somewhere that *does* have a
-backend, or it never runs at all. CI does, in the `backend` job, and passes
+backend, or it never runs at all. If another Worker already has port 8787, run
+this one elsewhere (`npx wrangler dev --port 8797`) and pass
+`--dart-define=API_BASE_URL=http://127.0.0.1:8797`; anything else answering on
+8787 fails the suite rather than skipping it. CI does, in the `backend` job, and passes
 `--dart-define=REQUIRE_BACKEND=true` so that a missing Worker there is a
 failure rather than a quiet skip.
 
@@ -116,8 +128,7 @@ Durable Object against `workerd` and `sync_test.dart` proves the sync algorithm
 against a fake, but neither can catch a generated client calling a path that
 moved, a field that does not survive the JSON round trip, a refusal code mapped
 to the wrong kind, or a payload key the server spells one way and the app reads
-another. That last one is not hypothetical — it had already happened once, and
-this is the test that would have caught it the same afternoon.
+another.
 
 ### The local database schema is versioned
 
@@ -128,12 +139,17 @@ snapshot of every shipped schema, and `test/data/migration_test.dart` fails the
 moment the code drifts from the newest one.
 
 After changing anything in `lib/data/local/tables.dart`, bump
-`AppDatabase.schemaVersion`, add a step to `onUpgrade`, and then:
+`AppDatabase.schemaVersion` (never re-dump a version that has been pushed) and
+then:
 
 ```bash
 dart run drift_dev schema dump lib/data/local/database.dart drift_schemas/
 dart run drift_dev schema generate drift_schemas/ test/data/generated_migrations/
 ```
+
+Until the first public release, an upgrade rebuilds the local database and
+re-syncs, which loses anything recorded offline and never pushed. See
+[docs/local-database.md](docs/local-database.md).
 
 The domain layer is also run in a real browser:
 
@@ -179,7 +195,8 @@ refusals have separate notices.
 Network and pull failures retry after 5 seconds with exponential backoff,
 capped at 5 minutes. Upload deadlines live in the outbox and are restored on
 the next launch; dependent writes cannot overtake a backed-off parent.
-Permanent refusals require an explicit retry. Active-run status is kept in
+A permanent refusal waits in a banner for the person to retry it or discard it;
+discarding puts back the group's version of that row. Active-run status is kept in
 memory and discarded on account changes, avoiding stale "running" flags after
 a crash. Ledger rows, cursors and queued writes remain durable.
 
@@ -794,10 +811,11 @@ site/               the static root: landing page, the three document
 drift_schemas/      a snapshot of every shipped local schema, so a future
                     migration can be tested against a real old database
                     rather than a guess at one.
-docs/               procedures and rules that are too long for a commit
-                    message and have to be followed exactly: standing the
-                    backend up, rebuilding it, and what to know before
-                    changing the local database.
+docs/               the design (architecture.md: stores, sync, and how
+                    types flow from the tables to the app), procedures that
+                    have to be followed exactly (standing the backend up,
+                    rebuilding it), what to know before changing the local
+                    database, and the audit's open items.
 ```
 
 Migrations are never edited in place, on either side. `drizzle-kit generate`

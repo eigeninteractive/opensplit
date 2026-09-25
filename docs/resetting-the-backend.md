@@ -172,8 +172,9 @@ is the same signal a permissions problem gives.
 
 Their queued writes then reference ids that no longer exist. The server refuses
 those permanently rather than transiently — a refusal carries its own kind, and
-a permanent one goes to dead letters instead of retrying — so the person sees
-changes that look saved and never arrive.
+a permanent one is set aside instead of retrying — so every such change lands
+in the "could not be saved" banner. Discarding there clears them, but it is one
+tester at a time.
 
 So a reset needs the devices cleared too: **clear app storage, or uninstall and
 reinstall.**

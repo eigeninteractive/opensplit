@@ -28,7 +28,7 @@ dart run drift_dev schema generate drift_schemas/ test/data/generated_migrations
 `test/data/migration_test.dart` fails if the committed snapshot no longer
 matches the tables in code, which catches a change nobody recorded. It cannot
 catch a snapshot re-dumped at the same version, so that is the one thing to
-watch.
+watch: once a version has been pushed, a further change is a new version.
 
 ### Why a bump is safe right now
 
@@ -87,16 +87,14 @@ about names rather than tidiness.
 that keep it in step with `entries`.
 
 It is there rather than in `database.dart` because **Drift cannot express an
-fts5 table in the Dart table DSL** — the documentation is explicit that it is not
-possible — and being a declared entity is what makes the migration drop and
-recreate it like anything else. As raw SQL it was invisible to `allSchemaEntities`
-and to the schema snapshot, so the rebuild had to know it existed by name.
+fts5 table in the Dart table DSL**, and being a declared entity is what makes
+the migration drop and recreate it like anything else.
 
-That mattered more than it sounds. An external-content fts5 index stores terms
-against `entries` rowids; drop and recreate `entries` underneath a surviving
-index and every rowid points at nothing, and because it is created with
-`IF NOT EXISTS` a stale one is never replaced. Searching then returns hits for
-expenses that are not there — measured, not assumed, and pinned by a test.
+That matters. An external-content fts5 index stores terms against `entries`
+rowids; drop and recreate `entries` underneath a surviving index and every rowid
+points at nothing, and because it is created with `IF NOT EXISTS` a stale one is
+never replaced. Searching would then return hits for expenses that are not
+there, which a test pins.
 
 ### It needs `build.yaml`
 
@@ -108,6 +106,12 @@ The shape matters as much as the contents: `sqlite: modules:` is accepted by
 `build_runner` and then **rejected outright** by `drift_dev schema dump`, which
 refuses the `sqlite` field beside `sql`. Everything has to go under
 `sql.options`, as it does in `build.yaml`.
+
+`build.yaml` also runs Drift as its `not_shared` builder, which writes
+`database.drift.dart` as a plain part. That is what lets riverpod_generator see
+the row classes providers return. If `build_runner` ever reports an
+`InvalidOutputException` after the API client is regenerated, delete
+`.dart_tool/build` and run it again.
 
 ### There is no server counterpart
 

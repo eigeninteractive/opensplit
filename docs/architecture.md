@@ -41,11 +41,7 @@ of changes is only ever cut between sequence numbers — so a device sees a whol
 change or none of it, and can never hold an expense whose shares have not
 arrived.
 
-That replaced four `(timestamp, id)` keyset cursors per group per sync, and with
-them the entire class of bug where two rows written in the same transaction
-straddle a page boundary because their timestamps differ by a microsecond.
-
-One feed still uses a timestamp cursor, and honestly: profiles live in D1, which
+One feed uses a timestamp cursor instead, and honestly: profiles live in D1, which
 several requests write concurrently, so there is nothing there that can issue a
 sequence number.
 
@@ -82,6 +78,58 @@ writes; the edge serves.
 the script. They are a few dozen rows that change about never and that a device
 cannot create a group without. A table would have been a migration and a read
 for data that ships with the code anyway.
+
+---
+
+## The contract, and how types reach the app
+
+Each shape is declared once and derived from there:
+
+```
+Drizzle tables ──drizzle-zod──▶ Zod row schemas ─┐
+                  hand-written Zod request bodies ┴─▶ OpenAPI (docs/openapi.json)
+    ──openapi-generator──▶ packages/opensplit_api (Dart) ──lib/data/sync/wire.dart──▶ Drift rows
+```
+
+- **Rows the server returns are derived from their tables** with drizzle-zod,
+  so a column is declared in one place. Overrides give a column its wire type
+  where SQLite has none: a timestamp, a date, a named enum, a meaningful range.
+- **Request bodies are written out**, because they are narrower than the rows
+  they write (no `createdBy`, no `seq`) and carry the validation.
+- **The enum vocabularies** (entry, split and event kinds) are one list each in
+  the Drizzle schema, used by the column, the Zod enum and so the Dart enum. A
+  value a build does not know decodes to the generator's `unknownDefaultOpenApi`
+  rather than failing the page.
+- **The app uses the generated types directly**, including the error envelope
+  (`ApiFailure`) and the activity payloads. `wire.dart` is the only translation,
+  and exists because a local row is not a server row: it can exist before the
+  server has seen it (null `seq`), it carries the `groupId` a page states once,
+  an expense is three tables, and a date is a `DateTime`.
+- CI regenerates the contract and the client (`dart run
+  tool/generate_api_client.dart --check`) and fails on any difference.
+
+### Required, nullable, optional
+
+**Every body field is required, and `null` is the only way to say "none".** A
+generated Dart client cannot send "absent" as distinct from null (it drops a
+null optional field), so an optional field would have three states on the
+server and two on the device. Updates are therefore `PUT`s of every editable
+field, like `ProfileUpdate`. Optional exists only for query parameters, where a
+server default is ordinary HTTP.
+
+### Dates
+
+An instant (`createdAt`, `deletedAt`, …) is an ISO 8601 timestamp, UTC, from the
+server's clock. An expense's date is a **calendar day**, not an instant:
+`YYYY-MM-DD` on the wire (`format: date`), in the server's tables and in the
+phone's. It is the day the person picked, so it needs no time zone, and it reads
+the same on every phone. As a timestamp, a 1 a.m. expense in Goa would be the
+previous day in UTC and could land on different days on different phones.
+
+Dart has no date-only type, so in the app a day is a `DateTime` at UTC midnight
+(`lib/domain/calendar_date.dart`). The generator is told to keep `format: date`
+a string, because it would otherwise send a full timestamp and read the day back
+as local midnight.
 
 ---
 
@@ -149,7 +197,7 @@ tokens.
 
 ---
 
-## Cron: two schedules, not three
+## Cron: two schedules
 
 `0 4 * * *` refreshes exchange rates. `0 5 * * 0` collects abandoned guest
 accounts and reconciles a slice of the D1 index.
