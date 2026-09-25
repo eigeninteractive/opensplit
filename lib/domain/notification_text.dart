@@ -89,16 +89,16 @@ import 'money_format.dart';
 ({String title, String body})? describeMemberEvent({
   required String groupName,
   required String memberName,
-  required GroupEventKind kind,
+  required EventKind kind,
 }) => switch (kind) {
-  GroupEventKind.memberJoined => (
+  EventKind.memberJoined => (
     title: groupName,
     body: '$memberName joined the group.',
   ),
   // No actor named, deliberately. Leaving is usually your own doing, and a
   // banner that says somebody removed somebody else invites a reading of the
   // group's politics that the record on the activity screen can give properly.
-  GroupEventKind.memberLeft => (
+  EventKind.memberLeft => (
     title: groupName,
     body: '$memberName is no longer in the group.',
   ),

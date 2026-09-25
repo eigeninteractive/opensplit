@@ -128,15 +128,15 @@ class _Line extends StatelessWidget {
       // you arrive -- and naming whoever happened to hold the session would
       // often name the person who sent the link rather than the person who
       // walked through it.
-      MemberChanged(kind: GroupEventKind.memberJoined, :final displayName) => (
+      MemberChanged(kind: EventKind.memberJoined, :final displayName) => (
         Icons.person_add_alt,
         '$displayName joined',
       ),
-      MemberChanged(kind: GroupEventKind.memberAdded, :final displayName) => (
+      MemberChanged(kind: EventKind.memberAdded, :final displayName) => (
         Icons.person_outline,
         '$actor added $displayName',
       ),
-      MemberChanged(kind: GroupEventKind.memberLeft, :final displayName) => (
+      MemberChanged(kind: EventKind.memberLeft, :final displayName) => (
         Icons.person_remove_outlined,
         '$displayName left',
       ),
@@ -147,17 +147,17 @@ class _Line extends StatelessWidget {
             : '$actor renamed $previousName to $displayName',
       ),
 
-      GroupChanged(kind: GroupEventKind.groupRenamed, :final name) => (
+      GroupChanged(kind: EventKind.groupRenamed, :final name) => (
         Icons.drive_file_rename_outline,
         '$actor renamed the group to $name',
       ),
-      GroupChanged(kind: GroupEventKind.groupArchived) => (
+      GroupChanged(kind: EventKind.groupArchived) => (
         Icons.inventory_2_outlined,
         '$actor archived the group',
       ),
       GroupChanged() => (Icons.unarchive_outlined, '$actor restored the group'),
 
-      LinkChanged(kind: GroupEventKind.linkCreated) => (
+      LinkChanged(kind: EventKind.linkCreated) => (
         Icons.link,
         '$actor created an invite link',
       ),

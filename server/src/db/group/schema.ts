@@ -3,6 +3,11 @@ import { check, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex
 
 import type { EventPayload } from "../../schemas/ledger";
 
+/** The closed vocabularies stored here. `schemas/ledger.ts` puts these same lists on the wire. */
+export const entryKinds = ["expense", "settlement"] as const;
+export const splitKinds = ["equal", "exact", "shares", "percent"] as const;
+export const eventKinds = ["entry", "member_added", "member_joined", "member_left", "member_renamed", "group_renamed", "group_archived", "group_restored", "link_created", "link_revoked"] as const;
+
 /** What each kind of staged D1 write carries. See `outbox` below. */
 export type MembershipWrite = { groupId: string; profileId: string; leftAt: string | null; updatedAt: string };
 export type LinkTokenWrite = { groupId: string; token: string; tokenKind: "invite" | "group_link"; revoked: boolean };
@@ -232,9 +237,7 @@ export const entries = sqliteTable(
      * folding through the identical balance path and cancelling exactly the
      * debt the expenses created.
      */
-    kind: text("kind", { enum: ["expense", "settlement"] })
-      .notNull()
-      .default("expense"),
+    kind: text("kind", { enum: entryKinds }).notNull().default("expense"),
 
     description: text("description").notNull().default(""),
     categoryId: text("category_id"),
@@ -246,9 +249,7 @@ export const entries = sqliteTable(
     /** A calendar date, `YYYY-MM-DD`, not an instant. */
     entryDate: text("entry_date").notNull(),
 
-    splitKind: text("split_kind", { enum: ["equal", "exact", "shares", "percent"] })
-      .notNull()
-      .default("equal"),
+    splitKind: text("split_kind", { enum: splitKinds }).notNull().default("equal"),
 
     /**
      * A display-only snapshot of the rate to the group's default currency as
@@ -395,25 +396,8 @@ export const events = sqliteTable(
 
     createdAt: text("created_at").notNull(),
 
-    kind: text("kind", {
-      enum: [
-        /**
-         * An expense snapshot. The only kind whose detail is derived on the
-         * client, by comparing consecutive rows — see `snapshot.ts` for why
-         * the server records after-images rather than diffs.
-         */
-        "entry",
-        "member_added",
-        "member_joined",
-        "member_left",
-        "member_renamed",
-        "group_renamed",
-        "group_archived",
-        "group_restored",
-        "link_created",
-        "link_revoked",
-      ],
-    }).notNull(),
+    /** `entry` is an expense snapshot, the one kind whose detail the client derives by comparing consecutive rows. */
+    kind: text("kind", { enum: eventKinds }).notNull(),
 
     /**
      * The entry, member or token this is about. Null for the kinds whose

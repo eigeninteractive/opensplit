@@ -3,6 +3,7 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:opensplit_api/src/model/error_code.dart';
 import 'package:opensplit_api/src/model/retry.dart';
 import 'package:json_annotation/json_annotation.dart';
 
@@ -18,8 +19,13 @@ class ErrorError {
   /// Returns a new [ErrorError] instance.
   ErrorError({required this.code, required this.message, required this.retry});
 
-  @JsonKey(name: r'code', required: true, includeIfNull: false)
-  final String code;
+  @JsonKey(
+    name: r'code',
+    required: true,
+    includeIfNull: false,
+    unknownEnumValue: ErrorCode.unknownDefaultOpenApi,
+  )
+  final ErrorCode code;
 
   @JsonKey(name: r'message', required: true, includeIfNull: false)
   final String message;

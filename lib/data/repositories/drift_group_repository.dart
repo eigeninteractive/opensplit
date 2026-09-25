@@ -1,12 +1,9 @@
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../domain/models/group.dart';
 import '../../domain/settle/upi.dart';
-import '../../domain/models/member.dart';
 import '../local/database.dart';
 import '../sync/outbox_queue.dart';
-import 'mappers.dart';
 
 /// Local-first group and membership storage.
 final class DriftGroupRepository {
@@ -36,15 +33,12 @@ final class DriftGroupRepository {
     if (!includeArchived) {
       query.where((t) => t.archivedAt.isNull());
     }
-    return query.watch().map(
-      (rows) => [for (final row in rows) row.toDomain()],
-    );
+    return query.watch().map((rows) => [for (final row in rows) row]);
   }
 
-  Stream<Group?> watchGroup(String groupId) =>
-      (_db.select(_db.groups)..where((t) => t.id.equals(groupId)))
-          .watchSingleOrNull()
-          .map((row) => row?.toDomain());
+  Stream<Group?> watchGroup(String groupId) => (_db.select(
+    _db.groups,
+  )..where((t) => t.id.equals(groupId))).watchSingleOrNull().map((row) => row);
 
   /// Members of a group, including placeholders and people who have left.
   Stream<List<Member>> watchMembers(
@@ -57,16 +51,14 @@ final class DriftGroupRepository {
     if (!includeLeft) {
       query.where((t) => t.leftAt.isNull());
     }
-    return query.watch().map(
-      (rows) => [for (final row in rows) row.toDomain()],
-    );
+    return query.watch().map((rows) => [for (final row in rows) row]);
   }
 
   Future<Group?> getGroup(String groupId) async {
     final row = await (_db.select(
       _db.groups,
     )..where((t) => t.id.equals(groupId))).getSingleOrNull();
-    return row?.toDomain();
+    return row;
   }
 
   Future<List<Member>> getMembers(String groupId) async {
@@ -75,7 +67,7 @@ final class DriftGroupRepository {
               ..where((t) => t.groupId.equals(groupId) & t.leftAt.isNull())
               ..orderBy([(t) => OrderingTerm.asc(t.joinedAt)]))
             .get();
-    return [for (final row in rows) row.toDomain()];
+    return [for (final row in rows) row];
   }
 
   /// Creates a group along with its first member — whoever made it.
@@ -112,45 +104,20 @@ final class DriftGroupRepository {
       name: trimmed,
       defaultCurrency: defaultCurrency,
       isDirect: isDirect,
+      simplifyDebts: true,
       createdBy: creator.id,
       createdAt: now,
     );
 
     await _db.transaction(() async {
-      await _db
-          .into(_db.groups)
-          .insert(
-            GroupsCompanion.insert(
-              id: group.id,
-              name: group.name,
-              defaultCurrency: group.defaultCurrency,
-              isDirect: Value(group.isDirect),
-              simplifyDebts: Value(group.simplifyDebts),
-              createdBy: Value(creator.id),
-              createdAt: group.createdAt,
-            ),
-          );
-      await _db
-          .into(_db.members)
-          .insert(
-            MembersCompanion.insert(
-              id: creator.id,
-              groupId: group.id,
-              profileId: Value(creator.profileId),
-              displayName: creator.displayName,
-              joinedAt: creator.joinedAt,
-            ),
-          );
+      await _db.into(_db.groups).insert(group);
+      await _db.into(_db.members).insert(creator);
       // Both rows have to reach the server, and the group has to land first:
       // members and entries reference it by foreign key.
       await outbox?.enqueue(OutboxTarget.group, group.id);
       await outbox?.enqueue(OutboxTarget.member, creator.id);
     });
 
-    // `group` already carries creatorProfileId, so there is nothing left to
-    // correct here. This used to overwrite it with the creator's *member* id —
-    // an id from a different table, in a column that holds profile ids — so
-    // that the returned object disagreed with the row just written.
     return (group: group, creator: creator);
   }
 
@@ -240,17 +207,7 @@ final class DriftGroupRepository {
     );
 
     await _db.transaction(() async {
-      await _db
-          .into(_db.members)
-          .insert(
-            MembersCompanion.insert(
-              id: member.id,
-              groupId: member.groupId,
-              profileId: Value(member.profileId),
-              displayName: member.displayName,
-              joinedAt: member.joinedAt,
-            ),
-          );
+      await _db.into(_db.members).insert(member);
       await outbox?.enqueue(OutboxTarget.member, member.id);
     });
     return member;
@@ -324,7 +281,7 @@ final class DriftGroupRepository {
   Future<({int solo, int shared})> membershipBreakdown(String profileId) async {
     final rows = await _db.select(_db.members).get();
 
-    final byGroup = <String, List<MemberRow>>{};
+    final byGroup = <String, List<Member>>{};
     for (final row in rows) {
       byGroup.putIfAbsent(row.groupId, () => []).add(row);
     }

@@ -10,8 +10,7 @@ import { EntryPathSchema, GroupPathSchema, group, MemberPathSchema, refusals, re
 /**
  * The sync surface: one request per group, one integer cursor.
  *
- * These handlers are deliberately thin, and that is the point of the phase
- * before this one. Every rule about who may do what lives in the group's
+ * These handlers are deliberately thin. Every rule about who may do what lives in the group's
  * Durable Object, which is the only thing that can answer it without a race;
  * every rule about *shape* lives in the Zod schemas, which answer it before a
  * Durable Object is woken at all. What is left here is routing and the
@@ -19,13 +18,10 @@ import { EntryPathSchema, GroupPathSchema, group, MemberPathSchema, refusals, re
  *
  * ## There is no membership check here
  *
- * The plan called for one: read D1's `memberships` index first, refuse cheap,
- * and only then wake the object. Building it, the saving turned out not to be
- * there and the cost was real.
- *
- * The saving is not there because a D1 read is a subrequest too — roughly what
- * asking the object costs — and because the object answers `not_member` from
- * its own table in microseconds. The cost is that the index is *derived*: it
+ * Reading D1's `memberships` index first to refuse cheaply saves nothing: a D1
+ * read is a subrequest too, roughly what asking the object costs, and the
+ * object answers `not_member` from its own table in microseconds. It would
+ * cost something, though: the index is *derived*: it
  * lags by however long the outbox takes to flush. The window is normally
  * nothing, but it opens exactly where it hurts most, which is the moment
  * somebody joins: the object has them as a member, D1 does not yet, and every

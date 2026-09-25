@@ -687,7 +687,7 @@ OAuth branding verification failed on exactly that.
 Nothing in Dart knows about the prefix. `--base-href=/app/` puts it below the
 path URL strategy, so go_router still sees `/g/123` while the browser shows
 `/app/g/123`. Two places do encode it, and `test/deep_link_host_test.dart`
-holds them together: the invite URL in `lib/domain/repositories/invite_api.dart`
+holds them together: `joinUrl` in `lib/data/sync/invites.dart`
 and the App Links `pathPrefix` in `AndroidManifest.xml`.
 
 Both halves are served by the Worker, from the same origin as the API. There is
@@ -776,10 +776,14 @@ After changing any of them, re-run `dart run build_runner build`.
 ### Layout
 
 ```
-lib/domain/         pure Dart: splitting, balance fold, simplify. No Flutter,
-                    no imports from data/.
-lib/data/           Drift database, repositories, sync. The only place the
-                    backend is referenced.
+lib/domain/         pure Dart: splitting, balance fold, simplify. No Flutter.
+                    Its models are the Drift row classes plus the Entry
+                    aggregate; its vocabularies (entry, split and event kinds)
+                    are the generated contract's own enums.
+lib/data/           Drift database, repositories, sync. `sync/wire.dart` is
+                    the one place wire types and local rows meet.
+packages/opensplit_api/
+                    the API client, generated from docs/openapi.json.
 lib/application/    Riverpod providers and view models.
 lib/presentation/   screens and widgets.
 server/src/do/      the Durable Objects: one class per group, and the

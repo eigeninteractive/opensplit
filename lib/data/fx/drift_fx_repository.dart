@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 
+import '../../domain/calendar_date.dart';
 import '../../domain/fx/fx_quote.dart';
 import '../local/database.dart';
 
@@ -35,7 +36,7 @@ class DriftFxRepository {
     required String quote,
     required DateTime asOf,
   }) async {
-    final day = isoDate(asOf);
+    final day = calendarDate(asOf);
 
     if (base == quote) {
       return FxQuote(
@@ -59,7 +60,9 @@ class DriftFxRepository {
       // The older of the two publications: a figure is only as current as the
       // stalest number that went into it, and claiming otherwise would
       // overstate how fresh the estimate is.
-      date: _parseDay(from.asOf.compareTo(to.asOf) <= 0 ? from.asOf : to.asOf),
+      date: parseCalendarDate(
+        from.asOf.compareTo(to.asOf) <= 0 ? from.asOf : to.asOf,
+      ),
       source: from.source == to.source
           ? from.source
           : '${from.source} + ${to.source}',
@@ -77,14 +80,4 @@ class DriftFxRepository {
             ..orderBy([(t) => OrderingTerm.desc(t.asOf)])
             ..limit(1))
           .getSingleOrNull();
-
-  static DateTime _parseDay(String day) => DateTime.parse('${day}T00:00:00Z');
-}
-
-/// Formats a date the way the rate table keys them.
-String isoDate(DateTime date) {
-  final utc = date.toUtc();
-  return '${utc.year.toString().padLeft(4, '0')}-'
-      '${utc.month.toString().padLeft(2, '0')}-'
-      '${utc.day.toString().padLeft(2, '0')}';
 }

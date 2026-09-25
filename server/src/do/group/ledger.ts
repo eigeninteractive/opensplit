@@ -167,12 +167,9 @@ export function upsertEntry(tx: Tx, input: EntryInput, context: WriteContext): E
 
   /**
    * `createdBy`, `createdAt`, `clientKey` and `deletedAt` are in the insert and
-   * not in the update, which is the whole of what `guard_entry_write` used to
-   * do. Who recorded an expense and when cannot be rewritten because there is
-   * no statement that rewrites them; a saved edit does not resurrect a deleted
-   * expense because this does not touch `deletedAt`. A rule expressed as an
-   * absent assignment cannot be got around by a caller, which is more than the
-   * trigger could say — it was reachable only for callers with a JWT.
+   * not in the update. Who recorded an expense and when cannot be rewritten
+   * because there is no statement that rewrites them; a saved edit does not
+   * resurrect a deleted expense because this does not touch `deletedAt`.
    */
   tx.insert(schema.entries)
     .values({
@@ -201,8 +198,7 @@ export function upsertEntry(tx: Tx, input: EntryInput, context: WriteContext): E
  * A hard delete would vanish from the change feed, leaving the expense on
  * every device that had already synced it with no way to learn it went — and
  * taking the record of it with it. There is no method here that removes an
- * entry row, which is the same guarantee the missing DELETE policy used to
- * give, stated as an absence rather than a permission.
+ * entry row.
  */
 export function deleteEntry(tx: Tx, entryId: string, baseSeq: number, context: WriteContext): EntryWrite {
   return setDeleted(tx, entryId, baseSeq, context, true);

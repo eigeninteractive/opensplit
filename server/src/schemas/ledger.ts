@@ -1,5 +1,6 @@
 import { z } from "@hono/zod-openapi";
 
+import { entryKinds, eventKinds, splitKinds } from "../db/group/schema";
 import { IdSchema, TimestampSchema } from "./common";
 
 /**
@@ -56,10 +57,10 @@ export const CurrencySchema = z
  * generative enum constructor call and does not compile. A `$ref` gives it a
  * real enum value to point at.
  */
-export const EntryKindSchema = z.enum(["expense", "settlement"]).openapi("EntryKind");
-export const SplitKindSchema = z.enum(["equal", "exact", "shares", "percent"]).openapi("SplitKind");
+export const EntryKindSchema = z.enum(entryKinds).openapi("EntryKind");
+export const SplitKindSchema = z.enum(splitKinds).openapi("SplitKind");
 
-export const EventKindSchema = z.enum(["entry", "member_added", "member_joined", "member_left", "member_renamed", "group_renamed", "group_archived", "group_restored", "link_created", "link_revoked"]).openapi("EventKind");
+export const EventKindSchema = z.enum(eventKinds).openapi("EventKind");
 
 /**
  * The sequence number a change was committed at.
@@ -221,17 +222,19 @@ export const GroupCreateSchema = z
 /**
  * Renaming, archiving, and the two settings.
  *
- * Every field is optional and an absent field means "leave it alone", so this
- * is a patch rather than the whole row. A full-row upsert would make `id`,
- * `createdAt` and `createdBy` writable and then need a guard to say they are
- * not; a patch with no field for them needs no guard.
+ * There are no fields for `id`, `createdAt` or `createdBy`, so nothing needs
+ * to forbid rewriting them. An absent `name` or `simplifyDebts` is left alone.
+ *
+ * `archivedAt` is required because null is a value here (restore), and a
+ * generated client omits a null optional field — so an optional one could
+ * never say "restore".
  */
 export const GroupPatchSchema = z
   .object({
     name: z.string().trim().min(1).max(100).optional(),
     simplifyDebts: z.boolean().optional(),
     /** An instant to archive, or null to restore. */
-    archivedAt: TimestampSchema.nullable().optional(),
+    archivedAt: TimestampSchema.nullable(),
   })
   .openapi("GroupPatch");
 
@@ -253,9 +256,10 @@ export const MemberCreateSchema = z
 export const MemberPatchSchema = z
   .object({
     displayName: z.string().trim().min(1).max(100).optional(),
-    upiVpa: UpiVpaSchema.nullable().optional(),
+    /** Required for the same reason as `GroupPatch.archivedAt`: null clears it. */
+    upiVpa: UpiVpaSchema.nullable(),
     /** An instant to leave or remove, or null to rejoin. */
-    leftAt: TimestampSchema.nullable().optional(),
+    leftAt: TimestampSchema.nullable(),
   })
   .openapi("MemberPatch");
 
@@ -268,13 +272,6 @@ export const InviteSchema = z
     expiresAt: TimestampSchema,
     redeemedAt: TimestampSchema.nullable(),
     redeemedBy: IdSchema.nullable(),
-
-    /**
-     * Tokens this one invalidated: one live link per slot, so a link found in
-     * a chat history cannot still be spent. Returned rather than merely done,
-     * because the derived index in D1 has to forget them too.
-     */
-    superseded: z.array(z.object({ token: IdSchema })),
   })
   .openapi("Invite");
 
@@ -285,19 +282,6 @@ export const GroupLinkSchema = z
     expiresAt: TimestampSchema,
   })
   .openapi("GroupLink");
-
-/**
- * What minting one *did*, which is more than what a link *is*.
- *
- * `superseded` belongs to the act and not to the thing: it is meaningless on a
- * read, and a single schema carrying it would have to answer null there and
- * invite every reader to wonder whether null meant "nothing was replaced" or
- * "we did not look".
- */
-export const MintedLinkSchema = GroupLinkSchema.extend({
-  /** The link this one replaced, if there was a live one. */
-  superseded: IdSchema.nullable(),
-}).openapi("MintedLink");
 
 /**
  * The group's live link, or the fact that there is not one.
@@ -461,45 +445,19 @@ export const LinkEventPayloadSchema = z
   .openapi("LinkEventPayload");
 
 /**
- * Every shape the record can hold, enumerated — in TypeScript.
+ * The after-image, whose shape is decided by the sibling `kind`.
  *
- * There are four, they are closed, and which one an event carries is decided
- * entirely by its `kind`, so a free-form map was never the honest *type* for
- * this. `append()` in `events.ts` takes a discriminated parameter, which is
- * where the pairing is enforced: a `member_renamed` carrying a group's payload
- * does not compile.
+ * `z.custom` rather than `z.union`, because the union emits `oneOf`, which the
+ * Dart generator flattens into one class with every branch's fields required.
+ * The four shapes are registered as components in `app.ts`, so the generated
+ * client has a class for each and decodes `payload` per `kind`.
  *
- * ## Why the contract says `object` and not `oneOf`
- *
- * It was `z.union([...])`, which emits `oneOf` — and `oneOf` is where the Dart
- * generator gives up. It does not produce a sealed class or even a `dynamic`.
- * It flattens all four branches into **one class carrying every field from
- * every branch, all required**, so `EventPayload.fromJson` asserts that a
- * "Priya joined" payload has an `amountMinor`, an `entryDate` and an
- * `expiresAt`, and throws when it does not. That is not a weaker client, it is
- * a client that cannot read the feed at all.
- *
- * So `z.custom` keeps the precise TypeScript type and tells the document what
- * this genuinely is: an object whose shape depends on a sibling field, which
- * OpenAPI 3.0.3 cannot express in a form this generator handles. The four
- * shapes are still registered as named schemas above, so the contract
- * documents them even though `payload` does not point at them.
- *
- * Nothing is lost at runtime. `Event` is a response type and responses are not
- * validated — the payload is written by this server from what it committed and
- * never arrives from a client. And the Dart side already reads it as
- * `Map<String, Object?>` and parses per kind, which is what this produces.
+ * `additionalProperties: {nullable: true}` rather than `true`: the latter
+ * generates `Map<String, Object>`, whose lazy cast throws on the first null
+ * value, and every payload has one.
  */
 export const EventPayloadSchema = z.custom<EntrySnapshot | MemberEventPayload | GroupEventPayload | LinkEventPayload>().openapi({
   type: "object",
-
-  /**
-   * `{nullable: true}` rather than `true`, and it is load-bearing. Plain
-   * `additionalProperties: true` generates `Map<String, Object>` in Dart, and
-   * `.cast<String, Object>()` is lazy — it throws on the first read of a key
-   * whose value is null. Every payload here has one: `previousName`,
-   * `categoryId`, `deletedAt`. The feed would break on the first rename.
-   */
   additionalProperties: { nullable: true },
   description: "The after-image, in whatever shape `kind` calls for: EntrySnapshot, MemberEventPayload, GroupEventPayload or LinkEventPayload.",
 });
@@ -611,7 +569,6 @@ export type MemberCreate = z.infer<typeof MemberCreateSchema>;
 export type MemberPatch = z.infer<typeof MemberPatchSchema>;
 export type Invite = z.infer<typeof InviteSchema>;
 export type GroupLink = z.infer<typeof GroupLinkSchema>;
-export type MintedLink = z.infer<typeof MintedLinkSchema>;
 export type LiveLink = z.infer<typeof LiveLinkSchema>;
 export type LinkRevocation = z.infer<typeof LinkRevocationSchema>;
 export type LinkPreview = z.infer<typeof LinkPreviewSchema>;

@@ -8,7 +8,6 @@ import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';
 import 'package:opensplit/data/repositories/drift_profile_repository.dart';
 import 'package:opensplit/domain/entry_draft.dart';
-import 'package:opensplit/domain/models/profile.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:test/test.dart';
 
@@ -92,7 +91,7 @@ void main() {
       activity: activity,
       myProfileId: 'profile-priya',
       groupId: g.groupId,
-      kind: GroupEventKind.entry,
+      kind: EventKind.entry,
       subjectId: entryId,
     );
 
@@ -120,7 +119,7 @@ void main() {
       activity: activity,
       myProfileId: 'profile-priya',
       groupId: g.groupId,
-      kind: GroupEventKind.entry,
+      kind: EventKind.entry,
       subjectId: entryId,
     );
 
@@ -139,7 +138,7 @@ void main() {
       activity: activity,
       myProfileId: 'profile-ravi',
       groupId: g.groupId,
-      kind: GroupEventKind.entry,
+      kind: EventKind.entry,
       subjectId: entryId,
     );
     final forPriya = await composeEventNotification(
@@ -150,7 +149,7 @@ void main() {
       activity: activity,
       myProfileId: 'profile-priya',
       groupId: g.groupId,
-      kind: GroupEventKind.entry,
+      kind: EventKind.entry,
       subjectId: entryId,
     );
 
@@ -174,7 +173,7 @@ void main() {
       // expense, or a profile that has not been reconciled yet.
       myProfileId: 'profile-nobody',
       groupId: g.groupId,
-      kind: GroupEventKind.entry,
+      kind: EventKind.entry,
       subjectId: entryId,
     );
 
@@ -197,7 +196,7 @@ void main() {
       activity: activity,
       myProfileId: 'profile-priya',
       groupId: g.groupId,
-      kind: GroupEventKind.entry,
+      kind: EventKind.entry,
       subjectId: 'an-id-this-device-has-never-seen',
     );
 

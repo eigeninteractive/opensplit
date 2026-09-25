@@ -9,6 +9,7 @@ import 'package:opensplit/data/repositories/drift_conflict_repository.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';
 import 'package:opensplit/data/repositories/drift_profile_repository.dart';
+import 'package:opensplit/data/sync/api_client.dart';
 import 'package:opensplit/data/sync/outbox_queue.dart';
 import 'package:opensplit/data/sync/sync_engine.dart';
 import 'package:opensplit/domain/balance/balance_fold.dart';
@@ -16,9 +17,8 @@ import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/models/entry.dart';
 import 'package:opensplit/domain/models/entry_event.dart';
 import 'package:opensplit/domain/models/group_event.dart';
-import 'package:opensplit/domain/models/currency.dart';
-import 'package:opensplit/domain/models/profile.dart';
 import 'package:opensplit/domain/split/splitter.dart';
+import 'package:opensplit_api/opensplit_api.dart' as api;
 import 'package:test/test.dart';
 
 import 'fake_remote_ledger.dart';
@@ -43,7 +43,7 @@ class Device {
     outbox = OutboxQueue(db);
     groups = DriftGroupRepository(db, outbox: outbox);
     entries = DriftEntryRepository(db, outbox: outbox);
-    _engine = SyncEngine(db: db, api: _server, outbox: outbox);
+    _engine = SyncEngine(db: db, remote: _server, outbox: outbox);
   }
 
   final String name;
@@ -106,7 +106,7 @@ void main() {
       addTearDown(device.close);
 
       server.serverCurrencies.add(
-        const Currency(code: 'XCD', exponent: 2, symbol: r'$', name: 'Test'),
+        api.Currency(code: 'XCD', exponent: 2, symbol: r'$', name: 'Test'),
       );
       await device.sync.syncEverything();
 
@@ -143,7 +143,14 @@ void main() {
       final inr = server.serverCurrencies.firstWhere((c) => c.code == 'INR');
       server.serverCurrencies
         ..remove(inr)
-        ..add(inr.copyWith(name: 'Indian Rupee (renamed)'));
+        ..add(
+          api.Currency(
+            code: inr.code,
+            exponent: inr.exponent,
+            symbol: inr.symbol,
+            name: 'Indian Rupee (renamed)',
+          ),
+        );
       await device.sync.syncEverything();
 
       final held = await (device.db.select(
@@ -222,7 +229,7 @@ void main() {
         server.beforeUpsertEntry = (_) => release.future;
         final engine = SyncEngine(
           db: a.db,
-          api: server,
+          remote: server,
           outbox: a.outbox,
           requestTimeout: const Duration(milliseconds: 20),
         );
@@ -254,7 +261,11 @@ void main() {
 
         expect(await a.db.select(a.db.groups).get(), isEmpty);
         expect(await a.db.select(a.db.groupCursors).get(), isEmpty);
-        final background = SyncEngine(db: a.db, api: server, outbox: a.outbox);
+        final background = SyncEngine(
+          db: a.db,
+          remote: server,
+          outbox: a.outbox,
+        );
         expect((await background.syncEverything()).isClean, isFalse);
         expect(await a.db.select(a.db.groups).get(), isEmpty);
       },
@@ -368,7 +379,11 @@ void main() {
           await release.future;
         };
 
-        final otherEngine = SyncEngine(db: a.db, api: server, outbox: a.outbox);
+        final otherEngine = SyncEngine(
+          db: a.db,
+          remote: server,
+          outbox: a.outbox,
+        );
         final first = a.sync.syncEverything();
         await entered.future;
         final second = otherEngine.syncEverything();
@@ -575,7 +590,7 @@ void main() {
 
       final conflicts = await DriftConflictRepository(b.db).watchAll().first;
       expect(conflicts, hasLength(1));
-      expect(conflicts.single.attempted.isDeleted, isTrue);
+      expect(conflicts.single.attempted.deletedAt, isNotNull);
       expect(conflicts.single.current?.amountMinor, 200000);
     });
 
@@ -823,7 +838,7 @@ void main() {
 
       final small = SyncEngine(
         db: b.db,
-        api: server,
+        remote: server,
         outbox: b.outbox,
         pageSize: 4,
       );
@@ -872,7 +887,7 @@ void main() {
 
       final small = SyncEngine(
         db: b.db,
-        api: server,
+        remote: server,
         outbox: b.outbox,
         pageSize: 5,
       );
@@ -1003,7 +1018,13 @@ void main() {
 
       expect(
         [for (final row in await a.outbox.due()) row.operation],
-        ['group', 'member', 'member', 'member', 'entry'],
+        [
+          OutboxTarget.group,
+          OutboxTarget.member,
+          OutboxTarget.member,
+          OutboxTarget.member,
+          OutboxTarget.entry,
+        ],
         reason: 'the group has to reach the server before anything naming it',
       );
 
@@ -1454,7 +1475,11 @@ void main() {
       final db = AppDatabase(NativeDatabase.memory());
       await seedReferenceData(db);
       addTearDown(db.close);
-      final engine = SyncEngine(db: db, api: server, outbox: OutboxQueue(db));
+      final engine = SyncEngine(
+        db: db,
+        remote: server,
+        outbox: OutboxQueue(db),
+      );
 
       // Priya is on the server under the name her account carries.
       server.seedProfile(
@@ -1486,7 +1511,11 @@ void main() {
       final db = AppDatabase(NativeDatabase.memory());
       await seedReferenceData(db);
       addTearDown(db.close);
-      final engine = SyncEngine(db: db, api: server, outbox: OutboxQueue(db));
+      final engine = SyncEngine(
+        db: db,
+        remote: server,
+        outbox: OutboxQueue(db),
+      );
 
       server.seedProfile(const Profile(id: 'a', displayName: 'Ravi'));
 
@@ -1815,6 +1844,42 @@ void main() {
       );
     }
 
+    test(
+      'converges even when a pull skipped the newer version first',
+      () async {
+        final g = await divergent(
+          raviAmount: 60000,
+          raviDescription: 'Dinner',
+          priyaAmount: 45000,
+        );
+
+        // A's push fails once, but the pull in the same run still happens. It
+        // skips the server's newer row, because A's edit is still queued, and
+        // moves the cursor past it.
+        var failOnce = true;
+        server.beforeUpsertEntry = (_) async {
+          if (failOnce) {
+            failOnce = false;
+            throw const ApiFailure('blip', retry: api.Retry.transient);
+          }
+        };
+        await a.sync.syncGroup(g.groupId);
+        await a.db
+            .update(a.db.outbox)
+            .write(const OutboxCompanion(nextAttemptAt: Value(null)));
+
+        // Refused as stale, parked, and the server's version read again.
+        await a.sync.syncGroup(g.groupId);
+
+        expect((await a.ledger(g.groupId)).single.amountMinor, 45000);
+        final conflict = (await DriftConflictRepository(
+          a.db,
+        ).watchAll().first).single;
+        expect(conflict.attempted.amountMinor, 60000);
+        expect(conflict.current?.amountMinor, 45000);
+      },
+    );
+
     test('the ledger converges and the edit is kept', () async {
       final g = await divergent(
         raviAmount: 60000,
@@ -1997,7 +2062,7 @@ void main() {
       final device = await freshDevice();
       final engine = SyncEngine(
         db: device.db,
-        api: server,
+        remote: server,
         outbox: device.outbox,
         pageSize: 2,
       );
@@ -2040,8 +2105,8 @@ void main() {
       // Cutting by rows instead would let a device hold an expense whose
       // record had not arrived -- or, with payers and shares on the same
       // number, an amount that does not add up on somebody's screen.
-      final firstPage = await server.pullChanges(
-        groupId: g.groupId,
+      final firstPage = await server.changes(
+        g.groupId,
         since: beforeExpenses,
         limit: 1,
       );
@@ -2054,7 +2119,7 @@ void main() {
       final device = await freshDevice();
       final engine = SyncEngine(
         db: device.db,
-        api: server,
+        remote: server,
         outbox: device.outbox,
         pageSize: 1,
       );

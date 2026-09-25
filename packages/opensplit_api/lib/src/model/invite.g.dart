@@ -19,7 +19,6 @@ Invite _$InviteFromJson(
       'expiresAt',
       'redeemedAt',
       'redeemedBy',
-      'superseded',
     ],
   );
   final val = Invite(
@@ -33,12 +32,6 @@ Invite _$InviteFromJson(
       (v) => v == null ? null : DateTime.parse(v as String),
     ),
     redeemedBy: $checkedConvert('redeemedBy', (v) => v as String?),
-    superseded: $checkedConvert(
-      'superseded',
-      (v) => (v as List<dynamic>)
-          .map((e) => InviteSupersededInner.fromJson(e as Map<String, dynamic>))
-          .toList(),
-    ),
   );
   return val;
 });
@@ -51,5 +44,4 @@ Map<String, dynamic> _$InviteToJson(Invite instance) => <String, dynamic>{
   'expiresAt': instance.expiresAt.toIso8601String(),
   'redeemedAt': instance.redeemedAt?.toIso8601String(),
   'redeemedBy': instance.redeemedBy,
-  'superseded': instance.superseded.map((e) => e.toJson()).toList(),
 };

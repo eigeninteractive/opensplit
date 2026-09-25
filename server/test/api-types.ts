@@ -9,4 +9,4 @@
  */
 export type { Bootstrap } from "../src/api/ledger";
 export type { AccountDeletion, Profile, ProfileList, ProfilePage } from "../src/schemas/account";
-export type { ChangePage, Entry, Group, Invite, Joined, LinkPreview, LinkRevocation, LiveLink, Member, MintedLink, PlaceholderList } from "../src/schemas/ledger";
+export type { ChangePage, Entry, Group, GroupLink, Invite, Joined, LinkPreview, LinkRevocation, LiveLink, Member, PlaceholderList } from "../src/schemas/ledger";

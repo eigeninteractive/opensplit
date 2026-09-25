@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:opensplit_api/opensplit_api.dart' as api;
 
 import '../../application/providers.dart';
 import '../../domain/activity/activity_text.dart';
+import '../../domain/calendar_date.dart';
 import '../../domain/entry_draft.dart';
 import '../../domain/fx/fx_quote.dart';
 import '../../domain/models/category.dart';
@@ -233,6 +235,10 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
           percents[id] = parsed;
         }
         return PercentSplit(percents);
+
+      // A split rule from a newer server: saving would have to guess it.
+      case SplitKind.unknownDefaultOpenApi:
+        return null;
     }
   }
 
@@ -288,7 +294,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
       // historical entry: what a rupee was worth on the night of the dinner
       // does not change because the market moved afterwards.
       fxRate: fx?.rate,
-      fxSource: fx == null ? null : '${fx.source}@${_isoDay(fx.date)}',
+      fxSource: fx == null ? null : '${fx.source}@${calendarDate(fx.date)}',
     );
 
     setState(() => _saving = true);
@@ -329,22 +335,18 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
   final _requestedRates = <String>{};
 
   void _requestRate(DateTime asOf, String currency) {
-    if (!_requestedRates.add('${_isoDay(asOf)}|$currency')) return;
+    final day = calendarDate(asOf);
+    if (!_requestedRates.add('$day|$currency')) return;
 
-    final api = ref.read(remoteLedgerApiProvider);
-    if (api == null) return;
-    // Deliberately not awaited: this must not delay a frame or a save. The
-    // implementation swallows its own failures, because a missing rate costs an
-    // estimate and nothing more.
-    unawaited(api.requestFxBackfill(asOf: asOf, currency: currency));
+    // Not awaited, and failures ignored: this must not delay a frame or a
+    // save, and a missing rate costs an estimate and nothing more.
+    ref
+        .read(remoteLedgerApiProvider)
+        ?.requestFxBackfill(
+          api.FxBackfillRequest(asOf: day, currency: currency),
+        )
+        .ignore();
   }
-
-  /// The rate's publication date, kept with the source so a stored snapshot
-  /// says both who published it and for which day.
-  static String _isoDay(DateTime date) =>
-      '${date.year.toString().padLeft(4, '0')}-'
-      '${date.month.toString().padLeft(2, '0')}-'
-      '${date.day.toString().padLeft(2, '0')}';
 
   Future<void> _delete() async {
     final confirmed = await showDialog<bool>(
@@ -873,7 +875,8 @@ class _SplitSection extends StatelessWidget {
                       ),
                     ],
                   ),
-                  SplitKind.equal => const SizedBox.shrink(),
+                  SplitKind.equal ||
+                  SplitKind.unknownDefaultOpenApi => const SizedBox.shrink(),
                 },
             ],
           ),

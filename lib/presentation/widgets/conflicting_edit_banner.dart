@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../application/providers.dart';
 import '../../data/repositories/drift_conflict_repository.dart';
-import '../../domain/models/entry.dart';
 import '../../domain/money_format.dart';
 
 /// Says that an edit did not apply, and what the expense says instead.
@@ -98,7 +97,11 @@ class ConflictingEditBanner extends ConsumerWidget {
           'and yours were not applied.';
     }
 
-    final mine = _money(ref, conflict.attempted);
+    final mine = _money(
+      ref,
+      conflict.attempted.currency,
+      conflict.attempted.amountMinor,
+    );
     final theirs = conflict.current;
 
     if (theirs == null) {
@@ -106,13 +109,11 @@ class ConflictingEditBanner extends ConsumerWidget {
           'is no longer on this device.';
     }
     return 'You set it to $mine. Somebody else changed it first, so the group '
-        'has ${_money(ref, theirs)}.';
+        'has ${_money(ref, theirs.currency, theirs.amountMinor)}.';
   }
 
   /// The same formatter every other amount in the app goes through, so a
   /// notice about money reads like the money it is about.
-  String _money(WidgetRef ref, Entry entry) => formatMoney(
-    ref.watch(currenciesProvider).value?[entry.currency],
-    entry.amountMinor,
-  );
+  String _money(WidgetRef ref, String currency, int amountMinor) =>
+      formatMoney(ref.watch(currenciesProvider).value?[currency], amountMinor);
 }

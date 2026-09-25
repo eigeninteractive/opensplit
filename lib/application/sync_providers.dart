@@ -16,7 +16,7 @@ SyncEngine? syncEngine(Ref ref) {
   if (api == null) return null;
   final engine = SyncEngine(
     db: ref.watch(appDatabaseProvider),
-    api: api,
+    remote: api,
     outbox: ref.watch(outboxQueueProvider),
   );
   ref.onDispose(engine.dispose);

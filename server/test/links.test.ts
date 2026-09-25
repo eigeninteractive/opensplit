@@ -2,7 +2,7 @@ import { exports as workerExports } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import type { ApiError } from "../src/schemas/common";
-import type { Invite, Joined, LinkPreview, LinkRevocation, LiveLink, MintedLink, PlaceholderList, ProfileList } from "./api-types";
+import type { GroupLink, Invite, Joined, LinkPreview, LinkRevocation, LiveLink, PlaceholderList, ProfileList } from "./api-types";
 import { freshId } from "./group";
 import { type Guest, signInAsGuest } from "./session";
 
@@ -128,8 +128,6 @@ describe("an invite", () => {
     const first = await json<Invite>(await call(`/api/groups/${id}/members/${slotId}/invite`, ravi, { method: "POST" }));
     const second = await json<Invite>(await call(`/api/groups/${id}/members/${slotId}/invite`, ravi, { method: "POST" }));
 
-    expect(second.superseded.map((row) => row.token)).toContain(first.token);
-
     // The index has to forget it, or a URL sitting in a chat history still
     // resolves to a group even though the object would refuse to spend it.
     const stale = await call(`/api/links/${first.token}`, null);
@@ -145,8 +143,7 @@ describe("an open link", () => {
 
     expect((await json<LiveLink>(await call(`/api/groups/${id}/link`, ravi))).link).toBeNull();
 
-    const minted = await json<MintedLink>(await call(`/api/groups/${id}/link`, ravi, { method: "POST" }));
-    expect(minted.superseded).toBeNull();
+    const minted = await json<GroupLink>(await call(`/api/groups/${id}/link`, ravi, { method: "POST" }));
 
     const live = await json<LiveLink>(await call(`/api/groups/${id}/link`, ravi));
     expect(live.link?.token).toBe(minted.token);
@@ -176,7 +173,7 @@ describe("an open link", () => {
 
   it("offers the places already typed in, to somebody who has signed in", async () => {
     const { id, slotId } = await makeGroup(ravi);
-    const minted = await json<MintedLink>(await call(`/api/groups/${id}/link`, ravi, { method: "POST" }));
+    const minted = await json<GroupLink>(await call(`/api/groups/${id}/link`, ravi, { method: "POST" }));
 
     // Names are more than the link implies to whoever holds it, so this one
     // needs a session where the preview does not.
@@ -197,7 +194,7 @@ describe("an open link", () => {
 
   it("lets somebody nobody typed in arrive under their own name", async () => {
     const { id } = await makeGroup(ravi);
-    const minted = await json<MintedLink>(await call(`/api/groups/${id}/link`, ravi, { method: "POST" }));
+    const minted = await json<GroupLink>(await call(`/api/groups/${id}/link`, ravi, { method: "POST" }));
 
     const zara = await signInAsGuest();
     const joined = await json<Joined>(await call(`/api/links/${minted.token}/join`, zara, { method: "POST", body: JSON.stringify({ displayName: "Zara" }) }));
@@ -219,7 +216,7 @@ describe("an open link", () => {
 
   it("uses the name already on the account when none is typed", async () => {
     const { id } = await makeGroup(ravi);
-    const minted = await json<MintedLink>(await call(`/api/groups/${id}/link`, ravi, { method: "POST" }));
+    const minted = await json<GroupLink>(await call(`/api/groups/${id}/link`, ravi, { method: "POST" }));
 
     // Anybody who signed in with Google or an email address has one, which is
     // most people arriving on a link.
@@ -266,7 +263,7 @@ describe("the name, travelling the other way", () => {
 
   it("tells somebody already inside that they are, rather than offering to let them in", async () => {
     const { id } = await makeGroup(ravi);
-    const minted = await json<MintedLink>(await call(`/api/groups/${id}/link`, ravi, { method: "POST" }));
+    const minted = await json<GroupLink>(await call(`/api/groups/${id}/link`, ravi, { method: "POST" }));
 
     const preview = await json<LinkPreview>(await call(`/api/links/${minted.token}`, ravi));
     expect(preview.isMember).toBe(true);

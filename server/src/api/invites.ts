@@ -5,7 +5,7 @@ import { type AppEnv, type AuthedEnv, withSession } from "../context";
 import { linkTokens, profiles } from "../db/d1/schema";
 import type { Result } from "../do/group/refusal";
 import { apiError, jsonResponse } from "../schemas/common";
-import { InviteSchema, JoinedSchema, JoinRequestSchema, LinkPreviewSchema, LinkRevocationSchema, LiveLinkSchema, MintedLinkSchema, PlaceholderListSchema } from "../schemas/ledger";
+import { GroupLinkSchema, InviteSchema, JoinedSchema, JoinRequestSchema, LinkPreviewSchema, LinkRevocationSchema, LiveLinkSchema, PlaceholderListSchema } from "../schemas/ledger";
 import { GroupPathSchema, group, MemberPathSchema, refusals, respond, TokenPathSchema } from "./routing";
 
 /**
@@ -39,7 +39,7 @@ const createInviteRoute = createRoute({
   summary: "Hand one unclaimed place to one person",
   description: "Only for a place nobody has claimed: handing out a link to a member who already has an account would be an account takeover with extra steps. Reissuing invalidates whatever was sent before, so an old link found in a chat history cannot still be spent.",
   request: { params: MemberPathSchema },
-  responses: { 200: jsonResponse(InviteSchema, "The invite, and the links it replaced"), ...refusals },
+  responses: { 200: jsonResponse(InviteSchema, "The invite"), ...refusals },
 });
 
 const createLinkRoute = createRoute({
@@ -50,7 +50,7 @@ const createLinkRoute = createRoute({
   summary: "Mint the group's one open link",
   description:
     "Bearer authority over membership: whoever holds it may join, any number of times, until it expires or is revoked. One live link at a time — minting revokes the previous one — and both the minting and the revocation are written to the activity feed, because a group that cannot see its open door has no way to decide it should be shut.",
-  responses: { 200: jsonResponse(MintedLinkSchema, "The link, and the one it replaced"), ...refusals },
+  responses: { 200: jsonResponse(GroupLinkSchema, "The new live link"), ...refusals },
   request: { params: GroupPathSchema },
 });
 

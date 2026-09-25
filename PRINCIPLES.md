@@ -42,8 +42,8 @@ not paying make something *impossible*? Only the first is allowed.
 The journal is yours and it is already on your device: plain SQLite, exported to
 CSV whenever you ask. The backend stores rows and enforces one invariant; every
 number you see is computed on your device from data you already hold. The client
-reaches the server through a single interface over a published OpenAPI contract,
-so a fork points at a different server by writing one class.
+is generated from a published OpenAPI contract (`docs/openapi.json`), so a fork
+points at a different server by serving that contract and changing one URL.
 
 The backend itself runs on Cloudflare Durable Objects, D1 and KV, which you
 cannot run yourself. There is no self-host path and we will not imply one with a

@@ -6,7 +6,12 @@ import 'package:opensplit/domain/repositories/auth_service.dart';
 import 'package:opensplit/presentation/widgets/account_section.dart';
 import 'package:opensplit/presentation/widgets/identity_choices.dart';
 
-const _guest = Account(id: 'guest', isAnonymous: true);
+final _guest = Account(
+  id: 'guest',
+  isAnonymous: true,
+  email: null,
+  displayName: null,
+);
 
 void main() {
   for (final linking in [false, true]) {
@@ -94,6 +99,6 @@ class _EmailController extends AccountController {
       ..email = email
       ..code = code
       ..verifiedFlow = flow;
-    return const SessionKept(account: _guest);
+    return SessionKept(account: _guest);
   }
 }

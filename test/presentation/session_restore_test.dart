@@ -112,7 +112,12 @@ class _ChangingAuth implements AuthService {
       );
 
   @override
-  Account? currentUser = const Account(id: 'user-1', isAnonymous: false);
+  Account? currentUser = Account(
+    id: 'user-1',
+    isAnonymous: false,
+    email: null,
+    displayName: null,
+  );
 
   @override
   Stream<Account?> authStateChanges() => events.stream;
@@ -137,7 +142,12 @@ class _SignedOut implements AuthService {
 
 /// An auth service holding a session, the way one does after a reload.
 class _SignedIn implements AuthService {
-  static const _account = Account(id: 'user-1', isAnonymous: false);
+  static final _account = Account(
+    id: 'user-1',
+    isAnonymous: false,
+    email: null,
+    displayName: null,
+  );
 
   @override
   Account? get currentUser => _account;

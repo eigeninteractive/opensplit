@@ -7,6 +7,156 @@
   },
   "components": {
     "schemas": {
+      "EntrySnapshot": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/EntryKind"
+          },
+          "description": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "example": "INR"
+          },
+          "amountMinor": {
+            "type": "integer",
+            "minimum": 0,
+            "exclusiveMinimum": true
+          },
+          "entryDate": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "example": "2026-09-23"
+          },
+          "splitKind": {
+            "$ref": "#/components/schemas/SplitKind"
+          },
+          "categoryId": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "deletedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "payers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MoneyRow"
+            }
+          },
+          "shares": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MoneyRow"
+            }
+          }
+        },
+        "required": [
+          "kind",
+          "description",
+          "currency",
+          "amountMinor",
+          "entryDate",
+          "splitKind",
+          "categoryId",
+          "notes",
+          "deletedAt",
+          "payers",
+          "shares"
+        ]
+      },
+      "EntryKind": {
+        "type": "string",
+        "enum": [
+          "expense",
+          "settlement"
+        ]
+      },
+      "SplitKind": {
+        "type": "string",
+        "enum": [
+          "equal",
+          "exact",
+          "shares",
+          "percent"
+        ]
+      },
+      "MoneyRow": {
+        "type": "object",
+        "properties": {
+          "memberId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "amountMinor": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "memberId",
+          "amountMinor"
+        ]
+      },
+      "MemberEventPayload": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "previousName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "displayName",
+          "previousName"
+        ]
+      },
+      "GroupEventPayload": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "previousName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "name",
+          "previousName"
+        ]
+      },
+      "LinkEventPayload": {
+        "type": "object",
+        "properties": {
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          }
+        },
+        "required": [
+          "expiresAt"
+        ]
+      },
       "Health": {
         "type": "object",
         "properties": {
@@ -102,8 +252,7 @@
             "type": "object",
             "properties": {
               "code": {
-                "type": "string",
-                "example": "stale_base"
+                "$ref": "#/components/schemas/ErrorCode"
               },
               "message": {
                 "type": "string"
@@ -121,6 +270,31 @@
         },
         "required": [
           "error"
+        ]
+      },
+      "ErrorCode": {
+        "type": "string",
+        "enum": [
+          "not_member",
+          "no_group",
+          "group_purged",
+          "group_exists",
+          "no_such_entry",
+          "no_such_member",
+          "unbalanced",
+          "stale_base",
+          "forbidden",
+          "not_settled",
+          "invite_invalid",
+          "invite_spent",
+          "invite_expired",
+          "already_member",
+          "slot_taken",
+          "malformed",
+          "no_session",
+          "not_found",
+          "internal",
+          "identity_already_in_use"
         ]
       },
       "Retry": {
@@ -549,22 +723,6 @@
           "seq"
         ]
       },
-      "EntryKind": {
-        "type": "string",
-        "enum": [
-          "expense",
-          "settlement"
-        ]
-      },
-      "SplitKind": {
-        "type": "string",
-        "enum": [
-          "equal",
-          "exact",
-          "shares",
-          "percent"
-        ]
-      },
       "Payer": {
         "type": "object",
         "properties": {
@@ -746,7 +904,10 @@
             "format": "date-time",
             "example": "2026-09-23T11:20:41.865Z"
           }
-        }
+        },
+        "required": [
+          "archivedAt"
+        ]
       },
       "MemberCreate": {
         "type": "object",
@@ -795,7 +956,11 @@
             "format": "date-time",
             "example": "2026-09-23T11:20:41.865Z"
           }
-        }
+        },
+        "required": [
+          "upiVpa",
+          "leftAt"
+        ]
       },
       "EntryInput": {
         "type": "object",
@@ -941,23 +1106,6 @@
             "minLength": 1,
             "maxLength": 64,
             "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
-          },
-          "superseded": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "token": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 64,
-                  "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
-                }
-              },
-              "required": [
-                "token"
-              ]
-            }
           }
         },
         "required": [
@@ -967,30 +1115,7 @@
           "createdAt",
           "expiresAt",
           "redeemedAt",
-          "redeemedBy",
-          "superseded"
-        ]
-      },
-      "MintedLink": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/GroupLink"
-          },
-          {
-            "type": "object",
-            "properties": {
-              "superseded": {
-                "type": "string",
-                "nullable": true,
-                "minLength": 1,
-                "maxLength": 64,
-                "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
-              }
-            },
-            "required": [
-              "superseded"
-            ]
-          }
+          "redeemedBy"
         ]
       },
       "GroupLink": {
@@ -2624,7 +2749,7 @@
         ],
         "responses": {
           "200": {
-            "description": "The invite, and the links it replaced",
+            "description": "The invite",
             "content": {
               "application/json": {
                 "schema": {
@@ -2729,11 +2854,11 @@
         ],
         "responses": {
           "200": {
-            "description": "The link, and the one it replaced",
+            "description": "The new live link",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MintedLink"
+                  "$ref": "#/components/schemas/GroupLink"
                 }
               }
             }
@@ -3662,31 +3787,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "retry": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message",
-                        "retry"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ]
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -3728,31 +3829,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "retry": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message",
-                        "retry"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ]
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }

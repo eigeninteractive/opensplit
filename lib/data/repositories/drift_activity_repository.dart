@@ -1,153 +1,97 @@
 import 'package:drift/drift.dart';
 
 import '../../domain/activity/snapshot_diff.dart';
-import '../../domain/models/entry_snapshot.dart';
 import '../../domain/models/group_event.dart';
 import '../local/database.dart';
-import 'mappers.dart';
 
-/// Reads the record of what has happened in a group.
+/// The activity feed, read from the local mirror of the server's record.
 ///
-/// Most of what is stored can be read straight off the row: the server saw a
-/// member join, so it wrote that a member joined. Expenses are the exception
-/// and the reason this class exists. What is stored for them is a chain of
-/// snapshots -- what each expense looked like after each change -- because at
-/// the only moment the server can observe an expense coherently its
-/// before-image is already gone. What a feed wants is the difference between
-/// consecutive links, and turning one into the other is this class's whole job.
-///
-/// It is deliberately the only place that does it, so a line reads identically
-/// whether it came from the server's record or this device's provisional one.
-///
-/// No write path here, and that is literal rather than a convention: the server
-/// holds no insert grant for any client, and locally the only writers are
-/// `writeEntryInTransaction` and the group repository, each inside the same
-/// transaction as the change they describe.
+/// An expense line is the difference between two consecutive snapshots of that
+/// expense; every other line is one row. Lines are ordered by the server's
+/// `(seq, ordinal)`, with this device's unconfirmed lines first.
 final class DriftActivityRepository {
   DriftActivityRepository(this._db);
 
   final AppDatabase _db;
 
   /// A group's feed, newest first.
-  ///
-  /// Capped rather than unbounded: this is a record to consult, not a list to
-  /// scroll to the beginning of time, and a busy group would otherwise build
-  /// every row it has ever produced to render a screenful.
   Stream<List<GroupEvent>> watchGroup(String groupId, {int limit = 200}) {
     final window =
         (_db.select(_db.groupEvents)
-              ..where((t) => t.groupId.equals(groupId))
-              ..orderBy([
-                (t) => OrderingTerm(
-                  expression: t.createdAt,
-                  mode: OrderingMode.desc,
-                ),
-                (t) => OrderingTerm(expression: t.id, mode: OrderingMode.desc),
-              ])
+              ..where((t) => t.groupId.equals(groupId) & _readable(t))
+              ..orderBy(newestFirst)
               ..limit(limit))
             .watch();
 
-    return window.asyncMap((raw) async {
-      final rows = [for (final row in raw) row.toDomain()].nonNulls.toList();
-      if (rows.isEmpty) return const <GroupEvent>[];
-
-      // Every expense snapshot needs the one before it to be readable as a
-      // change, and the one before it may well sit outside the window -- an
-      // expense edited today was created months and hundreds of rows ago.
-      // Fetching the history of just the expenses on screen keeps that bounded
-      // without letting the oldest line in the window misread as a creation.
-      //
-      // Only expenses need it. Nothing else here is a diff.
-      final entryIds = {
+    return window.asyncMap((rows) async {
+      // An expense line needs the snapshot before it, which may be far outside
+      // the window, so fetch the history of just the expenses on screen.
+      final history = await _historyOf({
         for (final row in rows)
-          if (row.kind == GroupEventKind.entry) row.subjectId!,
-      };
-      final history = await _historyOf(entryIds);
-
+          if (row.kind == EventKind.entry) row.subjectId!,
+      });
       return [for (final row in rows) _lineFor(row, history: history)];
     });
   }
 
-  /// One expense's history, oldest first -- the order it happened in.
+  /// One expense's history, oldest first.
   Stream<List<GroupEvent>> watchEntry(String entryId) =>
       (_db.select(_db.groupEvents)
             ..where(
               (t) =>
                   t.subjectId.equals(entryId) &
-                  t.kind.equals(GroupEventKind.entry.wireName),
+                  t.kind.equalsValue(EventKind.entry),
             )
-            ..orderBy([
-              (t) => OrderingTerm(expression: t.createdAt),
-              (t) => OrderingTerm(expression: t.id),
-            ]))
+            ..orderBy(oldestFirst))
           .watch()
-          .map((raw) {
-            final chain = [
-              for (final row in raw)
-                if (row.toDomain() case final parsed?) parsed.snapshot,
-            ];
-            return [
+          .map(
+            (chain) => [
               for (var i = 0; i < chain.length; i++)
-                _entryLine(
+                describeSnapshot(
                   previous: i == 0 ? null : chain[i - 1],
                   current: chain[i],
                 ),
-            ];
-          });
+            ],
+          );
 
-  /// The most recent recorded change to one subject, described.
-  ///
-  /// A one-shot read rather than a stream: the caller is a notification, which
-  /// is composed once at the moment it arrives and never rebuilds.
-  ///
-  /// Two rows rather than one, because an expense line is a difference and the
-  /// second row is the other half of it. For every other kind the second row is
-  /// fetched and ignored, which is cheaper than a second query shape.
+  /// The most recent line about one subject, for a notification.
   Future<GroupEvent?> latestFor(String subjectId) async {
-    final raw =
+    final latest =
         await (_db.select(_db.groupEvents)
-              ..where((t) => t.subjectId.equals(subjectId))
-              ..orderBy([
-                (t) => OrderingTerm(
-                  expression: t.createdAt,
-                  mode: OrderingMode.desc,
-                ),
-                (t) => OrderingTerm(expression: t.id, mode: OrderingMode.desc),
-              ])
+              ..where((t) => t.subjectId.equals(subjectId) & _readable(t))
+              ..orderBy(newestFirst)
               ..limit(2))
             .get();
+    if (latest.isEmpty) return null;
 
-    final chain = [for (final row in raw) row.toDomain()].nonNulls.toList();
-    if (chain.isEmpty) return null;
-
-    final current = chain.first;
-    if (current.kind != GroupEventKind.entry) return _lineFor(current);
-
-    return _entryLine(
-      previous: chain.length > 1 && chain[1].kind == GroupEventKind.entry
-          ? chain[1].snapshot
+    final current = latest.first;
+    if (current.kind != EventKind.entry) return _lineFor(current);
+    return describeSnapshot(
+      previous: latest.length > 1 && latest[1].kind == EventKind.entry
+          ? latest[1]
           : null,
-      current: current.snapshot,
+      current: current,
     );
   }
 
-  /// Turns one stored row into the line a reader is shown.
-  ///
-  /// The switch is exhaustive over [GroupEventKind] on purpose: a kind added to
-  /// the enum stops this compiling until somebody has decided what it says.
+  /// Rows whose kind this build can render.
+  static Expression<bool> _readable($GroupEventsTable t) =>
+      t.kind.equalsValue(EventKind.unknownDefaultOpenApi).not();
+
+  /// The line a reader is shown for one row. Exhaustive over [EventKind], so
+  /// a new kind stops this compiling until somebody decides what it says.
   GroupEvent _lineFor(
     GroupEventRow row, {
-    Map<String, List<EntrySnapshot>> history = const {},
+    Map<String, List<GroupEventRow>> history = const {},
   }) => switch (row.kind) {
-    GroupEventKind.entry => _entryLine(
+    EventKind.entry => describeSnapshot(
       previous: _predecessor(history[row.subjectId] ?? const [], row.id),
-      current: row.snapshot,
+      current: row,
     ),
-
-    GroupEventKind.memberAdded ||
-    GroupEventKind.memberJoined ||
-    GroupEventKind.memberLeft ||
-    GroupEventKind.memberRenamed => MemberChanged(
+    EventKind.memberAdded ||
+    EventKind.memberJoined ||
+    EventKind.memberLeft ||
+    EventKind.memberRenamed => MemberChanged(
       id: row.id,
       groupId: row.groupId,
       actorId: row.actorId,
@@ -158,10 +102,9 @@ final class DriftActivityRepository {
       displayName: row.name ?? 'Someone',
       previousName: row.previousName,
     ),
-
-    GroupEventKind.groupRenamed ||
-    GroupEventKind.groupArchived ||
-    GroupEventKind.groupRestored => GroupChanged(
+    EventKind.groupRenamed ||
+    EventKind.groupArchived ||
+    EventKind.groupRestored => GroupChanged(
       id: row.id,
       groupId: row.groupId,
       actorId: row.actorId,
@@ -171,8 +114,7 @@ final class DriftActivityRepository {
       name: row.name ?? '',
       previousName: row.previousName,
     ),
-
-    GroupEventKind.linkCreated || GroupEventKind.linkRevoked => LinkChanged(
+    EventKind.linkCreated || EventKind.linkRevoked => LinkChanged(
       id: row.id,
       groupId: row.groupId,
       actorId: row.actorId,
@@ -180,28 +122,14 @@ final class DriftActivityRepository {
       isProvisional: row.isProvisional,
       kind: row.kind,
     ),
+    // Filtered out by [_readable]; never reached.
+    EventKind.unknownDefaultOpenApi => throw StateError(
+      'Unreadable event ${row.id}',
+    ),
   };
 
-  /// An expense line: the difference between two snapshots.
-  EntryChanged _entryLine({
-    required EntrySnapshot? previous,
-    required EntrySnapshot current,
-  }) {
-    final event = describeSnapshot(previous: previous, current: current);
-    return EntryChanged(
-      id: event.id,
-      groupId: event.groupId,
-      actorId: event.actorId,
-      createdAt: event.createdAt,
-      isProvisional: event.isProvisional,
-      entryId: event.entryId,
-      kind: event.kind,
-      changes: event.changes,
-    );
-  }
-
-  /// The full snapshot chain for each of [entryIds], oldest first.
-  Future<Map<String, List<EntrySnapshot>>> _historyOf(
+  /// Each expense's snapshot chain, oldest first.
+  Future<Map<String, List<GroupEventRow>>> _historyOf(
     Set<String> entryIds,
   ) async {
     if (entryIds.isEmpty) return const {};
@@ -211,28 +139,22 @@ final class DriftActivityRepository {
               ..where(
                 (t) =>
                     t.subjectId.isIn(entryIds) &
-                    t.kind.equals(GroupEventKind.entry.wireName),
+                    t.kind.equalsValue(EventKind.entry),
               )
-              ..orderBy([
-                (t) => OrderingTerm(expression: t.createdAt),
-                (t) => OrderingTerm(expression: t.id),
-              ]))
+              ..orderBy(oldestFirst))
             .get();
 
-    final byEntry = <String, List<EntrySnapshot>>{};
+    final byEntry = <String, List<GroupEventRow>>{};
     for (final row in rows) {
-      final parsed = row.toDomain();
-      if (parsed == null) continue;
-      (byEntry[parsed.subjectId!] ??= []).add(parsed.snapshot);
+      (byEntry[row.subjectId!] ??= []).add(row);
     }
     return byEntry;
   }
 
-  /// What [chain] recorded immediately before the snapshot with [id], or null
-  /// if that snapshot is the first thing ever recorded about the expense --
+  /// The snapshot recorded just before [id], or null if [id] is the first —
   /// which is what makes it a creation.
-  static EntrySnapshot? _predecessor(List<EntrySnapshot> chain, String id) {
-    final at = chain.indexWhere((snapshot) => snapshot.id == id);
+  static GroupEventRow? _predecessor(List<GroupEventRow> chain, String id) {
+    final at = chain.indexWhere((row) => row.id == id);
     return at <= 0 ? null : chain[at - 1];
   }
 }

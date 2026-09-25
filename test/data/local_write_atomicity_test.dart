@@ -7,7 +7,6 @@ import 'package:opensplit/data/repositories/drift_profile_repository.dart';
 import 'package:opensplit/data/sync/outbox_queue.dart';
 import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/models/entry.dart';
-import 'package:opensplit/domain/models/profile.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:test/test.dart';
 

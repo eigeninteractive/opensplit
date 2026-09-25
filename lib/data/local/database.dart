@@ -1,16 +1,42 @@
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
-// Imported for the generated part file: `textEnum` columns resolve these types
-// in database.g.dart, and a part shares the imports of its parent library.
-import '../../domain/models/entry.dart';
-import '../../domain/split/splitter.dart';
+// For the generated part, which shares this library's imports.
+import '../../domain/models/kinds.dart';
 import 'open_database.dart';
 import 'tables.dart';
 
 export 'tables.dart';
 
-part 'database.g.dart';
+part 'database.drift.dart';
+
+/// The activity feed's total order, newest first: `(seq, ordinal)`, with lines
+/// the server has not confirmed yet (no `seq`) above everything it has.
+///
+/// Not `createdAt`: one change can record several lines with the same
+/// timestamp, and only `ordinal` says which came first.
+final List<OrderingTerm Function($GroupEventsTable)> newestFirst = [
+  (t) => OrderingTerm(
+    expression: t.seq,
+    mode: OrderingMode.desc,
+    nulls: NullsOrder.first,
+  ),
+  (t) => OrderingTerm.desc(t.ordinal),
+  (t) => OrderingTerm.desc(t.createdAt),
+  (t) => OrderingTerm.desc(t.id),
+];
+
+/// [newestFirst], reversed.
+final List<OrderingTerm Function($GroupEventsTable)> oldestFirst = [
+  (t) => OrderingTerm(
+    expression: t.seq,
+    mode: OrderingMode.asc,
+    nulls: NullsOrder.last,
+  ),
+  (t) => OrderingTerm.asc(t.ordinal),
+  (t) => OrderingTerm.asc(t.createdAt),
+  (t) => OrderingTerm.asc(t.id),
+];
 
 /// The local journal.
 ///
@@ -79,10 +105,9 @@ class AppDatabase extends _$AppDatabase {
 
   /// Timestamps are stored as ISO-8601 text rather than Unix seconds.
   ///
-  /// Delta sync compares against the server's `updated_at`, which carries
-  /// microseconds. Truncating to whole seconds would make the cursor ambiguous
-  /// for rows written in the same second — the client would either re-pull them
-  /// forever or skip them.
+  /// The profile feed's cursor is a server timestamp with milliseconds.
+  /// Truncating to whole seconds would make it ambiguous for rows written in
+  /// the same second — they would be re-pulled forever or skipped.
   @override
   DriftDatabaseOptions get options =>
       const DriftDatabaseOptions(storeDateTimeAsText: true);

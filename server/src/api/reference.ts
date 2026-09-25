@@ -3,7 +3,7 @@ import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import type { AppEnv } from "../context";
 import { type MonthBlob, monthKey } from "../fx/blob";
 import { reference, referenceEtag } from "../reference";
-import { apiError, jsonResponse } from "../schemas/common";
+import { apiError, errorResponse, jsonResponse } from "../schemas/common";
 import { DateSchema } from "../schemas/ledger";
 import { FxBackfillRequestSchema, FxBackfillResponseSchema, FxPageSchema, type FxRate, ReferenceSchema } from "../schemas/reference";
 
@@ -66,7 +66,7 @@ const fxRoute = createRoute({
   },
   responses: {
     200: jsonResponse(FxPageSchema, "The rates, oldest first"),
-    400: { description: "That is not a date.", content: { "application/json": { schema: z.object({ error: z.object({ code: z.string(), message: z.string(), retry: z.string() }) }) } } },
+    400: errorResponse("That is not a date."),
   },
 });
 
@@ -81,7 +81,7 @@ const backfillRoute = createRoute({
   request: { body: { required: true, content: { "application/json": { schema: FxBackfillRequestSchema } } } },
   responses: {
     200: jsonResponse(FxBackfillResponseSchema, "Whether this request was taken up"),
-    400: { description: "That is not a date, or not a currency.", content: { "application/json": { schema: z.object({ error: z.object({ code: z.string(), message: z.string(), retry: z.string() }) }) } } },
+    400: errorResponse("That is not a date, or not a currency."),
   },
 });
 

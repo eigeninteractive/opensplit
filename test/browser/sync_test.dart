@@ -14,7 +14,6 @@ import 'package:opensplit/data/sync/outbox_queue.dart';
 import 'package:opensplit/data/sync/sync_engine.dart';
 import 'package:opensplit/data/sync/sync_gate_web.dart';
 import 'package:opensplit/domain/entry_draft.dart';
-import 'package:opensplit/domain/models/profile.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:test/test.dart';
 import 'package:web/web.dart' as web;
@@ -125,7 +124,7 @@ void main() {
     server.seedProfile(const Profile(id: 'owner', displayName: 'Owner'));
     SyncEngine sync(AppDatabase db) {
       final queue = OutboxQueue(db);
-      final engine = SyncEngine(db: db, api: server, outbox: queue);
+      final engine = SyncEngine(db: db, remote: server, outbox: queue);
       queues.add(queue);
       engines.add(engine);
       return engine;

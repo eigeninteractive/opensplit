@@ -1,30 +1,9 @@
-import 'package:freezed_annotation/freezed_annotation.dart';
+import '../../data/local/database.dart';
 
-part 'currency.freezed.dart';
+export '../../data/local/database.dart' show Currency;
 
-/// An ISO 4217 currency and — critically — its exponent.
-///
-/// The exponent is the number of decimal digits in the minor unit. It is NOT
-/// always 2: JPY and KRW are 0, KWD and BHD are 3. Hardcoding `* 100` anywhere
-/// in this app is a bug that will ship, so every conversion between a
-/// user-facing amount and stored minor units goes through a [Currency].
-@freezed
-abstract class Currency with _$Currency {
-  const factory Currency({
-    /// ISO 4217 alphabetic code, e.g. `INR`.
-    required String code,
-
-    /// Digits after the decimal point in the minor unit.
-    required int exponent,
-
-    /// Display symbol, e.g. `₹`. May be absent for obscure currencies.
-    String? symbol,
-
-    required String name,
-  }) = _Currency;
-
-  const Currency._();
-
+/// Amount arithmetic for a currency, which is ISO 4217 reference data.
+extension CurrencyAmounts on Currency {
   /// Minor units in one major unit: 100 for INR, 1 for JPY, 1000 for KWD.
   int get minorPerMajor {
     var factor = 1;

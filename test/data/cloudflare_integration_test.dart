@@ -15,21 +15,18 @@ import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';
 import 'package:opensplit/data/repositories/drift_profile_repository.dart';
 import 'package:opensplit/data/sync/api_client.dart';
-import 'package:opensplit/data/sync/cloudflare_invite_api.dart';
-import 'package:opensplit/data/sync/cloudflare_ledger_api.dart';
+import 'package:opensplit/data/sync/invites.dart';
 import 'package:opensplit/data/sync/outbox_queue.dart';
 import 'package:opensplit/data/sync/remote_ledger_api.dart';
+import 'package:opensplit/data/sync/wire.dart';
+import 'package:opensplit_api/opensplit_api.dart' as api;
 import 'package:opensplit/data/sync/sync_engine.dart';
 import 'package:opensplit/domain/balance/balance_fold.dart';
 import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/models/entry.dart';
 import 'package:opensplit/domain/models/entry_event.dart';
-import 'package:opensplit/domain/models/group.dart';
 import 'package:opensplit/domain/models/group_event.dart';
-import 'package:opensplit/domain/models/member.dart';
-import 'package:opensplit/domain/models/profile.dart';
 import 'package:opensplit/domain/repositories/auth_service.dart';
-import 'package:opensplit/domain/repositories/invite_api.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -100,7 +97,7 @@ class _Device {
     return _Device._(
       auth: auth,
       ledger: CloudflareLedgerApi(client),
-      invites: CloudflareInviteApi(client),
+      invites: Invites(client),
       devices: CloudflareDeviceTokenRepository(client),
       account: auth,
     );
@@ -108,7 +105,7 @@ class _Device {
 
   final BetterAuthService auth;
   final CloudflareLedgerApi ledger;
-  final CloudflareInviteApi invites;
+  final Invites invites;
   final CloudflareDeviceTokenRepository devices;
   final AuthService account;
 
@@ -153,7 +150,10 @@ void main() {
 
   group('CloudflareLedgerApi against a live Worker', () {
     late String profileId;
-    late CloudflareLedgerApi api;
+    late CloudflareLedgerApi remote;
+
+    Future<api.Entry> push(Entry entry) =>
+        remote.upsertEntry(entry.groupId, entry.toInput());
     late AppDatabase db;
     late OutboxQueue outbox;
     late DriftGroupRepository groups;
@@ -172,7 +172,7 @@ void main() {
         db: other,
         sync: SyncEngine(
           db: other,
-          api: api,
+          remote: remote,
           outbox: OutboxQueue(other),
           pageSize: pageSize ?? 100,
         ),
@@ -184,7 +184,7 @@ void main() {
 
       final device = await _Device.guest();
       profileId = device.profileId;
-      api = device.ledger;
+      remote = device.ledger;
 
       db = AppDatabase(NativeDatabase.memory());
       // Reference data is phase 5's; until the Worker serves currencies, the
@@ -193,7 +193,7 @@ void main() {
       outbox = OutboxQueue(db);
       groups = DriftGroupRepository(db, outbox: outbox);
       entries = DriftEntryRepository(db, outbox: outbox);
-      sync = SyncEngine(db: db, api: api, outbox: outbox);
+      sync = SyncEngine(db: db, remote: remote, outbox: outbox);
     });
 
     tearDown(() async {
@@ -225,7 +225,7 @@ void main() {
     test('a guest session is a session the ledger accepts', () async {
       if (!_available) return;
 
-      final me = await api.bootstrap();
+      final me = await remote.bootstrap();
       expect(me.profileId, profileId);
       expect(
         me.isAnonymous,
@@ -395,13 +395,13 @@ void main() {
       // reach this state through its own repository, which is the point: the
       // object is the backstop for a client this server does not control.
       await expectLater(
-        api.pushEntry(
+        push(
           entry.copyWith(shares: [entry.shares.first.copyWith(amountMinor: 1)]),
         ),
         throwsA(
-          isA<RemoteRejected>()
-              .having((e) => e.kind, 'kind', RejectionKind.permanent)
-              .having((e) => e.code, 'code', 'unbalanced'),
+          isA<ApiFailure>()
+              .having((e) => e.retry, 'retry', api.Retry.permanent)
+              .having((e) => e.code?.value, 'code', 'unbalanced'),
         ),
       );
     });
@@ -433,7 +433,7 @@ void main() {
       );
 
       // Somebody else's edit lands first, moving the amount and the share.
-      final theirs = await api.pushEntry(at(150000));
+      final theirs = await push(at(150000));
       expect(theirs.amountMinor, 150000);
       expect(theirs.seq, greaterThan(base.seq!));
 
@@ -443,18 +443,18 @@ void main() {
       // object refuses, and the fake proves the outbox parks it, but neither
       // goes near the wire between them.
       await expectLater(
-        api.pushEntry(at(200000)),
+        push(at(200000)),
         throwsA(
-          isA<RemoteRejected>()
-              .having((e) => e.kind, 'kind', RejectionKind.stale)
-              .having((e) => e.code, 'code', 'stale_base'),
+          isA<ApiFailure>()
+              .having((e) => e.retry, 'retry', api.Retry.stale)
+              .having((e) => e.code?.value, 'code', 'stale_base'),
         ),
       );
 
       // The same stale base, leaving the money exactly where the server has
       // it, is not refused: arbitrating a typo would cost two people a
       // decision for nothing.
-      final prose = await api.pushEntry(
+      final prose = await push(
         at(150000).copyWith(description: 'Renamed', seq: base.seq),
       );
       expect(prose.description, 'Renamed');
@@ -483,26 +483,18 @@ void main() {
       // version the device last saw, and a wrong one is a refusal rather than
       // a licence.
       await expectLater(
-        api.deleteEntry(
-          groupId: g.groupId,
-          entryId: entry.id,
-          baseSeq: stored.seq! - 1,
-        ),
+        remote.deleteEntry(g.groupId, entry.id, baseSeq: stored.seq! - 1),
         throwsA(
-          isA<RemoteRejected>().having(
-            (e) => e.kind,
-            'kind',
-            RejectionKind.stale,
-          ),
+          isA<ApiFailure>().having((e) => e.retry, 'retry', api.Retry.stale),
         ),
       );
 
-      final deleted = await api.deleteEntry(
-        groupId: g.groupId,
-        entryId: entry.id,
+      final deleted = await remote.deleteEntry(
+        g.groupId,
+        entry.id,
         baseSeq: stored.seq!,
       );
-      expect(deleted.isDeleted, isTrue);
+      expect(deleted.deletedAt, isNotNull);
 
       // A soft delete, which is why it can propagate at all: a hard one would
       // simply stop appearing in the page and live forever on every device
@@ -584,7 +576,7 @@ void main() {
       final renamed =
           (await DriftActivityRepository(other.db).watchGroup(g.groupId).first)
               .whereType<MemberChanged>()
-              .where((event) => event.kind == GroupEventKind.memberRenamed);
+              .where((event) => event.kind == EventKind.memberRenamed);
       expect(renamed.single.displayName, 'Priya S');
       expect(renamed.single.previousName, 'Priya');
     });
@@ -608,7 +600,7 @@ void main() {
     test('the reference lists arrive whole, with no session', () async {
       if (!_available) return;
 
-      final reference = await public.pullReference();
+      final reference = await public.reference();
 
       // The exponent is the one field here that is not decoration: every
       // amount in this app is an integer of minor units, so a wrong exponent
@@ -639,7 +631,7 @@ void main() {
 
       final queue = OutboxQueue(device);
       addTearDown(queue.dispose);
-      final engine = SyncEngine(db: device, api: public, outbox: queue);
+      final engine = SyncEngine(db: device, remote: public, outbox: queue);
       addTearDown(engine.dispose);
 
       expect(await device.select(device.currencies).get(), isEmpty);
@@ -657,7 +649,7 @@ void main() {
       // test's business to arrange: an empty page is a correct answer for a
       // Worker started a moment ago, and asserting on a number of rates would
       // make this fail for a reason that is not about the client.
-      final rates = await public.pullFxRates(since: '2020-01-01');
+      final rates = (await public.fxRates(since: '2020-01-01')).rates;
       if (rates.isEmpty) {
         markTestSkipped('no rates published; run the 0 4 * * * trigger first');
         return;
@@ -672,7 +664,7 @@ void main() {
 
       // The source is stamped onto any expense converted with this rate, so a
       // converted amount can always say where its number came from.
-      expect(rates.every((rate) => rate.source.isNotEmpty), isTrue);
+      expect(rates.every((rate) => rate.source_.isNotEmpty), isTrue);
       expect(rates.every((rate) => rate.rate > 0), isTrue);
       expect(
         rates.every(
@@ -689,14 +681,12 @@ void main() {
       // later sync or it does not — so what matters is that asking never
       // throws into the editor that asked.
       await public.requestFxBackfill(
-        asOf: DateTime.utc(2026, 8, 14),
-        currency: 'INR',
+        api.FxBackfillRequest(asOf: '2026-08-14', currency: 'INR'),
       );
       // Twice, because six devices in one group sync the same backdated
       // expense within a second of each other.
       await public.requestFxBackfill(
-        asOf: DateTime.utc(2026, 8, 14),
-        currency: 'INR',
+        api.FxBackfillRequest(asOf: '2026-08-14', currency: 'INR'),
       );
     });
 
@@ -704,12 +694,12 @@ void main() {
       if (!_available) return;
 
       await expectLater(
-        public.pullFxRates(since: 'last-tuesday'),
+        public.fxRates(since: 'last-tuesday'),
         throwsA(
-          isA<RemoteRejected>().having(
-            (error) => error.kind,
-            'kind',
-            RejectionKind.permanent,
+          isA<ApiFailure>().having(
+            (error) => error.retry,
+            'retry',
+            api.Retry.permanent,
           ),
         ),
       );
@@ -742,23 +732,20 @@ void main() {
           simplifyDebts: true,
           createdBy: '$groupId-ravi',
           createdAt: DateTime.now().toUtc(),
-        ),
-        creator: Member(
-          id: '$groupId-ravi',
-          groupId: groupId,
-          profileId: host.profileId,
-          displayName: 'Ravi',
-          joinedAt: DateTime.now().toUtc(),
+        ).toCreate(
+          Member(
+            id: '$groupId-ravi',
+            groupId: groupId,
+            profileId: host.profileId,
+            displayName: 'Ravi',
+            joinedAt: DateTime.now().toUtc(),
+          ),
         ),
       );
 
       final priya = await host.ledger.addMember(
-        Member(
-          id: '$groupId-priya',
-          groupId: groupId,
-          displayName: 'Priya',
-          joinedAt: DateTime.now().toUtc(),
-        ),
+        groupId,
+        api.MemberCreate(id: '$groupId-priya', displayName: 'Priya'),
       );
       return (groupId: groupId, priya: priya.id);
     }
@@ -767,38 +754,37 @@ void main() {
       if (!_available) return;
 
       final g = await seededGroup(ravi);
-      final invite = await ravi.invites.create(
-        groupId: g.groupId,
-        memberId: g.priya,
-      );
+      final invite = await ravi.invites.create(g.groupId, g.priya);
 
       // No session at all. This is the ordering the whole flow turns on:
       // somebody who already has an account sees what they were sent before
       // anything claims the slot on their behalf.
-      final anonymous = CloudflareInviteApi(
+      final anonymous = Invites(
         buildApiClient(baseUrl: _origin, token: () async => null),
       );
-      final preview = await anonymous.peek(invite.token);
+      final preview = await anonymous.preview(invite.token);
       expect(preview, isNotNull);
       expect(preview!.groupName, 'Goa trip');
       expect(preview.memberName, 'Priya');
       expect(preview.inviterName, 'Ravi');
-      expect(preview.isUsable, isTrue);
+      expect(preview.isRedeemed || preview.isExpired, isFalse);
 
       final priya = await _Device.guest();
-      final claimed = await priya.invites.redeem(invite.token);
+      final claimed = await priya.invites.join(invite.token);
 
       // The place was claimed, not duplicated. One column changed on a row
       // that already had balances and history, which is the entire payoff of
       // members being group-scoped rather than accounts.
-      expect(claimed.id, g.priya);
+      expect(claimed.member.id, g.priya);
       expect(claimed.groupId, g.groupId, reason: 'the token said which group');
-      expect(claimed.profileId, priya.profileId);
-      expect(claimed.displayName, 'Priya');
+      expect(claimed.member.profileId, priya.profileId);
+      expect(claimed.member.displayName, 'Priya');
 
       // And the name travelled the other way: a guest has none of its own, so
       // it adopts the one a friend typed on the placeholder.
-      final mine = await priya.ledger.pullProfilesByIds([priya.profileId]);
+      final mine = (await priya.ledger.profilesByIds([
+        priya.profileId,
+      ])).profiles;
       expect(mine.single.displayName, 'Priya');
     });
 
@@ -806,23 +792,19 @@ void main() {
       if (!_available) return;
 
       final g = await seededGroup(ravi);
-      final invite = await ravi.invites.create(
-        groupId: g.groupId,
-        memberId: g.priya,
-      );
-      await (await _Device.guest()).invites.redeem(invite.token);
+      final invite = await ravi.invites.create(g.groupId, g.priya);
+      await (await _Device.guest()).invites.join(invite.token);
 
       // Three different reasons a link does not work, and a screen that shows
       // "invalid link" for all of them tells nobody what to do next.
       final second = await _Device.guest();
       await expectLater(
-        second.invites.redeem(invite.token),
-        throwsA(isA<InviteRejected>()),
+        second.invites.join(invite.token),
+        throwsA(isA<ApiFailure>()),
       );
 
-      final preview = await second.invites.peek(invite.token);
+      final preview = await second.invites.preview(invite.token);
       expect(preview!.isRedeemed, isTrue);
-      expect(preview.isUsable, isFalse);
     });
 
     test('an open link offers the places already typed in', () async {
@@ -836,21 +818,18 @@ void main() {
       );
 
       final arriving = await _Device.guest();
-      final target = await arriving.invites.peekLink(link.token);
-      expect(target, isA<GroupLinkTarget>());
+      final target = await arriving.invites.preview(link.token);
+      expect(target?.isOpenLink, isTrue);
 
-      final places = await arriving.invites.placeholdersFor(link.token);
+      final places = await arriving.invites.placeholders(link.token);
       expect(places.single.memberId, g.priya);
       expect(places.single.displayName, 'Priya');
 
       // Claiming one is what stops a group of six becoming a group of twelve
       // when a single link is pasted into a chat.
-      final joined = await arriving.invites.joinWithLink(
-        link.token,
-        memberId: g.priya,
-      );
-      expect(joined.id, g.priya);
-      expect(await arriving.invites.placeholdersFor(link.token), isEmpty);
+      final joined = await arriving.invites.join(link.token, memberId: g.priya);
+      expect(joined.member.id, g.priya);
+      expect(await arriving.invites.placeholders(link.token), isEmpty);
     });
 
     test('somebody nobody typed in arrives under their own name', () async {
@@ -860,29 +839,33 @@ void main() {
       final link = await ravi.invites.createGroupLink(g.groupId);
 
       final stranger = await _Device.guest();
-      final joined = await stranger.invites.joinWithLink(
+      final joined = await stranger.invites.join(
         link.token,
         displayName: 'Zara',
       );
-      expect(joined.displayName, 'Zara');
-      expect(joined.id, isNot(g.priya), reason: 'a new place, not a claim');
+      expect(joined.member.displayName, 'Zara');
+      expect(
+        joined.member.id,
+        isNot(g.priya),
+        reason: 'a new place, not a claim',
+      );
 
       // And it is a name, not a sentinel. A guest declining every placeholder
       // has one nowhere — not on their account, not on a slot — so the server
       // refuses rather than inventing "Someone", and the join screen asks.
       final nameless = await _Device.guest();
       await expectLater(
-        nameless.invites.joinWithLink(link.token),
-        throwsA(isA<InviteRejected>()),
+        nameless.invites.join(link.token),
+        throwsA(isA<ApiFailure>()),
       );
 
       // Whereas an account that already has a name needs no asking.
       final named = await _Device.guest();
-      await named.ledger.pushProfile(
-        Profile(id: named.profileId, displayName: 'Meera'),
+      await named.ledger.updateProfile(
+        api.ProfileUpdate(displayName: 'Meera', upiVpa: null),
       );
       expect(
-        (await named.invites.joinWithLink(link.token)).displayName,
+        (await named.invites.join(link.token)).member.displayName,
         'Meera',
       );
     });
@@ -899,71 +882,96 @@ void main() {
       // Turned off, not never valid. Somebody tapping a link a friend shared
       // last month deserves the first answer, and it is only reachable because
       // the index keeps the token while the group's object still holds it.
-      final preview = await ravi.invites.peekLink(link.token);
-      expect((preview! as GroupLinkTarget).preview.isRevoked, isTrue);
+      final preview = await ravi.invites.preview(link.token);
+      expect(preview?.isRevoked, isTrue);
 
       final arriving = await _Device.guest();
       await expectLater(
-        arriving.invites.joinWithLink(link.token),
-        throwsA(isA<InviteRejected>()),
+        arriving.invites.join(link.token),
+        throwsA(isA<ApiFailure>()),
       );
     });
 
     test('a token that names nothing is not a link', () async {
       if (!_available) return;
 
-      expect(await ravi.invites.peekLink('not-a-token-at-all'), isNull);
+      expect(await ravi.invites.preview('not-a-token-at-all'), isNull);
     });
 
     test('a profile is visible to a co-member and to nobody else', () async {
       if (!_available) return;
 
       final g = await seededGroup(ravi);
-      await ravi.ledger.pushProfile(
-        Profile(
-          id: ravi.profileId,
-          displayName: 'Ravi',
-          upiVpa: 'ravi@okhdfcbank',
-        ),
+      await ravi.ledger.updateProfile(
+        api.ProfileUpdate(displayName: 'Ravi', upiVpa: 'ravi@okhdfcbank'),
       );
 
       final stranger = await _Device.guest();
       expect(
-        await stranger.ledger.pullProfilesByIds([ravi.profileId]),
+        (await stranger.ledger.profilesByIds([ravi.profileId])).profiles,
         isEmpty,
         reason: 'a payment handle is not public',
       );
 
-      final invite = await ravi.invites.create(
-        groupId: g.groupId,
-        memberId: g.priya,
-      );
-      await stranger.invites.redeem(invite.token);
+      final invite = await ravi.invites.create(g.groupId, g.priya);
+      await stranger.invites.join(invite.token);
 
       // Sharing a group is the whole of the rule, and it is symmetric: a
       // settle-up needs Ravi's handle exactly as much as it needs Priya's.
-      final seen = await stranger.ledger.pullProfilesByIds([ravi.profileId]);
+      final seen = (await stranger.ledger.profilesByIds([
+        ravi.profileId,
+      ])).profiles;
       expect(seen.single.upiVpa, 'ravi@okhdfcbank');
 
-      final feed = await stranger.ledger.pullProfiles(limit: 50);
+      final feed = await stranger.ledger.profileChanges(limit: 50);
       expect(
-        feed.rows.map((row) => row.id),
+        feed.profiles.map((row) => row.id),
         containsAll([ravi.profileId, stranger.profileId]),
       );
+    });
+
+    test('restoring a group and clearing a handle reach the server', () async {
+      if (!_available) return;
+
+      // Null is a value in both patches. A generated client drops a null
+      // optional field, and the server reads an absent one as "leave it", so
+      // these only work because the contract makes the fields required.
+      final g = await seededGroup(ravi);
+      await ravi.ledger.updateGroup(
+        g.groupId,
+        api.GroupPatch(archivedAt: DateTime.now().toUtc()),
+      );
+      final restored = await ravi.ledger.updateGroup(
+        g.groupId,
+        api.GroupPatch(archivedAt: null),
+      );
+      expect(restored.archivedAt, isNull);
+
+      await ravi.ledger.updateMember(
+        g.groupId,
+        g.priya,
+        api.MemberPatch(upiVpa: 'priya@okaxis', leftAt: null),
+      );
+      final cleared = await ravi.ledger.updateMember(
+        g.groupId,
+        g.priya,
+        api.MemberPatch(upiVpa: null, leftAt: null),
+      );
+      expect(cleared.upiVpa, isNull);
     });
 
     test('a payment handle can be cleared, not only added', () async {
       if (!_available) return;
 
-      await ravi.ledger.pushProfile(
-        Profile(id: ravi.profileId, displayName: 'Ravi', upiVpa: 'ravi@oksbi'),
+      await ravi.ledger.updateProfile(
+        api.ProfileUpdate(displayName: 'Ravi', upiVpa: 'ravi@oksbi'),
       );
 
       // Bank accounts close. This is the case an optional field could not
       // express, because the generated client omits a null rather than sending
       // one — so the wire takes both fields every time.
-      final cleared = await ravi.ledger.pushProfile(
-        Profile(id: ravi.profileId, displayName: 'Ravi K'),
+      final cleared = await ravi.ledger.updateProfile(
+        api.ProfileUpdate(displayName: 'Ravi K', upiVpa: null),
       );
       expect(cleared.upiVpa, isNull);
       expect(cleared.displayName, 'Ravi K');
@@ -974,28 +982,25 @@ void main() {
       if (!_available) return;
 
       final g = await seededGroup(ravi);
-      await ravi.ledger.pushProfile(
-        Profile(id: ravi.profileId, displayName: 'Ravi'),
+      await ravi.ledger.updateProfile(
+        api.ProfileUpdate(displayName: 'Ravi', upiVpa: null),
       );
 
-      final invite = await ravi.invites.create(
-        groupId: g.groupId,
-        memberId: g.priya,
-      );
-      await (await _Device.guest()).invites.redeem(invite.token);
+      final invite = await ravi.invites.create(g.groupId, g.priya);
+      await (await _Device.guest()).invites.join(invite.token);
 
       final collected = <String>{};
-      var page = await ravi.ledger.pullProfiles(limit: 1);
-      collected.addAll(page.rows.map((row) => row.id));
+      var page = await ravi.ledger.profileChanges(limit: 1);
+      collected.addAll(page.profiles.map((row) => row.id));
 
       var guard = 0;
       while (page.hasMore && guard++ < 10) {
-        page = await ravi.ledger.pullProfiles(
+        page = await ravi.ledger.profileChanges(
           since: page.cursor,
           sinceId: page.cursorId,
           limit: 1,
         );
-        collected.addAll(page.rows.map((row) => row.id));
+        collected.addAll(page.profiles.map((row) => row.id));
       }
 
       expect(page.hasMore, isFalse);
@@ -1013,12 +1018,9 @@ void main() {
         // cursor survives a real response, or that `applyProfiles` writes what
         // the feed actually sends.
         final g = await seededGroup(ravi);
-        final invite = await ravi.invites.create(
-          groupId: g.groupId,
-          memberId: g.priya,
-        );
+        final invite = await ravi.invites.create(g.groupId, g.priya);
         final priya = await _Device.guest();
-        await priya.invites.redeem(invite.token);
+        await priya.invites.join(invite.token);
 
         final device = AppDatabase(NativeDatabase.memory());
         addTearDown(device.close);
@@ -1026,7 +1028,11 @@ void main() {
 
         final queue = OutboxQueue(device);
         addTearDown(queue.dispose);
-        final engine = SyncEngine(db: device, api: ravi.ledger, outbox: queue);
+        final engine = SyncEngine(
+          db: device,
+          remote: ravi.ledger,
+          outbox: queue,
+        );
         addTearDown(engine.dispose);
 
         final profiles = DriftProfileRepository(device, outbox: queue);
@@ -1081,23 +1087,16 @@ void main() {
       if (!_available) return;
 
       final g = await seededGroup(ravi);
-      final invite = await ravi.invites.create(
-        groupId: g.groupId,
-        memberId: g.priya,
-      );
+      final invite = await ravi.invites.create(g.groupId, g.priya);
       final priya = await _Device.guest();
-      await priya.invites.redeem(invite.token);
+      await priya.invites.join(invite.token);
 
       await priya.account.deleteAccount();
 
       // Money Priya paid is a fact about Ravi's group as much as hers, so the
       // member row keeps its name and loses its account — exactly the state of
       // somebody a friend added who never signed up.
-      final page = await ravi.ledger.pullChanges(
-        groupId: g.groupId,
-        since: 0,
-        limit: 200,
-      );
+      final page = await ravi.ledger.changes(g.groupId, since: 0, limit: 200);
       final row = page.members.firstWhere((member) => member.id == g.priya);
       expect(row.displayName, 'Priya');
       expect(row.profileId, isNull);
@@ -1105,10 +1104,7 @@ void main() {
       // And the session went with it, rather than lingering until something
       // else happened to fail.
       expect(priya.auth.currentUser, isNull);
-      await expectLater(
-        priya.ledger.bootstrap(),
-        throwsA(isA<RemoteRejected>()),
-      );
+      await expectLater(priya.ledger.bootstrap(), throwsA(isA<ApiFailure>()));
     });
 
     test('a group nobody left could read is collected outright', () async {
@@ -1125,8 +1121,8 @@ void main() {
       // membership left to check, and refusing would leave every device that
       // still holds a copy holding it forever.
       final onlooker = await _Device.guest();
-      final grave = await onlooker.ledger.pullChanges(
-        groupId: g.groupId,
+      final grave = await onlooker.ledger.changes(
+        g.groupId,
         since: 0,
         limit: 200,
       );

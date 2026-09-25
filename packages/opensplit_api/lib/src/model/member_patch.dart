@@ -15,15 +15,15 @@ part 'member_patch.g.dart';
 )
 class MemberPatch {
   /// Returns a new [MemberPatch] instance.
-  MemberPatch({this.displayName, this.upiVpa, this.leftAt});
+  MemberPatch({this.displayName, required this.upiVpa, required this.leftAt});
 
   @JsonKey(name: r'displayName', required: false, includeIfNull: false)
   final String? displayName;
 
-  @JsonKey(name: r'upiVpa', required: false, includeIfNull: false)
+  @JsonKey(name: r'upiVpa', required: true, includeIfNull: true)
   final String? upiVpa;
 
-  @JsonKey(name: r'leftAt', required: false, includeIfNull: false)
+  @JsonKey(name: r'leftAt', required: true, includeIfNull: true)
   final DateTime? leftAt;
 
   @override

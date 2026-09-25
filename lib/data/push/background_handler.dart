@@ -4,7 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../../application/entry_notification.dart';
-import '../../domain/models/group_event.dart';
+import '../../domain/models/kinds.dart';
 import '../../config.dart';
 import '../auth/session_store.dart';
 import '../local/database.dart';
@@ -14,7 +14,7 @@ import '../repositories/drift_entry_repository.dart';
 import '../repositories/drift_group_repository.dart';
 import '../repositories/drift_profile_repository.dart';
 import '../sync/api_client.dart';
-import '../sync/cloudflare_ledger_api.dart';
+import '../sync/remote_ledger_api.dart';
 import '../sync/outbox_queue.dart';
 import '../sync/sync_engine.dart';
 import '../sync/sync_session.dart';
@@ -51,7 +51,7 @@ bool _firebaseReady = false;
 Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
   final groupId = message.data['group_id'];
   final subjectId = message.data['subject_id'];
-  final kind = GroupEventKind.parse(message.data['kind'] as String? ?? '');
+  final kind = fromWire(EventKind.values, message.data['kind'] as String?);
   if (groupId is! String || subjectId is! String || kind == null) return;
   if (!hasPush || !hasBackend) return;
 
@@ -102,7 +102,7 @@ Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
       // container, and the foreground's is not reachable from here. The token
       // is the one just read — this is Android, where there is no cookie jar an
       // isolate could borrow.
-      api: CloudflareLedgerApi(
+      remote: CloudflareLedgerApi(
         buildApiClient(baseUrl: apiBaseUrl, token: () async => session.token),
       ),
       outbox: outbox,

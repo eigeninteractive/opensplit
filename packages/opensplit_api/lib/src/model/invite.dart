@@ -3,7 +3,6 @@
 //
 
 // ignore_for_file: unused_element
-import 'package:opensplit_api/src/model/invite_superseded_inner.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 part 'invite.g.dart';
@@ -30,8 +29,6 @@ class Invite {
     required this.redeemedAt,
 
     required this.redeemedBy,
-
-    required this.superseded,
   });
 
   @JsonKey(name: r'token', required: true, includeIfNull: false)
@@ -55,9 +52,6 @@ class Invite {
   @JsonKey(name: r'redeemedBy', required: true, includeIfNull: true)
   final String? redeemedBy;
 
-  @JsonKey(name: r'superseded', required: true, includeIfNull: false)
-  final List<InviteSupersededInner> superseded;
-
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -68,8 +62,7 @@ class Invite {
           other.createdAt == createdAt &&
           other.expiresAt == expiresAt &&
           other.redeemedAt == redeemedAt &&
-          other.redeemedBy == redeemedBy &&
-          other.superseded == superseded;
+          other.redeemedBy == redeemedBy;
 
   @override
   int get hashCode =>
@@ -79,8 +72,7 @@ class Invite {
       createdAt.hashCode +
       expiresAt.hashCode +
       (redeemedAt == null ? 0 : redeemedAt.hashCode) +
-      (redeemedBy == null ? 0 : redeemedBy.hashCode) +
-      superseded.hashCode;
+      (redeemedBy == null ? 0 : redeemedBy.hashCode);
 
   factory Invite.fromJson(Map<String, dynamic> json) => _$InviteFromJson(json);
 

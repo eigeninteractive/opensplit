@@ -7,6 +7,7 @@ import { type AppEnv, type AuthedEnv, requireSession, services } from "./context
 import { identityRoutes } from "./identity/routes";
 import { openApiDocument } from "./openapi";
 import { apiError, jsonResponse } from "./schemas/common";
+import { EntrySnapshotSchema, GroupEventPayloadSchema, LinkEventPayloadSchema, MemberEventPayloadSchema } from "./schemas/ledger";
 
 /**
  * Liveness, and the one route that is not about the ledger.
@@ -38,7 +39,7 @@ const healthRoute = createRoute({
 const app = new OpenAPIHono<AppEnv>({
   defaultHook: (result, c) => {
     if (result.success) return;
-    return c.json(apiError("bad_request", result.error.issues[0]?.message ?? "Invalid."), 400);
+    return c.json(apiError("malformed", result.error.issues[0]?.message ?? "Invalid."), 400);
   },
 });
 
@@ -121,6 +122,12 @@ app.route("/api", referenceRoutes());
  * generated from this same document and checked for drift in CI, so a change to
  * the wire format cannot land without showing up in review.
  */
+// `Event.payload` cannot reference these (see `EventPayloadSchema`), so they
+// are registered by hand to put a class for each in the generated client.
+for (const schema of [EntrySnapshotSchema, MemberEventPayloadSchema, GroupEventPayloadSchema, LinkEventPayloadSchema]) {
+  app.openAPIRegistry.register(schema.meta()?.id ?? "", schema);
+}
+
 app.doc("/api/openapi.json", openApiDocument);
 
 app.all("/api/*", (c) => c.json(apiError("not_found", "No such endpoint."), 404));

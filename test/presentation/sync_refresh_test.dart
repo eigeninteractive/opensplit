@@ -19,6 +19,8 @@ final _group = Group(
   name: 'Saved home group',
   defaultCurrency: 'INR',
   createdAt: DateTime.utc(2026, 8, 29),
+  isDirect: false,
+  simplifyDebts: true,
 );
 
 final _ledger = GroupLedger(

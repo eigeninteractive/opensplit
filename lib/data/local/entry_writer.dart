@@ -1,56 +1,17 @@
-import 'dart:convert';
-
 import 'package:drift/drift.dart';
 
 import '../../domain/models/entry.dart';
-import '../../domain/models/entry_snapshot.dart';
-import '../../domain/models/group_event.dart';
 import 'database.dart';
 
 /// Writes an entry and its children inside the caller's transaction.
 ///
-/// Shared by the repository (local edits) and the sync engine (rows arriving
-/// from the server) so there is exactly one place that knows how an entry is
-/// persisted. Two implementations would be two chances for the balance
-/// invariant to be violated in a way the other path never sees.
-///
-/// Payers and shares are replaced wholesale rather than diffed: it is simpler,
-/// and it mirrors what the server's `upsert_entry` does, so the two cannot
-/// disagree about what an edit means.
-///
-/// [snapshot] is this device's provisional record of the write, when there is
-/// one to make. It goes in the same transaction as the entry, deliberately: a
-/// change and the record of it are one fact, and committing them separately
-/// would allow either an expense with no history or history for an expense that
-/// was never stored.
-///
-/// Provisional because the authoritative record is the server's, taken from the
-/// row it actually committed. This one exists so the feed is not empty offline,
-/// or for a guest with no reachable backend -- which is what it was before the
-/// device wrote anything at all. It is never pushed, and it is dropped as soon
-/// as the server's account of the same expense arrives.
-///
-/// Null on the sync path, where snapshots arrive on their own feed already
-/// written by the server.
-///
-/// The caller must also write the outbox item or sync cursor in the same
-/// transaction. This helper does not open or commit a transaction itself.
-Future<void> writeEntryInTransaction(
-  AppDatabase db,
-  Entry entry, {
-  EntrySnapshot? snapshot,
-}) async {
-  // A real check, not an assert. Asserts are stripped from a release build,
-  // which left the one invariant this app is actually about — that what was
-  // paid, what is owed and the stated amount agree — enforced only in debug.
-  // Both producers guarantee it today, `composeEntry` by construction and the
-  // server by a deferred constraint trigger, and this is the line that means a
-  // third one cannot quietly not. Cheap, too: two sums over a handful of rows.
-  //
-  // Throwing is the right failure. A row arriving from a sync is applied inside
-  // SyncEngine.pull, whose caller reports the error, and refusing it leaves the
-  // previous known-good entry in place — where storing it would put a balance on
-  // screen that nothing on this device could explain.
+/// The one place an entry is persisted, used by local edits and by rows
+/// arriving from the server alike. Payers and shares are replaced wholesale,
+/// as the server replaces them. The caller writes the outbox item or the sync
+/// cursor in the same transaction.
+Future<void> writeEntryInTransaction(AppDatabase db, Entry entry) async {
+  // A real check, not an assert, which a release build strips. Refusing leaves
+  // the previous good row in place rather than a balance nothing can explain.
   if (!entry.isBalanced) {
     throw StateError(
       'Refusing to store entry ${entry.id}: it does not balance. '
@@ -111,29 +72,42 @@ Future<void> writeEntryInTransaction(
         ),
     ]);
   });
-
-  if (snapshot != null) await _writeSnapshot(db, snapshot);
 }
 
-/// Records what the expense now looks like, as this device sees it.
-///
-/// insertOrIgnore because the same id can be offered twice -- a retried write,
-/// or a re-entrant path -- and an event is never revised, so a row already
-/// present is the same row.
-Future<void> _writeSnapshot(AppDatabase db, EntrySnapshot snapshot) async {
-  await db
-      .into(db.groupEvents)
-      .insert(
-        GroupEventsCompanion.insert(
-          id: snapshot.id,
-          groupId: snapshot.groupId,
-          actorId: Value(snapshot.actorId),
-          createdAt: snapshot.createdAt,
-          kind: GroupEventKind.entry.wireName,
-          subjectId: Value(snapshot.entryId),
-          payload: jsonEncode(snapshotPayload(snapshot)),
-          isProvisional: const Value(true),
-        ),
-        mode: InsertMode.insertOrIgnore,
-      );
-}
+/// Reassembles an entry from its row and children.
+Entry entryFromRows(
+  EntryRow row, {
+  required List<EntryPayerRow> payers,
+  required List<EntryShareRow> shares,
+}) => Entry(
+  id: row.id,
+  groupId: row.groupId,
+  kind: row.kind,
+  description: row.description,
+  categoryId: row.categoryId,
+  currency: row.currency,
+  amountMinor: row.amountMinor,
+  entryDate: row.entryDate,
+  splitKind: row.splitKind,
+  payers: [
+    for (final payer in payers)
+      EntryPayer(memberId: payer.memberId, amountMinor: payer.amountMinor),
+  ],
+  shares: [
+    for (final share in shares)
+      EntryShare(
+        memberId: share.memberId,
+        amountMinor: share.amountMinor,
+        weightMicros: share.weightMicros,
+      ),
+  ],
+  fxRate: row.fxRate,
+  fxSource: row.fxSource,
+  fxAt: row.fxAt,
+  notes: row.notes,
+  createdBy: row.createdBy,
+  createdAt: row.createdAt,
+  seq: row.seq,
+  deletedAt: row.deletedAt,
+  clientKey: row.clientKey,
+);

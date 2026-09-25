@@ -95,7 +95,6 @@ describe("an invite to one named place", () => {
     const first = ok(await object.createInvite(priya.id, profile));
     const second = ok(await object.createInvite(priya.id, profile));
 
-    expect(second.superseded.map((row) => row.token)).toContain(first.token);
     expect(refusal(await object.join(first.token, PRIYA)).code).toBe("invite_invalid");
     expect(ok(await object.join(second.token, PRIYA)).id).toBe(priya.id);
   });
@@ -142,7 +141,6 @@ describe("the group's one open link", () => {
     const first = ok(await object.createLink(profile));
     const second = ok(await object.createLink(profile));
 
-    expect(second.superseded).toBe(first.token);
     expect(refusal(await object.join(first.token, ZARA, { displayName: "Zara" })).code).toBe("invite_invalid");
     expect(ok(await object.join(second.token, ZARA, { displayName: "Zara" })).displayName).toBe("Zara");
 

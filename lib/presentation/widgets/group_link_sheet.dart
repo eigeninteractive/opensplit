@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:opensplit_api/opensplit_api.dart' as api;
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../application/providers.dart';
 import '../../config.dart';
-import '../../domain/repositories/invite_api.dart';
+import '../../data/sync/api_client.dart';
+import '../../data/sync/invites.dart';
 import 'notification_invitation.dart';
 
 /// The group's one open invite link: share it, show it, or turn it off.
@@ -41,7 +43,7 @@ class _GroupLinkSheet extends ConsumerStatefulWidget {
 }
 
 class _GroupLinkSheetState extends ConsumerState<_GroupLinkSheet> {
-  GroupLink? _link;
+  api.GroupLink? _link;
   String? _error;
   bool _busy = true;
   bool _showQr = false;
@@ -52,7 +54,7 @@ class _GroupLinkSheetState extends ConsumerState<_GroupLinkSheet> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
-  InviteApi? get _invites => ref.read(inviteApiProvider);
+  Invites? get _invites => ref.read(invitesProvider);
 
   /// Reuses the live link rather than minting one per visit.
   ///
@@ -102,7 +104,7 @@ class _GroupLinkSheetState extends ConsumerState<_GroupLinkSheet> {
     });
     try {
       await body();
-    } on InviteRejected catch (e) {
+    } on ApiFailure catch (e) {
       if (mounted) setState(() => _error = e.message);
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
@@ -111,7 +113,7 @@ class _GroupLinkSheetState extends ConsumerState<_GroupLinkSheet> {
     }
   }
 
-  String get _url => _link!.urlFor(linkHost);
+  String get _url => joinUrl(linkHost, _link!.token);
 
   Future<void> _share() async {
     final name = ref.read(groupLedgerProvider(widget.groupId))?.group.name;

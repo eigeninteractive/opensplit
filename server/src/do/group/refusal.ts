@@ -114,9 +114,7 @@ export function attempt<T>(body: () => T): Result<T> {
  * forever. A device that read the status and retried would spin.
  *
  * So the server states the kind rather than leaving the client to infer it
- * from a status code, which is the same reason `code` exists at all — it
- * replaces the SQLSTATE lookup table that had to know `23514` was the balance
- * invariant and `PT409` was a permanent refusal dressed as a retryable one.
+ * from a status code, which is the same reason `code` exists at all.
  *
  * There is no `transient` member. Transient failures are 5xx and transport
  * errors, and they never carry one of these.

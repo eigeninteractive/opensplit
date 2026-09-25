@@ -2,7 +2,6 @@ import 'package:opensplit/domain/balance/balance_fold.dart';
 import 'package:opensplit/domain/balance/member_balance.dart';
 import 'package:opensplit/domain/balance/simplify.dart';
 import 'package:opensplit/domain/models/entry.dart';
-import 'package:opensplit/domain/split/splitter.dart';
 import 'package:test/test.dart';
 
 import 'generators.dart';

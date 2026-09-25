@@ -15,38 +15,3 @@ abstract class FieldChange with _$FieldChange {
   const factory FieldChange({required String field, String? from, String? to}) =
       _FieldChange;
 }
-
-/// What happened to an expense, in the terms the diff produces.
-///
-/// Kept as its own type because the entry path genuinely is different from
-/// every other kind: this is derived by comparing two stored rows, where the
-/// rest are read straight off one. `GroupEvent` in group_event.dart is what a
-/// screen renders; this is the intermediate the expense branch of it goes
-/// through.
-@freezed
-abstract class EntryEvent with _$EntryEvent {
-  const factory EntryEvent({
-    required String id,
-    required String entryId,
-    required String groupId,
-
-    /// The member who did it, not the account: a placeholder's edits survive
-    /// them claiming an account later.
-    ///
-    /// Null when the change came from something with no member row. Rendered
-    /// as "someone" rather than hidden -- an unattributable change still
-    /// belongs on the record.
-    required String? actorId,
-    required EntryEventKind kind,
-    required DateTime createdAt,
-
-    /// Empty for anything but an edit.
-    @Default(<FieldChange>[]) List<FieldChange> changes,
-
-    /// This device's own account of a change it has not yet managed to push.
-    ///
-    /// Replaced by the server's the moment one arrives. Worth surfacing: until
-    /// then the line describes something no one else in the group can see.
-    @Default(false) bool isProvisional,
-  }) = _EntryEvent;
-}

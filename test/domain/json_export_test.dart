@@ -7,7 +7,6 @@ import 'package:opensplit/domain/models/group_event.dart';
 import 'package:opensplit/domain/models/group.dart';
 import 'package:opensplit/domain/models/member.dart';
 import 'package:opensplit/domain/models/profile.dart';
-import 'package:opensplit/domain/split/splitter.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -17,6 +16,8 @@ void main() {
     defaultCurrency: 'INR',
     createdBy: 'priya-account',
     createdAt: DateTime.utc(2026, 6, 1),
+    isDirect: false,
+    simplifyDebts: true,
   );
 
   final priya = Member(
@@ -187,7 +188,7 @@ void main() {
                   actorId: null,
                   createdAt: DateTime.utc(2026, 6, 13),
                   memberId: 'm-ravi',
-                  kind: GroupEventKind.memberJoined,
+                  kind: EventKind.memberJoined,
                   displayName: 'Ravi',
                 ),
                 GroupChanged(
@@ -195,7 +196,7 @@ void main() {
                   groupId: 'g1',
                   actorId: 'm-priya',
                   createdAt: DateTime.utc(2026, 6, 14),
-                  kind: GroupEventKind.groupRenamed,
+                  kind: EventKind.groupRenamed,
                   name: 'Goa 2026',
                   previousName: 'Goa',
                 ),

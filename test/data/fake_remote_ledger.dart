@@ -1,18 +1,17 @@
+import 'package:drift/drift.dart' show Value;
+import 'package:opensplit/data/local/database.dart';
+import 'package:opensplit/data/sync/api_client.dart';
 import 'package:opensplit/data/sync/remote_ledger_api.dart';
-import 'package:opensplit/domain/models/category.dart';
-import 'package:opensplit/domain/models/currency.dart';
+import 'package:opensplit/domain/calendar_date.dart';
 import 'package:opensplit/domain/models/entry.dart';
-import 'package:opensplit/domain/models/group.dart';
-import 'package:opensplit/domain/models/group_event.dart';
-import 'package:opensplit/domain/models/member.dart';
-import 'package:opensplit/domain/models/profile.dart';
+import 'package:opensplit/domain/models/entry_snapshot.dart';
+import 'package:opensplit_api/opensplit_api.dart' as api;
 
 import 'server_reference_data.dart';
 
 /// An in-memory stand-in for one group's Durable Object, per group.
 ///
-/// Deliberately faithful about the things that actually decide whether sync is
-/// correct, rather than being a convenient stub:
+/// Faithful about the things that decide whether sync is correct:
 ///
 ///  * every committed change takes the next sequence number, and the client
 ///    can never invent one;
@@ -21,10 +20,8 @@ import 'server_reference_data.dart';
 ///  * it enforces `sum(payers) = sum(shares) = amount`;
 ///  * a stale base is refused only when applying the write would move money.
 ///
-/// Deliberately small. A fake for a timestamp-cursored feed has to model when
-/// writes share an instant, because that is the case the cursor's tiebreak
-/// exists for; a fake for a sequence number has nothing equivalent to model,
-/// which is itself the argument for the sequence number.
+/// It keeps its state in the app's own row types and speaks the wire types at
+/// its edge, the way the real server serializes its rows.
 class FakeRemoteLedger implements RemoteLedgerApi {
   FakeRemoteLedger({DateTime? start})
     : _now = start ?? DateTime.utc(2026, 8, 21, 12);
@@ -39,7 +36,7 @@ class FakeRemoteLedger implements RemoteLedgerApi {
   Future<void> Function(int call)? beforeBootstrap;
 
   /// Pauses an upload after the client captured its local revision.
-  Future<void> Function(Entry entry)? beforeUpsertEntry;
+  Future<void> Function(api.EntryInput input)? beforeUpsertEntry;
 
   /// The account this fake answers as. Groups it is not a member of are
   /// refused, and are not listed by [bootstrap].
@@ -47,31 +44,38 @@ class FakeRemoteLedger implements RemoteLedgerApi {
 
   DateTime _tick() => _now = _now.add(const Duration(milliseconds: 1));
 
-  _FakeGroup _group(String groupId) {
-    final group = _groups[groupId];
-    if (group == null) {
-      throw const RemoteRejected(
+  _FakeGroup _group(String groupId) =>
+      _groups[groupId] ??
+      (throw const ApiFailure(
         'No such group.',
-        kind: RejectionKind.permanent,
-        code: 'no_group',
-      );
-    }
-    return group;
+        retry: api.Retry.permanent,
+        code: api.ErrorCode.noGroup,
+      ));
+
+  /// Seeds a group as though it had been created and synced already, through
+  /// the same path a real create takes.
+  Future<Group> seedGroup(Group group, {required Member creator}) async {
+    await createGroup(
+      api.GroupCreate(
+        id: group.id,
+        name: group.name,
+        defaultCurrency: group.defaultCurrency,
+        isDirect: group.isDirect,
+        simplifyDebts: group.simplifyDebts,
+        memberId: creator.id,
+        displayName: creator.displayName,
+      ),
+      profile: creator.profileId,
+    );
+    return _group(group.id).meta;
   }
 
-  /// Seeds a group as though it had been created and synced already.
-  ///
-  /// Takes the same path a real create does, so a test cannot set up a state
-  /// the app could not have reached.
-  Future<Group> seedGroup(Group group, {required Member creator}) =>
-      createGroup(group, creator: creator);
-
   @override
-  Future<RemoteBootstrap> bootstrap() async {
+  Future<api.Bootstrap> bootstrap() async {
     bootstrapCalls++;
     await beforeBootstrap?.call(bootstrapCalls);
 
-    return RemoteBootstrap(
+    return api.Bootstrap(
       profileId: profileId,
       displayName: 'Ravi',
       upiVpa: null,
@@ -87,8 +91,8 @@ class FakeRemoteLedger implements RemoteLedgerApi {
   }
 
   @override
-  Future<GroupChanges> pullChanges({
-    required String groupId,
+  Future<api.ChangePage> changes(
+    String groupId, {
     required int since,
     required int limit,
   }) async {
@@ -107,7 +111,7 @@ class FakeRemoteLedger implements RemoteLedgerApi {
     }.toList()..sort();
 
     if (moved.isEmpty) {
-      return GroupChanges(
+      return api.ChangePage(
         groupId: groupId,
         seq: since,
         hasMore: false,
@@ -122,112 +126,137 @@ class FakeRemoteLedger implements RemoteLedgerApi {
     final hasMore = moved.length > limit;
     final upTo = hasMore ? moved[limit - 1] : moved.last;
     bool inWindow(int? seq) => seq != null && seq > since && seq <= upTo;
+    int bySeq(int? a, int? b) => a!.compareTo(b!);
 
-    return GroupChanges(
+    return api.ChangePage(
       groupId: groupId,
       seq: upTo,
       hasMore: hasMore,
       purgedAt: null,
-      group: inWindow(group.meta.seq) ? group.meta : null,
+      group: inWindow(group.meta.seq) ? _group$(group.meta) : null,
       members: [
-        for (final member in group.members.values)
-          if (inWindow(member.seq)) member,
-      ]..sort((a, b) => a.seq!.compareTo(b.seq!)),
+        for (final member
+            in group.members.values.toList()
+              ..sort((a, b) => bySeq(a.seq, b.seq)))
+          if (inWindow(member.seq)) _member$(member),
+      ],
       entries: [
-        for (final entry in group.entries.values)
-          if (inWindow(entry.seq)) entry,
-      ]..sort((a, b) => a.seq!.compareTo(b.seq!)),
-      events:
-          [
-            for (final event in group.events)
-              if (inWindow(event.seq)) event,
-          ]..sort((a, b) {
-            final bySeq = a.seq!.compareTo(b.seq!);
-            return bySeq != 0 ? bySeq : a.ordinal!.compareTo(b.ordinal!);
-          }),
+        for (final entry
+            in group.entries.values.toList()
+              ..sort((a, b) => bySeq(a.seq, b.seq)))
+          if (inWindow(entry.seq)) _entry$(entry),
+      ],
+      events: [
+        for (final event in group.events)
+          if (inWindow(event.seq)) _event$(event),
+      ],
     );
   }
 
   @override
-  Future<Entry> pushEntry(Entry entry) async {
+  Future<api.Entry> upsertEntry(String groupId, api.EntryInput input) async {
     upsertCalls++;
-    await beforeUpsertEntry?.call(entry);
+    await beforeUpsertEntry?.call(input);
 
-    final group = _group(entry.groupId);
-    _assertBalanced(entry);
+    final group = _group(groupId);
+    final stored = group.entries[input.id];
+    final incoming = _entryFrom(input, groupId, group, stored);
+    _assertBalanced(incoming);
 
     // A retry that re-minted the id. Answering with the expense already
     // recorded is the whole point of the key existing.
-    final key = entry.clientKey;
-    if (key != null && !group.entries.containsKey(entry.id)) {
+    final key = input.clientKey;
+    if (key != null && stored == null) {
       final existing = group.byClientKey[key];
-      if (existing != null) return group.entries[existing]!;
+      if (existing != null) return _entry$(group.entries[existing]!);
     }
 
-    final stored = group.entries[entry.id];
     if (stored != null) {
-      _assertBaseIsCurrent(stored, entry);
-      if (!_differs(stored, entry)) return stored;
+      _assertBaseIsCurrent(stored, incoming, input.baseSeq);
+      if (!_differs(stored, incoming)) return _entry$(stored);
     }
 
     final seq = group.nextSeq();
-    final written = entry.copyWith(
-      seq: seq,
-      createdBy: stored?.createdBy ?? entry.createdBy,
-      createdAt: stored?.createdAt ?? entry.createdAt,
-      clientKey: stored?.clientKey ?? entry.clientKey,
-      // An edit never resurrects a deleted expense. That is `restoreEntry`.
-      deletedAt: stored?.deletedAt,
-    );
-
-    group.entries[entry.id] = written;
-    if (key != null) group.byClientKey[key] = entry.id;
+    final written = incoming.copyWith(seq: seq);
+    group.entries[input.id] = written;
+    if (key != null) group.byClientKey[key] = input.id;
     group.snapshot(written, seq, _tick());
-    return written;
+    return _entry$(written);
   }
 
+  /// The entry an input describes. Authorship, creation time and the client
+  /// key are the server's to keep; an edit never resurrects a deletion.
+  Entry _entryFrom(
+    api.EntryInput input,
+    String groupId,
+    _FakeGroup group,
+    Entry? stored,
+  ) => Entry(
+    id: input.id,
+    groupId: groupId,
+    kind: input.kind ?? api.EntryKind.expense,
+    description: input.description ?? '',
+    categoryId: input.categoryId,
+    currency: input.currency,
+    amountMinor: input.amountMinor,
+    entryDate: parseCalendarDate(input.entryDate),
+    splitKind: input.splitKind ?? api.SplitKind.equal,
+    payers: [
+      for (final payer in input.payers)
+        EntryPayer(memberId: payer.memberId, amountMinor: payer.amountMinor),
+    ],
+    shares: [
+      for (final share in input.shares)
+        EntryShare(
+          memberId: share.memberId,
+          amountMinor: share.amountMinor,
+          weightMicros: share.weightMicros,
+        ),
+    ],
+    fxRate: input.fxRate?.toDouble(),
+    fxSource: input.fxSource,
+    notes: input.notes,
+    createdBy: stored?.createdBy ?? group.actor(profileId),
+    createdAt: stored?.createdAt ?? _tick(),
+    clientKey: stored?.clientKey ?? input.clientKey,
+    deletedAt: stored?.deletedAt,
+  );
+
   @override
-  Future<Entry> deleteEntry({
-    required String groupId,
-    required String entryId,
+  Future<api.Entry> deleteEntry(
+    String groupId,
+    String entryId, {
     required int baseSeq,
   }) => _setDeleted(groupId, entryId, baseSeq, deleted: true);
 
   @override
-  Future<Entry> restoreEntry({
-    required String groupId,
-    required String entryId,
+  Future<api.Entry> restoreEntry(
+    String groupId,
+    String entryId, {
     required int baseSeq,
   }) => _setDeleted(groupId, entryId, baseSeq, deleted: false);
 
-  Future<Entry> _setDeleted(
+  Future<api.Entry> _setDeleted(
     String groupId,
     String entryId,
     int baseSeq, {
     required bool deleted,
   }) async {
     final group = _group(groupId);
-    final stored = group.entries[entryId];
-    if (stored == null) {
-      throw const RemoteRejected(
-        'No such expense.',
-        kind: RejectionKind.permanent,
-        code: 'no_such_entry',
-      );
-    }
+    final stored =
+        group.entries[entryId] ??
+        (throw const ApiFailure(
+          'No such expense.',
+          retry: api.Retry.permanent,
+          code: api.ErrorCode.noSuchEntry,
+        ));
 
     // A retry after the server committed but before its answer arrived.
-    if (stored.isDeleted == deleted) return stored;
+    if (stored.isDeleted == deleted) return _entry$(stored);
 
     // Deleting always moves money, so it must carry the exact version the
     // device last saw.
-    if (stored.seq != baseSeq) {
-      throw const RemoteRejected(
-        'This expense changed since you opened it.',
-        kind: RejectionKind.stale,
-        code: 'stale_base',
-      );
-    }
+    if (stored.seq != baseSeq) throw _stale;
 
     final seq = group.nextSeq();
     final written = stored.copyWith(
@@ -236,69 +265,93 @@ class FakeRemoteLedger implements RemoteLedgerApi {
     );
     group.entries[entryId] = written;
     group.snapshot(written, seq, _tick());
-    return written;
+    return _entry$(written);
   }
 
   @override
-  Future<Group> createGroup(Group group, {required Member creator}) async {
-    final existing = _groups[group.id];
-    if (existing != null) return existing.meta;
+  Future<api.Group> createGroup(
+    api.GroupCreate input, {
+    String? profile,
+  }) async {
+    final existing = _groups[input.id];
+    if (existing != null) return _group$(existing.meta);
 
-    final fake = _FakeGroup(group.id);
-    _groups[group.id] = fake;
+    final fake = _FakeGroup(input.id);
+    _groups[input.id] = fake;
 
     final seq = fake.nextSeq();
-    fake.meta = group.copyWith(seq: seq, createdBy: creator.id);
-    fake.members[creator.id] = creator.copyWith(
+    final at = _tick();
+    fake.meta = Group(
+      id: input.id,
+      name: input.name,
+      defaultCurrency: input.defaultCurrency,
+      isDirect: input.isDirect ?? false,
+      simplifyDebts: input.simplifyDebts ?? true,
+      createdBy: input.memberId,
+      createdAt: at,
       seq: seq,
-      profileId: creator.profileId ?? profileId,
     );
-    return fake.meta;
+    fake.members[input.memberId] = Member(
+      id: input.memberId,
+      groupId: input.id,
+      profileId: profile ?? profileId,
+      displayName: input.displayName,
+      joinedAt: at,
+      seq: seq,
+    );
+    return _group$(fake.meta);
   }
 
   @override
-  Future<Group> updateGroup(Group group) async {
-    final fake = _group(group.id);
-    final seq = fake.nextSeq();
+  Future<api.Group> updateGroup(String groupId, api.GroupPatch patch) async {
+    final fake = _group(groupId);
     fake.meta = fake.meta.copyWith(
-      name: group.name,
-      simplifyDebts: group.simplifyDebts,
-      archivedAt: group.archivedAt,
-      seq: seq,
+      name: patch.name ?? fake.meta.name,
+      simplifyDebts: patch.simplifyDebts ?? fake.meta.simplifyDebts,
+      archivedAt: Value(patch.archivedAt),
+      seq: Value(fake.nextSeq()),
     );
-    return fake.meta;
+    return _group$(fake.meta);
   }
 
   @override
-  Future<Member> addMember(Member member) async {
-    final fake = _group(member.groupId);
-    final seq = fake.nextSeq();
-    final written = member.copyWith(seq: seq, profileId: null);
-    fake.members[member.id] = written;
-    return written;
+  Future<api.Member> addMember(String groupId, api.MemberCreate input) async {
+    final fake = _group(groupId);
+    final written = Member(
+      id: input.id,
+      groupId: groupId,
+      displayName: input.displayName,
+      upiVpa: input.upiVpa,
+      joinedAt: _tick(),
+      seq: fake.nextSeq(),
+    );
+    fake.members[input.id] = written;
+    return _member$(written);
   }
 
   @override
-  Future<Member> updateMember(Member member) async {
-    final fake = _group(member.groupId);
-    final stored = fake.members[member.id];
-    if (stored == null) {
-      throw const RemoteRejected(
-        'No such member in this group.',
-        kind: RejectionKind.permanent,
-        code: 'no_such_member',
-      );
-    }
+  Future<api.Member> updateMember(
+    String groupId,
+    String memberId,
+    api.MemberPatch patch,
+  ) async {
+    final fake = _group(groupId);
+    final stored =
+        fake.members[memberId] ??
+        (throw const ApiFailure(
+          'No such member in this group.',
+          retry: api.Retry.permanent,
+          code: api.ErrorCode.noSuchMember,
+        ));
 
-    final seq = fake.nextSeq();
     final written = stored.copyWith(
-      displayName: member.displayName,
-      upiVpa: member.upiVpa,
-      leftAt: member.leftAt,
-      seq: seq,
+      displayName: patch.displayName ?? stored.displayName,
+      upiVpa: Value(patch.upiVpa),
+      leftAt: Value(patch.leftAt),
+      seq: Value(fake.nextSeq()),
     );
-    fake.members[member.id] = written;
-    return written;
+    fake.members[memberId] = written;
+    return _member$(written);
   }
 
   // ----------------------------------------------------------- test fixtures
@@ -306,7 +359,7 @@ class FakeRemoteLedger implements RemoteLedgerApi {
   /// Adds a placeholder to a seeded group without going through the outbox.
   Member seedMember(Member member) {
     final group = _group(member.groupId);
-    final written = member.copyWith(seq: group.nextSeq());
+    final written = member.copyWith(seq: Value(group.nextSeq()));
     group.members[member.id] = written;
     return written;
   }
@@ -315,18 +368,14 @@ class FakeRemoteLedger implements RemoteLedgerApi {
   Member claimMember(String groupId, String memberId, String claimant) {
     final group = _group(groupId);
     final written = group.members[memberId]!.copyWith(
-      profileId: claimant,
-      seq: group.nextSeq(),
+      profileId: Value(claimant),
+      seq: Value(group.nextSeq()),
     );
     group.members[memberId] = written;
     return written;
   }
 
   /// The server's own view of one member, read without syncing.
-  ///
-  /// The only way to ask what actually landed. A test that checks this by
-  /// pulling it back onto a device is really testing the device's merge rules,
-  /// which is a different question and the one it was trying to control for.
   Member memberOn(String groupId, String memberId) =>
       _group(groupId).members[memberId]!;
 
@@ -344,13 +393,10 @@ class FakeRemoteLedger implements RemoteLedgerApi {
 
   int seqOf(String groupId) => _group(groupId)._seq;
 
-  /// Writes a profile as the account itself would, stamping it now.
-  ///
-  /// The stamp is the feed's cursor, so seeding two profiles in a row makes
-  /// the second strictly newer -- which is what lets a test put a row behind
-  /// the cursor on purpose.
+  /// Writes a profile as the account itself would, stamping it now. The stamp
+  /// is the feed's cursor, so seeding two in a row makes the second newer.
   void seedProfile(Profile profile) =>
-      profiles[profile.id] = profile.copyWith(updatedAt: _tick());
+      profiles[profile.id] = profile.copyWith(updatedAt: Value(_tick()));
 
   void publishFxRate({
     required String asOf,
@@ -358,7 +404,7 @@ class FakeRemoteLedger implements RemoteLedgerApi {
     required double rate,
     String source = 'test',
   }) => _rates.add(
-    RemoteFxRate(asOf: asOf, currency: currency, rate: rate, source: source),
+    api.FxRate(asOf: asOf, currency: currency, rate: rate, source_: source),
   );
 
   /// When set, every rate pull is refused. A missing rate costs an estimate,
@@ -367,23 +413,17 @@ class FakeRemoteLedger implements RemoteLedgerApi {
   int fxPulls = 0;
   String? lastFxSince;
 
-  // -------------------------------------------------- phases 4 and 5
-
   final Map<String, Profile> profiles = {};
-  final List<RemoteFxRate> _rates = [];
+  final List<api.FxRate> _rates = [];
 
   /// What the last profile pull asked for, which is how a test sees the cursor.
   DateTime? lastProfilesSince;
 
-  /// The one feed still paged on `(updatedAt, id)`, and faithfully so.
-  ///
-  /// Profiles live in D1, which several requests write at once, so there is
-  /// nothing there that can hand out a sequence number. The tie-break is
-  /// therefore real and is modelled: rows sharing an instant are ordered by id
-  /// and resumed by the pair, because a cursor on the timestamp alone skips
-  /// the rest of such a batch forever or re-reads it forever.
+  /// The one feed still paged on `(updatedAt, id)`. Rows sharing an instant
+  /// are ordered by id and resumed by the pair, because a cursor on the
+  /// timestamp alone skips the rest of such a batch or re-reads it forever.
   @override
-  Future<ProfilePage> pullProfiles({
+  Future<api.ProfilePage> profileChanges({
     DateTime? since,
     String? sinceId,
     required int limit,
@@ -406,12 +446,10 @@ class FakeRemoteLedger implements RemoteLedgerApi {
     ];
 
     final page = after.take(limit).toList();
-    if (page.isEmpty) return const ProfilePage.empty();
-
-    return ProfilePage(
-      rows: page,
-      cursor: page.last.updatedAt,
-      cursorId: page.last.id,
+    return api.ProfilePage(
+      profiles: [for (final profile in page) _profile$(profile)],
+      cursor: page.lastOrNull?.updatedAt,
+      cursorId: page.lastOrNull?.id,
       hasMore: after.length > limit,
     );
   }
@@ -419,24 +457,30 @@ class FakeRemoteLedger implements RemoteLedgerApi {
   static final _epoch = DateTime.utc(1970);
 
   @override
-  Future<List<Profile>> pullProfilesByIds(List<String> ids) async => [
-    for (final id in ids) ?profiles[id],
-  ];
+  Future<api.ProfileList> profilesByIds(List<String> ids) async =>
+      api.ProfileList(
+        profiles: [
+          for (final id in ids)
+            if (profiles[id] case final profile?) _profile$(profile),
+        ],
+      );
 
   @override
-  Future<Profile> pushProfile(Profile profile) async {
-    final written = profile.copyWith(updatedAt: _tick());
-    profiles[profile.id] = written;
-    return written;
+  Future<api.Profile> updateProfile(api.ProfileUpdate update) async {
+    final written = Profile(
+      id: profileId,
+      displayName: update.displayName,
+      upiVpa: update.upiVpa,
+      updatedAt: _tick(),
+    );
+    profiles[profileId] = written;
+    return _profile$(written);
   }
 
   /// What the server holds, mutable so a test can add, withdraw or rename one.
-  ///
-  /// The device ships a seed list, so proving that this feed does anything at
-  /// all means making the server disagree with it.
-  late final List<Currency> serverCurrencies = [
+  late final List<api.Currency> serverCurrencies = [
     for (final row in defaultCurrencies)
-      Currency(
+      api.Currency(
         code: row.code,
         exponent: row.exponent,
         symbol: row.symbol,
@@ -445,60 +489,57 @@ class FakeRemoteLedger implements RemoteLedgerApi {
   ];
 
   @override
-  Future<ReferenceData> pullReference() async => ReferenceData(
+  Future<api.Reference> reference() async => api.Reference(
     currencies: List.of(serverCurrencies),
     categories: [
       for (final row in defaultCategories)
-        Category(id: row.id, name: row.name, icon: row.icon),
+        api.Category(id: row.id, name: row.name, icon: row.icon),
     ],
   );
 
   @override
-  Future<List<RemoteFxRate>> pullFxRates({required String since}) async {
+  Future<api.FxPage> fxRates({required String since}) async {
     fxPulls++;
     lastFxSince = since;
     if (failFxPulls) {
-      throw const RemoteRejected(
+      throw const ApiFailure(
         'Rates are unavailable.',
-        kind: RejectionKind.transient,
+        retry: api.Retry.transient,
       );
     }
-    return [
-      for (final rate in _rates)
-        if (rate.asOf.compareTo(since) >= 0) rate,
-    ];
+    return api.FxPage(
+      rates: [
+        for (final rate in _rates)
+          if (rate.asOf.compareTo(since) >= 0) rate,
+      ],
+      hasMore: false,
+    );
   }
 
   @override
-  Future<void> requestFxBackfill({
-    required DateTime asOf,
-    required String currency,
-  }) async {}
+  Future<void> requestFxBackfill(api.FxBackfillRequest request) async {}
 
   // --------------------------------------------------------------- the rules
 
+  static const _stale = ApiFailure(
+    'This expense changed since you opened it.',
+    retry: api.Retry.stale,
+    code: api.ErrorCode.staleBase,
+  );
+
   static void _assertBalanced(Entry entry) {
     if (entry.isBalanced) return;
-    throw const RemoteRejected(
+    throw const ApiFailure(
       'This expense does not add up.',
-      kind: RejectionKind.permanent,
-      code: 'unbalanced',
+      retry: api.Retry.permanent,
+      code: api.ErrorCode.unbalanced,
     );
   }
 
   /// A stale base is refused only when applying the write would move money.
-  ///
-  /// Two people fixing a typo do not arbitrate; an edit carrying a stale
-  /// amount does.
-  static void _assertBaseIsCurrent(Entry stored, Entry incoming) {
-    if (incoming.seq == null || stored.seq == incoming.seq) return;
-    if (_money(stored) == _money(incoming)) return;
-
-    throw const RemoteRejected(
-      'This expense changed since you opened it.',
-      kind: RejectionKind.stale,
-      code: 'stale_base',
-    );
+  static void _assertBaseIsCurrent(Entry stored, Entry incoming, int? base) {
+    if (base == null || stored.seq == base) return;
+    if (_money(stored) != _money(incoming)) throw _stale;
   }
 
   static String _money(Entry entry) {
@@ -513,8 +554,7 @@ class FakeRemoteLedger implements RemoteLedgerApi {
     return '${entry.amountMinor}|$payers|$shares';
   }
 
-  /// A push that changes nothing spends no sequence number, so a retried
-  /// outbox item does not re-notify every device in the group.
+  /// A push that changes nothing spends no sequence number.
   static bool _differs(Entry stored, Entry incoming) =>
       _money(stored) != _money(incoming) ||
       stored.description != incoming.description ||
@@ -524,6 +564,84 @@ class FakeRemoteLedger implements RemoteLedgerApi {
       stored.splitKind != incoming.splitKind ||
       stored.kind != incoming.kind ||
       stored.notes != incoming.notes;
+
+  // -------------------------------------------------------- serializing rows
+
+  static api.Group _group$(Group row) => api.Group(
+    id: row.id,
+    name: row.name,
+    defaultCurrency: row.defaultCurrency,
+    isDirect: row.isDirect,
+    simplifyDebts: row.simplifyDebts,
+    createdBy: row.createdBy ?? '',
+    createdAt: row.createdAt,
+    archivedAt: row.archivedAt,
+    updatedAt: row.createdAt,
+    seq: row.seq!,
+  );
+
+  static api.Member _member$(Member row) => api.Member(
+    id: row.id,
+    profileId: row.profileId,
+    displayName: row.displayName,
+    upiVpa: row.upiVpa,
+    joinedAt: row.joinedAt,
+    leftAt: row.leftAt,
+    updatedAt: row.joinedAt,
+    seq: row.seq!,
+  );
+
+  static api.Entry _entry$(Entry entry) => api.Entry(
+    id: entry.id,
+    kind: entry.kind,
+    description: entry.description,
+    categoryId: entry.categoryId,
+    currency: entry.currency,
+    amountMinor: entry.amountMinor,
+    entryDate: calendarDate(entry.entryDate),
+    splitKind: entry.splitKind,
+    fxRate: entry.fxRate,
+    fxSource: entry.fxSource,
+    fxAt: entry.fxAt,
+    notes: entry.notes,
+    createdBy: entry.createdBy,
+    clientKey: entry.clientKey,
+    createdAt: entry.createdAt,
+    updatedAt: entry.createdAt,
+    deletedAt: entry.deletedAt,
+    payers: [
+      for (final payer in entry.payers)
+        api.Payer(memberId: payer.memberId, amountMinor: payer.amountMinor),
+    ],
+    shares: [
+      for (final share in entry.shares)
+        api.Share(
+          memberId: share.memberId,
+          amountMinor: share.amountMinor,
+          weightMicros: share.weightMicros,
+        ),
+    ],
+    seq: entry.seq!,
+  );
+
+  static api.Event _event$(GroupEventRow row) => api.Event(
+    id: row.id,
+    actorId: row.actorId,
+    createdAt: row.createdAt,
+    kind: row.kind,
+    subjectId: row.subjectId,
+    payload: row.payload,
+    seq: row.seq!,
+    ordinal: row.ordinal!,
+  );
+
+  static api.Profile _profile$(Profile row) => api.Profile(
+    id: row.id,
+    displayName: row.displayName,
+    upiVpa: row.upiVpa,
+    updatedAt: row.updatedAt ?? _epoch,
+    deletedAt: null,
+  );
 }
 
 class _FakeGroup {
@@ -540,42 +658,23 @@ class _FakeGroup {
   int _seq = 0;
   int nextSeq() => ++_seq;
 
-  /// The record, written by the thing that committed the change.
-  ///
-  /// Deduped the same way the real object dedupes: a snapshot byte-identical
-  /// to the previous one appends nothing, so a re-saved editor produces no
-  /// "somebody edited nothing" line.
-  void snapshot(Entry entry, int seq, DateTime at) {
-    final payload = <String, Object?>{
-      'kind': entry.kind.name,
-      'description': entry.description,
-      'currency': entry.currency,
-      'amountMinor': entry.amountMinor,
-      'entryDate': entry.entryDate.toIso8601String().substring(0, 10),
-      'splitKind': entry.splitKind.name,
-      'categoryId': entry.categoryId,
-      'notes': entry.notes,
-      'deletedAt': entry.deletedAt?.toIso8601String(),
-      'payers': [
-        for (final payer in [
-          ...entry.payers,
-        ]..sort((a, b) => a.memberId.compareTo(b.memberId)))
-          {'memberId': payer.memberId, 'amountMinor': payer.amountMinor},
-      ],
-      'shares': [
-        for (final share in [
-          ...entry.shares,
-        ]..sort((a, b) => a.memberId.compareTo(b.memberId)))
-          {'memberId': share.memberId, 'amountMinor': share.amountMinor},
-      ],
-    };
+  /// The caller's own member row, which is who the server says wrote a change.
+  String actor(String profileId) =>
+      members.values
+          .where((member) => member.profileId == profileId)
+          .firstOrNull
+          ?.id ??
+      members.keys.first;
 
-    final previous = events.lastWhere(
-      (event) =>
-          event.subjectId == entry.id && event.kind == GroupEventKind.entry,
-      orElse: () => _absent,
-    );
-    if (previous != _absent && '${previous.payload}' == '$payload') return;
+  /// The record, written by the thing that committed the change. A snapshot
+  /// identical to the previous one appends nothing, as on the real server.
+  void snapshot(Entry entry, int seq, DateTime at) {
+    final payload = snapshotOf(entry).toJson();
+
+    final previous = events
+        .where((event) => event.subjectId == entry.id)
+        .lastOrNull;
+    if (previous != null && '${previous.payload}' == '$payload') return;
 
     events.add(
       GroupEventRow(
@@ -583,22 +682,13 @@ class _FakeGroup {
         groupId: id,
         actorId: entry.createdBy,
         createdAt: at,
-        kind: GroupEventKind.entry,
+        kind: api.EventKind.entry,
         subjectId: entry.id,
         payload: payload,
         seq: seq,
         ordinal: events.where((event) => event.seq == seq).length,
+        isProvisional: false,
       ),
     );
   }
-
-  static final _absent = GroupEventRow(
-    id: '',
-    groupId: '',
-    actorId: null,
-    createdAt: DateTime.utc(1970),
-    kind: GroupEventKind.entry,
-    subjectId: null,
-    payload: const {},
-  );
 }

@@ -79,8 +79,7 @@ export const withSession = createMiddleware<AppEnv>(async (c, next) => {
  * Refuses anything without a session, so the handler behind it can stop asking.
  *
  * The ledger routes use this. It is a first pass and nothing more: a group's
- * Durable Object re-checks membership itself and is the authority, exactly as
- * the policy-plus-trigger pair was before the move.
+ * Durable Object re-checks membership itself and is the authority.
  */
 export const requireSession = createMiddleware<AuthedEnv>(async (c, next) => {
   const resolved = await c.var.auth.api.getSession({ headers: c.req.raw.headers });

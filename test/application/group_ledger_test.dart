@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:opensplit/application/providers.dart';
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/domain/models/entry.dart';
-import 'package:opensplit/domain/split/splitter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../harness.dart';

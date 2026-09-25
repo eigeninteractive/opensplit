@@ -75,7 +75,13 @@ class EntryGen {
   /// A random split specification over a random non-empty subset of [members].
   SplitSpec splitSpec(List<String> members, int totalMinor) {
     final participants = subset(members, minSize: 1);
-    final kind = SplitKind.values[random.nextInt(SplitKind.values.length)];
+    const kinds = [
+      SplitKind.equal,
+      SplitKind.exact,
+      SplitKind.shares,
+      SplitKind.percent,
+    ];
+    final kind = kinds[random.nextInt(kinds.length)];
 
     switch (kind) {
       case SplitKind.equal:
@@ -102,6 +108,9 @@ class EntryGen {
           for (var i = 0; i < participants.length; i++)
             participants[i]: micros[i],
         });
+
+      case SplitKind.unknownDefaultOpenApi:
+        throw StateError('not generated');
     }
   }
 

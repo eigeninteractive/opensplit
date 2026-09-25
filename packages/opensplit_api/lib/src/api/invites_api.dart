@@ -10,13 +10,13 @@ import 'package:opensplit_api/src/deserialize.dart';
 import 'package:dio/dio.dart';
 
 import 'package:opensplit_api/src/model/error.dart';
+import 'package:opensplit_api/src/model/group_link.dart';
 import 'package:opensplit_api/src/model/invite.dart';
 import 'package:opensplit_api/src/model/join_request.dart';
 import 'package:opensplit_api/src/model/joined.dart';
 import 'package:opensplit_api/src/model/link_preview.dart';
 import 'package:opensplit_api/src/model/link_revocation.dart';
 import 'package:opensplit_api/src/model/live_link.dart';
-import 'package:opensplit_api/src/model/minted_link.dart';
 import 'package:opensplit_api/src/model/placeholder_list.dart';
 
 class InvitesApi {
@@ -36,9 +36,9 @@ class InvitesApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future] containing a [Response] with a [MintedLink] as data
+  /// Returns a [Future] containing a [Response] with a [GroupLink] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<MintedLink>> createGroupLink({
+  Future<Response<GroupLink>> createGroupLink({
     required String groupId,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -68,15 +68,15 @@ class InvitesApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    MintedLink? _responseData;
+    GroupLink? _responseData;
 
     try {
       final rawData = _response.data;
       _responseData = rawData == null
           ? null
-          : deserialize<MintedLink, MintedLink>(
+          : deserialize<GroupLink, GroupLink>(
               rawData,
-              'MintedLink',
+              'GroupLink',
               growable: true,
             );
     } catch (error, stackTrace) {
@@ -89,7 +89,7 @@ class InvitesApi {
       );
     }
 
-    return Response<MintedLink>(
+    return Response<GroupLink>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,

@@ -7,9 +7,6 @@ import 'package:uuid/uuid.dart';
 import '../local/database.dart';
 import 'sync_session.dart';
 
-/// The kind of row an outbox item refers to.
-enum OutboxTarget { entry, group, member, profile }
-
 /// A write the server refused outright, named the way its author would name it.
 class FailedWrite {
   const FailedWrite({
@@ -97,7 +94,7 @@ class OutboxQueue {
         .insert(
           OutboxCompanion.insert(
             id: idFor(target, targetId),
-            operation: target.name,
+            operation: target,
             targetId: targetId,
             revision: Value(revision),
             createdAt: _clock(),
@@ -121,25 +118,11 @@ class OutboxQueue {
 
   /// Items ready to be attempted now, in an order the server can accept.
   ///
-  /// Sorted by dependency, and only then by age. That ordering follows from
-  /// what this queue actually holds: an item says "row X is dirty", not "apply
-  /// this change at time T" — [SyncEngine] re-reads the row's current state
-  /// when it pushes it — and entries carry no cross-entry ordering requirement
-  /// of their own. So there is no chronology to preserve here, and the one
-  /// constraint that does exist is referential: a group has to exist before the
-  /// members that belong to it, and both before any entry that references them,
-  /// or the foreign keys and the membership policies reject the write.
-  ///
-  /// Sorting the other way round — age first, dependency as a tiebreak — is
-  /// what shipped, and it inverted on any second edit. Creating a group offline
-  /// and then renaming it moved the group behind its own owner, whose push the
-  /// server then refused with a permission error it treats as permanent, so the
-  /// owner's member row went to the dead letters and every expense in the group
-  /// followed it. Dependency first cannot invert, because rank is a property of
-  /// the kind of row rather than of when anyone touched it.
-  ///
-  /// Age still decides within a rank, so paging under [limit] is stable and the
-  /// oldest dirty row of a kind goes first.
+  /// Sorted by the kind of row first ([OutboxTarget]'s order: a group before
+  /// its members, members before the entries that name them), then by age.
+  /// The queue holds dirty rows rather than a log of changes, so the only
+  /// ordering that matters is the reference one. Age first would let a second
+  /// edit to a new group move it behind its own creator.
   Future<List<OutboxRow>> due({int limit = 100}) async {
     final now = _clock();
     final rows = await _pendingInPushOrder();
@@ -157,35 +140,12 @@ class OutboxQueue {
     )..where((t) => t.deadLetteredAt.isNull())).get();
 
     rows.sort((a, b) {
-      final byDependency = _pushOrder(
-        a.operation,
-      ).compareTo(_pushOrder(b.operation));
-      if (byDependency != 0) return byDependency;
-      return a.createdAt.compareTo(b.createdAt);
+      final byKind = a.operation.index.compareTo(b.operation.index);
+      return byKind != 0 ? byKind : a.createdAt.compareTo(b.createdAt);
     });
 
     return rows;
   }
-
-  /// Where a kind of row sits in the dependency graph.
-  ///
-  /// A total order over the levels the schema actually has, which is what makes
-  /// sorting by it a valid topological sort: entries reference members, members
-  /// reference groups, and profiles reference nothing group-scoped at all.
-  /// There is no edge pointing back up, so no item ever needs to precede one of
-  /// a lower rank.
-  ///
-  /// Activity used to occupy a fourth rank below entries, because a feed line
-  /// named the expense it described with a real foreign key and could otherwise
-  /// reach the server ahead of it. Nothing queues activity any more -- the
-  /// server writes it -- so that ordering constraint, and the class of failure
-  /// where a refused expense dragged its own history into the dead letters, are
-  /// both simply gone.
-  static int _pushOrder(String operation) => switch (operation) {
-    'group' => 0,
-    'member' => 1,
-    _ => 2,
-  };
 
   /// Items still expected to reach the server. Dead letters are excluded.
   Future<int> pendingCount() async {
@@ -237,11 +197,10 @@ class OutboxQueue {
   }
 
   Future<FailedWrite> _describe(OutboxRow row) async {
-    final target = OutboxTarget.values.byName(row.operation);
     return FailedWrite(
       id: row.id,
-      target: target,
-      label: await _labelFor(target, row.targetId),
+      target: row.operation,
+      label: await _labelFor(row.operation, row.targetId),
       reason: row.lastError ?? 'The server refused it without saying why.',
       failedAt: row.deadLetteredAt!,
     );

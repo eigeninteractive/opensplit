@@ -1,6 +1,8 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
-import '../split/splitter.dart';
+import 'kinds.dart';
+
+export 'kinds.dart' show EntryKind, SplitKind;
 
 part 'entry.freezed.dart';
 
@@ -13,13 +15,6 @@ class StaleEntryException implements Exception {
       'This entry changed while you were editing. Your draft '
       'has not been saved. Reopen the entry to review its latest version.';
 }
-
-/// What kind of fact an entry records.
-///
-/// A settlement is one payer and one share, in the same table as expenses,
-/// because it participates in the identical balance fold. It is excluded from
-/// spend analytics — paying a friend back is not spending.
-enum EntryKind { expense, settlement }
 
 /// Money actually put down by one member for an entry.
 ///
@@ -50,11 +45,10 @@ abstract class EntryShare with _$EntryShare {
 }
 
 /// A single financial fact: an expense someone paid, or a settlement between
-/// two members.
+/// two members, with its payers and shares.
 ///
-/// Entries are independent of one another — there is no cross-entry ordering
-/// requirement — which is what lets sync be a cursor over `updated_at` rather
-/// than a CRDT.
+/// A settlement is one payer and one share and folds through the same balance
+/// path; it is excluded from spend analytics.
 @freezed
 abstract class Entry with _$Entry {
   const factory Entry({
@@ -88,12 +82,8 @@ abstract class Entry with _$Entry {
     required String createdBy,
     required DateTime createdAt,
 
-    /// The group sequence number this expense was last received at.
-    ///
-    /// Null on a row this device invented and has never pushed. It is both the
-    /// version the server last confirmed and the base a subsequent edit is
-    /// judged against, which used to be two columns — see [Entries.seq] in
-    /// `tables.dart` for why they could collapse into one.
+    /// The server's sequence number for this version, and the base the next
+    /// edit is judged against. Null for a row the server has not seen.
     int? seq,
 
     /// Soft delete. Financial rows are never physically removed, so that a
@@ -102,9 +92,6 @@ abstract class Entry with _$Entry {
 
     /// Client-generated, making a retried sync idempotent.
     String? clientKey,
-
-    /// Version of the split algorithm that produced [shares]. Historical
-    /// entries are never recomputed under a newer version.
   }) = _Entry;
 
   const Entry._();

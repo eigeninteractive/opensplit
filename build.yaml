@@ -13,8 +13,16 @@
 targets:
   $default:
     builders:
+      # The not_shared builder writes `database.drift.dart` as a plain part,
+      # rather than a shared part that source_gen combines at the end. That is
+      # what lets riverpod_generator see the row classes (`Group`, `Member`,
+      # ...) that providers return: a shared part does not exist yet when
+      # other part builders run.
       drift_dev:
-        options:
+        enabled: false
+      drift_dev:analyzer:
+        enabled: true
+        options: &drift_options
           sql:
             dialect: sqlite
             options:
@@ -24,3 +32,11 @@ targets:
               version: "3.45"
               modules:
                 - fts5
+      drift_dev:not_shared:
+        enabled: true
+        options: *drift_options
+
+global_options:
+  drift_dev:not_shared:
+    runs_before:
+      - riverpod_generator

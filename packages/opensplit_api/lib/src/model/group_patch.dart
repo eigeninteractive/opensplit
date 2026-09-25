@@ -15,7 +15,7 @@ part 'group_patch.g.dart';
 )
 class GroupPatch {
   /// Returns a new [GroupPatch] instance.
-  GroupPatch({this.name, this.simplifyDebts, this.archivedAt});
+  GroupPatch({this.name, this.simplifyDebts, required this.archivedAt});
 
   @JsonKey(name: r'name', required: false, includeIfNull: false)
   final String? name;
@@ -23,7 +23,7 @@ class GroupPatch {
   @JsonKey(name: r'simplifyDebts', required: false, includeIfNull: false)
   final bool? simplifyDebts;
 
-  @JsonKey(name: r'archivedAt', required: false, includeIfNull: false)
+  @JsonKey(name: r'archivedAt', required: true, includeIfNull: true)
   final DateTime? archivedAt;
 
   @override

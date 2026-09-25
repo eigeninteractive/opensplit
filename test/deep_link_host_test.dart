@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:opensplit/config.dart';
-import 'package:opensplit/domain/repositories/invite_api.dart';
+import 'package:opensplit/data/sync/invites.dart';
 
 /// The one host this app claims.
 ///
@@ -78,19 +78,14 @@ void main() {
   test('claims the path invite links are actually minted under', () {
     // The host is no longer all app: the root is static marketing pages and
     // the client is served from /app/. Two places encode that split and
-    // neither reads the other — urlFor here, pathPrefix in the manifest. Let
+    // neither reads the other — joinUrl here, pathPrefix in the manifest. Let
     // them drift and every invite link opens in a browser instead of the
     // installed app, silently, on other people's phones.
     final prefixes = RegExp(
       r'android:pathPrefix="([^"]+)"',
     ).allMatches(manifest).map((m) => m.group(1)!).toList();
 
-    final invite = InviteLink(
-      token: 'tok',
-      groupId: 'g',
-      memberId: 'm',
-      expiresAt: DateTime.utc(2030),
-    ).urlFor(linkHost);
+    final invite = joinUrl(linkHost, 'tok');
 
     expect(prefixes, hasLength(1), reason: 'one prefix, matching one split');
     expect(

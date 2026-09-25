@@ -7,7 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../../config.dart';
-import '../../domain/models/group_event.dart';
+import '../../domain/models/kinds.dart';
 import 'background_handler.dart';
 import 'notification_channel.dart';
 
@@ -46,7 +46,7 @@ class PushService {
   /// syncing it, and then quietly drawing nothing.
   final Future<({String title, String body})?> Function(
     String groupId,
-    GroupEventKind kind,
+    EventKind kind,
     String subjectId,
   )
   describe;
@@ -218,7 +218,7 @@ class PushService {
     if (!isEnabled()) return;
     final groupId = message.data['group_id'];
     final subjectId = message.data['subject_id'];
-    final kind = GroupEventKind.parse(message.data['kind'] as String? ?? '');
+    final kind = fromWire(EventKind.values, message.data['kind'] as String?);
     if (groupId is! String || subjectId is! String || kind == null) return;
 
     // Sync first. The notification describes what is now on the device, not

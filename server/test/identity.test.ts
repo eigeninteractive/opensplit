@@ -230,7 +230,7 @@ describe("the email code flow", () => {
 
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({
-      error: { code: "bad_request" },
+      error: { code: "malformed" },
     });
   });
 });

@@ -9,10 +9,10 @@ import 'dart:convert';
 import 'package:opensplit_api/src/deserialize.dart';
 import 'package:dio/dio.dart';
 
+import 'package:opensplit_api/src/model/error.dart';
 import 'package:opensplit_api/src/model/fx_backfill_request.dart';
 import 'package:opensplit_api/src/model/fx_backfill_response.dart';
 import 'package:opensplit_api/src/model/fx_page.dart';
-import 'package:opensplit_api/src/model/get_fx_rates400_response.dart';
 import 'package:opensplit_api/src/model/reference.dart';
 
 class ReferenceApi {

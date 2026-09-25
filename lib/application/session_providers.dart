@@ -104,9 +104,9 @@ class SessionController extends _$SessionController {
   /// account the user believes is gone — the one outcome worse than the delete
   /// simply not working.
   ///
-  /// It also has to happen while the session is still valid: the RPC is
-  /// authorised by `auth.uid()`, so signing out first would leave nothing to
-  /// identify the account by.
+  /// It also has to happen while the session is still valid: the request is
+  /// authorised by it, so signing out first would leave nothing to identify
+  /// the account by.
   Future<void> deleteAccount() async {
     final auth = ref.read(authServiceProvider);
     if (auth == null) return;

@@ -260,7 +260,7 @@
             "default_client_dart": null,
             "dsl_features": [],
             "type_converter": {
-              "dart_expr": "const EnumNameConverter<EntryKind>(EntryKind.values)",
+              "dart_expr": "const WireEnumConverter(EntryKind.values,EntryKind.unknownDefaultOpenApi)",
               "dart_type_name": "EntryKind"
             }
           },
@@ -324,7 +324,7 @@
             "default_client_dart": null,
             "dsl_features": [],
             "type_converter": {
-              "dart_expr": "const EnumNameConverter<SplitKind>(SplitKind.values)",
+              "dart_expr": "const WireEnumConverter(SplitKind.values,SplitKind.unknownDefaultOpenApi)",
               "dart_type_name": "SplitKind"
             }
           },
@@ -1001,7 +1001,11 @@
             "customConstraints": null,
             "default_dart": null,
             "default_client_dart": null,
-            "dsl_features": []
+            "dsl_features": [],
+            "type_converter": {
+              "dart_expr": "const WireEnumConverter(EventKind.values,EventKind.unknownDefaultOpenApi)",
+              "dart_type_name": "EventKind"
+            }
           },
           {
             "name": "subject_id",
@@ -1021,7 +1025,11 @@
             "customConstraints": null,
             "default_dart": null,
             "default_client_dart": null,
-            "dsl_features": []
+            "dsl_features": [],
+            "type_converter": {
+              "dart_expr": "const JsonMapConverter()",
+              "dart_type_name": "Map<String, Object?>"
+            }
           },
           {
             "name": "seq",
@@ -1252,7 +1260,11 @@
             "customConstraints": null,
             "default_dart": null,
             "default_client_dart": null,
-            "dsl_features": []
+            "dsl_features": [],
+            "type_converter": {
+              "dart_expr": "const EnumNameConverter<OutboxTarget>(OutboxTarget.values)",
+              "dart_type_name": "OutboxTarget"
+            }
           },
           {
             "name": "target_id",

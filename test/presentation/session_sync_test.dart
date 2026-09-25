@@ -10,8 +10,6 @@ import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/network/network_signal.dart';
 import 'package:opensplit/data/sync/sync_engine.dart';
 import 'package:opensplit/domain/repositories/auth_service.dart';
-import 'package:opensplit/domain/models/group.dart';
-import 'package:opensplit/domain/models/member.dart';
 import 'package:opensplit/presentation/app.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -19,8 +17,18 @@ import '../data/fake_remote_ledger.dart';
 
 import '../harness.dart';
 
-const _account = Account(id: 'account', isAnonymous: false);
-const _otherAccount = Account(id: 'other-account', isAnonymous: false);
+final _account = Account(
+  id: 'account',
+  isAnonymous: false,
+  email: null,
+  displayName: null,
+);
+final _otherAccount = Account(
+  id: 'other-account',
+  isAnonymous: false,
+  email: null,
+  displayName: null,
+);
 
 void main() {
   setUp(() => driftRuntimeOptions.dontWarnAboutMultipleDatabases = true);
@@ -129,10 +137,11 @@ void main() {
 
     // Token refresh and profile edits keep the same ledger and scheduler.
     final scheduler = container.read(syncSchedulerProvider);
-    auth.currentUser = const Account(
+    auth.currentUser = Account(
       id: 'other-account',
       isAnonymous: false,
       displayName: 'Updated name',
+      email: null,
     );
     auth.events.add(auth.currentUser);
     await tester.pumpAndSettle();
@@ -165,7 +174,7 @@ void main() {
           final engine = _RecordingEngine(
             reports,
             db: ref.watch(appDatabaseProvider),
-            api: ref.watch(remoteLedgerApiProvider)!,
+            remote: ref.watch(remoteLedgerApiProvider)!,
             outbox: ref.watch(outboxQueueProvider),
           );
           ref.onDispose(engine.dispose);
@@ -243,7 +252,7 @@ void main() {
           return _ControlledEngine(
             account == _account.id ? oldResult.future : newResult.future,
             db: ref.watch(appDatabaseProvider),
-            api: server,
+            remote: server,
             outbox: ref.watch(outboxQueueProvider),
           );
         }),
@@ -311,6 +320,8 @@ Future<void> _publishGroup(
       defaultCurrency: 'INR',
       createdBy: '$id-owner',
       createdAt: now,
+      isDirect: false,
+      simplifyDebts: true,
     ),
     creator: Member(
       id: '$id-owner',
@@ -347,7 +358,7 @@ class _ChangingAuth implements AuthService {
   }) async {
     currentUser = _account;
     if (emitOnVerify) events.add(currentUser);
-    return const SessionKept(account: _account);
+    return SessionKept(account: _account);
   }
 
   @override
@@ -377,7 +388,7 @@ class _RecordingEngine extends SyncEngine {
   _RecordingEngine(
     this.reports, {
     required super.db,
-    required super.api,
+    required super.remote,
     required super.outbox,
   });
 
@@ -395,7 +406,7 @@ class _ControlledEngine extends SyncEngine {
   _ControlledEngine(
     this.result, {
     required super.db,
-    required super.api,
+    required super.remote,
     required super.outbox,
   });
 

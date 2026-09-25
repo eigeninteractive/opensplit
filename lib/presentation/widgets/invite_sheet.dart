@@ -6,7 +6,8 @@ import '../../application/providers.dart';
 import 'notification_invitation.dart';
 import '../../config.dart';
 import '../../domain/models/member.dart';
-import '../../domain/repositories/invite_api.dart';
+import '../../data/sync/api_client.dart';
+import '../../data/sync/invites.dart';
 
 /// Creates and shows a link that hands over one unclaimed place in a group.
 Future<void> showInviteSheet(
@@ -41,7 +42,7 @@ class _InviteSheetState extends ConsumerState<_InviteSheet> {
   }
 
   Future<void> _create() async {
-    final invites = ref.read(inviteApiProvider);
+    final invites = ref.read(invitesProvider);
     if (invites == null) {
       setState(
         () => _error =
@@ -58,16 +59,16 @@ class _InviteSheetState extends ConsumerState<_InviteSheet> {
           .syncGroup(widget.member.groupId);
 
       final invite = await invites.create(
-        groupId: widget.member.groupId,
-        memberId: widget.member.id,
+        widget.member.groupId,
+        widget.member.id,
       );
       if (mounted) {
         setState(() {
-          _url = invite.urlFor(linkHost);
+          _url = joinUrl(linkHost, invite.token);
           _expires = invite.expiresAt;
         });
       }
-    } on InviteRejected catch (e) {
+    } on ApiFailure catch (e) {
       if (mounted) setState(() => _error = e.message);
     } catch (e) {
       if (mounted) setState(() => _error = 'Could not create a link. $e');

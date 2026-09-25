@@ -2,7 +2,7 @@ import { exports as workerExports } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import type { ApiError } from "../src/schemas/common";
-import type { AccountDeletion, Bootstrap, ChangePage, Joined, LinkPreview, MintedLink, Profile, ProfileList, ProfilePage } from "./api-types";
+import type { AccountDeletion, Bootstrap, ChangePage, GroupLink, Joined, LinkPreview, Profile, ProfileList, ProfilePage } from "./api-types";
 import { freshId } from "./group";
 import { type Guest, signInAsGuest } from "./session";
 
@@ -47,7 +47,7 @@ async function makeGroup(host: Guest) {
 /** Puts two accounts in one group, the only way the app can: a link, spent. */
 async function share(host: Guest, guest: Guest, name: string) {
   const groupId = await makeGroup(host);
-  const link = await json<MintedLink>(await call(`/api/groups/${groupId}/link`, host, { method: "POST" }));
+  const link = await json<GroupLink>(await call(`/api/groups/${groupId}/link`, host, { method: "POST" }));
 
   const joined = await call(`/api/links/${link.token}/join`, guest, { method: "POST", body: JSON.stringify({ displayName: name }) });
   expect(joined.status).toBe(200);
@@ -145,7 +145,7 @@ describe("the profile feed", () => {
     const friends = [await signInAsGuest(), await signInAsGuest(), await signInAsGuest()];
 
     const groupId = await makeGroup(host);
-    const link = await json<MintedLink>(await call(`/api/groups/${groupId}/link`, host, { method: "POST" }));
+    const link = await json<GroupLink>(await call(`/api/groups/${groupId}/link`, host, { method: "POST" }));
     for (const [index, friend] of friends.entries()) {
       await call(`/api/links/${link.token}/join`, friend, { method: "POST", body: JSON.stringify({ displayName: `Friend ${index}` }) });
       await named(friend, `Friend ${index}`);
@@ -324,7 +324,7 @@ describe("a link preview", () => {
     const friend = await signInAsGuest();
     const { groupId } = await share(host, friend, "Priya");
 
-    const link = await json<MintedLink>(await call(`/api/groups/${groupId}/link`, host, { method: "POST" }));
+    const link = await json<GroupLink>(await call(`/api/groups/${groupId}/link`, host, { method: "POST" }));
     const preview = await json<LinkPreview>(await call(`/api/links/${link.token}`, friend));
 
     expect(preview.isMember).toBe(true);

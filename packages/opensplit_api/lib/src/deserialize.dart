@@ -11,6 +11,7 @@ import 'package:opensplit_api/src/model/email_start_response.dart';
 import 'package:opensplit_api/src/model/email_verify_request.dart';
 import 'package:opensplit_api/src/model/entry.dart';
 import 'package:opensplit_api/src/model/entry_input.dart';
+import 'package:opensplit_api/src/model/entry_snapshot.dart';
 import 'package:opensplit_api/src/model/error.dart';
 import 'package:opensplit_api/src/model/error_error.dart';
 import 'package:opensplit_api/src/model/event.dart';
@@ -18,26 +19,26 @@ import 'package:opensplit_api/src/model/fx_backfill_request.dart';
 import 'package:opensplit_api/src/model/fx_backfill_response.dart';
 import 'package:opensplit_api/src/model/fx_page.dart';
 import 'package:opensplit_api/src/model/fx_rate.dart';
-import 'package:opensplit_api/src/model/get_fx_rates400_response.dart';
-import 'package:opensplit_api/src/model/get_fx_rates400_response_error.dart';
 import 'package:opensplit_api/src/model/google_identity_request.dart';
 import 'package:opensplit_api/src/model/group.dart';
 import 'package:opensplit_api/src/model/group_create.dart';
+import 'package:opensplit_api/src/model/group_event_payload.dart';
 import 'package:opensplit_api/src/model/group_link.dart';
 import 'package:opensplit_api/src/model/group_patch.dart';
 import 'package:opensplit_api/src/model/health.dart';
 import 'package:opensplit_api/src/model/identity_outcome.dart';
 import 'package:opensplit_api/src/model/invite.dart';
-import 'package:opensplit_api/src/model/invite_superseded_inner.dart';
 import 'package:opensplit_api/src/model/join_request.dart';
 import 'package:opensplit_api/src/model/joined.dart';
+import 'package:opensplit_api/src/model/link_event_payload.dart';
 import 'package:opensplit_api/src/model/link_preview.dart';
 import 'package:opensplit_api/src/model/link_revocation.dart';
 import 'package:opensplit_api/src/model/live_link.dart';
 import 'package:opensplit_api/src/model/member.dart';
 import 'package:opensplit_api/src/model/member_create.dart';
+import 'package:opensplit_api/src/model/member_event_payload.dart';
 import 'package:opensplit_api/src/model/member_patch.dart';
-import 'package:opensplit_api/src/model/minted_link.dart';
+import 'package:opensplit_api/src/model/money_row.dart';
 import 'package:opensplit_api/src/model/payer.dart';
 import 'package:opensplit_api/src/model/placeholder.dart';
 import 'package:opensplit_api/src/model/placeholder_list.dart';
@@ -103,8 +104,12 @@ ReturnType deserialize<ReturnType, BaseType>(
     case 'EntryInput':
       return EntryInput.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'EntryKind':
+    case 'EntrySnapshot':
+      return EntrySnapshot.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
     case 'Error':
       return Error.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'ErrorCode':
     case 'ErrorError':
       return ErrorError.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'Event':
@@ -120,12 +125,6 @@ ReturnType deserialize<ReturnType, BaseType>(
       return FxPage.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'FxRate':
       return FxRate.fromJson(value as Map<String, dynamic>) as ReturnType;
-    case 'GetFxRates400Response':
-      return GetFxRates400Response.fromJson(value as Map<String, dynamic>)
-          as ReturnType;
-    case 'GetFxRates400ResponseError':
-      return GetFxRates400ResponseError.fromJson(value as Map<String, dynamic>)
-          as ReturnType;
     case 'GoogleIdentityRequest':
       return GoogleIdentityRequest.fromJson(value as Map<String, dynamic>)
           as ReturnType;
@@ -133,6 +132,9 @@ ReturnType deserialize<ReturnType, BaseType>(
       return Group.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'GroupCreate':
       return GroupCreate.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'GroupEventPayload':
+      return GroupEventPayload.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
     case 'GroupLink':
       return GroupLink.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'GroupPatch':
@@ -144,13 +146,13 @@ ReturnType deserialize<ReturnType, BaseType>(
           as ReturnType;
     case 'Invite':
       return Invite.fromJson(value as Map<String, dynamic>) as ReturnType;
-    case 'InviteSupersededInner':
-      return InviteSupersededInner.fromJson(value as Map<String, dynamic>)
-          as ReturnType;
     case 'JoinRequest':
       return JoinRequest.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'Joined':
       return Joined.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'LinkEventPayload':
+      return LinkEventPayload.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
     case 'LinkPreview':
       return LinkPreview.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'LinkRevocation':
@@ -162,10 +164,13 @@ ReturnType deserialize<ReturnType, BaseType>(
       return Member.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'MemberCreate':
       return MemberCreate.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'MemberEventPayload':
+      return MemberEventPayload.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
     case 'MemberPatch':
       return MemberPatch.fromJson(value as Map<String, dynamic>) as ReturnType;
-    case 'MintedLink':
-      return MintedLink.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'MoneyRow':
+      return MoneyRow.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'Payer':
       return Payer.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'Placeholder':

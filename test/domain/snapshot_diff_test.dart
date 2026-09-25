@@ -1,8 +1,9 @@
 import 'package:opensplit/domain/activity/snapshot_diff.dart';
+import 'package:opensplit/domain/calendar_date.dart';
 import 'package:opensplit/domain/models/entry.dart';
 import 'package:opensplit/domain/models/entry_event.dart';
-import 'package:opensplit/domain/models/entry_snapshot.dart';
-import 'package:opensplit/domain/split/splitter.dart';
+import 'package:opensplit/domain/models/group_event.dart';
+import 'package:opensplit_api/opensplit_api.dart' as api;
 import 'package:test/test.dart';
 
 /// What a feed line says, worked out from two snapshots of the same expense.
@@ -15,7 +16,7 @@ void main() {
   final at = DateTime.utc(2026, 8, 27, 9);
   var seq = 0;
 
-  EntrySnapshot snap({
+  GroupEventRow snap({
     int amountMinor = 40000,
     String description = 'Dinner',
     String currency = 'INR',
@@ -27,29 +28,33 @@ void main() {
     Map<String, int> payers = const {'m1': 40000},
     String? actorId = 'm1',
     EntryKind kind = EntryKind.expense,
-  }) => EntrySnapshot(
+  }) => GroupEventRow(
     id: 'snap-${seq++}',
-    entryId: 'e1',
+    subjectId: 'e1',
     groupId: 'g1',
     actorId: actorId,
     createdAt: at,
-    kind: kind,
-    description: description,
-    currency: currency,
-    amountMinor: amountMinor,
-    entryDate: entryDate ?? DateTime.utc(2026, 8, 20),
-    splitKind: SplitKind.equal,
-    categoryId: categoryId,
-    notes: notes,
-    deletedAt: deletedAt,
-    payers: [
-      for (final row in payers.entries)
-        MemberAmount(memberId: row.key, amountMinor: row.value),
-    ]..sort((a, b) => a.memberId.compareTo(b.memberId)),
-    shares: [
-      for (final row in shares.entries)
-        MemberAmount(memberId: row.key, amountMinor: row.value),
-    ]..sort((a, b) => a.memberId.compareTo(b.memberId)),
+    kind: EventKind.entry,
+    isProvisional: false,
+    payload: api.EntrySnapshot(
+      kind: kind,
+      description: description,
+      currency: currency,
+      amountMinor: amountMinor,
+      entryDate: calendarDate(entryDate ?? DateTime.utc(2026, 8, 20)),
+      splitKind: SplitKind.equal,
+      categoryId: categoryId,
+      notes: notes,
+      deletedAt: deletedAt,
+      payers: [
+        for (final row in payers.entries)
+          api.MoneyRow(memberId: row.key, amountMinor: row.value),
+      ]..sort((a, b) => a.memberId.compareTo(b.memberId)),
+      shares: [
+        for (final row in shares.entries)
+          api.MoneyRow(memberId: row.key, amountMinor: row.value),
+      ]..sort((a, b) => a.memberId.compareTo(b.memberId)),
+    ).toJson(),
   );
 
   test('the first snapshot of an expense is its creation', () {
@@ -96,16 +101,19 @@ void main() {
   });
 
   test('saving something unchanged is not an edit', () {
-    expect(diffSnapshots(snap(), snap()), isEmpty);
+    expect(diffSnapshots(snap().snapshot, snap().snapshot), isEmpty);
     expect(
-      recordsSameShape(snap(), snap()),
+      recordsSameShape(snap().snapshot, snap().snapshot),
       isTrue,
       reason: 'a re-saved editor must not add a line to anybody\'s feed',
     );
   });
 
   test('an empty string and a null are the same absence', () {
-    expect(diffSnapshots(snap(notes: null), snap(notes: '')), isEmpty);
+    expect(
+      diffSnapshots(snap(notes: null).snapshot, snap(notes: '').snapshot),
+      isEmpty,
+    );
   });
 
   test('clearing a field records it as cleared, not as a change to empty', () {
@@ -205,8 +213,8 @@ void main() {
   test('a re-split is not mistaken for an unchanged expense', () {
     expect(
       recordsSameShape(
-        snap(shares: {'m1': 20000, 'm2': 20000}),
-        snap(shares: {'m1': 30000, 'm2': 10000}),
+        snap(shares: {'m1': 20000, 'm2': 20000}).snapshot,
+        snap(shares: {'m1': 30000, 'm2': 10000}).snapshot,
       ),
       isFalse,
       reason:

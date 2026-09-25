@@ -4,12 +4,13 @@ import 'package:uuid/uuid.dart';
 import '../../domain/activity/snapshot_diff.dart';
 import '../../domain/entry_draft.dart';
 import '../../domain/models/entry.dart';
+import 'package:opensplit_api/opensplit_api.dart' as api;
+
 import '../../domain/models/entry_snapshot.dart';
 import '../../domain/models/group_event.dart';
 import '../local/database.dart';
 import '../local/entry_writer.dart';
 import '../sync/outbox_queue.dart';
-import 'mappers.dart';
 
 /// Local-first entry storage.
 ///
@@ -20,8 +21,7 @@ import 'mappers.dart';
 ///
 /// An entry, its payers and its shares are one atomic fact. They are never
 /// written separately — a torn write would leave a row that violates the
-/// balance invariant, which is exactly what the server's deferred trigger
-/// exists to make impossible.
+/// balance invariant, which the group's Durable Object refuses outright.
 final class DriftEntryRepository {
   DriftEntryRepository(
     this._db, {
@@ -46,58 +46,42 @@ final class DriftEntryRepository {
   Future<void> _enqueue(String entryId) async =>
       outbox?.enqueue(OutboxTarget.entry, entryId);
 
-  /// Writes an entry, this device's record of the write, and the queue item,
-  /// as one operation.
+  /// Writes an entry, a provisional feed line for it, and its outbox item.
   ///
-  /// Every local write of an entry goes through here, which is the point: a
-  /// change and the record of it are one fact, and committing them separately
-  /// would allow either an expense with no history or history for an expense
-  /// that was never stored.
+  /// The line lets the feed say what happened before the server has heard of
+  /// it; the server's own line replaces it on the next pull. It is skipped
+  /// when the entry looks as it did last time, the same dedup the server
+  /// applies, so a re-saved editor records nothing.
   ///
-  /// The snapshot written here is PROVISIONAL and is never pushed. The
-  /// authoritative record is the server's, taken by a trigger from the row it
-  /// actually committed -- which is what makes the feed something a reader can
-  /// trust rather than something the editing device asserted about itself. This
-  /// one exists because the server's arrives only after a round trip, and the
-  /// one screen whose whole job is to say what happened must not be the one
-  /// screen that needs a network to do it. It is dropped the moment the
-  /// server's account of the same expense is pulled.
-  ///
-  /// [actorId] is a member id, not an account id. Authorship is group-scoped
-  /// for the same reason `entries.created_by` is: a placeholder's edits have to
-  /// survive them claiming an account later. Null when this device has no
-  /// member row in the group -- recorded anyway, with nobody named, because a
-  /// change nobody can be attributed to still belongs on the record.
+  /// [actorId] is a member id; null when this device has no member row in the
+  /// group.
   Future<void> _writeWithSnapshot({
     required Entry after,
     required String? actorId,
     required DateTime at,
   }) async {
-    final snapshot = snapshotOf(
-      after,
-      id: _uuid.v4(),
-      actorId: actorId,
-      at: at,
-    );
-
-    // The same dedup the server applies, so a re-saved editor produces no line
-    // here either -- rather than one that appears and then disappears when the
-    // server's deduped account of the write arrives.
+    final snapshot = snapshotOf(after);
     final latest = await _latestSnapshot(after.id);
-    final worthRecording =
-        latest == null || !recordsSameShape(latest, snapshot);
 
-    await writeEntryInTransaction(
-      _db,
-      after,
-      snapshot: worthRecording ? snapshot : null,
-    );
+    await writeEntryInTransaction(_db, after);
+    if (latest == null || !recordsSameShape(latest, snapshot)) {
+      await _db
+          .into(_db.groupEvents)
+          .insert(
+            GroupEventsCompanion.insert(
+              id: _uuid.v4(),
+              groupId: after.groupId,
+              actorId: Value(actorId),
+              createdAt: at,
+              kind: EventKind.entry,
+              subjectId: Value(after.id),
+              payload: snapshot.toJson(),
+              isProvisional: const Value(true),
+            ),
+          );
+    }
 
-    // Editing an expense acknowledges any notice about it. Whatever the person
-    // decided -- to put their change back, to keep what the group has, or
-    // something else entirely -- they have now seen what it says and acted, so
-    // a banner still asking them to look would be asking about a question they
-    // have answered.
+    // Editing an expense acknowledges any conflict notice about it.
     await (_db.delete(
       _db.entryConflicts,
     )..where((t) => t.entryId.equals(after.id))).go();
@@ -106,23 +90,18 @@ final class DriftEntryRepository {
   }
 
   /// The most recent thing recorded about an entry, from either source.
-  Future<EntrySnapshot?> _latestSnapshot(String entryId) async {
+  Future<api.EntrySnapshot?> _latestSnapshot(String entryId) async {
     final row =
         await (_db.select(_db.groupEvents)
               ..where(
                 (t) =>
                     t.subjectId.equals(entryId) &
-                    t.kind.equals(GroupEventKind.entry.wireName),
+                    t.kind.equalsValue(EventKind.entry),
               )
-              ..orderBy([
-                (t) => OrderingTerm(
-                  expression: t.createdAt,
-                  mode: OrderingMode.desc,
-                ),
-              ])
+              ..orderBy(newestFirst)
               ..limit(1))
             .getSingleOrNull();
-    return row?.toDomain()?.snapshot;
+    return row?.snapshot;
   }
 
   /// How many live entries this device holds, across every group.
@@ -243,7 +222,8 @@ final class DriftEntryRepository {
 
     return [
       for (final row in rows)
-        row.toDomain(
+        entryFromRows(
+          row,
           payers: payersByEntry[row.id] ?? const [],
           shares: sharesByEntry[row.id] ?? const [],
         ),

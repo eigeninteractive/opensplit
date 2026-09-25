@@ -23,7 +23,7 @@ import '../domain/notification_text.dart';
 ///
 /// Also null when the device holds the expense but no record of anything having
 /// happened to it. That is not a state worth guessing about: the wake is sent
-/// by the trigger that writes the record, so the two arrive together or the
+/// by the group's object after it writes the record, so the two arrive together or the
 /// sync did not complete, and a banner assembled from half a pull would be
 /// describing something it cannot see.
 Future<({String title, String body})?> composeEventNotification({
@@ -38,7 +38,7 @@ Future<({String title, String body})?> composeEventNotification({
   /// What the wake said this was. Used to decide whether to look at all; the
   /// wording comes from the record on this device, which is the copy that has
   /// actually been synced.
-  required GroupEventKind kind,
+  required EventKind kind,
 
   /// The entry or member the event is about.
   required String subjectId,
@@ -74,8 +74,8 @@ Future<({String title, String body})?> composeEventNotification({
     );
   }
 
-  // Nothing else is worth a banner. The trigger does not fan the other kinds
-  // out at all, so this is the belt to its braces.
+  // Nothing else is worth a banner. The server does not send the other kinds
+  // at all, so this is the belt to its braces.
   if (change is! EntryChanged) return null;
 
   final entry = await entries.getEntry(subjectId);
@@ -112,14 +112,13 @@ Future<({String title, String body})?> composeEventNotification({
 
 /// The kinds that produce a banner at all.
 ///
-/// The same list the SQL trigger holds, said again on the receiving end. The
-/// one in the migration is what saves the fan-out; this one is what stops a
-/// server ahead of this build waking a device for something it has no sentence
-/// for.
+/// The server's list (`server/src/do/group/notices.ts`), said again on the
+/// receiving end, so a server ahead of this build cannot wake a device for
+/// something it has no sentence for.
 const _worthABanner = {
-  GroupEventKind.entry,
-  GroupEventKind.memberJoined,
-  GroupEventKind.memberLeft,
+  EventKind.entry,
+  EventKind.memberJoined,
+  EventKind.memberLeft,
 };
 
 /// The group route a notification should open.

@@ -8,6 +8,7 @@ part of 'group_patch.dart';
 
 GroupPatch _$GroupPatchFromJson(Map<String, dynamic> json) =>
     $checkedCreate('GroupPatch', json, ($checkedConvert) {
+      $checkKeys(json, requiredKeys: const ['archivedAt']);
       final val = GroupPatch(
         name: $checkedConvert('name', (v) => v as String?),
         simplifyDebts: $checkedConvert('simplifyDebts', (v) => v as bool?),
@@ -23,5 +24,5 @@ Map<String, dynamic> _$GroupPatchToJson(GroupPatch instance) =>
     <String, dynamic>{
       'name': ?instance.name,
       'simplifyDebts': ?instance.simplifyDebts,
-      'archivedAt': ?instance.archivedAt?.toIso8601String(),
+      'archivedAt': instance.archivedAt?.toIso8601String(),
     };

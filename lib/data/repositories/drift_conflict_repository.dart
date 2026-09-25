@@ -1,11 +1,11 @@
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
+import 'package:opensplit_api/opensplit_api.dart' as api;
 
 import '../../domain/models/entry.dart';
 import '../local/database.dart';
-import '../local/entry_json.dart' show entryFromJson;
-import 'mappers.dart';
+import '../local/entry_writer.dart';
 
 /// An edit the server refused, and what the expense says instead.
 ///
@@ -14,22 +14,24 @@ import 'mappers.dart';
 /// decide whether anything is still owed a person's attention.
 class PendingConflict {
   const PendingConflict({
+    required this.entryId,
+    required this.groupId,
     required this.attempted,
     required this.current,
     required this.rejectedAt,
   });
 
-  /// The expense as this device meant to write it.
-  final Entry attempted;
+  final String entryId;
+  final String groupId;
+
+  /// The expense as this device meant it to look.
+  final api.EntrySnapshot attempted;
 
   /// The expense as it stands, which is also what every other device in the
   /// group is showing. Null if it has since been deleted here.
   final Entry? current;
 
   final DateTime rejectedAt;
-
-  String get entryId => attempted.id;
-  String get groupId => attempted.groupId;
 }
 
 /// Edits that did not apply because the expense moved underneath them.
@@ -61,7 +63,7 @@ class DriftConflictRepository {
   }
 
   Future<PendingConflict> _hydrate(EntryConflictRow row) async {
-    final attempted = entryFromJson(
+    final attempted = api.EntrySnapshot.fromJson(
       jsonDecode(row.attempted) as Map<String, dynamic>,
     );
 
@@ -81,8 +83,12 @@ class DriftConflictRepository {
           )..where((t) => t.entryId.equals(row.entryId))).get();
 
     return PendingConflict(
+      entryId: row.entryId,
+      groupId: row.groupId,
       attempted: attempted,
-      current: live?.toDomain(payers: payers, shares: shares),
+      current: live == null
+          ? null
+          : entryFromRows(live, payers: payers, shares: shares),
       rejectedAt: row.rejectedAt,
     );
   }

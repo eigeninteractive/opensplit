@@ -8,6 +8,7 @@ part of 'member_patch.dart';
 
 MemberPatch _$MemberPatchFromJson(Map<String, dynamic> json) =>
     $checkedCreate('MemberPatch', json, ($checkedConvert) {
+      $checkKeys(json, requiredKeys: const ['upiVpa', 'leftAt']);
       final val = MemberPatch(
         displayName: $checkedConvert('displayName', (v) => v as String?),
         upiVpa: $checkedConvert('upiVpa', (v) => v as String?),
@@ -22,6 +23,6 @@ MemberPatch _$MemberPatchFromJson(Map<String, dynamic> json) =>
 Map<String, dynamic> _$MemberPatchToJson(MemberPatch instance) =>
     <String, dynamic>{
       'displayName': ?instance.displayName,
-      'upiVpa': ?instance.upiVpa,
-      'leftAt': ?instance.leftAt?.toIso8601String(),
+      'upiVpa': instance.upiVpa,
+      'leftAt': instance.leftAt?.toIso8601String(),
     };

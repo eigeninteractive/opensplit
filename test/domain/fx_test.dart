@@ -4,7 +4,6 @@ import 'package:opensplit/domain/fx/estimated_total.dart';
 import 'package:opensplit/domain/fx/fx_quote.dart';
 import 'package:opensplit/domain/models/currency.dart';
 import 'package:opensplit/domain/models/entry.dart';
-import 'package:opensplit/domain/split/splitter.dart';
 
 const inr = Currency(code: 'INR', exponent: 2, symbol: '₹', name: 'Rupee');
 const usd = Currency(code: 'USD', exponent: 2, symbol: r'$', name: 'Dollar');

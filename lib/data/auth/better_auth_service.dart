@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:opensplit_api/opensplit_api.dart' as api;
 
 import '../../domain/repositories/auth_service.dart';
+import '../sync/api_client.dart';
 import 'browser_navigator.dart';
 import 'google_sign_in_gateway.dart';
 import 'pending_identity_redirect.dart';
@@ -152,14 +153,11 @@ final class BetterAuthService implements AuthService {
       // belongs to somebody, and signing in would leave this device's ledger
       // behind. The server refuses rather than doing it, because by the time
       // the session has been replaced it is too late to ask.
-      if (_isAlreadyClaimed(error)) {
-        throw IdentityAlreadyInUse(
-          _messageIn(error) ??
-              'That Google account already has an OpenSplit account of its '
-                  'own.',
-        );
+      final failure = ApiFailure.from(error);
+      if (failure.code == api.ErrorCode.identityAlreadyInUse) {
+        throw IdentityAlreadyInUse(failure.message);
       }
-      rethrow;
+      throw failure;
     }
   }
 
@@ -251,11 +249,10 @@ final class BetterAuthService implements AuthService {
     );
 
     return switch (response.data?.flow) {
-      api.EmailFlow.linkPending => EmailFlow.linkPending,
+      EmailFlow.linkPending => EmailFlow.linkPending,
       // Includes the unknown-value sentinel. A flow this build cannot name is
-      // safest read as the one that does not replace anything on its own — the
-      // caller asks for a code either way, and the verify call carries the
-      // server's own answer back rather than this guess.
+      // read as the one that does not replace anything on its own; the verify
+      // call carries the server's own answer back.
       _ => EmailFlow.signInPending,
     };
   }
@@ -271,9 +268,7 @@ final class BetterAuthService implements AuthService {
         emailVerifyRequest: api.EmailVerifyRequest(
           email: email,
           code: code,
-          flow: flow == EmailFlow.linkPending
-              ? api.EmailFlow.linkPending
-              : api.EmailFlow.signInPending,
+          flow: flow,
         ),
       ),
     );
@@ -361,13 +356,7 @@ final class BetterAuthService implements AuthService {
     final body = response.data;
     if (body == null) throw StateError('Identity answered with no body.');
 
-    final account = Account(
-      id: body.account.id,
-      isAnonymous: body.account.isAnonymous,
-      email: body.account.email,
-      displayName: body.account.displayName,
-    );
-
+    final account = body.account;
     await _adopt(account, token: _tokenIn(response) ?? body.token);
 
     // `outcome` rather than a comparison of ids. Which case applies cannot be
@@ -415,22 +404,6 @@ final class BetterAuthService implements AuthService {
     if (kIsWeb) return null;
     final value = response.headers.value('set-auth-token');
     return value == null || value.isEmpty ? null : value;
-  }
-
-  static bool _isAlreadyClaimed(DioException error) =>
-      error.response?.statusCode == 409 &&
-      _codeIn(error) == 'identity_already_in_use';
-
-  static String? _codeIn(DioException error) {
-    final body = error.response?.data;
-    final envelope = body is Map ? body['error'] : null;
-    return envelope is Map ? envelope['code'] as String? : null;
-  }
-
-  static String? _messageIn(DioException error) {
-    final body = error.response?.data;
-    final envelope = body is Map ? body['error'] : null;
-    return envelope is Map ? envelope['message'] as String? : null;
   }
 
   /// The already-claimed refusal, if the callback carried one.

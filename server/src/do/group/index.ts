@@ -9,7 +9,7 @@ import * as schema from "../../db/group/schema";
 import { wakeDevices } from "../../push/fcm";
 // `Group` is the wire shape of a group and also the name of the class below,
 // which wrangler binds by name. The record is the one that gets the alias.
-import type { ChangePage, Entry, EntryInput, GroupCreate, GroupPatch, Group as GroupRecord, Invite, LinkPreview, LinkRevocation, LiveLink, Member, MemberCreate, MemberPatch, MintedLink, Placeholder } from "../../schemas/ledger";
+import type { ChangePage, Entry, EntryInput, GroupCreate, GroupLink, GroupPatch, Group as GroupRecord, Invite, LinkPreview, LinkRevocation, LiveLink, Member, MemberCreate, MemberPatch, Placeholder } from "../../schemas/ledger";
 import { changesSince } from "./changes";
 import { createGroupLink, createInvite, join, liveLink, peek, placeholders, revokeGroupLink } from "./invites";
 import { deleteEntry, restoreEntry, upsertEntry } from "./ledger";
@@ -101,7 +101,7 @@ export class Group extends DurableObject<Env> {
     return result;
   }
 
-  async update(patch: GroupPatch, profileId: string): Promise<Result<GroupRecord>> {
+  async update(patch: Partial<GroupPatch>, profileId: string): Promise<Result<GroupRecord>> {
     const result = attempt(() => this.db.transaction((tx) => updateGroup(tx, patch, this.contextFor(tx, profileId)).value));
     await this.settle();
     return result;
@@ -113,7 +113,7 @@ export class Group extends DurableObject<Env> {
     return result;
   }
 
-  async updateMember(memberId: string, patch: MemberPatch, profileId: string): Promise<Result<Member>> {
+  async updateMember(memberId: string, patch: Partial<MemberPatch>, profileId: string): Promise<Result<Member>> {
     const now = nowIso();
     const result = attempt(() =>
       this.db.transaction((tx) => {
@@ -167,12 +167,12 @@ export class Group extends DurableObject<Env> {
     const now = nowIso();
     const result = attempt(() =>
       this.db.transaction((tx) => {
-        const invite = createInvite(tx, memberId, this.contextFor(tx, profileId, now));
+        const { invite, superseded } = createInvite(tx, memberId, this.contextFor(tx, profileId, now));
         const groupId = this.groupId(tx);
 
         // The index has to forget the links this one replaced, or a URL from a
         // chat history still routes somewhere even though it cannot be spent.
-        for (const old of invite.superseded) stageLinkToken(tx, groupId, old.token, "invite", now, true);
+        for (const old of superseded) stageLinkToken(tx, groupId, old, "invite", now, true);
         stageLinkToken(tx, groupId, invite.token, "invite", now);
         return invite;
       }),
@@ -181,13 +181,13 @@ export class Group extends DurableObject<Env> {
     return result;
   }
 
-  async createLink(profileId: string): Promise<Result<MintedLink>> {
+  async createLink(profileId: string): Promise<Result<GroupLink>> {
     const now = nowIso();
     const result = attempt(() =>
       this.db.transaction((tx) => {
-        const link = createGroupLink(tx, this.contextFor(tx, profileId, now));
+        const { link, superseded } = createGroupLink(tx, this.contextFor(tx, profileId, now));
         const groupId = this.groupId(tx);
-        if (link.superseded) stageLinkToken(tx, groupId, link.superseded, "group_link", now, true);
+        if (superseded) stageLinkToken(tx, groupId, superseded, "group_link", now, true);
         stageLinkToken(tx, groupId, link.token, "group_link", now);
         return link;
       }),

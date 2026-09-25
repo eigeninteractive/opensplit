@@ -1,136 +1,20 @@
-import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:opensplit_api/opensplit_api.dart' as api;
 
+import '../../data/local/database.dart';
 import 'entry_event.dart';
-import 'entry_snapshot.dart';
+import 'kinds.dart';
 
-part 'group_event.freezed.dart';
+export '../../data/local/database.dart' show GroupEventRow;
+export 'kinds.dart' show EventKind;
 
-/// Everything a group can be told happened to it.
-///
-/// One enum rather than one table per kind, because the whole point of the
-/// record is that it is a single ordered account of a group's life. A reader
-/// wants "what happened here, in order", and that question should not need a
-/// join per thing that can happen.
-///
-/// The names are the server's `group_event_kind` values verbatim. They are
-/// parsed off the wire and out of the local column by name, so renaming one
-/// here without renaming it in the migration would go unnoticed until a device
-/// met a row it could not read — which is what [GroupEventKind.parse] exists to
-/// make survivable.
-enum GroupEventKind {
-  /// An expense, as it stood after a change. The only kind whose detail has to
-  /// be worked out by comparing two rows, because the server cannot see an
-  /// expense's before-image at the only moment it could record one.
-  entry,
+/// Typed reads of a stored event's payload, whose shape [GroupEventRow.kind]
+/// decides.
+extension GroupEventPayload on GroupEventRow {
+  /// The expense after-image of an [EventKind.entry] row.
+  api.EntrySnapshot get snapshot => api.EntrySnapshot.fromJson(payload);
 
-  memberAdded,
-  memberJoined,
-  memberLeft,
-  memberRenamed,
-
-  groupRenamed,
-  groupArchived,
-  groupRestored,
-
-  linkCreated,
-  linkRevoked;
-
-  /// `member_joined` and friends, as the database spells them.
-  String get wireName => switch (this) {
-    GroupEventKind.entry => 'entry',
-    GroupEventKind.memberAdded => 'member_added',
-    GroupEventKind.memberJoined => 'member_joined',
-    GroupEventKind.memberLeft => 'member_left',
-    GroupEventKind.memberRenamed => 'member_renamed',
-    GroupEventKind.groupRenamed => 'group_renamed',
-    GroupEventKind.groupArchived => 'group_archived',
-    GroupEventKind.groupRestored => 'group_restored',
-    GroupEventKind.linkCreated => 'link_created',
-    GroupEventKind.linkRevoked => 'link_revoked',
-  };
-
-  /// Null for a name this build has never heard of.
-  ///
-  /// Which is a state worth having rather than a crash. A server that has
-  /// learned a new kind will send it to clients that have not, and the right
-  /// answer for an old build is to leave that line out of the feed — not to
-  /// fail the whole sync page it arrived in and stop the feed updating at all.
-  static GroupEventKind? parse(String wire) {
-    for (final kind in GroupEventKind.values) {
-      if (kind.wireName == wire) return kind;
-    }
-    return null;
-  }
-}
-
-/// One row of the record, exactly as it is stored.
-///
-/// The raw material. [GroupEvent] is what a screen renders, and the two are
-/// deliberately different types: a row is what the server committed, a feed
-/// line is what a reader is told, and for expenses the second takes two of the
-/// first to produce.
-@freezed
-abstract class GroupEventRow with _$GroupEventRow {
-  const factory GroupEventRow({
-    required String id,
-    required String groupId,
-
-    /// The member who did it, not the account: authorship is group-scoped, so
-    /// a placeholder's edits survive them claiming an account.
-    ///
-    /// Null when nobody can be named — which for a join is the ordinary case
-    /// rather than a failure, since the person arriving has no member row until
-    /// the statement that creates it commits.
-    required String? actorId,
-    required DateTime createdAt,
-    required GroupEventKind kind,
-
-    /// The entry, member or invite token this is about. Null for the kinds
-    /// whose subject is the group itself.
-    String? subjectId,
-
-    /// The after-image, in whatever shape [kind] calls for. Parsed by the
-    /// readers below rather than up front, because only one kind's payload is
-    /// ever wanted at a time.
-    required Map<String, Object?> payload,
-
-    /// Where this line falls in the group's history.
-    ///
-    /// `(seq, ordinal)` is a total order, and both halves are needed: one
-    /// change can append more than one line, and those lines share a `seq` and
-    /// a `createdAt` because both are taken once per change.
-    ///
-    /// Null on a provisional row, which by definition has no server version
-    /// and sorts after everything the server has confirmed.
-    int? seq,
-    int? ordinal,
-
-    /// Written by this device and not yet replaced by the server's account of
-    /// the same change. Local only; there is no such column on the server.
-    @Default(false) bool isProvisional,
-  }) = _GroupEventRow;
-
-  const GroupEventRow._();
-
-  /// The expense snapshot inside an `entry` row.
-  ///
-  /// Throws for any other kind, which is a programming error rather than a
-  /// data one: the callers all switch on [kind] first.
-  EntrySnapshot get snapshot => snapshotFromPayload(
-    id: id,
-    entryId: subjectId!,
-    groupId: groupId,
-    actorId: actorId,
-    createdAt: createdAt,
-    payload: payload,
-    isProvisional: isProvisional,
-  );
-
-  /// The name carried by a member or group event.
-  ///
-  /// One getter for two payload shapes, because every caller wants the same
-  /// thing: a member event says `displayName` and a group event says `name`,
-  /// and which one arrived is already decided by [kind].
+  /// The name a member or group event carries: `displayName` for a member,
+  /// `name` for the group.
   String? get name =>
       payload['displayName'] as String? ?? payload['name'] as String?;
 
@@ -223,11 +107,11 @@ final class MemberChanged extends GroupEvent {
   /// One of the `member*` kinds. Narrowed by construction rather than by type:
   /// a separate enum per variant would be four enums that all have to be kept
   /// in step with one migration.
-  final GroupEventKind kind;
+  final EventKind kind;
 
   final String displayName;
 
-  /// Only ever set on [GroupEventKind.memberRenamed], where it is the whole
+  /// Only ever set on [EventKind.memberRenamed], where it is the whole
   /// meaning of the line.
   final String? previousName;
 }
@@ -245,7 +129,7 @@ final class GroupChanged extends GroupEvent {
     this.previousName,
   });
 
-  final GroupEventKind kind;
+  final EventKind kind;
   final String name;
   final String? previousName;
 }
@@ -265,5 +149,5 @@ final class LinkChanged extends GroupEvent {
     required this.kind,
   });
 
-  final GroupEventKind kind;
+  final EventKind kind;
 }

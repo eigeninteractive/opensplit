@@ -159,17 +159,17 @@ Map<String, Object?> _eventToJson(GroupEvent event) {
     ) =>
       {
         ...common,
-        'kind': kind.wireName,
+        'kind': kind.value,
         'member_id': memberId,
         'display_name': displayName,
         'previous_name': ?previousName,
       },
     GroupChanged(:final kind, :final name, :final previousName) => {
       ...common,
-      'kind': kind.wireName,
+      'kind': kind.value,
       'name': name,
       'previous_name': ?previousName,
     },
-    LinkChanged(:final kind) => {...common, 'kind': kind.wireName},
+    LinkChanged(:final kind) => {...common, 'kind': kind.value},
   };
 }

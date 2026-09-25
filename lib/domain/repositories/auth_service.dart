@@ -1,52 +1,11 @@
-/// A signed-in identity.
-///
-/// Named Account rather than the more obvious AuthUser because the backend SDK
-/// exports a class by that name, and an unqualified collision in generated code
-/// resolves to whichever the analyzer reaches first.
-class Account {
-  const Account({
-    required this.id,
-    required this.isAnonymous,
-    this.email,
-    this.displayName,
-  });
+/// A signed-in identity (`api.Account`) and what asking for an email code
+/// started (`api.EmailFlow`): `linkPending` keeps the current user id,
+/// `signInPending` replaces the session.
+library;
 
-  final String id;
+export 'package:opensplit_api/opensplit_api.dart' show Account, EmailFlow;
 
-  /// True for a session created by [AuthService.signInAnonymously].
-  ///
-  /// Anonymous means one device and no recovery: on the web, clearing site data
-  /// destroys the account permanently. The server reads the same flag off the
-  /// session, which is what lets the weekly sweep collect a guest who joined
-  /// no group and never came back.
-  final bool isAnonymous;
-
-  final String? email;
-  final String? displayName;
-}
-
-/// What asking for an email code actually started.
-///
-/// Attaching an address to the session you already have and signing in to an
-/// account that already exists are different endpoints issuing different token
-/// types, and verifying a code against the wrong one fails with a message
-/// about an expired token that has nothing to do with what went wrong. So the
-/// answer travels back with the code rather than being guessed at afterwards.
-///
-/// Two cases and not three: there is no "attached outright, no code needed".
-/// A code is always sent, because without one anybody can claim an address
-/// they do not own.
-enum EmailFlow {
-  /// A code was sent. Verifying it keeps the current user id, so every row on
-  /// this device still belongs to it.
-  linkPending,
-
-  /// The address already had an account, so there was nothing to attach it to
-  /// and a sign-in code was sent instead. Verifying it REPLACES the session,
-  /// and anything recorded anonymously on this device stays with the anonymous
-  /// account that recorded it.
-  signInPending,
-}
+import 'package:opensplit_api/opensplit_api.dart' show Account, EmailFlow;
 
 /// Raised when an identity cannot be attached because somebody already has it.
 ///

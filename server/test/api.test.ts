@@ -239,7 +239,7 @@ describe("the roster over HTTP", () => {
     expect(added.status).toBe(200);
     expect((await json<Member>(added)).profileId).toBeNull();
 
-    const patched = await call(`/api/groups/${id}/members/${memberId}`, ravi, { method: "PATCH", body: JSON.stringify({ upiVpa: "priya@okaxis" }) });
+    const patched = await call(`/api/groups/${id}/members/${memberId}`, ravi, { method: "PATCH", body: JSON.stringify({ upiVpa: "priya@okaxis", leftAt: null }) });
     expect(patched.status).toBe(200);
     expect((await json<Member>(patched)).upiVpa).toBe("priya@okaxis");
   });
@@ -249,17 +249,17 @@ describe("the roster over HTTP", () => {
     const memberId = freshId("api-m");
     await call(`/api/groups/${id}/members`, ravi, { method: "POST", body: JSON.stringify({ id: memberId, displayName: "Priya" }) });
 
-    const response = await call(`/api/groups/${id}/members/${memberId}`, ravi, { method: "PATCH", body: JSON.stringify({ upiVpa: "not a handle" }) });
+    const response = await call(`/api/groups/${id}/members/${memberId}`, ravi, { method: "PATCH", body: JSON.stringify({ upiVpa: "not a handle", leftAt: null }) });
     expect(response.status).toBe(400);
   });
 
   it("renames a group, and refuses a blank name", async () => {
     const { id } = await makeGroup(ravi);
 
-    const renamed = await call(`/api/groups/${id}`, ravi, { method: "PATCH", body: JSON.stringify({ name: "Goa, take two" }) });
+    const renamed = await call(`/api/groups/${id}`, ravi, { method: "PATCH", body: JSON.stringify({ name: "Goa, take two", archivedAt: null }) });
     expect((await json<Group>(renamed)).name).toBe("Goa, take two");
 
-    const blank = await call(`/api/groups/${id}`, ravi, { method: "PATCH", body: JSON.stringify({ name: "   " }) });
+    const blank = await call(`/api/groups/${id}`, ravi, { method: "PATCH", body: JSON.stringify({ name: "   ", archivedAt: null }) });
     expect(blank.status).toBe(400);
   });
 });

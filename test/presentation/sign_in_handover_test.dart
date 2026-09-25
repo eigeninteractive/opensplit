@@ -135,7 +135,12 @@ void main() {
 /// service's does — the session is real before the stream says so, and nothing
 /// may depend on the order of those two.
 class _BecomesGuest implements AuthService {
-  static const _guest = Account(id: 'guest-1', isAnonymous: true);
+  static final _guest = Account(
+    id: 'guest-1',
+    isAnonymous: true,
+    email: null,
+    displayName: null,
+  );
 
   final events = StreamController<Account?>.broadcast();
 

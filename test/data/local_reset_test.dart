@@ -1,10 +1,9 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:opensplit/data/local/database.dart';
+import 'package:opensplit/domain/models/kinds.dart';
 import 'package:opensplit/data/local/local_reset.dart';
 import 'package:opensplit/data/sync/outbox_queue.dart';
-import 'package:opensplit/domain/models/entry.dart';
-import 'package:opensplit/domain/split/splitter.dart';
 import 'package:test/test.dart';
 
 import '../harness.dart';
@@ -103,14 +102,9 @@ void main() {
             groupId: 'g1',
             actorId: const Value('m1'),
             createdAt: now,
-            kind: 'entry',
+            kind: EventKind.entry,
             subjectId: const Value('e1'),
-            payload:
-                '{"description":"Dinner","currency":"INR",'
-                '"amount_minor":40000,"entry_date":"2026-08-21",'
-                '"split_kind":"equal",'
-                '"payers":[{"member_id":"m1","amount_minor":40000}],'
-                '"shares":[{"member_id":"m1","amount_minor":40000}]}',
+            payload: const {'description': 'Dinner', 'amountMinor': 40000},
           ),
         );
     await db

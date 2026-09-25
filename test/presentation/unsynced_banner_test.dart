@@ -7,7 +7,6 @@ import 'package:opensplit/application/providers.dart';
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/sync/outbox_queue.dart';
 import 'package:opensplit/domain/models/entry.dart';
-import 'package:opensplit/domain/split/splitter.dart';
 import 'package:opensplit/presentation/widgets/unsynced_changes_banner.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -89,7 +88,7 @@ Future<void> _deadLetter(
       .insert(
         OutboxCompanion.insert(
           id: OutboxQueue.idFor(OutboxTarget.entry, entryId),
-          operation: OutboxTarget.entry.name,
+          operation: OutboxTarget.entry,
           targetId: entryId,
           createdAt: DateTime.utc(2026, 8, 21),
           lastError: Value(error),

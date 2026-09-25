@@ -2,17 +2,20 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
+import 'package:opensplit_api/opensplit_api.dart' as api;
 
+import '../../domain/calendar_date.dart';
 import '../../domain/models/entry.dart';
+import '../../domain/models/entry_snapshot.dart';
 import '../local/database.dart';
-import '../repositories/mappers.dart';
+import '../local/entry_writer.dart';
+import 'api_client.dart';
 import 'apply_changes.dart';
 import 'outbox_queue.dart';
 import 'remote_ledger_api.dart';
 import 'sync_gate.dart';
 import 'sync_session.dart';
-import '../../domain/models/group.dart';
-import '../local/entry_json.dart' show entryToJson;
+import 'wire.dart';
 
 /// What one sync run did.
 class SyncReport {
@@ -44,21 +47,15 @@ class SyncReport {
       '${error == null ? '' : ', error: $error'})';
 }
 
-/// Moves rows between this device and the server.
+/// Moves rows between this device and the server: push the outbox, then pull
+/// each group's changes after its cursor.
 ///
-/// Push first, then pull. That ordering matters: a local write carries a client
-/// clock, which must never decide a conflict. Pushing first has the server
-/// stamp its own `updated_at`, and the pull that follows brings that
-/// authoritative value straight back, so last-write-wins is always comparing
-/// two server timestamps and never two devices' opinions of the time.
-///
-/// Entries are independent facts with no cross-entry ordering requirement,
-/// which is the whole reason a cursor over `(updated_at, id)` is sufficient and
-/// a CRDT is not needed.
+/// Push goes first so the pull that follows brings back the server's version
+/// of what was just sent, with its sequence number.
 class SyncEngine {
   SyncEngine({
     required this.db,
-    required this.api,
+    required this.remote,
     required this.outbox,
     SyncGate? gate,
     DateTime Function()? clock,
@@ -68,7 +65,7 @@ class SyncEngine {
        _gate = gate ?? createSyncGate(db);
 
   final AppDatabase db;
-  final RemoteLedgerApi api;
+  final RemoteLedgerApi remote;
   final OutboxQueue outbox;
   final DateTime Function() _clock;
   final SyncGate _gate;
@@ -97,34 +94,41 @@ class SyncEngine {
     if (_activeEpoch != null) await _gate.assertHeld();
   }
 
-  /// Every group the server says this account belongs to, including ones this
-  /// device has never seen.
+  /// Every group the server says this account belongs to, plus any local one
+  /// the server has not seen yet (created offline, on its way to being pushed).
   ///
-  /// The local group list is not the answer to "what should I sync?" — it is
-  /// the answer to "what have I synced already", and on a second device or
-  /// after a reinstall those are very different. Local ids are folded in so a
-  /// group created offline, which the server does not know about yet, is not
-  /// dropped from the sweep on its way to being pushed.
-  ///
-  /// Throws if discovery fails. A local-only answer cannot establish that an
-  /// account has no groups. Pending writes are pushed before discovery.
+  /// Throws if the server cannot be asked: the local list alone cannot show
+  /// that an account has no other groups.
   Future<List<String>> discoverGroups() async {
     final local = await db.select(db.groups).get();
-    final ids = <String>{for (final row in local) row.id};
-
-    final remote = await api.bootstrap().timeout(requestTimeout);
-    ids.addAll(remote.groupIds);
-    return ids.toList()..sort();
+    final bootstrap = await remote.bootstrap().timeout(requestTimeout);
+    return {for (final row in local) row.id, ...bootstrap.groupIds}.toList()
+      ..sort();
   }
 
   Future<SyncReport> syncGroup(String groupId) =>
-      _serialized(() => _syncGroup(groupId));
+      _serialized(() => _run(() async => pull(groupId)));
 
-  Future<SyncReport> _syncGroup(String groupId) async {
+  /// Syncs every group in one run: the outbox is drained once, and rates and
+  /// profiles — which are not group-scoped — are pulled once.
+  ///
+  /// A group that cannot be pulled ends the sweep, since the likely cause is
+  /// the connection rather than that group.
+  Future<SyncReport> syncEverything() => _serialized(
+    () => _run(() async {
+      var pulled = 0;
+      for (final groupId in await discoverGroups()) {
+        pulled += await pull(groupId);
+      }
+      return pulled;
+    }),
+  );
+
+  Future<SyncReport> _run(Future<int> Function() pullGroups) async {
     final pushed = await push();
     try {
       await pullShared();
-      final pulled = await pull(groupId);
+      final pulled = await pullGroups();
       return SyncReport(
         pushed: pushed.sent,
         pulled: pulled,
@@ -141,48 +145,10 @@ class SyncEngine {
     }
   }
 
-  /// Syncs every group this account belongs to, in one run.
-  ///
-  /// Here rather than in the caller because the saving is only available here:
-  /// the outbox is drained once for the whole sweep, and rates and profiles —
-  /// which are not group-scoped at all — are pulled once rather than once per
-  /// group. Driven from outside, this was N pushes and 2N requests for
-  /// reference data to sync N groups.
-  ///
-  /// One report for the run, not the last group's. Failures pushing are counted
-  /// once; a group that cannot be pulled ends the sweep, since the likely cause
-  /// is the connection rather than that group.
-  Future<SyncReport> syncEverything() => _serialized(_syncEverything);
-
-  Future<SyncReport> _syncEverything() async {
-    final pushed = await push();
-    var pulled = 0;
-    try {
-      await pullShared();
-      for (final groupId in await discoverGroups()) {
-        pulled += await pull(groupId);
-      }
-      return SyncReport(
-        pushed: pushed.sent,
-        pulled: pulled,
-        failed: pushed.failed,
-      );
-    } catch (error, stackTrace) {
-      return SyncReport(
-        pushed: pushed.sent,
-        pulled: pulled,
-        failed: pushed.failed,
-        error: error,
-        stackTrace: stackTrace,
-      );
-    }
-  }
-
   /// Queues every run in this isolate and holds the platform's sync gate.
   ///
-  /// The queue prevents two foreground triggers from racing. The gate closes
-  /// the remaining cross-context hole: an Android background isolate shares no
-  /// Dart memory, while browser tabs can disappear without running cleanup.
+  /// The queue stops two foreground triggers racing; the gate covers what it
+  /// cannot: an Android background isolate, or another browser tab.
   Future<SyncReport> _serialized(Future<SyncReport> Function() operation) {
     final previous = _tail;
     final released = Completer<void>();
@@ -221,119 +187,54 @@ class SyncEngine {
   }
 
   /// Everything a pull needs that is not about one group.
-  ///
-  /// Exchange rates and profiles are app-wide: rates are reference data, and
-  /// the profile feed already scopes itself to you plus your co-members, so one
-  /// request answers for every group at once. Pulling them per group meant a
-  /// person in three of your groups was fetched three times and the rate table
-  /// was swept three times, to no effect after the first.
   Future<void> pullShared() async {
     await pullReferenceData();
     await pullFxRates();
     await pullProfiles();
   }
 
-  /// Currencies and categories, from the server.
+  /// Currencies and categories. Must land before a group can be created,
+  /// because `groups.default_currency` references `currencies`.
   ///
-  /// The only source. The device used to ship a hardcoded copy of both and
-  /// write it at creation, which is a duplicate of server data that had to be
-  /// kept in step by hand -- and it meant a currency added on the server
-  /// reached nobody without an app release.
-  ///
-  /// Which leaves an ordering requirement rather than an optional refresh:
-  /// `groups.default_currency` references `currencies`, so a device that has
-  /// not learned what a currency is cannot create a group. That is why this
-  /// runs first in [pullShared], and why `referenceDataProvider` awaits it
-  /// before the app is usable at all.
-  ///
-  /// Upsert, never delete, and that is the whole of the merge rule. A category
-  /// withdrawn on the server is still on the entries that used it, and
-  /// `entries.category_id` references it; removing the row locally would break
-  /// a foreign key to make a list tidier. Reference data grows.
-  ///
-  /// Failures are swallowed. Everything here is already on the device, this
-  /// runs before the pull that actually matters, and taking the whole sweep
-  /// down because a currency name could not be refreshed would be the tail
-  /// wagging the dog.
+  /// Upsert, never delete: a withdrawn category is still on the entries that
+  /// used it. Failures are swallowed here, where it is a refresh of data the
+  /// device already has; `referenceDataProvider` calls it directly and does
+  /// check, for the first launch.
   Future<void> pullReferenceData() async {
     try {
-      final reference = await api.pullReference();
-
+      final reference = await remote.reference().timeout(requestTimeout);
       await db.batch((batch) {
         for (final currency in reference.currencies) {
           batch.insert(
             db.currencies,
-            CurrenciesCompanion.insert(
-              code: currency.code,
-              exponent: currency.exponent,
-              symbol: Value(currency.symbol),
-              name: currency.name,
-            ),
-            onConflict: DoUpdate(
-              (_) => CurrenciesCompanion.custom(
-                exponent: Constant(currency.exponent),
-                symbol: Constant(currency.symbol),
-                name: Constant(currency.name),
-              ),
-            ),
+            currency.toRow(),
+            onConflict: DoUpdate((_) => currency.toRow()),
           );
         }
         for (final category in reference.categories) {
           batch.insert(
             db.categories,
-            CategoriesCompanion.insert(
-              id: category.id,
-              name: category.name,
-              icon: category.icon,
-            ),
-            onConflict: DoUpdate(
-              (_) => CategoriesCompanion.custom(
-                name: Constant(category.name),
-                icon: Constant(category.icon),
-              ),
-            ),
+            category.toRow(),
+            onConflict: DoUpdate((_) => category.toRow()),
           );
         }
       });
-    } catch (_) {
-      // Swallowed here, where this is a refresh of something the device
-      // already has, and taking a whole sweep down because a currency name
-      // could not be updated would be the tail wagging the dog.
-      //
-      // Not swallowed on the path that matters: `referenceDataProvider` calls
-      // this directly and does look at whether it worked, because there the
-      // device may have nothing at all.
-    }
+    } catch (_) {}
   }
 
   /// Whether this device knows what a currency is yet.
-  Future<bool> hasReferenceData() async {
-    final row = await db
-        .customSelect('select count(*) as n from currencies')
-        .getSingle();
-    return row.read<int>('n') > 0;
-  }
+  Future<bool> hasReferenceData() async =>
+      (await (db.select(db.currencies)..limit(1)).get()).isNotEmpty;
 
-  /// A backstop on [push], not the thing that ends it — see there.
+  /// A backstop on [push], not the thing that ends it.
   static const int _maxPushRounds = 50;
 
   /// Drains the outbox until nothing more is due.
   ///
-  /// A page at a time, because [OutboxQueue.due] answers a bounded one — it
-  /// sorts in memory, so it has to. A single pass therefore drained at most
-  /// that many rows and left the rest for the next sync, and that was not
-  /// merely slow: [pull] runs immediately afterwards, and a row still waiting
-  /// to be pushed carries a *device* clock in `updated_at`, which is what
-  /// [EntryFeed] then compares against the server's. A long offline session
-  /// could have an edit overwritten by the pull that followed the push which
-  /// had not reached it — silently, and without even a dead letter to show for
-  /// it, since the item was never attempted.
-  ///
-  /// Terminating is not an assumption. Every item in a page is either
-  /// completed, which deletes it, or failed, which either sets a future
-  /// `nextAttemptAt` or dead-letters it — and `due` excludes both. So each
-  /// round strictly shrinks what the next one can see. The round cap guards
-  /// only against a queue being refilled from elsewhere as fast as it drains.
+  /// [OutboxQueue.due] answers a bounded page, so this loops. It terminates:
+  /// each item is completed (deleted), backed off, or dead-lettered, and `due`
+  /// excludes all three. The round cap only guards against a queue being
+  /// refilled as fast as it drains.
   Future<({int sent, int failed})> push() async {
     var sent = 0;
     var failed = 0;
@@ -348,34 +249,31 @@ class SyncEngine {
           await _pushOne(item);
           await outbox.complete(item.id, revision: item.revision);
           sent++;
-        } on RemoteRejected catch (e) {
-          switch (e.kind) {
-            // Composed against a version somebody has since changed. Neither a
-            // retry nor a dead letter; see _parkConflict.
-            case RejectionKind.stale:
+        } on ApiFailure catch (e) {
+          switch (e.retry) {
+            case api.Retry.stale:
               await _parkConflict(item);
-            // A rejected invariant or a permission failure will be rejected
-            // exactly the same way next time. Retrying forever would wedge
-            // everything queued behind it, so it is dropped and recorded
-            // instead.
-            case RejectionKind.permanent:
+            case api.Retry.transient:
+              await outbox.fail(item.id, e.message, revision: item.revision);
+              return (sent: sent, failed: failed + 1);
+            // Refused identically next time; retrying would wedge everything
+            // queued behind it. A retry kind this build does not know is
+            // treated the same way.
+            case api.Retry.permanent:
+            case api.Retry.unknownDefaultOpenApi:
               await outbox.fail(
                 item.id,
                 e.message,
                 permanent: true,
                 revision: item.revision,
               );
-            case RejectionKind.transient:
-              await outbox.fail(item.id, e.message, revision: item.revision);
-              return (sent: sent, failed: failed + 1);
           }
           failed++;
         } catch (e) {
           await outbox.fail(item.id, '$e', revision: item.revision);
-          failed++;
-          // A connection failure affects the entire batch. Do not spend one
-          // timeout per queued row while an offline device keeps editing.
-          return (sent: sent, failed: failed);
+          // A connection failure affects the whole batch; do not spend one
+          // timeout per queued row.
+          return (sent: sent, failed: failed + 1);
         }
       }
     }
@@ -383,74 +281,60 @@ class SyncEngine {
     return (sent: sent, failed: failed);
   }
 
-  /// Takes a refused edit out of the queue and parks it for a person.
+  /// Takes an edit the server refused as stale out of the queue and parks it
+  /// for a person, then rewinds the group's cursor to the edit's base.
   ///
-  /// Three things happen, and the order of the middle one is the point.
-  ///
-  /// The intention is stashed whole, because it is the only copy: the local
-  /// row is about to become the server's. Then the row's version marker is
-  /// wound back to the base it was composed against, which is what lets the
-  /// pull immediately afterwards apply the server's version over the top --
-  /// without it, [EntryFeed]'s last-write-wins guard sees a local clock newer
-  /// than the server's, keeps this device's rejected copy, and leaves the group
-  /// permanently split over one expense. And the item leaves the queue, because
-  /// resending it is refused identically forever.
-  ///
-  /// The ledger converges and the intention waits. The other direction --
-  /// holding this device's version until somebody decides -- would leave these
-  /// balances disagreeing with everybody else's for as long as nobody noticed,
-  /// which is the failure this whole design exists to make impossible.
+  /// The rewind is what makes the ledger converge. While the edit was queued,
+  /// a pull skipped the server's newer version of this entry and moved the
+  /// cursor past it; reading from the base again delivers it now that the row
+  /// is no longer dirty. Re-applying the rows in between is idempotent.
   Future<void> _parkConflict(OutboxRow item) async {
     await db.transaction(() async {
       if (!await outbox.isCurrent(item)) return;
-      final loaded = await _loadEntry(item.targetId);
-      if (loaded == null) return;
+      final entry = await _loadEntry(item.targetId);
+      if (entry == null) return;
+
       await db
           .into(db.entryConflicts)
           .insertOnConflictUpdate(
             EntryConflictsCompanion.insert(
-              entryId: loaded.id,
-              groupId: loaded.groupId,
-              attempted: jsonEncode(entryToJson(loaded)),
-              baseSeq: Value(loaded.seq),
+              entryId: entry.id,
+              groupId: entry.groupId,
+              attempted: jsonEncode(snapshotOf(entry).toJson()),
+              baseSeq: Value(entry.seq),
               rejectedAt: _clock(),
             ),
           );
-
+      await _rewindCursor(entry.groupId, to: entry.seq ?? 0);
       await outbox.complete(item.id, revision: item.revision);
     });
   }
 
-  Future<void> _pushOne(OutboxRow item) async {
-    final target = OutboxTarget.values.byName(item.operation);
+  Future<void> _rewindCursor(String groupId, {required int to}) =>
+      (db.update(db.groupCursors)..where(
+            (t) => t.groupId.equals(groupId) & t.seq.isBiggerThanValue(to),
+          ))
+          .write(GroupCursorsCompanion(seq: Value(to)));
 
-    switch (target) {
+  Future<void> _pushOne(OutboxRow item) async {
+    switch (item.operation) {
       case OutboxTarget.entry:
-        // Read the row now rather than trusting a payload captured at queue
-        // time: the entry may have been edited several times since.
+        // Read now, not at queue time: it may have been edited since.
         final entry = await _snapshot(item, () => _loadEntry(item.targetId));
         if (entry == null) return;
 
-        // A row created and deleted before its first successful push has no
-        // remote fact to delete. Completing its outbox item is the whole sync.
-        if (entry.isDeleted && entry.seq == null) return;
+        // Created and deleted before its first push: nothing remote to delete.
+        final base = entry.seq;
+        if (entry.isDeleted && base == null) return;
 
         final stored =
-            await (entry.isDeleted
-                    ? api.deleteEntry(
-                        groupId: entry.groupId,
-                        entryId: entry.id,
-                        baseSeq: entry.seq!,
-                      )
-                    // `entry.seq` travels inside the entry, so the server can
-                    // tell an ordinary edit from one composed against a version
-                    // somebody has since changed.
-                    : api.pushEntry(entry))
+            await (entry.isDeleted && base != null
+                    ? remote.deleteEntry(entry.groupId, entry.id, baseSeq: base)
+                    : remote.upsertEntry(entry.groupId, entry.toInput()))
                 .timeout(requestTimeout);
 
-        // Adopt the server's sequence number. It is both the version this row
-        // is now derived from and the base the next edit will be judged
-        // against, which is why there is one column here and not two.
+        // The server's number is both this row's version and the base the
+        // next edit is judged against.
         await db.transaction(() async {
           await _assertActive();
           await (db.update(db.entries)..where((t) => t.id.equals(stored.id)))
@@ -458,110 +342,103 @@ class SyncEngine {
         });
 
       case OutboxTarget.group:
-        final row = await _snapshot(
+        final group = await _snapshot(
           item,
           () => (db.select(
             db.groups,
           )..where((t) => t.id.equals(item.targetId))).getSingleOrNull(),
         );
-        if (row == null) return;
-        final group = row.toDomain();
+        if (group == null) return;
 
-        // A group the server has never seen is a create, and a create carries
-        // the creator's own member row: gating member writes on membership is
-        // unsatisfiable for the first member, so both land in one call.
-        final created = group.seq == null
-            ? await _createGroup(group).timeout(requestTimeout)
-            : (
-                group: await api.updateGroup(group).timeout(requestTimeout),
-                creatorId: null,
-              );
+        // A group the server has never seen is a create, which carries its
+        // creator's member row in the same change.
+        final creator = group.seq == null ? await _creatorOf(group) : null;
+        final stored =
+            await (creator == null
+                    ? remote.updateGroup(group.id, group.toPatch())
+                    : remote.createGroup(group.toCreate(creator)))
+                .timeout(requestTimeout);
 
         await db.transaction(() async {
           if (!await outbox.isCurrent(item)) return;
-          await (db.update(db.groups)..where((t) => t.id.equals(row.id))).write(
-            GroupsCompanion(seq: Value(created.group.seq)),
-          );
-
-          // The creator's row landed in that same call and at that same
-          // number -- the server stamps both from one change. Saying so here
-          // is what stops the outbox pushing it again as though it were
-          // somebody added afterwards, which would offer it as a placeholder
-          // and blank the very claim that makes this account a member.
-          final creatorId = created.creatorId;
-          if (creatorId != null) {
-            await (db.update(db.members)..where((t) => t.id.equals(creatorId)))
-                .write(MembersCompanion(seq: Value(created.group.seq)));
+          await (db.update(db.groups)..where((t) => t.id.equals(group.id)))
+              .write(GroupsCompanion(seq: Value(stored.seq)));
+          // The creator's row landed at the same number. Recording that stops
+          // it being pushed again as somebody added afterwards.
+          if (creator != null) {
+            await (db.update(db.members)..where((t) => t.id.equals(creator.id)))
+                .write(MembersCompanion(seq: Value(stored.seq)));
           }
         });
 
       case OutboxTarget.member:
-        final row = await _snapshot(
+        final member = await _snapshot(
           item,
           () => (db.select(
             db.members,
           )..where((t) => t.id.equals(item.targetId))).getSingleOrNull(),
         );
-        if (row == null) return;
-        final member = row.toDomain();
+        if (member == null) return;
 
-        // The creator's own member row arrives with the group, so a member the
-        // server has not seen is somebody added afterwards.
-        final storedMember =
+        final stored =
             await (member.seq == null
-                    ? api.addMember(member)
-                    : api.updateMember(member))
+                    ? remote.addMember(member.groupId, member.toCreate())
+                    : remote.updateMember(
+                        member.groupId,
+                        member.id,
+                        member.toPatch(),
+                      ))
                 .timeout(requestTimeout);
 
         await db.transaction(() async {
           if (!await outbox.isCurrent(item)) return;
-          await (db.update(db.members)..where((t) => t.id.equals(row.id)))
-              .write(MembersCompanion(seq: Value(storedMember.seq)));
+          await (db.update(db.members)..where((t) => t.id.equals(member.id)))
+              .write(MembersCompanion(seq: Value(stored.seq)));
         });
 
       case OutboxTarget.profile:
-        // Your own name and payment handle. Only ever your own row: the server
-        // policy allows an update where `id = auth.uid()` and nothing else, so
-        // there is no queued write here that could touch anybody else's.
-        final row = await _snapshot(
+        // Only ever this account's own row; the server refuses any other.
+        final profile = await _snapshot(
           item,
           () => (db.select(
             db.profiles,
           )..where((t) => t.id.equals(item.targetId))).getSingleOrNull(),
         );
-        if (row == null) return;
-        final storedProfile = await api
-            .pushProfile(row.toDomain())
+        if (profile == null) return;
+
+        final stored = await remote
+            .updateProfile(profile.toUpdate())
             .timeout(requestTimeout);
         await db.transaction(() async {
           if (!await outbox.isCurrent(item)) return;
-          await (db.update(
-            db.profiles,
-          )..where((t) => t.id.equals(row.id))).write(
-            ProfilesCompanion(updatedAt: Value(storedProfile.updatedAt)),
-          );
+          await (db.update(db.profiles)..where((t) => t.id.equals(profile.id)))
+              .write(ProfilesCompanion(updatedAt: Value(stored.updatedAt)));
         });
     }
   }
 
-  /// Applies one group's changes: its row, its members, its entries and its
-  /// activity.
+  /// The group's creator, named by `createdBy` rather than guessed: a group
+  /// created offline may already hold the whole trip.
+  Future<Member> _creatorOf(Group group) async {
+    final creatorId = group.createdBy;
+    final creator = creatorId == null
+        ? null
+        : await (db.select(
+            db.members,
+          )..where((t) => t.id.equals(creatorId))).getSingleOrNull();
+    if (creator == null) {
+      throw const ApiFailure(
+        'A group cannot be created without its first member.',
+        retry: api.Retry.permanent,
+      );
+    }
+    return creator;
+  }
+
+  /// Applies one group's changes after its cursor, page by page.
   ///
-  /// The order is the local foreign key graph, and it is not optional. Members
-  /// reference the group; an entry's payers and shares reference members; a
-  /// snapshot references the entry it describes and the member who made the
-  /// change. Pulling activity before the expenses it talks about fails the
-  /// constraint and takes the whole sync down with it -- which, on a device
-  /// seeing the group for the first time, is every row there is.
-  ///
-  /// Rates and ordinary profile changes remain in [pullShared], which callers
-  /// run once per sync. The member pass does hydrate profiles referenced by a
-  /// newly changed member row, because an invite claim can make an older
-  /// profile newly visible behind the account-wide profile cursor.
-  ///
-  /// Counts entries only. It is the number the callers report and the only one
-  /// that means "something happened to the money"; a renamed group is a change
-  /// nobody needs counted.
+  /// Counts entries only: the number that means "something happened to the
+  /// money".
   Future<int> pull(String groupId) async {
     var cursor = await _readGroupCursor(groupId);
     var applied = 0;
@@ -569,13 +446,10 @@ class SyncEngine {
 
     while (true) {
       await _assertActive();
-      final page = await api
-          .pullChanges(groupId: groupId, since: cursor, limit: pageSize)
+      final page = await remote
+          .changes(groupId, since: cursor, limit: pageSize)
           .timeout(requestTimeout);
 
-      // `applyGroupChanges` writes the rows and advances the cursor in one
-      // transaction. They have to commit together: a crash between them either
-      // re-reads a page or, far worse, skips one.
       applied += await applyGroupChanges(db, page, now: _clock());
       claimed.addAll(page.members.map((member) => member.profileId).nonNulls);
 
@@ -589,17 +463,12 @@ class SyncEngine {
     return applied;
   }
 
-  /// Fetches profiles that became visible because a member row just changed.
+  /// Fetches profiles that became visible because a member row changed.
   ///
-  /// The gap no cursor can close. Somebody claims a placeholder with an account
-  /// they named two years ago: their profile row is older than this device's
-  /// profile cursor, so the incremental feed has already walked past it and
-  /// never will again. Their member row changing is the only signal that it
-  /// became readable at all, so the ids are asked for outright.
-  ///
-  /// Narrowed to profiles this device does not hold, which is what keeps it
-  /// from being a request on every sync of every group: an ordinary rename is
-  /// already the profile feed's job.
+  /// Somebody claiming a placeholder may have an account named long ago, so
+  /// their profile is older than this device's profile cursor and the feed
+  /// will never mention it. Only profiles this device does not hold are
+  /// asked for.
   Future<void> _hydrateProfiles(Set<String> profileIds) async {
     if (profileIds.isEmpty) return;
 
@@ -610,14 +479,14 @@ class SyncEngine {
     if (missing.isEmpty) return;
 
     await _assertActive();
-    final rows = await api
-        .pullProfilesByIds(missing.toList()..sort())
+    final list = await remote
+        .profilesByIds(missing.toList()..sort())
         .timeout(requestTimeout);
-    if (rows.isEmpty) return;
+    if (list.profiles.isEmpty) return;
 
     await db.transaction(() async {
       await _assertActive();
-      await applyProfiles(db, rows);
+      await applyProfiles(db, list.profiles);
     });
   }
 
@@ -628,12 +497,7 @@ class SyncEngine {
     return row?.seq ?? 0;
   }
 
-  /// The one feed still cursored on a timestamp, and honestly so.
-  ///
-  /// Profiles live in a database several requests write concurrently, so there
-  /// is nothing there that can hand out a sequence number. The keyset pair
-  /// survives here and nowhere else — rows sharing a timestamp are otherwise
-  /// either skipped or re-read forever.
+  /// The profile feed, on a `(timestamp, id)` keyset cursor.
   Future<int> pullProfiles() async {
     const feed = 'profiles';
     var (cursor, cursorId) = await _readFeedCursor(feed);
@@ -641,16 +505,21 @@ class SyncEngine {
 
     while (true) {
       await _assertActive();
-      final page = await api
-          .pullProfiles(since: cursor, sinceId: cursorId, limit: pageSize)
+      final resumable = cursor != null && cursorId != null;
+      final page = await remote
+          .profileChanges(
+            since: resumable ? cursor : null,
+            sinceId: resumable ? cursorId : null,
+            limit: pageSize,
+          )
           .timeout(requestTimeout);
-      if (page.rows.isEmpty) break;
+      if (page.profiles.isEmpty) break;
 
       final at = page.cursor;
       final id = page.cursorId;
       applied += await db.transaction(() async {
         await _assertActive();
-        final count = await applyProfiles(db, page.rows);
+        final count = await applyProfiles(db, page.profiles);
         if (at != null && id != null) await _writeFeedCursor(feed, at, id);
         return count;
       });
@@ -665,58 +534,44 @@ class SyncEngine {
 
   /// Mirrors published exchange rates onto the device.
   ///
-  /// Rates are immutable once published, so the ordinary ask is a high-water
-  /// mark rather than a cursor: everything on or after the newest date held,
-  /// which on a settled device returns nothing. A device with no rates at all
-  /// takes a bounded window instead, because a first sync should not pull years
-  /// of reference data to convert a dinner.
+  /// Rates never change once published, so the ordinary ask is everything on
+  /// or after the newest date held. It also reaches back once to the oldest
+  /// expense that has no rate, because a backfill produces a date *older* than
+  /// the newest held, which a high-water mark alone would never ask for.
+  /// [_fxFloor] records how far back it has asked, so a date no provider
+  /// answers widens the window once, not on every sync.
   ///
-  /// ## Why there is a second, backwards direction
-  ///
-  /// A high-water mark alone cannot deliver a rate for a day *older* than the
-  /// ones already held — and that is precisely what a backfill produces. The
-  /// app asks the server for a day it has never needed exactly when somebody
-  /// backdates an expense past the window, the server fetches it, and a pull
-  /// anchored to the newest date held would then never mention it. The request
-  /// would be decorative: fired, answered, and unreachable.
-  ///
-  /// So the ask reaches back to the oldest expense this device holds no rate
-  /// for, and [_fxFloor] records how far back it has already been so a date no
-  /// provider will ever answer widens the window once rather than on every
-  /// sync forever.
-  ///
-  /// Failure is swallowed. A missing rate costs an estimate, never a balance,
-  /// and it must not be able to fail a sync that carries actual money.
+  /// Failure is swallowed: a missing rate costs an estimate, never a balance.
   Future<int> pullFxRates() async {
     try {
       final newest = await _newestRateDate();
       final since =
           await _oldestRateNeeded(newest) ??
           newest ??
-          _isoDay(_clock().toUtc().subtract(_rateWindow));
+          calendarDate(_clock().toUtc().subtract(_rateWindow));
 
-      final rates = await api.pullFxRates(since: since).timeout(requestTimeout);
+      final page = await remote.fxRates(since: since).timeout(requestTimeout);
       await _writeFxFloor(since);
-      if (rates.isEmpty) return 0;
+      if (page.rates.isEmpty) return 0;
 
       await db.transaction(() async {
         await _assertActive();
         await db.batch((batch) {
-          for (final rate in rates) {
+          for (final rate in page.rates) {
             batch.insert(
               db.fxRates,
               FxRatesCompanion.insert(
                 asOf: rate.asOf,
                 currency: rate.currency,
-                rate: rate.rate,
-                source: rate.source,
+                rate: rate.rate.toDouble(),
+                source: rate.source_,
               ),
               mode: InsertMode.insertOrReplace,
             );
           }
         });
       });
-      return rates.length;
+      return page.rates.length;
     } catch (_) {
       return 0;
     }
@@ -725,21 +580,14 @@ class SyncEngine {
   /// How far back a device with no rates at all reaches on its first sync.
   static const _rateWindow = Duration(days: 400);
 
-  /// The feed whose "cursor" runs backwards. See [pullFxRates].
+  /// The [FeedCursors] row recording how far back rates have been asked for.
   static const _fxFloor = 'fx:floor';
 
-  /// The oldest day this device needs a rate for and has not already asked for.
-  ///
-  /// Null in the steady state, which is the point: the wide ask happens on the
-  /// sync after somebody backdates an expense, and not again. The floor is what
-  /// makes that true even when the answer is empty — a date before any
-  /// provider's history would otherwise widen the window on every sync, for
-  /// ever, and each of those is a full page of rates the device already has.
-  ///
-  /// Only entries in a currency that is not the group's own can need one: a
-  /// bill in the group's default currency is never converted.
+  /// The oldest day this device needs a rate for and has not asked about, or
+  /// null in the steady state. Only entries in a currency other than their
+  /// group's need one.
   Future<String?> _oldestRateNeeded(String? newest) async {
-    final floor = (await _readFeedCursor(_fxFloor)).$1;
+    final floor = (await _readFeedCursor(_fxFloor)).$2;
 
     final query =
         db.select(db.entries).join([
@@ -752,26 +600,23 @@ class SyncEngine {
           ..orderBy([OrderingTerm.asc(db.entries.entryDate)])
           ..limit(1);
 
-    final row = await query.getSingleOrNull();
-    final oldest = row?.readTable(db.entries).entryDate;
+    final oldest = (await query.getSingleOrNull())
+        ?.readTable(db.entries)
+        .entryDate;
     if (oldest == null) return null;
 
-    final wanted = _isoDay(oldest.toUtc());
+    final wanted = calendarDate(oldest);
     if (newest != null && wanted.compareTo(newest) >= 0) return null;
-    if (floor != null && wanted.compareTo(_isoDay(floor.toUtc())) >= 0) {
-      return null;
-    }
+    if (floor != null && wanted.compareTo(floor) >= 0) return null;
     return wanted;
   }
 
-  /// Records how far back this device has reached, whatever came back.
-  ///
-  /// Written on an empty answer too — that is the whole reason it exists.
+  /// Records how far back this device has asked, even when the answer was
+  /// empty — that is the reason it exists.
   Future<void> _writeFxFloor(String since) async {
-    final at = DateTime.parse('${since}T00:00:00Z');
-    final held = (await _readFeedCursor(_fxFloor)).$1;
-    if (held != null && !at.isBefore(held)) return;
-    await _writeFeedCursor(_fxFloor, at, since);
+    final held = (await _readFeedCursor(_fxFloor)).$2;
+    if (held != null && held.compareTo(since) <= 0) return;
+    await _writeFeedCursor(_fxFloor, parseCalendarDate(since), since);
   }
 
   Future<String?> _newestRateDate() async {
@@ -783,34 +628,25 @@ class SyncEngine {
     return row?.asOf;
   }
 
-  static String _isoDay(DateTime date) =>
-      '${date.year.toString().padLeft(4, '0')}-'
-      '${date.month.toString().padLeft(2, '0')}-'
-      '${date.day.toString().padLeft(2, '0')}';
-
-  /// The entry, whole.
-  ///
-  /// It used to return the base version alongside, because the row carried a
-  /// device clock in `updated_at` and the base in a second column. A sequence
-  /// number is only ever the server's, so the row's own `seq` is the base.
   Future<Entry?> _loadEntry(String entryId) async {
     final row = await (db.select(
       db.entries,
     )..where((t) => t.id.equals(entryId))).getSingleOrNull();
     if (row == null) return null;
 
-    final payers = await (db.select(
-      db.entryPayers,
-    )..where((t) => t.entryId.equals(entryId))).get();
-    final shares = await (db.select(
-      db.entryShares,
-    )..where((t) => t.entryId.equals(entryId))).get();
-
-    return row.toDomain(payers: payers, shares: shares);
+    return entryFromRows(
+      row,
+      payers: await (db.select(
+        db.entryPayers,
+      )..where((t) => t.entryId.equals(entryId))).get(),
+      shares: await (db.select(
+        db.entryShares,
+      )..where((t) => t.entryId.equals(entryId))).get(),
+    );
   }
 
-  /// Captures a consistent row and queue revision without holding a database
-  /// transaction open during the network request.
+  /// Reads a row and checks the queue revision in one transaction, without
+  /// holding it open across the network request.
   Future<T?> _snapshot<T>(OutboxRow item, Future<T?> Function() read) =>
       db.transaction(() async {
         await _assertActive();
@@ -818,7 +654,6 @@ class SyncEngine {
         return read();
       });
 
-  /// Where a timestamp-cursored feed stands. See [_drainProfiles].
   Future<(DateTime?, String?)> _readFeedCursor(String feed) async {
     final row = await (db.select(
       db.feedCursors,
@@ -837,34 +672,5 @@ class SyncEngine {
             lastSyncedAt: Value(_clock()),
           ),
         );
-  }
-
-  /// A group's creation, which carries the creator's own member row.
-  ///
-  /// Both in one call, because gating member writes on membership is
-  /// unsatisfiable for the first member. The old backend needed a nullable
-  /// `created_by` on the group to escape that, and a trigger to stop anybody
-  /// writing themselves into it.
-  Future<({Group group, String creatorId})> _createGroup(Group group) async {
-    // Named, not guessed. Picking the first member without a sequence number
-    // happened to be the creator only while the group had exactly one member,
-    // and a group created offline with the whole trip typed in is the ordinary
-    // case -- there the creator would have been whoever the query returned.
-    final creatorId = group.createdBy;
-    final creator = creatorId == null
-        ? null
-        : await (db.select(
-            db.members,
-          )..where((t) => t.id.equals(creatorId))).getSingleOrNull();
-
-    if (creator == null) {
-      throw const RemoteRejected(
-        'A group cannot be created without its first member.',
-        kind: RejectionKind.permanent,
-      );
-    }
-
-    final stored = await api.createGroup(group, creator: creator.toDomain());
-    return (group: stored, creatorId: creator.id);
   }
 }

@@ -3,9 +3,10 @@ import 'package:drift/native.dart';
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';
-import 'package:opensplit/data/repositories/mappers.dart';
+import 'package:opensplit/domain/balance/member_balance.dart';
 import 'package:opensplit/domain/balance/balance_fold.dart';
 import 'package:opensplit/domain/entry_draft.dart';
+import 'package:opensplit/domain/models/member.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:test/test.dart';
 
@@ -328,4 +329,13 @@ void main() {
       expect(emissions.last, 1);
     });
   });
+}
+
+extension on List<MemberBalance> {
+  /// This member's balance in [currency], or zero if they are settled.
+  int minorFor(String memberId, String currency) => firstWhere(
+    (balance) => balance.memberId == memberId && balance.currency == currency,
+    orElse: () =>
+        const MemberBalance(memberId: '', currency: '', balanceMinor: 0),
+  ).balanceMinor;
 }

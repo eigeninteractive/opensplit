@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:opensplit_api/opensplit_api.dart' as api;
 
 import '../../application/providers.dart';
-import '../../domain/repositories/invite_api.dart';
+import '../../data/sync/api_client.dart';
+import '../../data/sync/invites.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/identity_choices.dart';
 import '../widgets/page_body.dart';
@@ -34,7 +36,7 @@ class JoinScreen extends ConsumerStatefulWidget {
 }
 
 class _JoinScreenState extends ConsumerState<JoinScreen> {
-  LinkTarget? _target;
+  api.LinkPreview? _preview;
   String? _error;
   bool _loading = true;
   bool _joining = false;
@@ -44,7 +46,7 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
   /// Null until asked for, which is deliberately not until there is a session:
   /// these are other people's names, and the server refuses to list them to
   /// somebody who has not said who they are.
-  List<LinkPlaceholder>? _places;
+  List<api.Placeholder>? _places;
   bool _loadingPlaces = false;
 
   /// The place about to be claimed, or null for "I am not listed".
@@ -70,7 +72,7 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
   }
 
   Future<void> _peek() async {
-    final invites = ref.read(inviteApiProvider);
+    final invites = ref.read(invitesProvider);
     if (invites == null) {
       setState(() {
         _loading = false;
@@ -82,16 +84,16 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
     }
 
     try {
-      final target = await invites.peekLink(widget.token);
+      final preview = await invites.preview(widget.token);
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _target = target;
-        if (target == null) _error = 'This is not a link we recognise.';
+        _preview = preview;
+        if (preview == null) _error = 'This is not a link we recognise.';
       });
       // An open link with a session already in hand can go straight to the
       // question that matters.
-      if (target is GroupLinkTarget) await _loadPlaces();
+      if (preview?.isOpenLink ?? false) await _loadPlaces();
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -104,13 +106,13 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
 
   /// The unclaimed places, once there is somebody to show them to.
   Future<void> _loadPlaces() async {
-    final invites = ref.read(inviteApiProvider);
+    final invites = ref.read(invitesProvider);
     if (invites == null || _places != null || _loadingPlaces) return;
     if (ref.read(accountProvider).value == null) return;
 
     setState(() => _loadingPlaces = true);
     try {
-      final places = await invites.placeholdersFor(widget.token);
+      final places = await invites.placeholders(widget.token);
       if (mounted) setState(() => _places = places);
     } catch (_) {
       // Not fatal, and not worth an error banner in front of the button that
@@ -124,7 +126,7 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
 
   /// Spends the token as whoever holds the session now.
   Future<void> _join() async {
-    final invites = ref.read(inviteApiProvider);
+    final invites = ref.read(invitesProvider);
     if (invites == null) return;
 
     setState(() {
@@ -132,20 +134,19 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
       _error = null;
     });
     try {
-      final member = switch (_target) {
-        GroupLinkTarget() => await invites.joinWithLink(
-          widget.token,
-          memberId: _chosenMemberId,
-          displayName: _name.text.trim().isEmpty ? null : _name.text.trim(),
-        ),
-        // A named invite names the place; there is nothing to choose.
-        _ => await invites.redeem(widget.token),
-      };
+      // A named invite names the place; there is nothing to choose.
+      final joined = (_preview?.isOpenLink ?? false)
+          ? await invites.join(
+              widget.token,
+              memberId: _chosenMemberId,
+              displayName: _name.text.trim().isEmpty ? null : _name.text.trim(),
+            )
+          : await invites.join(widget.token);
       // Pull the group down before showing it, so it is populated on arrival
       // rather than filling in underneath them.
-      await ref.read(syncControllerProvider.notifier).syncGroup(member.groupId);
-      if (mounted) context.go('/g/${member.groupId}');
-    } on InviteRejected catch (e) {
+      await ref.read(syncControllerProvider.notifier).syncGroup(joined.groupId);
+      if (mounted) context.go('/g/${joined.groupId}');
+    } on ApiFailure catch (e) {
       if (mounted) {
         setState(() {
           _joining = false;
@@ -210,26 +211,35 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
       );
     }
 
-    return switch (_target) {
+    return switch (_preview) {
       null => _Dead(message: _error ?? 'Unknown problem.'),
-      MemberInviteTarget(:final preview) => _invitation(theme, preview),
-      GroupLinkTarget(:final preview) => _openLink(theme, preview),
+      final preview when preview.isOpenLink => _openLink(theme, preview),
+      // An invite hands over one named place; one with no name on it is not
+      // an invite this app can show.
+      final api.LinkPreview preview &&
+          api.LinkPreview(:final String memberName) =>
+        _invitation(theme, preview, memberName),
+      _ => const _Dead(message: 'This is not a link we recognise.'),
     };
   }
 
   /// A link naming one place, for one person.
-  Widget _invitation(ThemeData theme, InvitePreview preview) {
+  Widget _invitation(
+    ThemeData theme,
+    api.LinkPreview preview,
+    String memberName,
+  ) {
     if (preview.isRedeemed) {
       return _Dead(
         message:
             'This link has already been used. Links work once, so ask '
-            '${preview.inviterName} to send a new one.',
+            '${preview.inviter} to send a new one.',
       );
     }
     if (preview.isExpired) {
       return _Dead(
         message:
-            'This link has expired. Ask ${preview.inviterName} to send a '
+            'This link has expired. Ask ${preview.inviter} to send a '
             'new one.',
       );
     }
@@ -250,9 +260,9 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
       mainAxisSize: MainAxisSize.min,
       children: [
         BrandHeader(
-          title: '${preview.inviterName} invited you to ${preview.groupName}',
+          title: '${preview.inviter} invited you to ${preview.groupName}',
           subtitle:
-              'You would join as \u201c${preview.memberName}\u201d, alongside '
+              'You would join as \u201c$memberName\u201d, alongside '
               '${preview.memberCount} '
               '${preview.memberCount == 1 ? 'person' : 'people'}.',
         ),
@@ -260,6 +270,7 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
         ..._errorIfAny(theme),
         _Claim(
           preview: preview,
+          memberName: memberName,
           joining: _joining,
           onJoin: _join,
           onSwitchAccount: _switchAccount,
@@ -269,18 +280,17 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
   }
 
   /// A link anybody may use, which is the one posted in a group chat.
-  Widget _openLink(ThemeData theme, GroupLinkPreview preview) {
+  Widget _openLink(ThemeData theme, api.LinkPreview preview) {
     if (preview.isRevoked) {
       return _Dead(
         message:
-            'This link has been turned off. Ask ${preview.inviterName} for a '
+            'This link has been turned off. Ask ${preview.inviter} for a '
             'new one.',
       );
     }
     if (preview.isExpired) {
       return _Dead(
-        message:
-            'This link has expired. Ask ${preview.inviterName} for a new one.',
+        message: 'This link has expired. Ask ${preview.inviter} for a new one.',
       );
     }
     if (preview.isMember) {
@@ -302,7 +312,7 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
       mainAxisSize: MainAxisSize.min,
       children: [
         BrandHeader(
-          title: '${preview.inviterName} invited you to ${preview.groupName}',
+          title: '${preview.inviter} invited you to ${preview.groupName}',
           subtitle:
               '${preview.memberCount} '
               '${preview.memberCount == 1 ? 'person is' : 'people are'} '
@@ -384,7 +394,7 @@ class _ChoosePlace extends StatelessWidget {
     required this.onSwitchAccount,
   });
 
-  final List<LinkPlaceholder>? places;
+  final List<api.Placeholder>? places;
   final bool loading;
   final String? chosen;
   final bool joining;
@@ -411,7 +421,7 @@ class _ChoosePlace extends StatelessWidget {
       );
     }
 
-    final waiting = places ?? const <LinkPlaceholder>[];
+    final waiting = places ?? const <api.Placeholder>[];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -502,12 +512,14 @@ class _ChoosePlace extends StatelessWidget {
 class _Claim extends ConsumerWidget {
   const _Claim({
     required this.preview,
+    required this.memberName,
     required this.joining,
     required this.onJoin,
     required this.onSwitchAccount,
   });
 
-  final InvitePreview preview;
+  final api.LinkPreview preview;
+  final String memberName;
   final bool joining;
   final Future<void> Function() onJoin;
   final Future<void> Function() onSwitchAccount;
@@ -538,7 +550,7 @@ class _Claim extends ConsumerWidget {
       children: [
         FilledButton(
           onPressed: joining ? null : onJoin,
-          child: Text('Join as ${preview.memberName}'),
+          child: Text('Join as $memberName'),
         ),
         const SizedBox(height: 12),
         Text(
@@ -548,7 +560,7 @@ class _Claim extends ConsumerWidget {
           // what a friend happened to type — but it should never happen by
           // accident.
           'You are signed in as $who. Joining puts you in the place '
-          '${preview.inviterName} labelled “${preview.memberName}”.',
+          '${preview.inviter} labelled “$memberName”.',
           textAlign: TextAlign.center,
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,

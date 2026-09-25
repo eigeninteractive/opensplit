@@ -1,5 +1,7 @@
 import { z } from "@hono/zod-openapi";
 
+import { refusalCodes } from "../do/group/refusal";
+
 /**
  * The wire format, declared once.
  *
@@ -25,16 +27,22 @@ import { z } from "@hono/zod-openapi";
  * current state — and only `stale_base` is worth composing again.
  * `not_settled` refuses identically until somebody settles a debt;
  * `already_member` refuses forever. A device reading the number would spin on
- * its outbox, which is the exact failure `PT409` existed to avoid.
+ * its outbox.
  */
 export const RetrySchema = z.enum(["stale", "permanent", "transient"]).openapi("Retry", {
   description: "stale: re-read, re-compose and send again. permanent: this will be refused identically forever; do not retry. transient: back off and try the same request again.",
 });
 
+/**
+ * Every code the Worker can answer with: the group object's refusals, plus the
+ * few the Worker itself gives before an object is involved.
+ */
+export const ErrorCodeSchema = z.enum([...refusalCodes, "no_session", "not_found", "internal", "identity_already_in_use"]).openapi("ErrorCode");
+
 export const ErrorSchema = z
   .object({
     error: z.object({
-      code: z.string().openapi({ example: "stale_base" }),
+      code: ErrorCodeSchema,
       message: z.string(),
       retry: RetrySchema,
     }),
@@ -43,6 +51,7 @@ export const ErrorSchema = z
 
 export type ApiError = z.infer<typeof ErrorSchema>;
 export type Retry = z.infer<typeof RetrySchema>;
+export type ErrorCode = z.infer<typeof ErrorCodeSchema>;
 
 /**
  * Permanent by default, because that is the safe way to be wrong.
@@ -51,7 +60,7 @@ export type Retry = z.infer<typeof RetrySchema>;
  * reported as permanent drops one write and says so. The first is worse, so
  * anything that has not thought about it gets the second.
  */
-export function apiError(code: string, message: string, retry: Retry = "permanent"): ApiError {
+export function apiError(code: ErrorCode, message: string, retry: Retry = "permanent"): ApiError {
   return { error: { code, message, retry } };
 }
 

@@ -1,7 +1,7 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 
 import * as schema from "../../db/group/schema";
-import type { GroupLink, Invite, LinkPreview, Member, MintedLink, Placeholder } from "../../schemas/ledger";
+import type { GroupLink, Invite, LinkPreview, Member, Placeholder } from "../../schemas/ledger";
 import { append } from "./events";
 import { refuse } from "./refusal";
 import { type MemberRow, nextSeq, requireMember, requireMeta, type Tx } from "./store";
@@ -66,7 +66,7 @@ export interface InviteContext {
  * Only for a slot nobody has claimed. Handing out a link to an already-claimed
  * member would be an account takeover with extra steps.
  */
-export function createInvite(tx: Tx, memberId: string, context: InviteContext, ttl = INVITE_TTL): Invite {
+export function createInvite(tx: Tx, memberId: string, context: InviteContext, ttl = INVITE_TTL): { invite: Invite; superseded: string[] } {
   requireMeta(tx);
   const member = requireMember(tx, memberId);
 
@@ -95,7 +95,7 @@ export function createInvite(tx: Tx, memberId: string, context: InviteContext, t
   };
   tx.insert(schema.invites).values(invite).run();
 
-  return { ...invite, redeemedAt: null, redeemedBy: null, superseded };
+  return { invite: { ...invite, redeemedAt: null, redeemedBy: null }, superseded: superseded.map((row) => row.token) };
 }
 
 /**
@@ -107,7 +107,7 @@ export function createInvite(tx: Tx, memberId: string, context: InviteContext, t
  * insert, and the group has two open doors while everybody involved believes
  * there is one.
  */
-export function createGroupLink(tx: Tx, context: InviteContext, ttl = LINK_TTL): MintedLink {
+export function createGroupLink(tx: Tx, context: InviteContext, ttl = LINK_TTL): { link: GroupLink; superseded: string | null } {
   requireMeta(tx);
 
   const previous = tx.select().from(schema.groupLink).get();
@@ -144,7 +144,7 @@ export function createGroupLink(tx: Tx, context: InviteContext, ttl = LINK_TTL):
    * token still routing to a group that can no longer say anything about it is
    * how a dead link comes back as "invalid" rather than as "turned off".
    */
-  return { token: link.token, expiresAt: link.expiresAt, superseded: previous?.token ?? null };
+  return { link: { token: link.token, expiresAt: link.expiresAt }, superseded: previous?.token ?? null };
 }
 
 /**
