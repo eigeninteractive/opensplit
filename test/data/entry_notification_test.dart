@@ -1,6 +1,5 @@
 import 'package:drift/native.dart';
 import 'package:opensplit/application/entry_notification.dart';
-import 'package:opensplit/domain/models/group_event.dart';
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/repositories/drift_activity_repository.dart';
 import 'package:opensplit/data/repositories/drift_currency_repository.dart';
@@ -9,6 +8,7 @@ import 'package:opensplit/data/repositories/drift_group_repository.dart';
 import 'package:opensplit/data/repositories/drift_profile_repository.dart';
 import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/split/splitter.dart';
+import 'package:opensplit_api/opensplit_api.dart' show EventKind;
 import 'package:test/test.dart';
 
 import '../harness.dart';

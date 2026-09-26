@@ -1,8 +1,6 @@
-import 'entry_event.dart';
-import 'kinds.dart';
+import 'package:opensplit_api/opensplit_api.dart' show EventKind;
 
-export '../../data/local/database.dart' show GroupEventRow;
-export 'kinds.dart' show EventKind;
+import 'entry_event.dart';
 
 /// A line in a group's activity feed.
 sealed class GroupEvent {

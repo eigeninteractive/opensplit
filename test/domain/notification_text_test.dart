@@ -1,7 +1,8 @@
-import 'package:opensplit/domain/models/currency.dart';
+import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/domain/models/entry.dart';
 import 'package:opensplit/domain/models/entry_event.dart';
 import 'package:opensplit/domain/notification_text.dart';
+import 'package:opensplit_api/opensplit_api.dart' show EntryKind, SplitKind;
 import 'package:test/test.dart';
 
 const inr = Currency(

@@ -1,15 +1,14 @@
 import 'package:drift/drift.dart';
+import 'package:opensplit_api/opensplit_api.dart' as api;
 import 'package:uuid/uuid.dart';
 
 import '../../domain/activity/snapshot_diff.dart';
 import '../../domain/entry_draft.dart';
 import '../../domain/models/entry.dart';
-import 'package:opensplit_api/opensplit_api.dart' as api;
-
 import '../../domain/models/entry_snapshot.dart';
-import '../../domain/models/group_event.dart';
 import '../local/database.dart';
 import '../local/entry_writer.dart';
+import '../local/tables.dart';
 import '../sync/outbox_queue.dart';
 
 /// Local-first entry storage.
@@ -52,7 +51,7 @@ final class DriftEntryRepository {
               groupId: after.groupId,
               actorId: Value(actorId),
               createdAt: at,
-              kind: EventKind.entry,
+              kind: api.EventKind.entry,
               subjectId: Value(after.id),
               entry: Value(snapshot),
               isProvisional: const Value(true),
@@ -75,7 +74,7 @@ final class DriftEntryRepository {
               ..where(
                 (t) =>
                     t.subjectId.equals(entryId) &
-                    t.kind.equalsValue(EventKind.entry),
+                    t.kind.equalsValue(api.EventKind.entry),
               )
               ..orderBy(newestFirst)
               ..limit(1))

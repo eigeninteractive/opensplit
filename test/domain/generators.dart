@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:opensplit/domain/models/entry.dart';
 import 'package:opensplit/domain/split/allocation.dart';
 import 'package:opensplit/domain/split/splitter.dart';
+import 'package:opensplit_api/opensplit_api.dart' show EntryKind, SplitKind;
 
 /// Deterministic random generators for property-based tests.
 class EntryGen {

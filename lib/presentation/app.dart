@@ -5,10 +5,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:in_app_update/in_app_update.dart';
 
-import '../application/providers.dart';
+import '../application/local_providers.dart';
+import '../application/preferences_providers.dart';
+import '../application/push_providers.dart';
+import '../application/router_provider.dart';
+import '../application/session_providers.dart';
+import '../application/sync_providers.dart';
 import '../data/platform/app_update_service.dart';
-import '../domain/repositories/auth_service.dart';
 import '../data/web/boot_hint.dart';
+import '../domain/auth_service.dart';
 import '../l10n/app_localizations.dart';
 import 'dynamic_colors.dart';
 import 'theme.dart';

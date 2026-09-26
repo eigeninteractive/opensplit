@@ -3,6 +3,7 @@ import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/local/entry_writer.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/domain/models/entry.dart';
+import 'package:opensplit_api/opensplit_api.dart' show EntryKind, SplitKind;
 import 'package:test/test.dart';
 
 import '../harness.dart';

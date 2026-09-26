@@ -1,8 +1,8 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:opensplit/data/local/database.dart';
-import 'package:opensplit/domain/models/kinds.dart';
 import 'package:opensplit/data/local/local_reset.dart';
+import 'package:opensplit/data/local/tables.dart';
 import 'package:opensplit/data/sync/outbox_queue.dart';
 import 'package:opensplit_api/opensplit_api.dart' as api;
 import 'package:test/test.dart';
@@ -58,11 +58,11 @@ void main() {
           EntriesCompanion.insert(
             id: 'e1',
             groupId: 'g1',
-            kind: EntryKind.expense,
+            kind: api.EntryKind.expense,
             currency: 'INR',
             amountMinor: 40000,
             entryDate: now,
-            splitKind: SplitKind.equal,
+            splitKind: api.SplitKind.equal,
             createdBy: 'm1',
             createdAt: now,
           ),
@@ -93,7 +93,7 @@ void main() {
             groupId: 'g1',
             actorId: const Value('m1'),
             createdAt: now,
-            kind: EventKind.groupRenamed,
+            kind: api.EventKind.groupRenamed,
             subjectId: const Value('e1'),
             group: Value(
               api.GroupEventPayload(name: 'Goa', previousName: null),

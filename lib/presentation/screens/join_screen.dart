@@ -3,7 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:opensplit_api/opensplit_api.dart' as api;
 
-import '../../application/providers.dart';
+import '../../application/backend_providers.dart';
+import '../../application/ledger_providers.dart';
+import '../../application/session_providers.dart';
+import '../../application/sync_providers.dart';
 import '../../data/sync/api_client.dart';
 import '../../data/sync/invites.dart';
 import '../widgets/brand_mark.dart';

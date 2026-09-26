@@ -2,9 +2,12 @@ import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:opensplit/application/providers.dart';
+import 'package:opensplit/application/ledger_providers.dart';
+import 'package:opensplit/application/local_providers.dart';
+import 'package:opensplit/application/preferences_providers.dart';
+import 'package:opensplit/application/session_providers.dart';
 import 'package:opensplit/data/local/database.dart';
-import 'package:opensplit/domain/models/entry.dart';
+import 'package:opensplit_api/opensplit_api.dart' show EntryKind, SplitKind;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../harness.dart';

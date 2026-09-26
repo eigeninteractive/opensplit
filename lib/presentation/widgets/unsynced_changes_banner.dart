@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../application/providers.dart';
+import '../../application/local_providers.dart';
+import '../../application/sync_providers.dart';
 import '../../data/sync/outbox_queue.dart';
 
 /// Says out loud that something recorded on this device never reached anyone.

@@ -1,7 +1,6 @@
-import '../models/kinds.dart';
-import 'allocation.dart';
+import 'package:opensplit_api/opensplit_api.dart' show SplitKind;
 
-export '../models/kinds.dart' show SplitKind;
+import 'allocation.dart';
 
 /// A share after resolution: what this member owes, plus the rule that produced
 /// it.

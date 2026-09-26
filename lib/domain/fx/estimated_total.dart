@@ -1,6 +1,6 @@
 import 'dart:collection';
 
-import '../models/currency.dart';
+import '../../data/local/database.dart';
 import '../models/entry.dart';
 import 'convert.dart';
 

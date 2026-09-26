@@ -4,10 +4,14 @@ import 'package:drift/native.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:opensplit/application/providers.dart';
+import 'package:opensplit/application/backend_providers.dart';
+import 'package:opensplit/application/local_providers.dart';
+import 'package:opensplit/application/preferences_providers.dart';
+import 'package:opensplit/application/session_providers.dart';
 import 'package:opensplit/data/local/database.dart';
-import 'package:opensplit/domain/repositories/auth_service.dart';
+import 'package:opensplit/domain/auth_service.dart';
 import 'package:opensplit/presentation/app.dart';
+import 'package:opensplit_api/opensplit_api.dart' show Account;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../harness.dart';

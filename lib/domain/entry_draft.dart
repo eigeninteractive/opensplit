@@ -1,3 +1,5 @@
+import 'package:opensplit_api/opensplit_api.dart' show EntryKind;
+
 import 'calendar_date.dart';
 import 'models/entry.dart';
 import 'split/splitter.dart';

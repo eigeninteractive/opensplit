@@ -3,8 +3,6 @@
 /// `signInPending` replaces the session.
 library;
 
-export 'package:opensplit_api/opensplit_api.dart' show Account, EmailFlow;
-
 import 'package:opensplit_api/opensplit_api.dart' show Account, EmailFlow;
 
 /// Raised when an identity cannot be attached because somebody already has it.

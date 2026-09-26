@@ -1,12 +1,12 @@
 import 'dart:convert';
 
+import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/domain/export/json_export.dart';
 import 'package:opensplit/domain/models/entry.dart';
 import 'package:opensplit/domain/models/entry_event.dart';
 import 'package:opensplit/domain/models/group_event.dart';
-import 'package:opensplit/domain/models/group.dart';
-import 'package:opensplit/domain/models/member.dart';
-import 'package:opensplit/domain/models/profile.dart';
+import 'package:opensplit_api/opensplit_api.dart'
+    show EntryKind, EventKind, SplitKind;
 import 'package:test/test.dart';
 
 void main() {

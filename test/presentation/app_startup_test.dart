@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:opensplit/application/providers.dart';
+import 'package:opensplit/application/preferences_providers.dart';
 import 'package:opensplit/presentation/app.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

@@ -1,9 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:opensplit_api/opensplit_api.dart' show Account;
 import 'package:shared_preferences/shared_preferences.dart';
-
-import '../../domain/repositories/auth_service.dart';
 
 /// The session as it survives a restart: a cache of the server's last answer,
 /// readable synchronously so a signed-in launch never flashes the welcome

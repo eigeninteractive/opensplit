@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../application/providers.dart';
+import '../../application/sync_providers.dart';
 
 /// Pull down to sync, on any scrollable in the app.
 class PullToSync extends ConsumerWidget {

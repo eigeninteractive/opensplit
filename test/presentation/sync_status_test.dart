@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:opensplit/application/providers.dart';
+import 'package:opensplit/application/sync_coordinator.dart';
+import 'package:opensplit/application/sync_providers.dart';
 import 'package:opensplit/data/sync/sync_engine.dart';
 import 'package:opensplit/presentation/widgets/sync_status_notice.dart';
 

@@ -5,7 +5,9 @@ import 'package:opensplit_api/opensplit_api.dart' as api;
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../../application/providers.dart';
+import '../../application/backend_providers.dart';
+import '../../application/ledger_providers.dart';
+import '../../application/sync_providers.dart';
 import '../../config.dart';
 import '../../data/sync/api_client.dart';
 import '../../data/sync/invites.dart';

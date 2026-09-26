@@ -1,8 +1,7 @@
+import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/domain/activity/snapshot_diff.dart';
 import 'package:opensplit/domain/calendar_date.dart';
-import 'package:opensplit/domain/models/entry.dart';
 import 'package:opensplit/domain/models/entry_event.dart';
-import 'package:opensplit/domain/models/group_event.dart';
 import 'package:opensplit_api/opensplit_api.dart' as api;
 import 'package:test/test.dart';
 
@@ -22,14 +21,14 @@ void main() {
     Map<String, int> shares = const {'m1': 40000},
     Map<String, int> payers = const {'m1': 40000},
     String? actorId = 'm1',
-    EntryKind kind = EntryKind.expense,
+    api.EntryKind kind = api.EntryKind.expense,
   }) => GroupEventRow(
     id: 'snap-${seq++}',
     subjectId: 'e1',
     groupId: 'g1',
     actorId: actorId,
     createdAt: at,
-    kind: EventKind.entry,
+    kind: api.EventKind.entry,
     isProvisional: false,
     entry: api.EntrySnapshot(
       kind: kind,
@@ -37,7 +36,7 @@ void main() {
       currency: currency,
       amountMinor: amountMinor,
       entryDate: calendarDate(entryDate ?? DateTime.utc(2026, 8, 20)),
-      splitKind: SplitKind.equal,
+      splitKind: api.SplitKind.equal,
       categoryId: categoryId,
       notes: notes,
       deletedAt: deletedAt,

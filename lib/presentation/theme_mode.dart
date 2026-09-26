@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../application/providers.dart';
+import '../application/preferences_providers.dart';
 
 /// Whether the app follows the platform, or a brightness the user picked.
 class ThemeModeController extends Notifier<ThemeMode> {

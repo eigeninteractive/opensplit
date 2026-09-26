@@ -1,11 +1,13 @@
+import 'package:opensplit_api/opensplit_api.dart' show EventKind;
+
 import '../data/repositories/drift_activity_repository.dart';
 import '../data/repositories/drift_currency_repository.dart';
 import '../data/repositories/drift_entry_repository.dart';
 import '../data/repositories/drift_group_repository.dart';
 import '../data/repositories/drift_profile_repository.dart';
 import '../domain/member_identity.dart';
-import '../domain/money_format.dart';
 import '../domain/models/group_event.dart';
+import '../domain/money_format.dart';
 import '../domain/notification_text.dart';
 
 /// Turns an event that has just landed on this device into notification text.

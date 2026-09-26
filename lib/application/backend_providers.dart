@@ -6,11 +6,10 @@ import '../config.dart';
 import '../data/auth/better_auth_service.dart';
 import '../data/auth/google_sign_in_gateway.dart';
 import '../data/auth/session_store.dart';
-import '../data/push/cloudflare_device_token_repository.dart';
+import '../data/push/device_tokens.dart';
 import '../data/sync/api_client.dart';
 import '../data/sync/invites.dart';
-import '../domain/repositories/auth_service.dart';
-import '../domain/repositories/device_token_repository.dart';
+import '../domain/auth_service.dart';
 import 'preferences_providers.dart';
 
 part 'backend_providers.g.dart';
@@ -58,7 +57,7 @@ Invites? invites(Ref ref) {
 }
 
 @Riverpod(keepAlive: true)
-DeviceTokenRepository? deviceTokenRepository(Ref ref) {
+DeviceTokens? deviceTokens(Ref ref) {
   final client = ref.watch(apiClientProvider);
-  return client == null ? null : CloudflareDeviceTokenRepository(client);
+  return client == null ? null : DeviceTokens(client);
 }

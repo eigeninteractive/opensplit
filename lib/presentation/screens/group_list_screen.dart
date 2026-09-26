@@ -3,24 +3,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../widgets/page_body.dart';
-import '../widgets/pull_to_sync.dart';
-import '../../application/providers.dart';
+import '../../application/ledger_providers.dart';
+import '../../application/sync_providers.dart';
+import '../../data/local/database.dart';
 import '../../data/web/boot_hint.dart';
-import '../../domain/models/currency.dart';
-import '../../domain/models/group.dart';
-import '../format.dart';
+import '../../domain/money_format.dart';
 import '../theme.dart';
 import '../widgets/balance_arrow.dart';
 import '../widgets/brand_mark.dart';
+import '../widgets/conflicting_edit_banner.dart';
 import '../widgets/create_group_sheet.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/group_skeleton.dart';
 import '../widgets/link_account_prompt.dart';
-import '../widgets/conflicting_edit_banner.dart';
-import '../widgets/unsynced_changes_banner.dart';
-import '../widgets/sync_status_notice.dart';
+import '../widgets/page_body.dart';
+import '../widgets/pull_to_sync.dart';
 import '../widgets/sync_refresh_button.dart';
+import '../widgets/sync_status_notice.dart';
+import '../widgets/unsynced_changes_banner.dart';
 
 class GroupListScreen extends ConsumerWidget {
   const GroupListScreen({super.key});

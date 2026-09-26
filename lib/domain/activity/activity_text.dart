@@ -1,8 +1,8 @@
 /// Turns a computed diff into something a person can read.
 library;
 
+import '../../data/local/database.dart';
 import '../activity/snapshot_diff.dart';
-import '../models/currency.dart';
 import '../models/entry_event.dart';
 
 /// One rendered line, e.g. "the amount, from ₹400.00 to ₹300.00".

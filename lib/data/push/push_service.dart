@@ -5,7 +5,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:opensplit_api/opensplit_api.dart' show EventKind, PushData;
+import 'package:opensplit_api/opensplit_api.dart'
+    show EventKind, Platform, PushData;
 
 import '../../config.dart';
 import 'background_handler.dart';
@@ -172,7 +173,7 @@ class PushService {
     );
   }
 
-  String get platform => kIsWeb ? 'web' : 'android';
+  Platform get platform => kIsWeb ? Platform.web : Platform.android;
 
   Future<void> dispose() async {
     await _refresh?.cancel();

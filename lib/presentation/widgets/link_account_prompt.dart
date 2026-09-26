@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../application/providers.dart';
+import '../../application/ledger_providers.dart';
+import '../../application/session_providers.dart';
 
 /// Asks the user to attach a real account, once they have something to lose.
 class LinkAccountPrompt extends ConsumerWidget {

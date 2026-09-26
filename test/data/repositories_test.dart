@@ -3,11 +3,11 @@ import 'package:drift/native.dart';
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';
-import 'package:opensplit/domain/balance/member_balance.dart';
 import 'package:opensplit/domain/balance/balance_fold.dart';
+import 'package:opensplit/domain/balance/member_balance.dart';
 import 'package:opensplit/domain/entry_draft.dart';
-import 'package:opensplit/domain/models/member.dart';
 import 'package:opensplit/domain/split/splitter.dart';
+import 'package:opensplit_api/opensplit_api.dart' show SplitKind;
 import 'package:test/test.dart';
 
 import '../harness.dart';

@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../local/database.dart';
+import '../local/tables.dart';
 import '../sync/outbox_queue.dart';
 
 final class DriftProfileRepository {

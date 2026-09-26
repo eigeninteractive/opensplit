@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:opensplit/application/providers.dart';
-import 'package:opensplit/domain/repositories/auth_service.dart';
+import 'package:opensplit/application/session_providers.dart';
+import 'package:opensplit/domain/auth_service.dart';
 import 'package:opensplit/presentation/widgets/account_section.dart';
 import 'package:opensplit/presentation/widgets/identity_choices.dart';
+import 'package:opensplit_api/opensplit_api.dart' show Account, EmailFlow;
 
 final _guest = Account(
   id: 'guest',

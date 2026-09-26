@@ -1,14 +1,15 @@
 import 'dart:async';
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-import 'entry_notification.dart';
+
 import '../data/push/push_service.dart';
 import 'backend_providers.dart';
+import 'entry_notification.dart';
 import 'local_providers.dart';
-import 'session_providers.dart';
-import 'sync_providers.dart';
 import 'preferences_providers.dart';
 import 'router_provider.dart';
+import 'session_providers.dart';
+import 'sync_providers.dart';
 
 part 'push_providers.g.dart';
 
@@ -47,7 +48,7 @@ PushService pushService(Ref ref) {
 
 /// Sends this device's token to the server.
 Future<void> _registerDeviceToken(Ref ref, String token) async {
-  final tokens = ref.read(deviceTokenRepositoryProvider);
+  final tokens = ref.read(deviceTokensProvider);
   final account = ref.read(sessionControllerProvider);
   if (tokens == null ||
       account == null ||
@@ -67,7 +68,7 @@ Future<void> _registerDeviceToken(Ref ref, String token) async {
 Future<void> pushRegistration(Ref ref) async {
   final wanted = ref.watch(notificationPreferenceProvider);
   final account = ref.watch(sessionControllerProvider);
-  final tokens = ref.watch(deviceTokenRepositoryProvider);
+  final tokens = ref.watch(deviceTokensProvider);
   if (!wanted || account == null || tokens == null) return;
 
   try {
@@ -116,7 +117,7 @@ class NotificationPreference extends _$NotificationPreference {
   /// fan-out does not keep paying to wake a device that will ignore it.
   Future<void> disable() async {
     await _remember(false);
-    final tokens = ref.read(deviceTokenRepositoryProvider);
+    final tokens = ref.read(deviceTokensProvider);
     final token = await ref.read(pushServiceProvider).token();
     if (tokens == null || token == null) return;
     try {

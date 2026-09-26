@@ -1,5 +1,6 @@
 import 'package:opensplit_api/opensplit_api.dart' as api;
 
+import '../../data/local/database.dart';
 import '../models/entry_event.dart';
 import '../models/group_event.dart';
 

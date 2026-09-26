@@ -1,4 +1,5 @@
 import 'package:opensplit/data/local/database.dart';
+import 'package:opensplit/data/local/tables.dart';
 import 'package:opensplit/data/repositories/drift_activity_repository.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';

@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../application/providers.dart';
+import '../../application/ledger_providers.dart';
+import '../../application/local_providers.dart';
 import '../../data/repositories/drift_conflict_repository.dart';
 import '../../domain/money_format.dart';
 

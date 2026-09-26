@@ -4,9 +4,11 @@ import 'package:drift/drift.dart';
 import 'package:opensplit_api/opensplit_api.dart' as api;
 
 import '../../domain/calendar_date.dart';
-import '../../domain/models/kinds.dart';
 
 /// The local mirror of the server's ledger, plus the client-only sync state.
+///
+/// The generated row classes (`Group`, `Member`, `Currency`, ...) are the
+/// app's models; their few derived getters are in `database.dart`.
 
 /// Stores a generated wire enum by its wire value.
 class WireEnumConverter<T extends Enum> extends TypeConverter<T, String> {
@@ -16,7 +18,8 @@ class WireEnumConverter<T extends Enum> extends TypeConverter<T, String> {
   final T _unknown;
 
   @override
-  T fromSql(String fromDb) => fromWire(_values, fromDb) ?? _unknown;
+  T fromSql(String fromDb) =>
+      _values.where((value) => '$value' == fromDb).firstOrNull ?? _unknown;
 
   @override
   String toSql(T value) => '$value';
@@ -97,7 +100,10 @@ class GroupEvents extends Table {
 
   DateTimeColumn get createdAt => dateTime()();
   TextColumn get kind => text().map(
-    const WireEnumConverter(EventKind.values, EventKind.unknownDefaultOpenApi),
+    const WireEnumConverter(
+      api.EventKind.values,
+      api.EventKind.unknownDefaultOpenApi,
+    ),
   )();
 
   /// The entry, member or link token this is about; null when it is the group.
@@ -197,7 +203,10 @@ class Entries extends Table {
   TextColumn get groupId =>
       text().references(Groups, #id, onDelete: KeyAction.cascade)();
   TextColumn get kind => text().map(
-    const WireEnumConverter(EntryKind.values, EntryKind.unknownDefaultOpenApi),
+    const WireEnumConverter(
+      api.EntryKind.values,
+      api.EntryKind.unknownDefaultOpenApi,
+    ),
   )();
   TextColumn get description => text().withDefault(const Constant(''))();
   TextColumn get categoryId => text().nullable()();
@@ -216,7 +225,10 @@ class Entries extends Table {
   DateTimeColumn get occurredAt => dateTime().nullable()();
   TextColumn get timeZone => text().nullable()();
   TextColumn get splitKind => text().map(
-    const WireEnumConverter(SplitKind.values, SplitKind.unknownDefaultOpenApi),
+    const WireEnumConverter(
+      api.SplitKind.values,
+      api.SplitKind.unknownDefaultOpenApi,
+    ),
   )();
 
   /// Display-only rate to the group's currency on [entryDate]. Never

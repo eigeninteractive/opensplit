@@ -1,4 +1,5 @@
-import '../models/currency.dart';
+import '../../data/local/database.dart';
+import '../money_format.dart';
 import 'fx_quote.dart';
 
 /// Converts [amountMinor] from one currency to another, for display only.

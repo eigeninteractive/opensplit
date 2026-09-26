@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../application/providers.dart';
-import 'notification_invitation.dart';
+import '../../application/backend_providers.dart';
+import '../../application/sync_providers.dart';
 import '../../config.dart';
-import '../../domain/models/member.dart';
+import '../../data/local/database.dart';
 import '../../data/sync/api_client.dart';
 import '../../data/sync/invites.dart';
+import 'notification_invitation.dart';
 
 /// Creates and shows a link that hands over one unclaimed place in a group.
 Future<void> showInviteSheet(

@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../local/database.dart';
+import '../local/tables.dart';
 import 'sync_session.dart';
 
 /// A write the server refused outright, named the way its author would name it.

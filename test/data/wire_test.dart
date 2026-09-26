@@ -5,7 +5,6 @@ import 'package:opensplit/data/repositories/drift_activity_repository.dart';
 import 'package:opensplit/data/sync/wire.dart';
 import 'package:opensplit/domain/calendar_date.dart';
 import 'package:opensplit/domain/models/entry.dart';
-import 'package:opensplit/domain/models/group_event.dart';
 import 'package:opensplit_api/opensplit_api.dart' as api;
 import 'package:test/test.dart';
 
@@ -45,14 +44,14 @@ void main() {
     final input = Entry(
       id: 'e',
       groupId: 'g',
-      kind: EntryKind.expense,
+      kind: api.EntryKind.expense,
       description: 'Snack',
       currency: 'INR',
       amountMinor: 100,
       entryDate: DateTime.utc(2026, 9, 24),
       occurredAt: DateTime.utc(2026, 9, 23, 19, 30),
       timeZone: 'Asia/Kolkata',
-      splitKind: SplitKind.equal,
+      splitKind: api.SplitKind.equal,
       payers: const [EntryPayer(memberId: 'm', amountMinor: 100)],
       shares: const [EntryShare(memberId: 'm', amountMinor: 100)],
       createdBy: 'm',
@@ -102,7 +101,7 @@ void main() {
 
     Future<void> line(
       String id,
-      EventKind kind, {
+      api.EventKind kind, {
       int? seq,
       int? ordinal,
       bool provisional = false,
@@ -126,10 +125,10 @@ void main() {
 
     test('reads in (seq, ordinal) order, not by id', () async {
       // Ids sort the opposite way to the order the change recorded them in.
-      await line('b', EventKind.groupRenamed, seq: 4, ordinal: 0);
-      await line('a', EventKind.groupArchived, seq: 4, ordinal: 1);
-      await line('z', EventKind.groupRenamed, seq: 3, ordinal: 0);
-      await line('p', EventKind.groupRestored, provisional: true);
+      await line('b', api.EventKind.groupRenamed, seq: 4, ordinal: 0);
+      await line('a', api.EventKind.groupArchived, seq: 4, ordinal: 1);
+      await line('z', api.EventKind.groupRenamed, seq: 3, ordinal: 0);
+      await line('p', api.EventKind.groupRestored, provisional: true);
 
       final feed = await DriftActivityRepository(db).watchGroup('g').first;
       expect([for (final event in feed) event.id], ['p', 'a', 'b', 'z']);

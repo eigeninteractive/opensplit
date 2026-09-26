@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../domain/settle/upi.dart';
 import '../local/database.dart';
+import '../local/tables.dart';
 import '../sync/outbox_queue.dart';
 
 /// Local-first group and membership storage.

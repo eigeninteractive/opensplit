@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:opensplit_api/opensplit_api.dart' show EventKind;
 
-import '../../application/providers.dart';
+import '../../application/ledger_providers.dart';
+import '../../application/sync_providers.dart';
+import '../../data/local/database.dart';
 import '../../domain/activity/activity_text.dart';
-import '../../domain/models/currency.dart';
 import '../../domain/models/entry_event.dart';
 import '../../domain/models/group_event.dart';
 import '../navigation.dart';

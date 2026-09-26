@@ -1,7 +1,7 @@
-import 'package:test/test.dart';
+import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/domain/activity/activity_text.dart';
-import 'package:opensplit/domain/models/currency.dart';
 import 'package:opensplit/domain/models/entry_event.dart';
+import 'package:test/test.dart';
 
 void main() {
   const rupee = Currency(code: 'INR', exponent: 2, symbol: '₹', name: 'Rupee');

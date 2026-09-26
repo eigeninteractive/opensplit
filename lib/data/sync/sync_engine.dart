@@ -8,6 +8,7 @@ import '../../domain/models/entry.dart';
 import '../../domain/models/entry_snapshot.dart';
 import '../local/database.dart';
 import '../local/entry_writer.dart';
+import '../local/tables.dart';
 import 'api_client.dart';
 import 'apply_changes.dart';
 import 'outbox_queue.dart';

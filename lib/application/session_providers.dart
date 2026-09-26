@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'package:flutter_riverpod/flutter_riverpod.dart' show Provider;
+import 'package:opensplit_api/opensplit_api.dart' show Account, EmailFlow;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+
 import '../data/local/local_reset.dart';
-import '../domain/repositories/auth_service.dart';
+import '../domain/auth_service.dart';
 import 'backend_providers.dart';
 import 'local_providers.dart';
 import 'sync_providers.dart';

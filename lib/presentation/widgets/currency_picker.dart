@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../application/providers.dart';
+import '../../application/ledger_providers.dart';
 
 /// Picks a currency from the local reference table.
 class CurrencyPicker extends ConsumerWidget {

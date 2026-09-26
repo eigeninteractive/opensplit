@@ -4,7 +4,7 @@ import 'dart:js_interop';
 import 'package:web/web.dart' as web;
 
 import '../local/database.dart';
-import 'sync_gate_contract.dart';
+import 'sync_gate.dart';
 
 /// Creates a gate shared by every OpenSplit tab in this browser profile.
 SyncGate createPlatformSyncGate(AppDatabase _) => BrowserSyncGate();

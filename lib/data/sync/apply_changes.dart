@@ -4,9 +4,9 @@ library;
 import 'package:drift/drift.dart';
 import 'package:opensplit_api/opensplit_api.dart' as api;
 
-import '../../domain/models/kinds.dart';
 import '../local/database.dart';
 import '../local/entry_writer.dart';
+import '../local/tables.dart';
 import 'wire.dart';
 
 /// Rows this device changed and has not managed to push.
@@ -89,7 +89,7 @@ Future<void> _applyEvents(
   // stored as an unreadable line.
   final events = [
     for (final event in page.events)
-      if (event.kind != EventKind.unknownDefaultOpenApi) event,
+      if (event.kind != api.EventKind.unknownDefaultOpenApi) event,
   ];
   if (events.isEmpty) return;
 

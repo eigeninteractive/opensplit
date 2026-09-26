@@ -1,17 +1,14 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+
+import '../data/local/database.dart';
+import '../domain/analytics/analytics_query.dart';
 import '../domain/balance/balance_fold.dart';
 import '../domain/balance/member_balance.dart';
 import '../domain/balance/simplify.dart';
 import '../domain/fx/estimated_total.dart';
 import '../domain/member_identity.dart';
-import '../domain/models/category.dart';
-import '../domain/models/currency.dart';
 import '../domain/models/entry.dart';
-import '../domain/models/group.dart';
 import '../domain/models/group_event.dart';
-import '../domain/models/member.dart';
-import '../domain/models/profile.dart';
-import '../domain/analytics/analytics_query.dart';
 import 'local_providers.dart';
 
 part 'ledger_providers.g.dart';

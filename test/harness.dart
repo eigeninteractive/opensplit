@@ -2,7 +2,10 @@ import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:opensplit/application/providers.dart';
+import 'package:opensplit/application/backend_providers.dart';
+import 'package:opensplit/application/local_providers.dart';
+import 'package:opensplit/application/preferences_providers.dart';
+import 'package:opensplit/application/session_providers.dart';
 import 'package:opensplit/data/local/database.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

@@ -1,7 +1,8 @@
-import 'models/currency.dart';
-import 'models/entry_event.dart';
+import 'package:opensplit_api/opensplit_api.dart' show EntryKind, EventKind;
+
+import '../data/local/database.dart';
 import 'models/entry.dart';
-import 'models/group_event.dart';
+import 'models/entry_event.dart';
 import 'money_format.dart';
 
 /// Builds the text for a local notification about an entry.

@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:opensplit_api/opensplit_api.dart' as api;
 
-import '../../domain/repositories/auth_service.dart';
+import '../../domain/auth_service.dart';
 import '../sync/api_client.dart';
 import 'browser_navigator.dart';
 import 'google_sign_in_gateway.dart';
@@ -35,19 +35,19 @@ final class BetterAuthService implements AuthService {
   final PendingIdentityRedirects pending;
   final void Function(String url) leaveFor;
 
-  Account? _current;
-  final _changes = StreamController<Account?>.broadcast();
+  api.Account? _current;
+  final _changes = StreamController<api.Account?>.broadcast();
 
   api.IdentityApi get _identity => client.getIdentityApi();
 
   @override
-  Account? get currentUser => _current;
+  api.Account? get currentUser => _current;
 
   @override
-  Stream<Account?> authStateChanges() => _changes.stream;
+  Stream<api.Account?> authStateChanges() => _changes.stream;
 
   @override
-  Future<Account> signInAnonymously() async =>
+  Future<api.Account> signInAnonymously() async =>
       (await _settle(await fetch(_identity.signInAsGuest()))).account;
 
   @override
@@ -139,7 +139,7 @@ final class BetterAuthService implements AuthService {
   }
 
   @override
-  Future<EmailFlow> sendEmailCode(String email) async {
+  Future<api.EmailFlow> sendEmailCode(String email) async {
     final response = await fetch(
       _identity.startEmailSignIn(
         emailStartRequest: api.EmailStartRequest(email: email),
@@ -147,16 +147,16 @@ final class BetterAuthService implements AuthService {
     );
     // A flow this build cannot name is read as the one that replaces nothing
     // by itself; verifying reports what actually happened.
-    return response.flow == EmailFlow.linkPending
-        ? EmailFlow.linkPending
-        : EmailFlow.signInPending;
+    return response.flow == api.EmailFlow.linkPending
+        ? api.EmailFlow.linkPending
+        : api.EmailFlow.signInPending;
   }
 
   @override
   Future<IdentityOutcome> verifyEmailCode({
     required String email,
     required String code,
-    required EmailFlow flow,
+    required api.EmailFlow flow,
   }) async => _settle(
     await fetch(
       _identity.verifyEmailCode(
@@ -190,7 +190,7 @@ final class BetterAuthService implements AuthService {
   /// await it): anything but an answer leaves the cached account alone, since
   /// the app renders from the local database either way. An answer overtaken by
   /// a sign-in is dropped, or it would sign that session out.
-  Future<Account?> _revalidate() async {
+  Future<api.Account?> _revalidate() async {
     final asked = _current?.id;
     final api.Session session;
     try {
@@ -207,7 +207,10 @@ final class BetterAuthService implements AuthService {
   }
 
   /// The one place the account changes: stored, set on the client, announced.
-  Future<Account?> _adopt(Account? account, {required String? token}) async {
+  Future<api.Account?> _adopt(
+    api.Account? account, {
+    required String? token,
+  }) async {
     // On the web the session is an HttpOnly cookie; a readable token would
     // undo that, so none is kept.
     final bearer = kIsWeb || account == null ? null : token;

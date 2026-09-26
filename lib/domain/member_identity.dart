@@ -1,5 +1,4 @@
-import 'models/member.dart';
-import 'models/profile.dart';
+import '../data/local/database.dart';
 
 /// Resolves the name shown for a group member.
 String memberDisplayName(Member member, Profile? profile) {

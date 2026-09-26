@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+import 'package:opensplit_api/opensplit_api.dart' show EventKind;
 
 import '../../domain/activity/snapshot_diff.dart';
 import '../../domain/models/group_event.dart';

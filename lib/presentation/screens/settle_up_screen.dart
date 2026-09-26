@@ -3,20 +3,21 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-import '../navigation.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../widgets/page_body.dart';
-import '../../application/providers.dart';
+import '../../application/ledger_providers.dart';
+import '../../application/local_providers.dart';
+import '../../application/preferences_providers.dart';
+import '../../application/sync_providers.dart';
+import '../../data/local/database.dart';
 import '../../domain/calendar_date.dart';
 import '../../domain/entry_draft.dart';
-import '../../domain/models/currency.dart';
-import '../../domain/models/member.dart';
+import '../../domain/money_format.dart';
 import '../../domain/settle/upi.dart';
-import '../format.dart';
+import '../navigation.dart';
 import '../widgets/currency_picker.dart';
+import '../widgets/page_body.dart';
 
 /// Records a payment between two members, optionally handing off to a UPI app
 /// first.

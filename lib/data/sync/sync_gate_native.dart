@@ -4,7 +4,7 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../local/database.dart';
-import 'sync_gate_contract.dart';
+import 'sync_gate.dart';
 
 /// Creates a gate shared by native connections to [database].
 SyncGate createPlatformSyncGate(AppDatabase database) =>

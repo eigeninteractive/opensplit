@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../application/providers.dart';
-import '../../domain/models/profile.dart';
+import '../../application/ledger_providers.dart';
+import '../../application/session_providers.dart';
+import '../../data/local/database.dart';
 import '../../domain/settle/upi.dart';
 import '../feedback.dart';
 import '../widgets/account_section.dart';

@@ -1,4 +1,5 @@
-import '../models/currency.dart';
+import '../../data/local/database.dart';
+import '../money_format.dart';
 
 /// Matches the `upi_vpa_format` check constraint on `profiles`. Kept identical
 /// on purpose: a handle the client accepts must be one the server will store.

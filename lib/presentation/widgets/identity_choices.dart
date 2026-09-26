@@ -3,10 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:opensplit_api/opensplit_api.dart' show EmailFlow;
 
-import '../../application/providers.dart';
+import '../../application/session_providers.dart';
 import '../../data/auth/google_sign_in_gateway.dart';
-import '../../domain/repositories/auth_service.dart';
+import '../../domain/auth_service.dart';
 import '../navigation.dart';
 
 /// The three ways to become somebody, offered together.

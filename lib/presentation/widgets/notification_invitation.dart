@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../application/providers.dart';
+import '../../application/push_providers.dart';
 import '../../config.dart';
 
 /// Offers notifications at the one moment they obviously matter.

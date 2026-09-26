@@ -3,10 +3,14 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:opensplit/application/providers.dart';
+import 'package:opensplit/application/local_providers.dart';
+import 'package:opensplit/application/preferences_providers.dart';
+import 'package:opensplit/application/sync_coordinator.dart';
+import 'package:opensplit/application/sync_providers.dart';
 import 'package:opensplit/data/local/database.dart';
-import 'package:opensplit/domain/models/entry.dart';
+import 'package:opensplit/data/local/tables.dart';
 import 'package:opensplit/presentation/widgets/unsynced_changes_banner.dart';
+import 'package:opensplit_api/opensplit_api.dart' show EntryKind, SplitKind;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../harness.dart';

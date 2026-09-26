@@ -1,8 +1,5 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
-
-import 'kinds.dart';
-
-export 'kinds.dart' show EntryKind, SplitKind;
+import 'package:opensplit_api/opensplit_api.dart' show EntryKind, SplitKind;
 
 part 'entry.freezed.dart';
 

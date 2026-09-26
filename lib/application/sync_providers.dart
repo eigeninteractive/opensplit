@@ -6,8 +6,6 @@ import 'backend_providers.dart';
 import 'local_providers.dart';
 import 'sync_coordinator.dart';
 
-export 'sync_coordinator.dart' show SyncStatus;
-
 part 'sync_providers.g.dart';
 
 @Riverpod(keepAlive: true)

@@ -9,7 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:opensplit/data/auth/better_auth_service.dart';
 import 'package:opensplit/data/auth/session_store.dart';
 import 'package:opensplit/data/local/database.dart';
-import 'package:opensplit/data/push/cloudflare_device_token_repository.dart';
+import 'package:opensplit/data/push/device_tokens.dart';
 import 'package:opensplit/data/repositories/drift_activity_repository.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';
@@ -17,16 +17,16 @@ import 'package:opensplit/data/repositories/drift_profile_repository.dart';
 import 'package:opensplit/data/sync/api_client.dart';
 import 'package:opensplit/data/sync/invites.dart';
 import 'package:opensplit/data/sync/outbox_queue.dart';
-import 'package:opensplit/data/sync/wire.dart';
-import 'package:opensplit_api/opensplit_api.dart' as api;
 import 'package:opensplit/data/sync/sync_engine.dart';
+import 'package:opensplit/data/sync/wire.dart';
+import 'package:opensplit/domain/auth_service.dart';
 import 'package:opensplit/domain/balance/balance_fold.dart';
 import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/models/entry.dart';
 import 'package:opensplit/domain/models/entry_event.dart';
 import 'package:opensplit/domain/models/group_event.dart';
-import 'package:opensplit/domain/repositories/auth_service.dart';
 import 'package:opensplit/domain/split/splitter.dart';
+import 'package:opensplit_api/opensplit_api.dart' as api;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../harness.dart';
@@ -56,8 +56,7 @@ class _Device {
 
   AuthService get account => auth;
   Invites get invites => Invites(client);
-  CloudflareDeviceTokenRepository get devices =>
-      CloudflareDeviceTokenRepository(client);
+  DeviceTokens get devices => DeviceTokens(client);
 
   String get profileId => auth.currentUser!.id;
 }
@@ -497,7 +496,7 @@ void main() {
       final renamed =
           (await DriftActivityRepository(other.db).watchGroup(g.groupId).first)
               .whereType<MemberChanged>()
-              .where((event) => event.kind == EventKind.memberRenamed);
+              .where((event) => event.kind == api.EventKind.memberRenamed);
       expect(renamed.single.displayName, 'Priya S');
       expect(renamed.single.previousName, 'Priya');
     });
@@ -1030,15 +1029,15 @@ void main() {
       if (!backendUp) return;
 
       final token = 'fcm-${DateTime.now().microsecondsSinceEpoch}';
-      await ravi.devices.register(token: token, platform: 'android');
+      await ravi.devices.register(token: token, platform: api.Platform.android);
       // Re-registered on every launch, so it has to be idempotent.
-      await ravi.devices.register(token: token, platform: 'android');
+      await ravi.devices.register(token: token, platform: api.Platform.android);
 
       // A phone that changes hands keeps its registration token, so the claim
       // transfers rather than being refused — otherwise the previous owner's
       // notifications would follow the new one.
       final next = await _Device.guest();
-      await next.devices.register(token: token, platform: 'android');
+      await next.devices.register(token: token, platform: api.Platform.android);
 
       // Which also means signing out on one phone cannot silence another's.
       await ravi.devices.unregister(token);

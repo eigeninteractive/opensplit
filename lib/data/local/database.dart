@@ -1,15 +1,18 @@
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-
-// For the generated part, which shares this library's imports.
+// Named in the generated part, which shares this library's imports.
 import 'package:opensplit_api/opensplit_api.dart'
-    show EntrySnapshot, GroupEventPayload, LinkEventPayload, MemberEventPayload;
+    show
+        EntryKind,
+        EntrySnapshot,
+        EventKind,
+        GroupEventPayload,
+        LinkEventPayload,
+        MemberEventPayload,
+        SplitKind;
 
-import '../../domain/models/kinds.dart';
 import 'open_database.dart';
 import 'tables.dart';
-
-export 'tables.dart';
 
 part 'database.drift.dart';
 
@@ -107,4 +110,15 @@ class AppDatabase extends _$AppDatabase {
       }
     },
   );
+}
+
+extension GroupState on Group {
+  bool get isArchived => archivedAt != null;
+}
+
+extension MemberState on Member {
+  /// Nobody has claimed this place yet.
+  bool get isPlaceholder => profileId == null;
+
+  bool get isActive => leftAt == null;
 }

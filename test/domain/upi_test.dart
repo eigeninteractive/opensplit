@@ -1,4 +1,4 @@
-import 'package:opensplit/domain/models/currency.dart';
+import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/domain/settle/upi.dart';
 import 'package:test/test.dart';
 
