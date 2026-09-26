@@ -69,11 +69,9 @@ dependencies:
   # client. Depending on a package you import is the rule that makes a
   # transitive bump unable to break you silently.
   dio: ^5.10.0
-  # When and where an expense happened: flutter_timezone names this device's
-  # IANA zone (Dart itself only gives abbreviations like "IST"), and timezone
-  # is the IANA database that reads a moment on another place's clock.
+  # Names this device's IANA zone, which an expense records as where it
+  # happened. Dart itself only gives abbreviations like "IST".
   flutter_timezone: ^5.1.0
-  timezone: ^0.11.1
 dev_dependencies:
   args: ^2.7.0
   flutter_test:

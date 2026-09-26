@@ -8,7 +8,6 @@ import 'package:opensplit_api/opensplit_api.dart' as api;
 import '../../application/providers.dart';
 import '../../domain/activity/activity_text.dart';
 import '../../domain/calendar_date.dart';
-import '../../domain/clocks.dart';
 import '../../domain/entry_draft.dart';
 import '../../domain/fx/fx_quote.dart';
 import '../../domain/models/category.dart';
@@ -55,7 +54,8 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
   String? _currencyCode;
   String? _categoryId;
 
-  /// The day it happened, and when on that day if known, read in [_zone].
+  /// The day it happened, and when on that day if known, with the zone it
+  /// happened in. Times are shown and picked on this device's clock.
   ///
   /// A new expense happened now, here: [_zone] is filled in with this
   /// device's zone at save. Picking another day clears the time, which is no
@@ -345,21 +345,10 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
   /// The moment to save. A time with no zone yet (a new expense) is this
   /// device's. Saving never waits to learn which that is: with no zone known
   /// yet, only the day is kept.
-  Moment? _moment() {
+  ({DateTime at, String zone})? _moment() {
     final at = _occurredAt;
-    if (at == null) return null;
-    final zone = _zone ?? ref.read(clocksProvider).value?.device;
-    return zone == null ? null : (at: at, zone: zone);
-  }
-
-  /// [_occurredAt] as the clock read where it happened, and that clock's
-  /// label when it is not this device's.
-  (DateTime, String?)? _shownTime(Clocks? clocks) {
-    final at = _occurredAt;
-    if (at == null) return null;
-    final zone = _zone;
-    if (clocks == null || zone == null) return (at.toLocal(), null);
-    return (clocks.wallClock(at, zone), clocks.foreignLabel(at, zone));
+    final zone = _zone ?? ref.read(deviceZoneProvider).value;
+    return at == null || zone == null ? null : (at: at, zone: zone);
   }
 
   Future<void> _pickDate() async {
@@ -377,29 +366,24 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
     });
   }
 
-  Future<void> _pickTime(Clocks clocks) async {
-    final shown = _shownTime(clocks)?.$1 ?? DateTime.now();
+  /// A time picked on this device's clock happened in this device's zone.
+  Future<void> _pickTime(String device) async {
     final picked = await showTimePicker(
       context: context,
-      initialTime: TimeOfDay.fromDateTime(shown),
+      initialTime: TimeOfDay.fromDateTime(
+        _occurredAt?.toLocal() ?? DateTime.now(),
+      ),
     );
-    if (picked == null) return;
-    final moment = clocks.moment(
-      _date,
-      hour: picked.hour,
-      minute: picked.minute,
-      zone: _zone ?? clocks.device,
-    );
-    if (!mounted) return;
+    if (picked == null || !mounted) return;
     setState(() {
-      if (moment == null) {
-        _error =
-            'This device did not say which time zone it is in, so a time '
-            'cannot be recorded.';
-      } else {
-        _occurredAt = moment.at;
-        _zone = moment.zone;
-      }
+      _occurredAt = DateTime(
+        _date.year,
+        _date.month,
+        _date.day,
+        picked.hour,
+        picked.minute,
+      ).toUtc();
+      _zone = device;
     });
   }
 
@@ -466,7 +450,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
   @override
   Widget build(BuildContext context) {
     final ledger = ref.watch(groupLedgerProvider(widget.groupId));
-    final clocks = ref.watch(clocksProvider).value;
+    final device = ref.watch(deviceZoneProvider).value;
     final currencies = ref.watch(currenciesProvider).value ?? const {};
 
     if (ledger == null) {
@@ -590,8 +574,8 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
               onTap: _pickDate,
             ),
             _TimeRow(
-              shown: _shownTime(clocks),
-              onPick: clocks == null ? null : () => _pickTime(clocks),
+              shown: _occurredAt?.toLocal(),
+              onPick: device == null ? null : () => _pickTime(device),
               onClear: () => setState(() {
                 _occurredAt = null;
                 _zone = null;
@@ -1081,11 +1065,10 @@ class _TimeRow extends StatelessWidget {
     required this.onClear,
   });
 
-  /// The time as the clock read where it happened, and that clock's label
-  /// when it is not this device's. Null when no time is recorded.
-  final (DateTime, String?)? shown;
+  /// On this device's clock. Null when no time is recorded.
+  final DateTime? shown;
 
-  /// Null until this device's clock can be read.
+  /// Null until this device's zone is known.
   final VoidCallback? onPick;
   final VoidCallback onClear;
 
@@ -1101,7 +1084,7 @@ class _TimeRow extends StatelessWidget {
               'Add a time',
               style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
             )
-          : Text([DateFormat.jm().format(shown.$1), ?shown.$2].join(' ')),
+          : Text(DateFormat.jm().format(shown)),
       trailing: shown == null
           ? null
           : IconButton(

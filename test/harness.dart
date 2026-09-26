@@ -4,7 +4,6 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:opensplit/application/providers.dart';
 import 'package:opensplit/data/local/database.dart';
-import 'package:opensplit/domain/clocks.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'data/server_reference_data.dart';
@@ -64,7 +63,7 @@ Widget signedInApp({
 
     // The platform channel that names this device's zone never answers
     // inside a widget test's fake clock.
-    clocksProvider.overrideWith((ref) async => const Clocks(device: testZone)),
+    deviceZoneProvider.overrideWith((ref) async => testZone),
   ],
   child: child,
 );

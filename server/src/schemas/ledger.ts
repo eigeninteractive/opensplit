@@ -39,13 +39,6 @@ function isTimeZone(name: string): boolean {
   }
 }
 
-/** The calendar day [instant] falls on in [timeZone], `YYYY-MM-DD`. */
-function dayIn(instant: string, timeZone: string): string {
-  const parts = new Intl.DateTimeFormat("en", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(instant));
-  const part = (type: string) => parts.find((p) => p.type === type)?.value;
-  return `${part("year")}-${part("month")}-${part("day")}`;
-}
-
 /** A UPI virtual payment address. SQLite has no regular expressions, so this is the only check. */
 export const UpiVpaSchema = z
   .string()
@@ -134,8 +127,10 @@ export const EntryInputSchema = z
     entryDate: DateSchema,
 
     /**
-     * When it happened, and where. Both or neither, and `entryDate` must be
-     * the day `occurredAt` falls on in `timeZone`.
+     * When it happened, and where. Both or neither. The device keeps
+     * `entryDate` that moment's day; it is not checked here, because the
+     * device's time zone rules and this runtime's can disagree for a while
+     * after a country changes them, and a refusal would strand the expense.
      */
     occurredAt: TimestampSchema.nullable(),
     timeZone: TimeZoneSchema.nullable(),
@@ -154,13 +149,9 @@ export const EntryInputSchema = z
      */
     baseSeq: SeqSchema.nullable(),
   })
-  .superRefine((input, ctx) => {
-    if (input.occurredAt === null && input.timeZone === null) return;
-    if (input.occurredAt === null || input.timeZone === null) {
-      ctx.addIssue({ code: "custom", path: ["timeZone"], message: "occurredAt and timeZone are both set or both null." });
-    } else if (isTimeZone(input.timeZone) && dayIn(input.occurredAt, input.timeZone) !== input.entryDate) {
-      ctx.addIssue({ code: "custom", path: ["entryDate"], message: "entryDate must be the day occurredAt falls on in timeZone." });
-    }
+  .refine((input) => (input.occurredAt === null) === (input.timeZone === null), {
+    path: ["timeZone"],
+    message: "occurredAt and timeZone are both set or both null.",
   })
   .openapi("EntryInput");
 

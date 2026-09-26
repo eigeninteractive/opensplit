@@ -241,9 +241,8 @@ export const entries = sqliteTable(
 
     /**
      * The moment it happened and the IANA time zone it happened in, when
-     * known: both or neither, and `entryDate` is that moment's day in that
-     * zone. From the device's clock, so it orders a day's expenses and is
-     * shown, and decides nothing.
+     * known: both or neither. From the device's clock, so it orders a day's
+     * expenses and is shown, and decides nothing.
      */
     occurredAt: text("occurred_at"),
     timeZone: text("time_zone"),

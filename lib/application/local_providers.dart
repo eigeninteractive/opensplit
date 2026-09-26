@@ -11,7 +11,6 @@ import '../data/repositories/drift_group_repository.dart';
 import '../data/repositories/drift_activity_repository.dart';
 import '../data/repositories/drift_profile_repository.dart';
 import '../data/sync/outbox_queue.dart';
-import '../domain/clocks.dart';
 import '../domain/fx/fx_quote.dart';
 import 'session_providers.dart';
 
@@ -30,22 +29,10 @@ part 'local_providers.g.dart';
 @Riverpod(keepAlive: true)
 String? currentAccountId(Ref ref) => ref.watch(sessionControllerProvider)?.id;
 
-/// Reading expense times on the clock where they happened.
-///
-/// Waits for the time zone database too, so a screen watching this redraws
-/// once other places' times can be read. A database that will not load (on
-/// the web, offline before it was ever fetched) leaves times from elsewhere
-/// shown in this device's time until the next launch.
+/// This device's IANA time zone: where an expense recorded here happened.
+/// Null when the platform will not say.
 @Riverpod(keepAlive: true)
-Future<Clocks> clocks(Ref ref) async {
-  final device = await deviceTimeZone();
-  try {
-    await loadTimeZoneDatabase();
-  } on Exception {
-    // See above: a fallback, not a failure.
-  }
-  return Clocks(device: device);
-}
+Future<String?> deviceZone(Ref ref) => deviceTimeZone();
 
 /// This account's ledger, and no other account's.
 ///

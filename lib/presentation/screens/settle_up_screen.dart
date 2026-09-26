@@ -84,7 +84,7 @@ class _SettleUpScreenState extends ConsumerState<SettleUpScreen> {
   Widget build(BuildContext context) {
     // Started on the way in, so this device's zone is known by the time a
     // settlement is recorded.
-    ref.watch(clocksProvider);
+    ref.watch(deviceZoneProvider);
 
     // Revalidate on the way in, and this is the one screen where it is not
     // merely tidiness.
@@ -246,7 +246,7 @@ class _SettleUpScreenState extends ConsumerState<SettleUpScreen> {
     try {
       // Paid now, here. Saving never waits to learn where "here" is: with no
       // zone known yet, only the day is kept.
-      final zone = ref.read(clocksProvider).value?.device;
+      final zone = ref.read(deviceZoneProvider).value;
       final now = DateTime.now();
       await ref
           .read(entryRepositoryProvider)

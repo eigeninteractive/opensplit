@@ -251,8 +251,7 @@ void main() {
           description: 'Dinner at Toit',
           split: EqualSplit([g.ravi, g.priya]),
           payerAmounts: {g.ravi: 240000},
-          // 1 a.m. in Bengaluru: the previous evening in UTC. The server
-          // checks the day against the moment in its own zone database.
+          // 1 a.m. in Bengaluru: the previous evening in UTC.
           entryDate: DateTime.utc(2026, 9, 24),
           occurredAt: DateTime.utc(2026, 9, 23, 19, 30),
           timeZone: 'Asia/Kolkata',

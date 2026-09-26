@@ -132,20 +132,25 @@ a string, because it would otherwise send a full timestamp and read the day back
 as local midnight.
 
 An expense can also carry **when and where it happened**: `occurredAt` (an
-instant) and `timeZone` (an IANA name such as `Asia/Kolkata`), both or neither,
-the way calendar APIs pair `dateTime` with `timeZone`. A new expense happened
-now, here; the editor's time is optional, and picking another day clears it,
-because that time is no longer known. When set, `entryDate` must be the day
-`occurredAt` falls on in `timeZone`, which the server checks against its own
-time zone database (`Intl`), and a CHECK keeps the pair together.
+instant) and `timeZone` (an IANA name such as `Asia/Kolkata`, from
+`flutter_timezone`), both or neither, the way calendar APIs pair `dateTime`
+with `timeZone`. A new expense happened now, here; the editor's time is
+optional, and picking another day clears it, because that time is no longer
+known. The server keeps the pair together (the request schema and a CHECK) and
+checks the zone is one its runtime knows.
 
-It is shown as the clock read where it happened, labelled when that is not the
-viewer's clock ("9:40 pm +07"), and it orders a day's expenses; it decides
-nothing else, since it comes from a device clock. `createdAt` stays the server's
-own "when this was stored". The device's zone name comes from
-`flutter_timezone`, and other zones are read with `package:timezone`, whose
-database (`latest_all`, which keeps old aliases like `Asia/Calcutta`) loads
-through a deferred import so the web's first download does not carry it.
+It orders a day's expenses and is shown on the viewer's own clock. It decides
+nothing else, since it comes from a device clock, and `createdAt` stays the
+server's own "when this was stored". Two things are deliberately left out for
+now:
+
+- **Showing a time on the clock where it happened** ("9:40 pm +07" when viewed
+  from another zone). It needs the IANA database on the device. The stored
+  `timeZone` keeps that possible later.
+- **Checking `entryDate` against the moment on the server.** The device and
+  the server each carry their own time zone rules, which disagree for a while
+  after a country changes them; a refused expense near midnight would be
+  stranded for a field that is only displayed.
 
 ---
 
