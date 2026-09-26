@@ -77,6 +77,10 @@ String groupToJson({
           // where it matters most.
           'amount_minor': entry.amountMinor,
           'date': calendarDate(entry.entryDate),
+          // When and where it happened, when known: an instant in UTC and
+          // the IANA zone to read it in.
+          'occurred_at': entry.occurredAt?.toIso8601String(),
+          'time_zone': entry.timeZone,
           'split_kind': entry.splitKind.name,
           'notes': entry.notes,
           // What a unit of this currency was worth on the day, as recorded then

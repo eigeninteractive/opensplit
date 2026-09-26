@@ -105,7 +105,8 @@ final class DriftAnalyticsRepository {
     return _db
         .customSelect(
           'SELECT e.id FROM entries e WHERE ${where.sql} '
-          'ORDER BY e.entry_date DESC, e.created_at DESC',
+          'ORDER BY e.entry_date DESC, e.occurred_at DESC NULLS LAST, '
+          'e.created_at DESC',
           variables: where.vars,
           readsFrom: {_db.entries, _db.entryShares},
         )

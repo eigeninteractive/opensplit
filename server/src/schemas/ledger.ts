@@ -24,6 +24,28 @@ import { createSelectSchema, IdSchema, TimestampSchema } from "./common";
 /** A calendar date, `YYYY-MM-DD`. An expense happens on a day, not at an instant. */
 export const DateSchema = z.iso.date().openapi({ example: "2026-09-23" });
 
+/**
+ * An IANA time zone, e.g. `Asia/Kolkata`: whatever the runtime's own time zone
+ * database accepts, so there is no list here to keep up to date.
+ */
+export const TimeZoneSchema = z.string().max(64).refine(isTimeZone, "Not a time zone.").openapi({ example: "Asia/Kolkata" });
+
+function isTimeZone(name: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: name });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The calendar day [instant] falls on in [timeZone], `YYYY-MM-DD`. */
+function dayIn(instant: string, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(instant));
+  const part = (type: string) => parts.find((p) => p.type === type)?.value;
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
 /** A UPI virtual payment address. SQLite has no regular expressions, so this is the only check. */
 export const UpiVpaSchema = z
   .string()
@@ -82,6 +104,8 @@ export const EntrySchema = createSelectSchema(tables.entries, {
   amountMinor: z.int().positive(),
   fxRate: z.number().positive().nullable(),
   entryDate: DateSchema,
+  occurredAt: TimestampSchema.nullable(),
+  timeZone: TimeZoneSchema.nullable(),
   splitKind: SplitKindSchema,
   fxAt: TimestampSchema.nullable(),
   createdAt: TimestampSchema,
@@ -108,6 +132,14 @@ export const EntryInputSchema = z
     currency: CurrencyCodeSchema,
     amountMinor: z.int().positive(),
     entryDate: DateSchema,
+
+    /**
+     * When it happened, and where. Both or neither, and `entryDate` must be
+     * the day `occurredAt` falls on in `timeZone`.
+     */
+    occurredAt: TimestampSchema.nullable(),
+    timeZone: TimeZoneSchema.nullable(),
+
     splitKind: SplitKindSchema,
     fxRate: z.number().positive().nullable(),
     fxSource: z.string().max(64).nullable(),
@@ -121,6 +153,14 @@ export const EntryInputSchema = z
      * stale base is refused only when the write would move money.
      */
     baseSeq: SeqSchema.nullable(),
+  })
+  .superRefine((input, ctx) => {
+    if (input.occurredAt === null && input.timeZone === null) return;
+    if (input.occurredAt === null || input.timeZone === null) {
+      ctx.addIssue({ code: "custom", path: ["timeZone"], message: "occurredAt and timeZone are both set or both null." });
+    } else if (isTimeZone(input.timeZone) && dayIn(input.occurredAt, input.timeZone) !== input.entryDate) {
+      ctx.addIssue({ code: "custom", path: ["entryDate"], message: "entryDate must be the day occurredAt falls on in timeZone." });
+    }
   })
   .openapi("EntryInput");
 

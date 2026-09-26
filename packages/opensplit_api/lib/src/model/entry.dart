@@ -34,6 +34,10 @@ class Entry {
 
     required this.entryDate,
 
+    required this.occurredAt,
+
+    required this.timeZone,
+
     required this.splitKind,
 
     required this.fxRate,
@@ -87,6 +91,12 @@ class Entry {
 
   @JsonKey(name: r'entryDate', required: true, includeIfNull: false)
   final String entryDate;
+
+  @JsonKey(name: r'occurredAt', required: true, includeIfNull: true)
+  final DateTime? occurredAt;
+
+  @JsonKey(name: r'timeZone', required: true, includeIfNull: true)
+  final String? timeZone;
 
   @JsonKey(
     name: r'splitKind',
@@ -145,6 +155,8 @@ class Entry {
           other.currency == currency &&
           other.amountMinor == amountMinor &&
           other.entryDate == entryDate &&
+          other.occurredAt == occurredAt &&
+          other.timeZone == timeZone &&
           other.splitKind == splitKind &&
           other.fxRate == fxRate &&
           other.fxSource == fxSource &&
@@ -168,6 +180,8 @@ class Entry {
       currency.hashCode +
       amountMinor.hashCode +
       entryDate.hashCode +
+      (occurredAt == null ? 0 : occurredAt.hashCode) +
+      (timeZone == null ? 0 : timeZone.hashCode) +
       splitKind.hashCode +
       (fxRate == null ? 0 : fxRate.hashCode) +
       (fxSource == null ? 0 : fxSource.hashCode) +

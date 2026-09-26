@@ -184,6 +184,11 @@ final class DriftEntryRepository {
       })
       ..orderBy([
         (t) => OrderingTerm.desc(t.entryDate),
+        (t) => OrderingTerm(
+          expression: t.occurredAt,
+          mode: OrderingMode.desc,
+          nulls: NullsOrder.last,
+        ),
         (t) => OrderingTerm.desc(t.createdAt),
       ]);
 

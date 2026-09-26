@@ -250,6 +250,22 @@ class Entries extends Table with TableInfo {
     requiredDuringInsert: true,
     $customConstraints: 'NOT NULL',
   );
+  late final GeneratedColumn<int> occurredAt = GeneratedColumn<int>(
+    'occurred_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> timeZone = GeneratedColumn<String>(
+    'time_zone',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
   late final GeneratedColumn<String> splitKind = GeneratedColumn<String>(
     'split_kind',
     aliasedName,
@@ -340,6 +356,8 @@ class Entries extends Table with TableInfo {
     currency,
     amountMinor,
     entryDate,
+    occurredAt,
+    timeZone,
     splitKind,
     fxRate,
     fxSource,

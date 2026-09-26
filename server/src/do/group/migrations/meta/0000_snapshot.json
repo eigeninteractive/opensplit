@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "3266ec37-5e38-44d2-8612-90cf36d19291",
+  "id": "465253fa-47db-4a34-beb8-22b6c8ba5eb7",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "counter": {
@@ -80,6 +80,20 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "time_zone": {
+          "name": "time_zone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         },
         "split_kind": {
@@ -194,6 +208,10 @@
         "entries_fx_rate_positive": {
           "name": "entries_fx_rate_positive",
           "value": "\"entries\".\"fx_rate\" is null or \"entries\".\"fx_rate\" > 0"
+        },
+        "entries_moment_complete": {
+          "name": "entries_moment_complete",
+          "value": "(\"entries\".\"occurred_at\" is null) = (\"entries\".\"time_zone\" is null)"
         },
         "entries_fx_complete": {
           "name": "entries_fx_complete",

@@ -251,6 +251,11 @@ void main() {
           description: 'Dinner at Toit',
           split: EqualSplit([g.ravi, g.priya]),
           payerAmounts: {g.ravi: 240000},
+          // 1 a.m. in Bengaluru: the previous evening in UTC. The server
+          // checks the day against the moment in its own zone database.
+          entryDate: DateTime.utc(2026, 9, 24),
+          occurredAt: DateTime.utc(2026, 9, 23, 19, 30),
+          timeZone: 'Asia/Kolkata',
         ),
         createdBy: g.ravi,
       );
@@ -278,6 +283,9 @@ void main() {
       expect(pulled, hasLength(1));
       expect(pulled.single.description, 'Dinner at Toit');
       expect(pulled.single.isBalanced, isTrue);
+      expect(pulled.single.entryDate, DateTime.utc(2026, 9, 24));
+      expect(pulled.single.occurredAt, DateTime.utc(2026, 9, 23, 19, 30));
+      expect(pulled.single.timeZone, 'Asia/Kolkata');
       expect(pulled.single.shares, hasLength(2));
       expect(
         pulled.single.shares.first.weightMicros,

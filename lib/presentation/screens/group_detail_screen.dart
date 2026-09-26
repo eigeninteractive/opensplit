@@ -2,9 +2,9 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
 import '../../application/providers.dart';
+import '../../domain/clocks.dart';
 import '../../domain/models/currency.dart';
 import '../../domain/models/entry.dart';
 import '../format.dart';
@@ -177,6 +177,7 @@ class _EntriesList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final currencies = ref.watch(currenciesProvider).value ?? const {};
+    final clocks = ref.watch(clocksProvider).value;
 
     if (ledger.entries.isEmpty) {
       return PullToSync.group(
@@ -198,6 +199,7 @@ class _EntriesList extends ConsumerWidget {
             entry: entry,
             ledger: ledger,
             currency: currencies[entry.currency],
+            clocks: clocks,
           );
         },
       ),
@@ -210,11 +212,13 @@ class _EntryTile extends StatelessWidget {
     required this.entry,
     required this.ledger,
     required this.currency,
+    required this.clocks,
   });
 
   final Entry entry;
   final GroupLedger ledger;
   final Currency? currency;
+  final Clocks? clocks;
 
   @override
   Widget build(BuildContext context) {
@@ -259,8 +263,7 @@ class _EntryTile extends StatelessWidget {
           : ledger.nameOf(entry.shares.first.memberId);
       subtitle = '$payerNames paid $payee';
     } else {
-      subtitle =
-          '$payerNames paid · ${DateFormat.MMMd().format(entry.entryDate)}';
+      subtitle = '$payerNames paid · ${formatWhen(entry, clocks)}';
     }
 
     return ListTile(

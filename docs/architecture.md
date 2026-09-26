@@ -131,6 +131,22 @@ Dart has no date-only type, so in the app a day is a `DateTime` at UTC midnight
 a string, because it would otherwise send a full timestamp and read the day back
 as local midnight.
 
+An expense can also carry **when and where it happened**: `occurredAt` (an
+instant) and `timeZone` (an IANA name such as `Asia/Kolkata`), both or neither,
+the way calendar APIs pair `dateTime` with `timeZone`. A new expense happened
+now, here; the editor's time is optional, and picking another day clears it,
+because that time is no longer known. When set, `entryDate` must be the day
+`occurredAt` falls on in `timeZone`, which the server checks against its own
+time zone database (`Intl`), and a CHECK keeps the pair together.
+
+It is shown as the clock read where it happened, labelled when that is not the
+viewer's clock ("9:40 pm +07"), and it orders a day's expenses; it decides
+nothing else, since it comes from a device clock. `createdAt` stays the server's
+own "when this was stored". The device's zone name comes from
+`flutter_timezone`, and other zones are read with `package:timezone`, whose
+database (`latest_all`, which keeps old aliases like `Asia/Calcutta`) loads
+through a deferred import so the web's first download does not carry it.
+
 ---
 
 ## Sync is event-triggered, never polled

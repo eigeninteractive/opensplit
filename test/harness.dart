@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:opensplit/application/providers.dart';
 import 'package:opensplit/data/local/database.dart';
+import 'package:opensplit/domain/clocks.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'data/server_reference_data.dart';
@@ -27,6 +28,9 @@ const testAccountId = '00000000-0000-4000-8000-00000000dead';
 /// real controller can only ever answer "nobody".
 /// Returns a scope, not a list of overrides: `Override` is not part of
 /// flutter_riverpod's public API, so it cannot be named in a signature here.
+/// The zone a signed-in test app reports for this device.
+const testZone = 'Etc/UTC';
+
 Widget signedInApp({
   required AppDatabase db,
   required SharedPreferences prefs,
@@ -57,6 +61,10 @@ Widget signedInApp({
     // it is the single place "no backend" is expressible — and a test that
     // wants one of them back overrides that one alone.
     apiClientProvider.overrideWithValue(null),
+
+    // The platform channel that names this device's zone never answers
+    // inside a widget test's fake clock.
+    clocksProvider.overrideWith((ref) async => const Clocks(device: testZone)),
   ],
   child: child,
 );

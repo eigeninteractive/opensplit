@@ -33,6 +33,8 @@ Future<void> writeEntryInTransaction(AppDatabase db, Entry entry) async {
           currency: entry.currency,
           amountMinor: entry.amountMinor,
           entryDate: entry.entryDate,
+          occurredAt: Value(entry.occurredAt),
+          timeZone: Value(entry.timeZone),
           splitKind: entry.splitKind,
           fxRate: Value(entry.fxRate),
           fxSource: Value(entry.fxSource),
@@ -88,6 +90,8 @@ Entry entryFromRows(
   currency: row.currency,
   amountMinor: row.amountMinor,
   entryDate: row.entryDate,
+  occurredAt: row.occurredAt,
+  timeZone: row.timeZone,
   splitKind: row.splitKind,
   payers: [
     for (final payer in payers)

@@ -4,7 +4,9 @@ import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/repositories/drift_activity_repository.dart';
 import 'package:opensplit/data/sync/wire.dart';
 import 'package:opensplit/domain/calendar_date.dart';
+import 'package:opensplit/domain/models/entry.dart';
 import 'package:opensplit/domain/models/group_event.dart';
+import 'package:opensplit_api/opensplit_api.dart' as api;
 import 'package:test/test.dart';
 
 import '../harness.dart';
@@ -37,6 +39,32 @@ void main() {
         allOf(containsPair('leftAt', null), containsPair('upiVpa', null)),
       );
     });
+  });
+
+  test('when and where an expense happened survive the wire', () {
+    final input = Entry(
+      id: 'e',
+      groupId: 'g',
+      kind: EntryKind.expense,
+      description: 'Snack',
+      currency: 'INR',
+      amountMinor: 100,
+      entryDate: DateTime.utc(2026, 9, 24),
+      occurredAt: DateTime.utc(2026, 9, 23, 19, 30),
+      timeZone: 'Asia/Kolkata',
+      splitKind: SplitKind.equal,
+      payers: const [EntryPayer(memberId: 'm', amountMinor: 100)],
+      shares: const [EntryShare(memberId: 'm', amountMinor: 100)],
+      createdBy: 'm',
+      createdAt: DateTime.utc(2026, 9, 23, 19, 31),
+    ).toInput();
+    final json = input.toJson();
+    expect(json, containsPair('entryDate', '2026-09-24'));
+    expect(json, containsPair('timeZone', 'Asia/Kolkata'));
+    expect(
+      api.EntryInput.fromJson(json).occurredAt,
+      DateTime.utc(2026, 9, 23, 19, 30),
+    );
   });
 
   group('a calendar date', () {

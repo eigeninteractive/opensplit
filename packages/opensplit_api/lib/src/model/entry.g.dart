@@ -19,6 +19,8 @@ Entry _$EntryFromJson(
       'currency',
       'amountMinor',
       'entryDate',
+      'occurredAt',
+      'timeZone',
       'splitKind',
       'fxRate',
       'fxSource',
@@ -49,6 +51,11 @@ Entry _$EntryFromJson(
     currency: $checkedConvert('currency', (v) => v as String),
     amountMinor: $checkedConvert('amountMinor', (v) => (v as num).toInt()),
     entryDate: $checkedConvert('entryDate', (v) => v as String),
+    occurredAt: $checkedConvert(
+      'occurredAt',
+      (v) => v == null ? null : DateTime.parse(v as String),
+    ),
+    timeZone: $checkedConvert('timeZone', (v) => v as String?),
     splitKind: $checkedConvert(
       'splitKind',
       (v) => $enumDecode(
@@ -97,6 +104,8 @@ Map<String, dynamic> _$EntryToJson(Entry instance) => <String, dynamic>{
   'currency': instance.currency,
   'amountMinor': instance.amountMinor,
   'entryDate': instance.entryDate,
+  'occurredAt': instance.occurredAt?.toIso8601String(),
+  'timeZone': instance.timeZone,
   'splitKind': _$SplitKindEnumMap[instance.splitKind]!,
   'fxRate': instance.fxRate,
   'fxSource': instance.fxSource,

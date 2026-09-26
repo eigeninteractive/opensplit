@@ -19,6 +19,8 @@ class EntryDraft {
     this.description = '',
     this.categoryId,
     this.entryDate,
+    this.occurredAt,
+    this.timeZone,
     this.notes,
     this.fxRate,
     this.fxSource,
@@ -36,6 +38,8 @@ class EntryDraft {
     required String fromMemberId,
     required String toMemberId,
     DateTime? entryDate,
+    DateTime? occurredAt,
+    String? timeZone,
     String? notes,
   }) {
     if (fromMemberId == toMemberId) {
@@ -49,6 +53,8 @@ class EntryDraft {
       split: ExactSplit({toMemberId: amountMinor}),
       payerAmounts: {fromMemberId: amountMinor},
       entryDate: entryDate,
+      occurredAt: occurredAt,
+      timeZone: timeZone,
       notes: notes,
     );
   }
@@ -60,6 +66,11 @@ class EntryDraft {
   final String currency;
   final int amountMinor;
   final DateTime? entryDate;
+
+  /// When it happened and where; see [Entry.occurredAt]. The caller keeps
+  /// [entryDate] consistent with them.
+  final DateTime? occurredAt;
+  final String? timeZone;
 
   /// How the total is divided.
   final SplitSpec split;
@@ -111,6 +122,8 @@ Entry composeEntry(
     currency: draft.currency,
     amountMinor: draft.amountMinor,
     entryDate: draft.entryDate ?? calendarDay(now),
+    occurredAt: draft.occurredAt,
+    timeZone: draft.timeZone,
     splitKind: draft.split.kind,
     payers: [
       for (final p in payers)

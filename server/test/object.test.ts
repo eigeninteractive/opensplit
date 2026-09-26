@@ -4,6 +4,7 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 
 import type { Group } from "../src/do/group";
 import type { append } from "../src/do/group/events";
+import migrations from "../src/do/group/migrations/migrations.js";
 import { kindOf, refusalCodes, statusFor } from "../src/do/group/refusal";
 import { isMemberEvent } from "../src/schemas/ledger";
 import { evenly, freshId, makeGroup, ok, RAVI, stub } from "./group";
@@ -37,7 +38,7 @@ describe("the schema this object migrates itself to", () => {
 
     await runInDurableObject(stub(groupId), async (_instance: Group, state) => {
       const applied = [...state.storage.sql.exec<{ n: number }>("select count(*) as n from __drizzle_migrations")];
-      expect(applied[0]?.n).toBe(1);
+      expect(applied[0]?.n).toBe(migrations.journal.entries.length);
 
       const entries = [...state.storage.sql.exec<{ n: number }>("select count(*) as n from entries")];
       expect(entries[0]?.n).toBe(1);

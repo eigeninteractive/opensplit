@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../widgets/page_body.dart';
 import '../../application/providers.dart';
+import '../../domain/calendar_date.dart';
 import '../../domain/entry_draft.dart';
 import '../../domain/models/currency.dart';
 import '../../domain/models/member.dart';
@@ -81,6 +82,10 @@ class _SettleUpScreenState extends ConsumerState<SettleUpScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Started on the way in, so this device's zone is known by the time a
+    // settlement is recorded.
+    ref.watch(clocksProvider);
+
     // Revalidate on the way in, and this is the one screen where it is not
     // merely tidiness.
     //
@@ -239,6 +244,10 @@ class _SettleUpScreenState extends ConsumerState<SettleUpScreen> {
 
     setState(() => _saving = true);
     try {
+      // Paid now, here. Saving never waits to learn where "here" is: with no
+      // zone known yet, only the day is kept.
+      final zone = ref.read(clocksProvider).value?.device;
+      final now = DateTime.now();
       await ref
           .read(entryRepositoryProvider)
           .create(
@@ -248,6 +257,9 @@ class _SettleUpScreenState extends ConsumerState<SettleUpScreen> {
               amountMinor: amountMinor,
               fromMemberId: from,
               toMemberId: to,
+              entryDate: calendarDay(now),
+              occurredAt: zone == null ? null : now.toUtc(),
+              timeZone: zone,
             ),
             createdBy: ledger.me?.id ?? from,
           );

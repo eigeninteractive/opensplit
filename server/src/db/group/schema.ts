@@ -239,6 +239,15 @@ export const entries = sqliteTable(
     /** A calendar date, `YYYY-MM-DD`, not an instant. */
     entryDate: text("entry_date").notNull(),
 
+    /**
+     * The moment it happened and the IANA time zone it happened in, when
+     * known: both or neither, and `entryDate` is that moment's day in that
+     * zone. From the device's clock, so it orders a day's expenses and is
+     * shown, and decides nothing.
+     */
+    occurredAt: text("occurred_at"),
+    timeZone: text("time_zone"),
+
     splitKind: text("split_kind", { enum: splitKinds }).notNull().default("equal"),
 
     /**
@@ -295,6 +304,7 @@ export const entries = sqliteTable(
      * Provenance without a rate cannot be audited and a rate without
      * provenance cannot be traced, so the three travel together or not at all.
      */
+    check("entries_moment_complete", sql`(${table.occurredAt} is null) = (${table.timeZone} is null)`),
     check("entries_fx_complete", sql`(${table.fxRate} is null) = (${table.fxSource} is null) and (${table.fxRate} is null) = (${table.fxAt} is null)`),
   ],
 );

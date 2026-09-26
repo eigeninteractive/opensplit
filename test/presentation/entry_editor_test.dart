@@ -193,6 +193,38 @@ void main() {
     await _unmount(tester);
   });
 
+  testWidgets('a new expense happened now, here, unless the time is removed', (
+    tester,
+  ) async {
+    await _seed(db);
+    await _pumpApp(tester, db);
+    final before = DateTime.now().toUtc();
+
+    await _openEditor(tester);
+    await _type(tester, what: 'Chai', amount: '30');
+    await tester.tap(find.widgetWithText(FilledButton, 'Add expense'));
+    await _beats(tester);
+
+    final chai = (await DriftEntryRepository(db).getEntries('g1')).single;
+    expect(chai.timeZone, testZone);
+    expect(chai.occurredAt!.isBefore(before), isFalse);
+
+    await _openEditor(tester);
+    await _type(tester, what: 'Snacks', amount: '60');
+    await tester.tap(find.byTooltip('Remove the time'));
+    await _beats(tester);
+    expect(find.text('Add a time'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Add expense'));
+    await _beats(tester);
+
+    final snacks = (await DriftEntryRepository(
+      db,
+    ).getEntries('g1')).firstWhere((entry) => entry.description == 'Snacks');
+    expect(snacks.occurredAt, isNull, reason: 'only the day is known');
+    expect(snacks.timeZone, isNull);
+    await _unmount(tester);
+  });
+
   testWidgets('editing an existing expense fills the form from it', (
     tester,
   ) async {

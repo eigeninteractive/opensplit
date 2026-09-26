@@ -52,6 +52,8 @@ function expense(overrides: Record<string, unknown> = {}) {
     currency: "INR",
     amountMinor: 1000,
     entryDate: "2026-09-23",
+    occurredAt: null,
+    timeZone: null,
     splitKind: "exact",
     fxRate: null,
     fxSource: null,
@@ -213,6 +215,28 @@ describe("recording an expense over HTTP", () => {
 
     expect(response.status).toBe(400);
     expect((await json<ApiError>(response)).error.code).toBe("malformed");
+  });
+
+  it("keeps when and where it happened, and holds the date to that moment's own day", async () => {
+    const { id } = await makeGroup(ravi);
+    const page = await json<ChangePage>(await call(`/api/groups/${id}/changes`, ravi));
+    const me = page.members[0];
+    if (!me) expect.unreachable("The group has no members.");
+    const post = (moment: Record<string, unknown>) =>
+      call(`/api/groups/${id}/entries`, ravi, {
+        method: "POST",
+        body: JSON.stringify(expense({ payers: [{ memberId: me.id, amountMinor: 1000 }], shares: [{ memberId: me.id, amountMinor: 1000, weightMicros: null }], ...moment })),
+      });
+
+    // 1 a.m. in Goa is still the previous evening in UTC.
+    const snack = { occurredAt: "2026-09-23T19:30:00.000Z", timeZone: "Asia/Kolkata" };
+    expect((await post({ ...snack, entryDate: "2026-09-23" })).status).toBe(400);
+
+    const stored = await json<Entry>(await post({ ...snack, entryDate: "2026-09-24" }));
+    expect(stored).toMatchObject({ ...snack, entryDate: "2026-09-24" });
+
+    expect((await post({ occurredAt: snack.occurredAt, timeZone: null, entryDate: "2026-09-24" })).status).toBe(400);
+    expect((await post({ ...snack, timeZone: "Goa/Beach", entryDate: "2026-09-24" })).status).toBe(400);
   });
 
   it("soft-deletes, and refuses a delete carrying no version at all", async () => {

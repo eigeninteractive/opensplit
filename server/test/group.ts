@@ -97,6 +97,8 @@ export function expense(overrides: Partial<EntryInput> & Pick<EntryInput, "id" |
     categoryId: null,
     currency: "INR",
     entryDate: "2026-09-23",
+    occurredAt: null,
+    timeZone: null,
     splitKind: "equal",
     fxRate: null,
     fxSource: null,

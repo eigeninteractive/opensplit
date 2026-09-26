@@ -200,6 +200,8 @@ class FakeRemoteLedger implements RemoteLedgerApi {
     currency: input.currency,
     amountMinor: input.amountMinor,
     entryDate: parseCalendarDate(input.entryDate),
+    occurredAt: input.occurredAt,
+    timeZone: input.timeZone,
     splitKind: input.splitKind,
     payers: [
       for (final payer in input.payers)
@@ -599,6 +601,8 @@ class FakeRemoteLedger implements RemoteLedgerApi {
     currency: entry.currency,
     amountMinor: entry.amountMinor,
     entryDate: calendarDate(entry.entryDate),
+    occurredAt: entry.occurredAt,
+    timeZone: entry.timeZone,
     splitKind: entry.splitKind,
     fxRate: entry.fxRate,
     fxSource: entry.fxSource,

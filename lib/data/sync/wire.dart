@@ -59,6 +59,8 @@ extension EntryFromWire on api.Entry {
     currency: currency,
     amountMinor: amountMinor,
     entryDate: parseCalendarDate(entryDate),
+    occurredAt: occurredAt,
+    timeZone: timeZone,
     splitKind: splitKind,
     payers: [
       for (final payer in payers)
@@ -133,6 +135,8 @@ extension EntryToWire on Entry {
     currency: currency,
     amountMinor: amountMinor,
     entryDate: calendarDate(entryDate),
+    occurredAt: occurredAt,
+    timeZone: timeZone,
     splitKind: splitKind,
     fxRate: fxRate,
     fxSource: fxSource,

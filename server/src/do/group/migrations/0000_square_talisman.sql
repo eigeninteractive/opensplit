@@ -11,6 +11,8 @@ CREATE TABLE `entries` (
 	`currency` text NOT NULL,
 	`amount_minor` integer NOT NULL,
 	`entry_date` text NOT NULL,
+	`occurred_at` text,
+	`time_zone` text,
 	`split_kind` text DEFAULT 'equal' NOT NULL,
 	`fx_rate` real,
 	`fx_source` text,
@@ -25,6 +27,7 @@ CREATE TABLE `entries` (
 	FOREIGN KEY (`created_by`) REFERENCES `members`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "entries_amount_positive" CHECK("entries"."amount_minor" > 0),
 	CONSTRAINT "entries_fx_rate_positive" CHECK("entries"."fx_rate" is null or "entries"."fx_rate" > 0),
+	CONSTRAINT "entries_moment_complete" CHECK(("entries"."occurred_at" is null) = ("entries"."time_zone" is null)),
 	CONSTRAINT "entries_fx_complete" CHECK(("entries"."fx_rate" is null) = ("entries"."fx_source" is null) and ("entries"."fx_rate" is null) = ("entries"."fx_at" is null))
 );
 --> statement-breakpoint

@@ -222,6 +222,11 @@ class Entries extends Table {
   IntColumn get amountMinor => integer()();
 
   TextColumn get entryDate => text().map(const CalendarDateConverter())();
+
+  /// When it happened and the IANA zone it happened in, when known: both or
+  /// neither, and [entryDate] is that moment's day in that zone.
+  DateTimeColumn get occurredAt => dateTime().nullable()();
+  TextColumn get timeZone => text().nullable()();
   TextColumn get splitKind => text().map(
     const WireEnumConverter(SplitKind.values, SplitKind.unknownDefaultOpenApi),
   )();

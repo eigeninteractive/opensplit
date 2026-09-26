@@ -63,6 +63,12 @@ abstract class Entry with _$Entry {
     required String currency,
     required int amountMinor,
     required DateTime entryDate,
+
+    /// When it happened, from the recording device's clock, and the IANA zone
+    /// it happened in. Both or neither: a back-dated expense may have only a
+    /// day. When set, [entryDate] is that moment's day in that zone.
+    DateTime? occurredAt,
+    String? timeZone,
     required SplitKind splitKind,
     required List<EntryPayer> payers,
     required List<EntryShare> shares,
