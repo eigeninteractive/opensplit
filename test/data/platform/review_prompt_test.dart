@@ -29,10 +29,8 @@ void main() {
     expect(await build(available: false).isDue(), isFalse);
   });
 
-  // Play's quota is enforced silently: over it, requestReview resolves
-  // normally and shows nothing at all. Asking again inside the window would
-  // therefore spend the one prompt this person gets on a sheet nobody sees,
-  // and there is no way to find out that happened.
+  // Play's quota is enforced silently: over it, requestReview resolves normally
+  // and shows nothing at all.
   test('does not ask again straight away', () async {
     final prompt = build();
     await prompt.ask();

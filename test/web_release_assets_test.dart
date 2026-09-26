@@ -35,16 +35,7 @@ void main() {
   test('serving enables Wasm isolation, and only for the client', () {
     final rules = _headerRules();
 
-    // Scoped to the app rather than the whole origin. Cross-origin isolation
-    // is what lets sqlite3.wasm use SharedArrayBuffer, and it is also what
-    // stops a page loading anything cross-origin that does not opt in — a
-    // needless constraint on a marketing site somebody else designs, whose
-    // pages embed Google Fonts.
-    //
-    // The pair is safe here only because no sign-in depends on a popup any
-    // more: the web hands the whole page to Google and comes back. Reinstating
-    // an in-page Google button without removing these would break sign-in
-    // silently, in release builds only.
+    // Scoped to the app rather than the whole origin.
     expect(rules['/app/*'], contains('Cross-Origin-Opener-Policy'));
     expect(rules['/app/*'], contains('Cross-Origin-Embedder-Policy'));
 
@@ -56,9 +47,8 @@ void main() {
   test('the header rules reach the bundle Cloudflare is given', () {
     // Cloudflare parses _headers and never serves it, so losing it produces no
     // 404 and no error: the site simply comes back without cross-origin
-    // isolation, and the client's database stops working in a way that reads
-    // as a Flutter bug. It has to be at the root of the assets directory,
-    // which is build/web, and it gets there by being in site/.
+    // isolation, and the client's database stops working in a way that reads as
+    // a Flutter bug.
     expect(
       File('site/_headers').existsSync(),
       isTrue,
@@ -74,14 +64,7 @@ void main() {
   test('the deep-link fallback cannot swallow the static site', () {
     final worker = File('server/src/app.ts').readAsStringSync();
 
-    // The whole reason the client moved under /app/. A catch-all fallback
-    // answers *everything* with the app shell — which is how the landing page,
-    // the privacy policy and /favicon.ico all came back as 200 text/html, and
-    // how an OAuth reviewer ended up looking at a sign-in screen.
-    //
-    // Asserted against the Worker rather than a config file because that is
-    // where the rule now lives: none of the platform's own not_found_handling
-    // settings answers the right document, so src/app.ts decides by hand.
+    // The whole reason the client moved under /app/.
     expect(
       worker,
       contains(
@@ -105,9 +88,6 @@ void main() {
 }
 
 /// The header names `_headers` sets, by the path pattern they are set on.
-///
-/// Parsed rather than asserted as text so the test says what the rules mean,
-/// and so reordering or recommenting the file does not fail it.
 Map<String, Set<String>> _headerRules() {
   final rules = <String, Set<String>>{};
   var pattern = '';

@@ -6,7 +6,135 @@
     "description": "The server stores rows and enforces one invariant. It computes nothing: splitting, folding balances, simplifying debts and analytics all happen on the device."
   },
   "components": {
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The session token from `set-auth-token`, on Android."
+      },
+      "cookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "better-auth.session_token",
+        "description": "The HttpOnly session cookie, on the web."
+      }
+    },
     "schemas": {
+      "Group": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "defaultCurrency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "example": "INR"
+          },
+          "isDirect": {
+            "type": "boolean"
+          },
+          "simplifyDebts": {
+            "type": "boolean"
+          },
+          "createdBy": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "archivedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": 0,
+            "example": 412
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "defaultCurrency",
+          "isDirect",
+          "simplifyDebts",
+          "createdBy",
+          "createdAt",
+          "archivedAt",
+          "updatedAt",
+          "seq"
+        ]
+      },
+      "GroupLink": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          }
+        },
+        "required": [
+          "token",
+          "expiresAt"
+        ]
+      },
+      "Account": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "isAnonymous": {
+            "type": "boolean"
+          },
+          "email": {
+            "type": "string",
+            "nullable": true,
+            "format": "email"
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "isAnonymous",
+          "email",
+          "displayName"
+        ]
+      },
       "EntrySnapshot": {
         "type": "object",
         "properties": {
@@ -14,7 +142,8 @@
             "$ref": "#/components/schemas/EntryKind"
           },
           "description": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 500
           },
           "currency": {
             "type": "string",
@@ -43,7 +172,8 @@
           },
           "notes": {
             "type": "string",
-            "nullable": true
+            "nullable": true,
+            "maxLength": 2000
           },
           "deletedAt": {
             "type": "string",
@@ -104,7 +234,8 @@
             "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
           },
           "amountMinor": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": [
@@ -157,6 +288,53 @@
           "expiresAt"
         ]
       },
+      "PushData": {
+        "type": "object",
+        "properties": {
+          "groupId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "eventId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/EventKind"
+          },
+          "subjectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          }
+        },
+        "required": [
+          "groupId",
+          "eventId",
+          "kind",
+          "subjectId"
+        ]
+      },
+      "EventKind": {
+        "type": "string",
+        "enum": [
+          "entry",
+          "member_added",
+          "member_joined",
+          "member_left",
+          "member_renamed",
+          "group_renamed",
+          "group_archived",
+          "group_restored",
+          "link_created",
+          "link_revoked"
+        ]
+      },
       "Health": {
         "type": "object",
         "properties": {
@@ -187,12 +365,7 @@
         "type": "object",
         "properties": {
           "outcome": {
-            "type": "string",
-            "enum": [
-              "kept",
-              "replaced"
-            ],
-            "description": "kept: the account id did not change, so nothing on the device has to move. replaced: a different account holds the session now, and `strandedUserId` names the one this device's ledger stays with."
+            "$ref": "#/components/schemas/IdentityOutcomeKind"
           },
           "account": {
             "$ref": "#/components/schemas/Account"
@@ -216,33 +389,35 @@
           "strandedUserId"
         ]
       },
-      "Account": {
+      "IdentityOutcomeKind": {
+        "type": "string",
+        "enum": [
+          "kept",
+          "replaced"
+        ],
+        "description": "kept: the account id did not change. replaced: a different account holds the session now, and `strandedUserId` names the one this device's ledger belongs to."
+      },
+      "Session": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 64,
-            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          "account": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Account"
+              },
+              {
+                "nullable": true
+              }
+            ]
           },
-          "isAnonymous": {
-            "type": "boolean"
-          },
-          "email": {
-            "type": "string",
-            "nullable": true,
-            "format": "email"
-          },
-          "displayName": {
+          "token": {
             "type": "string",
             "nullable": true
           }
         },
         "required": [
-          "id",
-          "isAnonymous",
-          "email",
-          "displayName"
+          "account",
+          "token"
         ]
       },
       "Error": {
@@ -294,7 +469,8 @@
           "no_session",
           "not_found",
           "internal",
-          "identity_already_in_use"
+          "identity_already_in_use",
+          "auth_failed"
         ]
       },
       "Retry": {
@@ -327,6 +503,34 @@
           "allowSignIn"
         ]
       },
+      "GoogleRedirect": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      },
+      "GoogleRedirectRequest": {
+        "type": "object",
+        "properties": {
+          "callbackUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "allowSignIn": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "callbackUrl",
+          "allowSignIn"
+        ]
+      },
       "EmailStartResponse": {
         "type": "object",
         "properties": {
@@ -344,7 +548,7 @@
           "linkPending",
           "signInPending"
         ],
-        "description": "linkPending: verifying keeps the current account id, so every group on this device still belongs to it. signInPending: the address already had an account, so verifying REPLACES the session, and anything recorded as a guest stays with the guest account."
+        "description": "linkPending: verifying keeps the current account id. signInPending: the address already has an account, so verifying replaces the session."
       },
       "EmailStartRequest": {
         "type": "object",
@@ -380,26 +584,9 @@
           "flow"
         ]
       },
-      "Bootstrap": {
+      "GroupIds": {
         "type": "object",
         "properties": {
-          "profileId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 64,
-            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
-          },
-          "displayName": {
-            "type": "string",
-            "nullable": true
-          },
-          "upiVpa": {
-            "type": "string",
-            "nullable": true
-          },
-          "isAnonymous": {
-            "type": "boolean"
-          },
           "groupIds": {
             "type": "array",
             "items": {
@@ -411,10 +598,6 @@
           }
         },
         "required": [
-          "profileId",
-          "displayName",
-          "upiVpa",
-          "isAnonymous",
           "groupIds"
         ]
       },
@@ -436,7 +619,14 @@
             "type": "boolean"
           },
           "group": {
-            "$ref": "#/components/schemas/Group"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Group"
+              },
+              {
+                "nullable": true
+              }
+            ]
           },
           "members": {
             "type": "array",
@@ -474,79 +664,32 @@
           "purgedAt"
         ]
       },
-      "Group": {
-        "type": "object",
-        "nullable": true,
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "defaultCurrency": {
-            "type": "string"
-          },
-          "isDirect": {
-            "type": "boolean"
-          },
-          "simplifyDebts": {
-            "type": "boolean"
-          },
-          "createdBy": {
-            "type": "string"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time",
-            "example": "2026-09-23T11:20:41.865Z"
-          },
-          "archivedAt": {
-            "type": "string",
-            "nullable": true,
-            "format": "date-time",
-            "example": "2026-09-23T11:20:41.865Z"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time",
-            "example": "2026-09-23T11:20:41.865Z"
-          },
-          "seq": {
-            "type": "integer",
-            "minimum": 0,
-            "example": 412
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "defaultCurrency",
-          "isDirect",
-          "simplifyDebts",
-          "createdBy",
-          "createdAt",
-          "archivedAt",
-          "updatedAt",
-          "seq"
-        ]
-      },
       "Member": {
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
           },
           "profileId": {
             "type": "string",
-            "nullable": true
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
           },
           "displayName": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
           },
           "upiVpa": {
             "type": "string",
-            "nullable": true
+            "nullable": true,
+            "pattern": "^[a-zA-Z0-9._-]{2,64}@[a-zA-Z]{2,64}$",
+            "example": "ravi@okhdfcbank"
           },
           "joinedAt": {
             "type": "string",
@@ -585,20 +728,29 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
           },
           "kind": {
             "$ref": "#/components/schemas/EntryKind"
           },
           "description": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 500
           },
           "categoryId": {
             "type": "string",
-            "nullable": true
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
           },
           "currency": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "example": "INR"
           },
           "amountMinor": {
             "type": "integer",
@@ -633,7 +785,8 @@
           },
           "fxSource": {
             "type": "string",
-            "nullable": true
+            "nullable": true,
+            "maxLength": 64
           },
           "fxAt": {
             "type": "string",
@@ -643,14 +796,21 @@
           },
           "notes": {
             "type": "string",
-            "nullable": true
+            "nullable": true,
+            "maxLength": 2000
           },
           "createdBy": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
           },
           "clientKey": {
             "type": "string",
-            "nullable": true
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
           },
           "createdAt": {
             "type": "string",
@@ -759,11 +919,17 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
           },
           "actorId": {
             "type": "string",
-            "nullable": true
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
           },
           "createdAt": {
             "type": "string",
@@ -775,14 +941,50 @@
           },
           "subjectId": {
             "type": "string",
-            "nullable": true
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
           },
-          "payload": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "description": "The after-image, in whatever shape `kind` calls for: EntrySnapshot, MemberEventPayload, GroupEventPayload or LinkEventPayload."
+          "entry": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EntrySnapshot"
+              },
+              {
+                "nullable": true
+              }
+            ]
+          },
+          "member": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MemberEventPayload"
+              },
+              {
+                "nullable": true
+              }
+            ]
+          },
+          "group": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GroupEventPayload"
+              },
+              {
+                "nullable": true
+              }
+            ]
+          },
+          "link": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LinkEventPayload"
+              },
+              {
+                "nullable": true
+              }
+            ]
           },
           "seq": {
             "type": "integer",
@@ -800,24 +1002,12 @@
           "createdAt",
           "kind",
           "subjectId",
-          "payload",
+          "entry",
+          "member",
+          "group",
+          "link",
           "seq",
           "ordinal"
-        ]
-      },
-      "EventKind": {
-        "type": "string",
-        "enum": [
-          "entry",
-          "member_added",
-          "member_joined",
-          "member_left",
-          "member_renamed",
-          "group_renamed",
-          "group_archived",
-          "group_restored",
-          "link_created",
-          "link_revoked"
         ]
       },
       "GroupCreate": {
@@ -954,6 +1144,13 @@
             "maxLength": 64,
             "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
           },
+          "clientKey": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
           "kind": {
             "$ref": "#/components/schemas/EntryKind"
           },
@@ -1014,13 +1211,6 @@
             "nullable": true,
             "maxLength": 2000
           },
-          "clientKey": {
-            "type": "string",
-            "nullable": true,
-            "minLength": 1,
-            "maxLength": 64,
-            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
-          },
           "payers": {
             "type": "array",
             "items": {
@@ -1044,6 +1234,7 @@
         },
         "required": [
           "id",
+          "clientKey",
           "kind",
           "description",
           "categoryId",
@@ -1056,7 +1247,6 @@
           "fxRate",
           "fxSource",
           "notes",
-          "clientKey",
           "payers",
           "shares",
           "baseSeq"
@@ -1066,13 +1256,22 @@
         "type": "object",
         "properties": {
           "token": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
           },
           "memberId": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
           },
           "createdBy": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
           },
           "createdAt": {
             "type": "string",
@@ -1103,26 +1302,6 @@
           "expiresAt",
           "redeemedAt",
           "redeemedBy"
-        ]
-      },
-      "GroupLink": {
-        "type": "object",
-        "properties": {
-          "token": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 64,
-            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
-          },
-          "expiresAt": {
-            "type": "string",
-            "format": "date-time",
-            "example": "2026-09-23T11:20:41.865Z"
-          }
-        },
-        "required": [
-          "token",
-          "expiresAt"
         ]
       },
       "LiveLink": {
@@ -1158,166 +1337,11 @@
           "revoked"
         ]
       },
-      "ProfilePage": {
-        "type": "object",
-        "properties": {
-          "profiles": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Profile"
-            }
-          },
-          "cursor": {
-            "type": "string",
-            "nullable": true,
-            "format": "date-time",
-            "example": "2026-09-23T11:20:41.865Z"
-          },
-          "cursorId": {
-            "type": "string",
-            "nullable": true,
-            "minLength": 1,
-            "maxLength": 64,
-            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
-          },
-          "hasMore": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "profiles",
-          "cursor",
-          "cursorId",
-          "hasMore"
-        ]
-      },
-      "Profile": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "displayName": {
-            "type": "string",
-            "nullable": true
-          },
-          "upiVpa": {
-            "type": "string",
-            "nullable": true
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time",
-            "example": "2026-09-23T11:20:41.865Z"
-          },
-          "deletedAt": {
-            "type": "string",
-            "nullable": true,
-            "format": "date-time",
-            "example": "2026-09-23T11:20:41.865Z"
-          }
-        },
-        "required": [
-          "id",
-          "displayName",
-          "upiVpa",
-          "updatedAt",
-          "deletedAt"
-        ]
-      },
-      "ProfileList": {
-        "type": "object",
-        "properties": {
-          "profiles": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Profile"
-            }
-          }
-        },
-        "required": [
-          "profiles"
-        ]
-      },
-      "ProfileUpdate": {
-        "type": "object",
-        "properties": {
-          "displayName": {
-            "type": "string",
-            "nullable": true,
-            "minLength": 1,
-            "maxLength": 100
-          },
-          "upiVpa": {
-            "type": "string",
-            "nullable": true,
-            "pattern": "^[a-zA-Z0-9._-]{2,64}@[a-zA-Z]{2,64}$",
-            "example": "ravi@okhdfcbank"
-          }
-        },
-        "required": [
-          "displayName",
-          "upiVpa"
-        ]
-      },
-      "Device": {
-        "type": "object",
-        "properties": {
-          "token": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 4096
-          },
-          "platform": {
-            "type": "string",
-            "enum": [
-              "android",
-              "web"
-            ]
-          }
-        },
-        "required": [
-          "token",
-          "platform"
-        ]
-      },
-      "DeviceForgotten": {
-        "type": "object",
-        "properties": {
-          "forgotten": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "forgotten"
-        ]
-      },
-      "AccountDeletion": {
-        "type": "object",
-        "properties": {
-          "forgotten": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "purged": {
-            "type": "integer",
-            "minimum": 0
-          }
-        },
-        "required": [
-          "forgotten",
-          "purged"
-        ]
-      },
       "LinkPreview": {
         "type": "object",
         "properties": {
           "kind": {
-            "type": "string",
-            "enum": [
-              "invite",
-              "group_link"
-            ]
+            "$ref": "#/components/schemas/LinkKind"
           },
           "groupId": {
             "type": "string",
@@ -1366,6 +1390,13 @@
           "isMember"
         ]
       },
+      "LinkKind": {
+        "type": "string",
+        "enum": [
+          "invite",
+          "group_link"
+        ]
+      },
       "PlaceholderList": {
         "type": "object",
         "properties": {
@@ -1383,18 +1414,20 @@
       "Placeholder": {
         "type": "object",
         "properties": {
-          "memberId": {
+          "id": {
             "type": "string",
             "minLength": 1,
             "maxLength": 64,
             "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
           },
           "displayName": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
           }
         },
         "required": [
-          "memberId",
+          "id",
           "displayName"
         ]
       },
@@ -1436,6 +1469,176 @@
         "required": [
           "memberId",
           "displayName"
+        ]
+      },
+      "ProfilePage": {
+        "type": "object",
+        "properties": {
+          "profiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Profile"
+            }
+          },
+          "cursor": {
+            "type": "string",
+            "nullable": true
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "profiles",
+          "cursor",
+          "hasMore"
+        ]
+      },
+      "Profile": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "upiVpa": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^[a-zA-Z0-9._-]{2,64}@[a-zA-Z]{2,64}$",
+            "example": "ravi@okhdfcbank"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "deletedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          }
+        },
+        "required": [
+          "id",
+          "displayName",
+          "upiVpa",
+          "updatedAt",
+          "deletedAt"
+        ]
+      },
+      "ProfileList": {
+        "type": "object",
+        "properties": {
+          "profiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Profile"
+            }
+          }
+        },
+        "required": [
+          "profiles"
+        ]
+      },
+      "ProfileLookup": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            },
+            "minItems": 1,
+            "maxItems": 200
+          }
+        },
+        "required": [
+          "ids"
+        ]
+      },
+      "ProfileUpdate": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "upiVpa": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^[a-zA-Z0-9._-]{2,64}@[a-zA-Z]{2,64}$",
+            "example": "ravi@okhdfcbank"
+          }
+        },
+        "required": [
+          "displayName",
+          "upiVpa"
+        ]
+      },
+      "Device": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "platform": {
+            "$ref": "#/components/schemas/Platform"
+          }
+        },
+        "required": [
+          "token",
+          "platform"
+        ]
+      },
+      "Platform": {
+        "type": "string",
+        "enum": [
+          "android",
+          "web"
+        ]
+      },
+      "DeviceForgotten": {
+        "type": "object",
+        "properties": {
+          "forgotten": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "forgotten"
+        ]
+      },
+      "AccountDeletion": {
+        "type": "object",
+        "properties": {
+          "forgotten": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "purged": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "forgotten",
+          "purged"
         ]
       },
       "Reference": {
@@ -1536,7 +1739,9 @@
             "example": "2026-09-23"
           },
           "currency": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "example": "INR"
           },
           "rate": {
             "type": "number",
@@ -1609,14 +1814,106 @@
         }
       }
     },
+    "/api/identity/guest": {
+      "post": {
+        "security": [
+          {},
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "signInAsGuest",
+        "tags": [
+          "identity"
+        ],
+        "summary": "Start a guest account on this device",
+        "responses": {
+          "200": {
+            "description": "Signed in as a new guest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityOutcome"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/session": {
+      "get": {
+        "security": [
+          {},
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "getSession",
+        "tags": [
+          "identity"
+        ],
+        "summary": "The session in hand, or none",
+        "responses": {
+          "200": {
+            "description": "The account, and a rotated bearer token if one was issued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/sign-out": {
+      "post": {
+        "security": [
+          {},
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "signOut",
+        "tags": [
+          "identity"
+        ],
+        "summary": "End this session",
+        "responses": {
+          "204": {
+            "description": "Signed out"
+          }
+        }
+      }
+    },
     "/api/identity/google": {
       "post": {
+        "security": [
+          {},
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
         "operationId": "linkGoogle",
         "tags": [
           "identity"
         ],
         "summary": "Attach Google to this session, or sign in with it",
-        "description": "Tries to link first, so the account id survives and nothing on the device has to move. Falls back to signing in only when the Google account provably belongs to somebody already, and only when allowSignIn says the cost has already been explained to the person.",
+        "description": "Links first, so the account id survives. Signs in instead only when the Google account already belongs to somebody, and only with allowSignIn.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1651,8 +1948,58 @@
         }
       }
     },
+    "/api/identity/google/redirect": {
+      "post": {
+        "security": [
+          {},
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "startGoogleRedirect",
+        "tags": [
+          "identity"
+        ],
+        "summary": "Where to send the browser to link or sign in with Google",
+        "description": "Links to the session in hand unless allowSignIn is set or there is none. Afterwards, read `GET /identity/session`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleRedirectRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The URL to visit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleRedirect"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/identity/email": {
       "post": {
+        "security": [
+          {},
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
         "operationId": "startEmailSignIn",
         "tags": [
           "identity"
@@ -1684,6 +2031,15 @@
     },
     "/api/identity/email/verify": {
       "post": {
+        "security": [
+          {},
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
         "operationId": "verifyEmailCode",
         "tags": [
           "identity"
@@ -1710,6 +2066,16 @@
               }
             }
           },
+          "400": {
+            "description": "The code is wrong or has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "401": {
             "description": "That code was for a flow this session cannot finish.",
             "content": {
@@ -1723,20 +2089,28 @@
         }
       }
     },
-    "/api/bootstrap": {
+    "/api/groups": {
       "get": {
-        "operationId": "bootstrap",
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "listGroups",
         "tags": [
           "sync"
         ],
-        "summary": "Who I am, and which groups to ask",
+        "summary": "The groups this account is still in",
         "responses": {
           "200": {
-            "description": "The account and its groups",
+            "description": "The group ids",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Bootstrap"
+                  "$ref": "#/components/schemas/GroupIds"
                 }
               }
             }
@@ -1752,16 +2126,132 @@
             }
           }
         }
+      },
+      "post": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "createGroup",
+        "tags": [
+          "groups"
+        ],
+        "summary": "Make a group, and its creator's place in it",
+        "description": "Idempotent for its creator, so a retry whose response was lost returns the same group.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GroupCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The group",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Group"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "You are not a member of this group, or not allowed to change that.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such group, entry, member or link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The request conflicts with the group's current state. Read `error.retry` before retrying.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The group was collected, or the link has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The expense does not add up.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/groups/{groupId}/changes": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
         "operationId": "getChanges",
         "tags": [
           "sync"
         ],
         "summary": "Everything that changed in one group since a cursor",
-        "description": "`limit` counts changes, not rows. Every row written by one call shares a sequence number and a page is only ever cut between numbers, so a device sees a whole write or none of it — it can never observe an expense whose shares have not arrived. Send `seq` back as `since` next time.",
+        "description": "`limit` counts changes, not rows, and a page is cut only between sequence numbers, so a device sees a whole write or none of it. Send `seq` back as `since` next time.",
         "parameters": [
           {
             "schema": {
@@ -1877,116 +2367,21 @@
         }
       }
     },
-    "/api/groups": {
-      "post": {
-        "operationId": "createGroup",
-        "tags": [
-          "groups"
-        ],
-        "summary": "Make a group, and its creator's place in it",
-        "description": "Idempotent for the account that made it, so a retry whose response was lost returns the same group rather than refusing.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/GroupCreate"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "The group",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Group"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "The request is malformed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No session.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "You are not a member of this group, or not allowed to change that.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No such group, entry, member or link.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "The request conflicts with the group's current state. Read `error.retry` before retrying.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "410": {
-            "description": "The group was collected, or the link has expired.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "The expense does not add up.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/groups/{groupId}": {
       "put": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
         "operationId": "updateGroup",
         "tags": [
           "groups"
         ],
         "summary": "Rename, archive or change a setting",
-        "description": "Every editable field, every time. There are no fields for `id`, `createdAt` or `createdBy`, which is why nothing needs to forbid rewriting them.",
         "parameters": [
           {
             "schema": {
@@ -2096,12 +2491,19 @@
     },
     "/api/groups/{groupId}/members": {
       "post": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
         "operationId": "addMember",
         "tags": [
           "groups"
         ],
         "summary": "Add somebody who has never opened the app",
-        "description": "A placeholder is a full member: they can pay, hold a balance and be settled with. Claiming an invite later sets one column and moves no money.",
         "parameters": [
           {
             "schema": {
@@ -2211,12 +2613,20 @@
     },
     "/api/groups/{groupId}/members/{memberId}": {
       "put": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
         "operationId": "updateMember",
         "tags": [
           "groups"
         ],
         "summary": "Change a name, a payment handle, or whether somebody is still here",
-        "description": "Your own row and any placeholder are editable; another account holder's are not — including by whoever made the group. Leaving is always yours to do; removing somebody else requires them to be settled in every currency.",
+        "description": "Your own row and any placeholder are editable; another account holder's are not. Leaving is always yours to do; removing somebody else requires them to be settled in every currency.",
         "parameters": [
           {
             "schema": {
@@ -2337,12 +2747,20 @@
     },
     "/api/groups/{groupId}/entries": {
       "post": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
         "operationId": "upsertEntry",
         "tags": [
           "entries"
         ],
         "summary": "Record or edit an expense, whole",
-        "description": "Whole rather than by column: an amount, its payers and its shares are one coherent fact. Send `baseSeq` to be told when somebody else has moved the money since you composed the edit — a stale base is refused only when applying the write would move money, so two people fixing a typo never arbitrate.",
+        "description": "A stale `baseSeq` is refused only when the write would move money, so two people fixing a typo never arbitrate.",
         "parameters": [
           {
             "schema": {
@@ -2452,12 +2870,20 @@
     },
     "/api/groups/{groupId}/entries/{entryId}": {
       "delete": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
         "operationId": "deleteEntry",
         "tags": [
           "entries"
         ],
         "summary": "Soft-delete an expense",
-        "description": "Deleting always moves money, so unlike a prose edit it must carry the exact version the device last saw. The row stays in the feed with `deletedAt` set; nothing here can remove it.",
+        "description": "Deleting always moves money, so it must carry the exact version the device last saw.",
         "parameters": [
           {
             "schema": {
@@ -2577,6 +3003,14 @@
     },
     "/api/groups/{groupId}/entries/{entryId}/restore": {
       "post": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
         "operationId": "restoreEntry",
         "tags": [
           "entries"
@@ -2701,12 +3135,20 @@
     },
     "/api/groups/{groupId}/members/{memberId}/invite": {
       "post": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
         "operationId": "createInvite",
         "tags": [
           "invites"
         ],
         "summary": "Hand one unclaimed place to one person",
-        "description": "Only for a place nobody has claimed: handing out a link to a member who already has an account would be an account takeover with extra steps. Reissuing invalidates whatever was sent before, so an old link found in a chat history cannot still be spent.",
+        "description": "Reissuing invalidates whatever was sent before.",
         "parameters": [
           {
             "schema": {
@@ -2817,12 +3259,20 @@
     },
     "/api/groups/{groupId}/link": {
       "post": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
         "operationId": "createGroupLink",
         "tags": [
           "invites"
         ],
         "summary": "Mint the group's one open link",
-        "description": "Bearer authority over membership: whoever holds it may join, any number of times, until it expires or is revoked. One live link at a time — minting revokes the previous one — and both the minting and the revocation are written to the activity feed, because a group that cannot see its open door has no way to decide it should be shut.",
+        "description": "Whoever holds it may join until it expires or is revoked. Minting revokes the previous one; both are in the activity feed.",
         "parameters": [
           {
             "schema": {
@@ -2920,12 +3370,19 @@
         }
       },
       "get": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
         "operationId": "getGroupLink",
         "tags": [
           "invites"
         ],
         "summary": "The group's open link, if it has a usable one",
-        "description": "Null when nobody has minted one, or the last one has expired or been revoked. Requires membership, because it hands a working URL out rather than describing one somebody already holds.",
         "parameters": [
           {
             "schema": {
@@ -3023,6 +3480,14 @@
         }
       },
       "delete": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
         "operationId": "revokeGroupLink",
         "tags": [
           "invites"
@@ -3125,314 +3590,23 @@
         }
       }
     },
-    "/api/profiles": {
-      "get": {
-        "operationId": "getProfiles",
-        "tags": [
-          "sync"
-        ],
-        "summary": "Everybody you share a group with, plus yourself",
-        "description": "The one feed still cursored on a timestamp rather than a sequence number, and honestly so: profiles live in a database that several requests write concurrently, so there is nothing there that can hand out a monotonic integer the way a group's Durable Object can. Send `cursor` and `cursorId` back next time.",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "format": "date-time",
-              "example": "2026-09-23T11:20:41.865Z"
-            },
-            "required": false,
-            "name": "since",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 64,
-              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
-            },
-            "required": false,
-            "name": "sinceId",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "integer",
-              "example": 100
-            },
-            "required": false,
-            "name": "limit",
-            "in": "query"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "The page, and where the feed stands",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProfilePage"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No session.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/profiles/by-ids": {
-      "get": {
-        "operationId": "getProfilesByIds",
-        "tags": [
-          "sync"
-        ],
-        "summary": "Exactly these profiles, cursor or no cursor",
-        "description": "The one thing the feed structurally cannot do. A cursor orders changes within what you can already see; it cannot surface a row that only just became visible to you. When somebody claims a placeholder, their account may have been named years ago — the row is old, the cursor is past it, and no incremental pull will ever mention it again. Same visibility rule as the feed: ids you cannot see are simply absent.",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f,0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e70",
-              "description": "Comma-separated profile ids, at most 200."
-            },
-            "required": true,
-            "description": "Comma-separated profile ids, at most 200.",
-            "name": "ids",
-            "in": "query"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Those of them you can see",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProfileList"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "The request is malformed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No session.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/profile": {
-      "put": {
-        "operationId": "updateProfile",
-        "tags": [
-          "sync"
-        ],
-        "summary": "Your own name and payment handle",
-        "description": "Singular, and with no id in it: the row written is the one the session names. An endpoint that took an id would be an endpoint somebody could point at a stranger's payment handle. Both fields are required — null clears one — because an optional field that means 'leave it alone' cannot be told from a null on the wire, and clearing a payment handle has to be expressible.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProfileUpdate"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Your profile, as stored",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Profile"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "The request is malformed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No session.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/devices": {
-      "put": {
-        "operationId": "registerDevice",
-        "tags": [
-          "devices"
-        ],
-        "summary": "Where to wake this account",
-        "description": "Idempotent, and a transfer rather than a refusal when the token already belongs to somebody else: a phone that changes hands keeps its registration token, so the previous owner's claim on it has to yield or their notifications follow the new one.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Device"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Registered",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Device"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "The request is malformed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No session.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/devices/{token}": {
-      "delete": {
-        "operationId": "forgetDevice",
-        "tags": [
-          "devices"
-        ],
-        "summary": "Stop waking this device",
-        "description": "Only removes a token that belongs to this account, so signing out on one phone cannot silence somebody else's.",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 4096
-            },
-            "required": true,
-            "name": "token",
-            "in": "path"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Whether there was one to forget",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DeviceForgotten"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No session.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/account": {
-      "delete": {
-        "operationId": "deleteAccount",
-        "tags": [
-          "account"
-        ],
-        "summary": "Delete this account, permanently",
-        "description": "Not a sign-out and not recoverable. It does not remove other people's ledgers: money you paid, money you owe and the settlements between you are facts about their group as much as yours, so your member row keeps its name and loses its account — exactly the state of somebody a friend added who never signed up. A group where you were the last account holder is collected outright instead, because nobody left could ever read it again. The session is left alone; the caller decides what to do with the device.",
-        "responses": {
-          "200": {
-            "description": "What it did, group by group",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AccountDeletion"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No session.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/links/{token}": {
       "get": {
+        "security": [
+          {},
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
         "operationId": "peekLink",
         "tags": [
           "invites"
         ],
         "summary": "What a link is for, without spending it",
-        "description": "Works with no session, which is the point: whoever just tapped the link has not been asked who they are yet. A spent, expired or revoked token still describes itself, so a screen can say which of those it is rather than showing 'invalid link' for three different reasons.",
+        "description": "Works with no session. A spent, expired or revoked token still describes itself.",
         "parameters": [
           {
             "schema": {
@@ -3482,12 +3656,20 @@
     },
     "/api/links/{token}/placeholders": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
         "operationId": "linkPlaceholders",
         "tags": [
           "invites"
         ],
         "summary": "The unclaimed places this link's group is holding",
-        "description": "Requires a session, unlike the preview: these are other people's names, which is more than the link implies to whoever holds it. It is asked after the arrival has chosen an account rather than before, which they have to do to join in any case.",
+        "description": "Other people's names, so a session is required, unlike the preview.",
         "parameters": [
           {
             "schema": {
@@ -3587,12 +3769,20 @@
     },
     "/api/links/{token}/join": {
       "post": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
         "operationId": "joinWithLink",
         "tags": [
           "invites"
         ],
         "summary": "Walk in on a link",
-        "description": "Claiming a place sets exactly one column on a member row that already has balances and history; arriving as somebody new inserts one. Never both, and never a second place for one account.",
+        "description": "Claiming a place sets one column on a member row that already has balances; arriving as somebody new inserts one. Never a second place for one account.",
         "parameters": [
           {
             "schema": {
@@ -3700,6 +3890,346 @@
         }
       }
     },
+    "/api/profiles": {
+      "get": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "getProfiles",
+        "tags": [
+          "sync"
+        ],
+        "summary": "Everybody you share a group with, plus yourself",
+        "description": "Cursored on time, since profiles have no single writer to number them. Send `cursor` back as `after`.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "after",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "example": 100
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The page, and where the feed stands",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfilePage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/profiles/lookup": {
+      "post": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "lookupProfiles",
+        "tags": [
+          "sync"
+        ],
+        "summary": "Exactly these profiles",
+        "description": "For a profile that just became visible (a placeholder was claimed) but is older than the feed's cursor. Ids you cannot see are absent.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileLookup"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Those of them you can see",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/profile": {
+      "put": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "updateProfile",
+        "tags": [
+          "sync"
+        ],
+        "summary": "Your own name and payment handle",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Your profile, as stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/devices": {
+      "put": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "registerDevice",
+        "tags": [
+          "devices"
+        ],
+        "summary": "Where to wake this account",
+        "description": "Idempotent, and a transfer when the token belonged to somebody else: phones change hands.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Device"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Registered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Device"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/devices/{token}": {
+      "delete": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "forgetDevice",
+        "tags": [
+          "devices"
+        ],
+        "summary": "Stop waking this device",
+        "description": "Only removes a token that belongs to this account.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "required": true,
+            "name": "token",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Whether there was one to forget",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceForgotten"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/account": {
+      "delete": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "deleteAccount",
+        "tags": [
+          "account"
+        ],
+        "summary": "Delete this account, permanently",
+        "description": "Other people's ledgers stay: your member rows become placeholders that keep your name. A group where you were the last account holder is collected. The session is left for the caller to clear.",
+        "responses": {
+          "200": {
+            "description": "What it did, group by group",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountDeletion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/reference": {
       "get": {
         "operationId": "getReference",
@@ -3707,7 +4237,7 @@
           "reference"
         ],
         "summary": "Every currency and category the server knows about",
-        "description": "Whole rather than paged, which is proportionate rather than lazy: there are a few dozen rows between them and they change about never. Send the `ETag` back as `If-None-Match` to get a 304. The client merges with an upsert and never deletes — a category withdrawn here is still on the entries that used it.",
+        "description": "Send the `ETag` back as `If-None-Match` to get a 304.",
         "parameters": [
           {
             "schema": {
@@ -3742,7 +4272,7 @@
           "reference"
         ],
         "summary": "Exchange rates published on or after a date",
-        "description": "Against USD, which is stored as exactly 1 — so any pair is a division and there is no such thing as a supported *pair*, only a supported currency. Rates are immutable once published, so a device keeps a high-water mark rather than a cursor and asks for everything after it.",
+        "description": "Against USD. Rates are immutable, so a device keeps a high-water mark and asks for everything after it; the most recent months are served when the window is too wide.",
         "parameters": [
           {
             "schema": {
@@ -3786,7 +4316,7 @@
           "reference"
         ],
         "summary": "Ask for a day the server has never needed",
-        "description": "Fire and forget: a device recording an expense backdated past what the server holds says so, and the rate arrives on a later sync. It cannot wait, because a rate is display-only and must never be in the way of recording money. Heavily throttled — six devices in one group sync the same backdated expense within a second of each other.",
+        "description": "Fire and forget, and heavily throttled: the rate arrives on a later sync.",
         "requestBody": {
           "required": true,
           "content": {

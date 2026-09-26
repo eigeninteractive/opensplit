@@ -10,24 +10,11 @@ import '../../domain/repositories/auth_service.dart';
 import '../navigation.dart';
 
 /// The three ways to become somebody, offered together.
-///
-/// Used wherever there is no session yet: the welcome screen, and the invite
-/// screen once it has shown what the link is for. It is deliberately *not* the
-/// same widget as [AccountSection], which attaches an account to a session that
-/// already exists — that one has to weigh what a sign-in would cost and stop to
-/// ask. Here there is nothing on the device and nothing to lose, so every path
-/// is one tap with no warning attached, and folding the two together would mean
-/// a widget whose behaviour is half flags.
 class IdentityChoices extends ConsumerStatefulWidget {
   const IdentityChoices({super.key, this.onSignedIn, this.guestNote});
 
-  /// Work that only makes sense once a session exists, whichever route
-  /// produced it.
-  ///
-  /// Optional, and usually absent: nothing has to be done to *move* somebody
-  /// on, because the router's guard already reconsiders where a signed-in
-  /// visitor belongs the moment the session appears. The invite screen passes
-  /// one because it has a token to spend.
+  /// Work that only makes sense once a session exists, whichever route produced
+  /// it.
   final Future<void> Function()? onSignedIn;
 
   /// What being a guest means *here*, if the caller wants to say something
@@ -101,8 +88,8 @@ class _IdentityChoicesState extends ConsumerState<IdentityChoices> {
       case AttemptCompleted():
         await widget.onSignedIn?.call();
       // Nothing to do for either: the browser is on its way to Google and
-      // finishes through the resume at startup, or the picker was dismissed
-      // and nothing happened at all.
+      // finishes through the resume at startup, or the picker was dismissed and
+      // nothing happened at all.
       case AttemptRedirected():
       case AttemptCancelled():
         return;
@@ -205,9 +192,7 @@ class _IdentityChoicesState extends ConsumerState<IdentityChoices> {
           ),
           const SizedBox(height: 16),
 
-          // A real button, the same size as the others. Being a guest is a
-          // supported way to use this app, not a way of giving up on it, and
-          // demoting it to a text link would say the opposite.
+          // A real button, the same size as the others.
           OutlinedButton(
             onPressed: _busy ? null : _guest,
             child: const Text('Continue as guest'),

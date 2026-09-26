@@ -48,12 +48,6 @@ void main() {
       });
 
       // Deliberately NOT asserted: that credit and debit differ in luminance.
-      // Green and red are close to identical there, which is exactly why
-      // roughly one man in twelve cannot tell them apart — and why every
-      // balance in this app is worded ("you owe", "is owed", and the
-      // semanticsLabel on the signed figures) rather than relying on hue.
-      // A test demanding luminance separation would push the design towards
-      // treating colour as sufficient, which it is not.
     }
 
     test('light and dark do not share a credit colour', () {
@@ -105,11 +99,7 @@ void main() {
 
       final css = File('web/index.html').readAsStringSync();
 
-      // The app bar headline. All three destinations use a Material 3 large
-      // top app bar, whose expanded title is set in headlineMedium — so that
-      // is what the skeleton has to draw. A skeleton whose headline is a
-      // different size or weight than the real one visibly jumps at the swap,
-      // which is the whole thing this skeleton exists to prevent.
+      // The app bar headline.
       final headline = resolved.headlineMedium!;
       expect(css, contains('font-size: ${headline.fontSize!.round()}px'));
       expect(css, contains('font-weight: ${headline.fontWeight!.value}'));
@@ -124,19 +114,6 @@ void main() {
       tester,
     ) async {
       // Measured, not compared.
-      //
-      // Every other number in this stylesheet is derived from something the
-      // app publishes — a colour role, a text style, a breakpoint — and could
-      // be checked by reading that thing. A card's height is not published
-      // anywhere: it is whatever ListTile works out from its own padding, the
-      // type scale and the density in force. So the test renders the real
-      // skeleton card, measures it, and requires the stylesheet to carry
-      // exactly that.
-      //
-      // Which puts the causation the right way round. The app decides what a
-      // group card is; this fails until the stylesheet has been brought to it.
-      // The previous arrangement had the numbers hand-derived in a comment,
-      // and it quietly became a reason not to improve the real card.
       await tester.pumpWidget(
         MaterialApp(
           theme: buildTheme(Brightness.light),
@@ -162,9 +139,7 @@ void main() {
     testWidgets('gives its app bar the height the app gives one', (
       tester,
     ) async {
-      // The other number with no published source. A large app bar's expanded
-      // height is Flutter's, not ours, so it is read off a rendered one rather
-      // than copied from the framework's source.
+      // The other number with no published source.
       await tester.pumpWidget(
         MaterialApp(
           theme: buildTheme(Brightness.light),
@@ -201,12 +176,7 @@ void main() {
 
     test('agrees with the app on every boot-hint key', () {
       // The loader decides which shape to draw, and whether to fill it, by
-      // reading keys the Dart side writes. They are in different languages, in
-      // different files, and nothing connects them but these strings — so a
-      // rename on either side silently returns the loader to guessing.
-      //
-      // Every key, not the first one: there are two now, and checking only the
-      // one that happens to appear first is how the second goes unnoticed.
+      // reading keys the Dart side writes.
       final keys = RegExp(r"localStorage\.getItem\('([^']+)'\)")
           .allMatches(File('web/index.html').readAsStringSync())
           .map((match) => match.group(1)!)
@@ -229,10 +199,7 @@ void main() {
     });
 
     test('puts its navigation rail where the app puts one', () {
-      // Two numbers in two languages describing the same edge. If the CSS
-      // shows a rail at a width where Flutter does not, or the other way
-      // round, the layout jumps sideways at the swap — which is the one thing
-      // this skeleton exists to prevent, and nothing else would catch it.
+      // Two numbers in two languages describing the same edge.
       final dart = RegExp(
         r'_railBreakpoint\s*=\s*(\d+)',
       ).firstMatch(File('lib/presentation/router.dart').readAsStringSync());
@@ -263,11 +230,6 @@ void main() {
               as Map<String, dynamic>;
 
       // What the browser paints before a single byte of the app has parsed.
-      //
-      // Lower-cased before comparing because this file is rewritten in place by
-      // `dart run flutter_launcher_icons`, which copies the colours out of
-      // flutter_launcher_icons.yaml verbatim — and hex is written upper case
-      // there, as every other generator config in this repo writes it.
       for (final key in ['background_color', 'theme_color']) {
         expect(
           (manifest[key] as String).toLowerCase(),
@@ -291,11 +253,6 @@ void main() {
   // paints the window before a line of Dart runs — and on 12 and up paints a
   // system splash screen over it — from colours it can only read out of
   // resources and generator configs.
-  //
-  // Most of these files are written by `dart run flutter_native_splash:create`
-  // and `dart run flutter_launcher_icons`, which is exactly why they are worth
-  // testing: regenerating them silently reverts anything corrected by hand, and
-  // the result is a flash on a cold start that no test would otherwise catch.
   group('the Android launch window', () {
     String res(String path) =>
         File('android/app/src/main/res/$path').readAsStringSync();
@@ -331,10 +288,7 @@ void main() {
       });
 
       // NormalTheme is the window behind the running Flutter UI, visible during
-      // a rotation or a resize. flutter_native_splash writes v31 copies of both
-      // themes and leaves ?android:colorBackground — the platform's white — in
-      // this one, which shadows the corrected value on Android 12 and up. That
-      // is the whole reason this loop covers the v31 variants too.
+      // a rotation or a resize.
       for (final suffix in ['', '-v31']) {
         test('paints NormalTheme in the surface ($variant$suffix)', () {
           expect(
@@ -391,8 +345,7 @@ void main() {
 
     test('gives the launcher icon the theme\'s container colour', () {
       // The adaptive icon's background layer, which flutter_launcher_icons
-      // copies from its own config into colors.xml. Both are checked, because
-      // they are two files that have to agree and neither reads the other.
+      // copies from its own config into colors.xml.
       final light = buildTheme(Brightness.light).colorScheme;
 
       final declared = RegExp(
@@ -411,15 +364,6 @@ void main() {
 }
 
 /// The colours the loading skeleton in `web/index.html` claims to be using.
-///
-/// It has to paint before any Dart runs, so it cannot ask the theme what its
-/// own colours are — it writes them out as literals. That is fine right up
-/// until someone changes the seed, at which point the first thing anyone sees
-/// is a skeleton in the old palette dissolving into an app in the new one, and
-/// nothing anywhere fails.
-///
-/// So each literal is named after the role it stands for, and this reads them
-/// back out and holds them against the running theme.
 Map<String, String> _declaredColors(String css, int from) {
   final open = css.indexOf(':root {', from);
   expect(open, isNot(-1), reason: 'no :root block after offset $from');

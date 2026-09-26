@@ -2,21 +2,11 @@ import { env, exports as workerExports } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import type { ApiError } from "../src/schemas/common";
-import type { Bootstrap, ChangePage, Entry, Group, Member } from "./api-types";
+import type { ChangePage, Entry, Group, GroupIds, Member } from "./api-types";
 import { freshId } from "./group";
 import { type Guest, signInAsGuest } from "./session";
 
-/**
- * The sync surface over HTTP.
- *
- * The suites before this one reach the Durable Object directly, because that
- * is where every rule lives and a test of a rule should not have to route
- * through a Worker to get at it. This one is the opposite: the rules are
- * assumed, and what is under test is the layer that was added on top of them —
- * whether a request without a session gets anywhere, whether a refusal arrives
- * as the right status with the right retry kind, and whether the validation
- * that happens before a Durable Object is woken actually happens.
- */
+/** The sync surface over HTTP. */
 
 const ORIGIN = "https://opensplit.test";
 
@@ -76,7 +66,7 @@ beforeAll(async () => {
 
 describe("without a session", () => {
   it("refuses every route in the sync surface", async () => {
-    const paths = ["/api/bootstrap", `/api/groups/${freshId()}/changes`];
+    const paths = ["/api/groups", `/api/groups/${freshId()}/changes`];
 
     for (const path of paths) {
       const response = await call(path, null);
@@ -89,19 +79,17 @@ describe("without a session", () => {
   });
 });
 
-describe("bootstrap", () => {
-  it("names the account and the groups it is still in", async () => {
+describe("listing groups", () => {
+  it("names the groups the account is still in", async () => {
     const { id } = await makeGroup(ravi);
-    const body = await json<Bootstrap>(await call("/api/bootstrap", ravi));
+    const body = await json<GroupIds>(await call("/api/groups", ravi));
 
-    expect(body.profileId).toBe(ravi.id);
-    expect(body.isAnonymous).toBe(true);
     expect(body.groupIds).toContain(id);
   });
 
   it("does not name somebody else's groups", async () => {
     const { id } = await makeGroup(ravi);
-    const body = await json<Bootstrap>(await call("/api/bootstrap", zara));
+    const body = await json<GroupIds>(await call("/api/groups", zara));
 
     expect(body.groupIds).not.toContain(id);
   });

@@ -3,17 +3,9 @@ import 'package:opensplit_api/opensplit_api.dart' as api;
 import 'api_client.dart';
 
 /// The URL a link token is shared as.
-///
-/// One shape for invites and open links, one App Links filter and one route:
-/// which kind a token names is the server's business. Under `/app/` because
-/// that is where the client is served; `<base href="/app/">` absorbs the prefix
-/// so go_router still sees `/join/:token`.
 String joinUrl(String host, String token) => 'https://$host/app/join/$token';
 
 /// Invites and open links, over the generated client. Throws [ApiFailure].
-///
-/// Every rule about who may mint, spend or revoke a link is the group's
-/// Durable Object's; this only makes the calls.
 class Invites {
   Invites(api.OpensplitApi client) : _invites = client.getInvitesApi();
 
@@ -77,7 +69,7 @@ class Invites {
 
 /// How the join screen reads a preview.
 extension LinkPreviewReading on api.LinkPreview {
-  bool get isOpenLink => kind == api.LinkPreviewKindEnum.groupLink;
+  bool get isOpenLink => kind == api.LinkKind.groupLink;
 
   /// Null only if the member who minted it cannot be resolved, which the
   /// schema makes unreachable while the link exists; rendered, not stored.

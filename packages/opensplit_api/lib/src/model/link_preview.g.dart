@@ -27,9 +27,9 @@ LinkPreview _$LinkPreviewFromJson(Map<String, dynamic> json) =>
         kind: $checkedConvert(
           'kind',
           (v) => $enumDecode(
-            _$LinkPreviewKindEnumEnumMap,
+            _$LinkKindEnumMap,
             v,
-            unknownValue: LinkPreviewKindEnum.unknownDefaultOpenApi,
+            unknownValue: LinkKind.unknownDefaultOpenApi,
           ),
         ),
         groupId: $checkedConvert('groupId', (v) => v as String),
@@ -47,7 +47,7 @@ LinkPreview _$LinkPreviewFromJson(Map<String, dynamic> json) =>
 
 Map<String, dynamic> _$LinkPreviewToJson(LinkPreview instance) =>
     <String, dynamic>{
-      'kind': _$LinkPreviewKindEnumEnumMap[instance.kind]!,
+      'kind': _$LinkKindEnumMap[instance.kind]!,
       'groupId': instance.groupId,
       'groupName': instance.groupName,
       'inviterName': instance.inviterName,
@@ -59,8 +59,8 @@ Map<String, dynamic> _$LinkPreviewToJson(LinkPreview instance) =>
       'isMember': instance.isMember,
     };
 
-const _$LinkPreviewKindEnumEnumMap = {
-  LinkPreviewKindEnum.invite: 'invite',
-  LinkPreviewKindEnum.groupLink: 'group_link',
-  LinkPreviewKindEnum.unknownDefaultOpenApi: 'unknown_default_open_api',
+const _$LinkKindEnumMap = {
+  LinkKind.invite: 'invite',
+  LinkKind.groupLink: 'group_link',
+  LinkKind.unknownDefaultOpenApi: 'unknown_default_open_api',
 };

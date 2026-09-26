@@ -5,11 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart';
 
 /// The link preview, which nobody on this side of the link ever sees.
-///
-/// Every failure here is silent by construction: a card at the wrong aspect is
-/// cropped by the network showing it, a relative `og:image` is dropped
-/// entirely, and either way the first thing anyone learns is that the link
-/// unfurled badly in somebody else's feed.
 void main() {
   late final String landing;
 
@@ -93,9 +88,7 @@ void main() {
       reason: 'the app shell must exclude itself from the index',
     );
 
-    // And the exclusion has to be reachable. A Disallow would stop the fetch
-    // that reads the line above, which leaves the landing page's two links to
-    // /app pointing at something Google may still list without a snippet.
+    // And the exclusion has to be reachable.
     expect(
       File('site/robots.txt').readAsStringSync(),
       isNot(contains(RegExp(r'^Disallow: /app', multiLine: true))),

@@ -111,9 +111,8 @@ jobs:
           flutter pub get --enforce-lockfile
           dart run build_runner build
           dart run tool/build_web.dart --config=env/ci.example.json
-      # And then the one test that goes near the wire. `wrangler dev` runs the
-      # real Worker over local D1, KV and Durable Object storage -- nothing
-      # here touches a Cloudflare account, and no credentials are needed.
+      # Then the app's integration tests. `wrangler dev` runs the real Worker
+      # over local D1, KV and Durable Object storage; no Cloudflare account.
       - name: Start the Worker
         run: |
           cp .dev.vars.example .dev.vars
@@ -133,13 +132,12 @@ jobs:
         run: |
           curl -sS --max-time 60 \
             'http://127.0.0.1:8787/cdn-cgi/handler/scheduled?cron=0+4+*+*+*'
-      - name: Test the adapter against it
+      - name: Test the app against it
         working-directory: .
         run: |
-          # REQUIRE_BACKEND, so this can never quietly skip itself in CI --
-          # which is the only failure mode an opt-in integration test has.
-          flutter test --dart-define=REQUIRE_BACKEND=true \
-            test/data/cloudflare_integration_test.dart
+          # Every test tagged integration: sync, sessions and the client, with
+          # no fake server. REQUIRE_BACKEND so none can quietly skip here.
+          flutter test --tags integration --dart-define=REQUIRE_BACKEND=true
 
   tooling:
     name: Release tooling

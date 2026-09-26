@@ -43,11 +43,6 @@ Future<void> _beats(WidgetTester tester) async {
 }
 
 /// Tears the tree down while the binding is still pumping.
-///
-/// Cancelling a Drift query stream schedules a zero-duration cleanup timer. If
-/// the tree is disposed by the test framework instead, that timer is still
-/// pending when it checks, and every test in the file fails on an invariant
-/// that has nothing to do with what it was testing.
 Future<void> _teardown(WidgetTester tester) async {
   await tester.pumpWidget(const SizedBox.shrink());
   await tester.pump(Duration.zero);

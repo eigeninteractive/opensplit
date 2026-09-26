@@ -16,9 +16,9 @@ IdentityOutcome _$IdentityOutcomeFromJson(Map<String, dynamic> json) =>
         outcome: $checkedConvert(
           'outcome',
           (v) => $enumDecode(
-            _$IdentityOutcomeOutcomeEnumEnumMap,
+            _$IdentityOutcomeKindEnumMap,
             v,
-            unknownValue: IdentityOutcomeOutcomeEnum.unknownDefaultOpenApi,
+            unknownValue: IdentityOutcomeKind.unknownDefaultOpenApi,
           ),
         ),
         account: $checkedConvert(
@@ -33,14 +33,14 @@ IdentityOutcome _$IdentityOutcomeFromJson(Map<String, dynamic> json) =>
 
 Map<String, dynamic> _$IdentityOutcomeToJson(IdentityOutcome instance) =>
     <String, dynamic>{
-      'outcome': _$IdentityOutcomeOutcomeEnumEnumMap[instance.outcome]!,
+      'outcome': _$IdentityOutcomeKindEnumMap[instance.outcome]!,
       'account': instance.account.toJson(),
       'token': instance.token,
       'strandedUserId': instance.strandedUserId,
     };
 
-const _$IdentityOutcomeOutcomeEnumEnumMap = {
-  IdentityOutcomeOutcomeEnum.kept: 'kept',
-  IdentityOutcomeOutcomeEnum.replaced: 'replaced',
-  IdentityOutcomeOutcomeEnum.unknownDefaultOpenApi: 'unknown_default_open_api',
+const _$IdentityOutcomeKindEnumMap = {
+  IdentityOutcomeKind.kept: 'kept',
+  IdentityOutcomeKind.replaced: 'replaced',
+  IdentityOutcomeKind.unknownDefaultOpenApi: 'unknown_default_open_api',
 };

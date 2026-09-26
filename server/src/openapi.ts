@@ -1,12 +1,6 @@
 /**
- * The document's own metadata, in one place.
- *
- * Shared by the Worker, which serves it at `/api/openapi.json`, and by
- * `scripts/write-openapi.ts`, which writes the committed copy. Two definitions
- * would differ by a version string one day and produce a spurious CI failure.
- *
- * Emitted as OpenAPI **3.0.3** rather than 3.1: nothing here needs 3.1, and
- * support for it across Dart client generators is uneven.
+ * The document's metadata, shared by the served `/api/openapi.json` and the
+ * committed `docs/openapi.json`. OpenAPI 3.0.3: Dart generators handle 3.1 unevenly.
  */
 export const openApiDocument = {
   openapi: "3.0.3",

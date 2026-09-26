@@ -180,8 +180,7 @@ void main() {
 
     test('stays exact at amounts that overflow a JavaScript double', () {
       // 10^15 minor units multiplied by a 10^6-scaled weight is 10^21, far past
-      // the 2^53 where a web int silently loses precision. This is the case the
-      // BigInt intermediate exists for.
+      // the 2^53 where a web int silently loses precision.
       final gen = EntryGen(7);
       for (var i = 0; i < 500; i++) {
         final members = gen.memberIds(2 + gen.random.nextInt(8));
@@ -289,14 +288,6 @@ void main() {
     });
 
     // Pinned values, run on the VM and in Chrome by CI.
-    //
-    // This is the test that matters most in this group. The first version of
-    // the hash used a plain `hash * prime` masked to 32 bits, which is correct
-    // on a 64-bit int and lossy on a JavaScript double — the product reaches
-    // 2^56 and the web is exact only to 2^53. The two platforms then chose
-    // different members for the same entry, meaning a phone and the web app
-    // would split one expense differently and the sync would flip between
-    // them. Nothing but pinned cross-platform values catches that.
     test('a seed picks the same member on every platform', () {
       expect(favoured('entry-1'), 'bbb');
       expect(favoured('entry-2'), 'bbb');

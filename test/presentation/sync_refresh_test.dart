@@ -169,9 +169,9 @@ void main() {
       groups: groups.stream,
     );
     // The skeleton, not a spinner and not a blank body: the point of the
-    // assertion is that something group-shaped is on screen before the
-    // database has answered, which is what the web loader has already been
-    // drawing for the whole of the engine download.
+    // assertion is that something group-shaped is on screen before the database
+    // has answered, which is what the web loader has already been drawing for
+    // the whole of the engine download.
     expect(find.byType(GroupListSkeleton), findsOneWidget);
     expect(find.text('No groups yet'), findsNothing);
     groups.add([_group]);

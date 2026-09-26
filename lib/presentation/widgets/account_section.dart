@@ -10,26 +10,6 @@ import '../../domain/repositories/auth_service.dart';
 import '../navigation.dart';
 
 /// Attaches a real account to an anonymous session.
-///
-/// An eight-digit code, not a magic link. Magic links open in whichever browser
-/// the mail app prefers rather than the one holding the session, lose the app's
-/// context entirely on mobile, and are routinely followed and consumed by
-/// corporate mail scanners before the recipient ever sees them.
-///
-/// No SMS either, despite being the Indian default: per-message cost scales
-/// linearly with signups and never goes away, and SMS pumping fraud can produce
-/// a real bill overnight. That is exactly the kind of recurring per-user cost
-/// that forces a paywall later.
-///
-/// ## Two outcomes, and the difference matters
-///
-/// Giving an address that is free ATTACHES it: the user id does not change and
-/// every expense on this device is still theirs. Giving one that already has an
-/// OpenSplit account is a SIGN-IN: the session is replaced, and what this
-/// device recorded anonymously stays with the anonymous account, unreachable.
-///
-/// The screen has to name that before it happens rather than after, so both
-/// paths stop and ask, and both say how many expenses are at stake.
 class AccountSection extends ConsumerStatefulWidget {
   const AccountSection({super.key});
 
@@ -52,8 +32,6 @@ class _AccountSectionState extends ConsumerState<AccountSection> {
     super.initState();
     // A refusal that came back from a redirect has no caller left to catch it,
     // so it waits in a provider for whichever screen the user was returned to.
-    // This is that screen: nothing else ever asks to link without permission
-    // to fall back, so nothing else can be refused.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final parked = ref.read(googleRefusalProvider);
       final refusal = parked.value;
@@ -64,9 +42,6 @@ class _AccountSectionState extends ConsumerState<AccountSection> {
   }
 
   /// Asks the question the redirect could not, then signs in if told to.
-  ///
-  /// The same two steps [_attach] takes on Android, split across the page load
-  /// that happened in between.
   Future<void> _signInAfterRefusal() async {
     final returnTo = returnDestination(GoRouterState.of(context).uri);
     if (!await _confirmSignIn('that Google account')) return;
@@ -110,9 +85,6 @@ class _AccountSectionState extends ConsumerState<AccountSection> {
   }
 
   /// Asks whether to go ahead with replacing the session, naming the cost.
-  ///
-  /// Returns false if they back out, and false if the widget went away while
-  /// the dialog was open.
   Future<bool> _confirmSignIn(String who) async {
     final count = await ref
         .read(accountControllerProvider.notifier)
@@ -187,15 +159,6 @@ class _AccountSectionState extends ConsumerState<AccountSection> {
   Future<void> _google() => _run(_attach);
 
   /// Attaches Google to this session, or signs in as it.
-  ///
-  /// Linking is tried first and the refusal is the one chance to ask before a
-  /// sign-in replaces the session and strands this device's rows.
-  ///
-  /// On Android the whole exchange happens here. On the web the first call
-  /// hands the page to Google and returns [AttemptRedirected]; the refusal, if
-  /// there is one, is raised on the way back by
-  /// [AccountController.resumeGoogleRedirect] on the next launch and asked from
-  /// [_resumeRedirect] — the same question, from the other end of a page load.
   Future<void> _attach() async {
     // Read before any await: on the web this navigates the page away.
     final returnTo = returnDestination(GoRouterState.of(context).uri);

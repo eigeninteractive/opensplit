@@ -4,18 +4,6 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 
 /// That the fonts this app redistributes travel with their licence.
-///
-/// The OFL asks for two things from anyone shipping the files: the copyright
-/// notice, and the licence text itself. Both live in `assets/google_fonts/
-/// LICENSE`, which is bundled and which `lib/main.dart` hands to
-/// `LicenseRegistry` so that the app's own licences screen can show it.
-///
-/// A test rather than a note, because the failure is silent in both directions.
-/// Adding a fifth face is a two-line edit to `pubspec.yaml` that nothing
-/// otherwise objects to, and the licence page renders happily whether or not
-/// anything registered a font. So the notices are read out of the files
-/// themselves — a font's own name table is where its copyright actually lives —
-/// and checked against what ships beside them.
 void main() {
   final directory = Directory('assets/google_fonts');
   final licence = File('${directory.path}/LICENSE').readAsStringSync();
@@ -51,8 +39,7 @@ void main() {
 
   test('the licence text is present, not linked', () {
     // Clause 2 is the one being satisfied, and a URL does not satisfy it: the
-    // file has to accompany the fonts. These three lines are far enough apart
-    // in the text that no summary of it could pass by accident.
+    // file has to accompany the fonts.
     expect(licence, contains('SIL OPEN FONT LICENSE Version 1.1'));
     expect(
       licence,
@@ -63,11 +50,6 @@ void main() {
 }
 
 /// The `copyright` string (name ID 0) from a TrueType file's name table.
-///
-/// Read here rather than trusted from a spreadsheet: the point of the check is
-/// that what ships and what is claimed are the same, and only one of those can
-/// be read off the bytes. Returns null if the file has no name table or no
-/// copyright record in it, which the caller reports as the failure it is.
 String? _copyright(Uint8List bytes) {
   final data = ByteData.sublistView(bytes);
   final tables = data.getUint16(4);

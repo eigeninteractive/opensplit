@@ -11,11 +11,6 @@ SyncGate createPlatformSyncGate(AppDatabase database) =>
     SqliteSyncGate(database);
 
 /// Serializes native isolates with an expiring SQLite lease.
-///
-/// Android background messages open a second connection and share no Dart
-/// memory with the foreground app. A persisted lease is therefore required,
-/// but renewal failure belongs to the current run only. A later run gets a
-/// clean attempt.
 class SqliteSyncGate implements SyncGate {
   SqliteSyncGate(
     this._database, {
@@ -79,13 +74,7 @@ class SqliteSyncGate implements SyncGate {
 
   Future<void> _renewWhileHeld(String owner, Completer<void> stop) async {
     while (!stop.isCompleted) {
-      // A sleep that can actually be cancelled. `Future.any` resolves as soon
-      // as the first future completes but cannot cancel the others, so a
-      // `Future.delayed` here kept a timer alive for the rest of the renewal
-      // interval after every sync had finished with it. Harmless in the sense
-      // that nothing fired, and not harmless at all in the sense that an app
-      // syncing on every write accumulated one per run -- and a widget test
-      // rightly refuses to end with a timer still pending.
+      // A sleep that can actually be cancelled.
       final tick = Completer<void>();
       final timer = Timer(renewalInterval, tick.complete);
       await Future.any([tick.future, stop.future]);

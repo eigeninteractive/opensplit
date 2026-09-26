@@ -3,6 +3,7 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:opensplit_api/src/model/link_kind.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 part 'link_preview.g.dart';
@@ -41,9 +42,9 @@ class LinkPreview {
     name: r'kind',
     required: true,
     includeIfNull: false,
-    unknownEnumValue: LinkPreviewKindEnum.unknownDefaultOpenApi,
+    unknownEnumValue: LinkKind.unknownDefaultOpenApi,
   )
-  final LinkPreviewKindEnum kind;
+  final LinkKind kind;
 
   @JsonKey(name: r'groupId', required: true, includeIfNull: false)
   final String groupId;
@@ -110,20 +111,4 @@ class LinkPreview {
   String toString() {
     return toJson().toString();
   }
-}
-
-enum LinkPreviewKindEnum {
-  @JsonValue(r'invite')
-  invite(r'invite'),
-  @JsonValue(r'group_link')
-  groupLink(r'group_link'),
-  @JsonValue(r'unknown_default_open_api')
-  unknownDefaultOpenApi(r'unknown_default_open_api');
-
-  const LinkPreviewKindEnum(this.value);
-
-  final String value;
-
-  @override
-  String toString() => value;
 }

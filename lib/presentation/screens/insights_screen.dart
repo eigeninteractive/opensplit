@@ -13,11 +13,6 @@ import '../widgets/export_button.dart';
 import '../widgets/page_body.dart';
 
 /// Spend analytics and search.
-///
-/// Everything here is local SQL over data already on the device: no endpoint,
-/// no per-query cost, nothing to invalidate, and it all works with no
-/// connection. Search in particular is something other apps have put behind a
-/// paywall; here it is a query against a table the phone already holds.
 class InsightsScreen extends ConsumerWidget {
   const InsightsScreen({super.key, required this.groupId});
 
@@ -53,11 +48,7 @@ class InsightsScreen extends ConsumerWidget {
             ? const SizedBox.shrink()
             // A CustomScrollView rather than a ListView because the search
             // results underneath are unbounded — every entry in the group can
-            // match — and a ListView's children are all built at once. The
-            // fixed part of the page is a handful of widgets, so it stays a
-            // plain list; only the results need to be lazy. Nesting a second
-            // scrollable would have been the other way to get there, and it is
-            // the wrong one: two scroll positions in one gesture.
+            // match — and a ListView's children are all built at once.
             : CustomScrollView(
                 slivers: [
                   SliverPadding(
@@ -68,9 +59,7 @@ class InsightsScreen extends ConsumerWidget {
                           children: [
                             // SearchBar is Material 3's search field: a
                             // pill-shaped bar on surfaceContainerHigh with its
-                            // own elevation and leading/trailing slots. A
-                            // TextField dressed up with a prefixIcon is the
-                            // Material 2 way of drawing one.
+                            // own elevation and leading/trailing slots.
                             SearchBar(
                               hintText: 'Search descriptions and notes',
                               leading: const Icon(Icons.search),
@@ -271,16 +260,6 @@ class _Section extends StatelessWidget {
 }
 
 /// How big one row is against the biggest row in its section.
-///
-/// A bar rather than a pie: comparing lengths is far easier than comparing
-/// angles.
-///
-/// Not a [LinearProgressIndicator]: that announces itself to assistive tech as
-/// a task in progress, and a spend figure is finished and static.
-///
-/// So this is drawn plainly, from the same scheme roles, and hidden from
-/// assistive tech entirely: the label and the amount beside it already say
-/// everything the bar is a picture of.
 class _ShareBar extends StatelessWidget {
   const _ShareBar({required this.fraction});
 
@@ -325,13 +304,7 @@ class _Results extends ConsumerWidget {
     if (results == null) return const SliverToBoxAdapter();
 
     // Slivers rather than widgets, so the rows are built as they are scrolled
-    // to. There is no upper bound on how many entries a search matches.
-    //
-    // The rows are a plain divided list rather than the card the summary
-    // sections above use. A card is a container for a bounded, glanceable
-    // group, and it also cannot wrap a lazy list without hand-drawing its own
-    // border — which is the thing this app just stopped doing. Material's own
-    // pattern for a result set of unknown length is a list on the surface.
+    // to.
     return SliverMainAxisGroup(
       slivers: [
         SliverToBoxAdapter(

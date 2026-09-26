@@ -15,10 +15,10 @@ part 'placeholder.g.dart';
 )
 class Placeholder {
   /// Returns a new [Placeholder] instance.
-  Placeholder({required this.memberId, required this.displayName});
+  Placeholder({required this.id, required this.displayName});
 
-  @JsonKey(name: r'memberId', required: true, includeIfNull: false)
-  final String memberId;
+  @JsonKey(name: r'id', required: true, includeIfNull: false)
+  final String id;
 
   @JsonKey(name: r'displayName', required: true, includeIfNull: false)
   final String displayName;
@@ -27,11 +27,11 @@ class Placeholder {
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is Placeholder &&
-          other.memberId == memberId &&
+          other.id == id &&
           other.displayName == displayName;
 
   @override
-  int get hashCode => memberId.hashCode + displayName.hashCode;
+  int get hashCode => id.hashCode + displayName.hashCode;
 
   factory Placeholder.fromJson(Map<String, dynamic> json) =>
       _$PlaceholderFromJson(json);

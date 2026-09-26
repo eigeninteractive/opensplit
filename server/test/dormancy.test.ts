@@ -1,20 +1,9 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
-import { evenly, freshId, makeGroup, makeGroupOfTwo, ok, PRIYA, RAVI, refusal, stub } from "./group";
+import { editMember, evenly, freshId, makeGroup, makeGroupOfTwo, ok, PRIYA, RAVI, refusal, stub } from "./group";
 
-/**
- * Dormancy and account deletion: what an idle group does to itself, and what
- * survives somebody deleting the account that made it.
- *
- * Both happen on the object's own alarm rather than on a sweep, so each group
- * carries its own clock: a quiet one costs a single wake-up in three months
- * instead of ninety nightly checks that find nothing to do. These tests drive
- * that clock directly rather than waiting for it.
- *
- * `runUpkeep` takes the instant to reason about, which is what lets these tests
- * ask what happens in a year without waiting or back-dating rows.
- */
+/** Dormancy and account deletion: what an idle group does to itself, and what survives somebody deleting the account that made it. */
 
 const DAYS = 24 * 60 * 60 * 1000;
 
@@ -145,7 +134,7 @@ describe("the membership index in D1", () => {
 
   it("learns when somebody leaves, rather than losing the row", async () => {
     const { groupId, priya } = await makeGroupOfTwo();
-    ok(await stub(groupId).updateMember(priya.id, { leftAt: new Date().toISOString() }, PRIYA));
+    ok(await editMember(groupId, priya.id, PRIYA, { leftAt: new Date().toISOString() }));
 
     const rows = await membershipsIn(groupId);
     expect(rows.find((row) => row.profile_id === PRIYA)?.left_at).not.toBeNull();

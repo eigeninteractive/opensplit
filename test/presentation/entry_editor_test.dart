@@ -12,20 +12,12 @@ import '../harness.dart';
 
 /// The editor seeds itself from asynchronous data, and hands its two sections
 /// read-only copies of the selection which come back as new values through
-/// callbacks. Both used to work the other way round — seeded inside `build`,
-/// with the sections editing the screen's own collections in place — so these
-/// hold the corrected shape down.
-///
-/// Driven through the real router rather than pumped on its own: saving calls
-/// [goBack], which needs one, and the editor is only ever reached by a push.
+/// callbacks.
 Future<void> _pumpApp(WidgetTester tester, AppDatabase db) async {
   SharedPreferences.setMockInitialValues({});
   final prefs = await SharedPreferences.getInstance();
 
-  // A tall phone rather than the default 800x600. The editor is a long form and
-  // its save button sits below three members' worth of split rows, so on the
-  // default surface the thing under test is off screen. Kept under the 840dp
-  // rail breakpoint so the layout is still the phone one.
+  // A tall phone rather than the default 800x600.
   tester.view.physicalSize = const Size(400, 1600);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -42,11 +34,6 @@ Future<void> _go(WidgetTester tester, String location) async {
 }
 
 /// Opens the editor the way a person does: into the group, then the button.
-///
-/// Deliberately not `go('/g/g1/add')`. Going straight to a two-level location
-/// builds both pages in one frame, and SelectionArea — which wraps the whole
-/// app — walks the selectables of a page whose transition has not been laid out
-/// yet, tripping a framework assertion that has nothing to do with this screen.
 Future<void> _openEditor(WidgetTester tester) async {
   await _go(tester, '/g/g1');
   await tester.tap(find.widgetWithText(FloatingActionButton, 'Add expense'));

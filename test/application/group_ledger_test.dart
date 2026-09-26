@@ -10,12 +10,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../harness.dart';
 
 /// The fold every group screen reads.
-///
-/// Two things here are newer than the rest of it. `isSettledUp` is what the
-/// members screen asks before offering to remove somebody — the server refuses
-/// otherwise — and `pastMembers` is what lets a departed member's name still
-/// resolve, which it did not: the balances panel iterates balances rather than
-/// members, so somebody who left owing money rendered as "—".
 void main() {
   final now = DateTime.utc(2026, 8, 27);
   late AppDatabase db;
@@ -207,9 +201,7 @@ void main() {
 
     final fold = await ledger();
 
-    // The symptom, first. Every member's position still renders, and the
-    // settlement plan is silently empty — because matching debtors against
-    // creditors has nothing to match when the two sides do not sum to zero.
+    // The symptom, first.
     expect(fold.balances, isNotEmpty);
     expect(
       fold.transfers,
@@ -219,9 +211,7 @@ void main() {
           'and no way at all to settle them',
     );
 
-    // And the reason it is no longer silent. The check used to be an `assert`
-    // inside simplifyDebts, which is stripped from exactly the build where
-    // nobody is watching a console.
+    // And the reason it is no longer silent.
     expect(fold.isCoherent, isFalse);
     expect(fold.brokenEntries.single.id, 'e1');
   });

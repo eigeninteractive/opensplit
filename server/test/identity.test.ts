@@ -3,39 +3,18 @@ import { describe, expect, it } from "vitest";
 import { googleIdToken } from "./google";
 import { signInAsGuest } from "./session";
 
-/**
- * The branches that decide whether somebody's ledger survives.
- *
- * This is the suite that justifies moving link-or-sign-in out of Dart. Every
- * case below was unreachable from a Flutter test without a live backend, and
- * the one that matters most — an identity that already belongs to somebody —
- * is the one nobody would think to set up by hand.
- */
+/** The branches that decide whether somebody's ledger survives. */
 
 interface Outcome {
   outcome: "kept" | "replaced";
   account: { id: string; isAnonymous: boolean; email: string | null };
   token: string | null;
 
-  /**
-   * Present and null on a `kept` outcome, rather than absent.
-   *
-   * Not a style choice. A discriminated union here emits `oneOf`, which the
-   * Dart generator flattens into one class with every field from both branches
-   * required — so an absent `strandedUserId` made the most common answer this
-   * endpoint gives fail to decode on the device. `everyOutcomeCarriesTheField`
-   * below is what holds it present.
-   */
+  /** Present and null on a `kept` outcome, rather than absent. */
   strandedUserId: string | null;
 }
 
-/**
- * Every field the generated client declares required, actually there.
- *
- * Asserted on the parsed body rather than trusted from the type, because the
- * type is this file's own description of the wire and the wire is what the
- * device has to read.
- */
+/** Every field the generated client declares required, actually there. */
 function everyOutcomeCarriesTheField(body: Outcome) {
   expect(Object.keys(body).sort()).toEqual(["account", "outcome", "strandedUserId", "token"]);
 }
@@ -74,13 +53,7 @@ describe("continuing with Google", () => {
     expect(body.account.isAnonymous).toBe(false);
   });
 
-  /**
-   * The case the whole design turns on.
-   *
-   * A guest has been recording expenses. Attaching Google must keep the same
-   * account id, because every member row in every group points at it. A new id
-   * here would leave them a stranger to their own data.
-   */
+  /** The case the whole design turns on. */
   it("links to a guest session, keeping the account id", async () => {
     const guest = await signInAsGuest();
     const token = await googleIdToken({
@@ -112,13 +85,7 @@ describe("continuing with Google", () => {
     expect(row?.anon).toBeFalsy();
   });
 
-  /**
-   * The refusal that has to happen before anything moves.
-   *
-   * Signing in would abandon this device's ledger, so the server refuses and
-   * makes the app say so. By the time the session is replaced it is too late
-   * to ask.
-   */
+  /** The refusal that has to happen before anything moves. */
   it("refuses when the Google account is already somebody else's", async () => {
     const owner = await googleIdToken({
       sub: "google-taken",
@@ -222,6 +189,18 @@ describe("the email code flow", () => {
     });
   });
 
+  it("refuses a wrong code as a refusal, not a crash", async () => {
+    await startEmail("wrong-code@example.com");
+    const response = await workerExports.default.fetch("https://opensplit.test/api/identity/email/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "wrong-code@example.com", code: "00000000", flow: "signInPending" }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: { code: "auth_failed", retry: "permanent" } });
+  });
+
   it("refuses a malformed address with the standard error shape", async () => {
     const response = await workerExports.default.fetch("https://opensplit.test/api/identity/email", {
       method: "POST",
@@ -233,5 +212,42 @@ describe("the email code flow", () => {
     expect(await response.json()).toMatchObject({
       error: { code: "malformed" },
     });
+  });
+});
+
+describe("the session", () => {
+  const session = (token?: string) => workerExports.default.fetch("https://opensplit.test/api/identity/session", { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+
+  it("is none without a credential", async () => {
+    expect(await (await session()).json()).toEqual({ account: null, token: null });
+  });
+
+  it("names a guest as a guest, with no invented name or address", async () => {
+    const guest = await signInAsGuest();
+    const body = (await (await session(guest.token)).json()) as { account: unknown };
+    expect(body.account).toEqual({ id: guest.id, isAnonymous: true, email: null, displayName: null });
+  });
+
+  it("ends on sign-out", async () => {
+    const guest = await signInAsGuest();
+    const out = await workerExports.default.fetch("https://opensplit.test/api/identity/sign-out", { method: "POST", headers: { Authorization: `Bearer ${guest.token}` } });
+
+    expect(out.status).toBe(204);
+    expect(await (await session(guest.token)).json()).toEqual({ account: null, token: null });
+  });
+});
+
+describe("the browser flow to Google", () => {
+  it("answers with a Google URL and the state cookie the callback will check", async () => {
+    const response = await workerExports.default.fetch("https://opensplit.test/api/identity/google/redirect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ callbackUrl: "http://localhost:8787/app/welcome", allowSignIn: false }),
+    });
+
+    expect(response.status).toBe(200);
+    const { url } = (await response.json()) as { url: string };
+    expect(new URL(url).hostname).toBe("accounts.google.com");
+    expect(response.headers.getSetCookie().length).toBeGreaterThan(0);
   });
 });

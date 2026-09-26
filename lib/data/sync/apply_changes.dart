@@ -1,11 +1,4 @@
 /// Writing one page of a group's history into the local database.
-///
-/// Every row in a page carries a sequence number greater than the cursor, so
-/// it *is* what the server holds: there is no newer-or-older to decide. The one
-/// reason not to apply a row is a local edit still waiting in the outbox
-/// ([_dirtyIds]). Such a row is skipped, and the sync engine rewinds the cursor
-/// if the server later refuses that edit, so the server's version is read
-/// again.
 library;
 
 import 'package:drift/drift.dart';
@@ -24,10 +17,8 @@ Future<Set<String>> _dirtyIds(AppDatabase db, OutboxTarget target) async {
   return {for (final row in rows) row.targetId};
 }
 
-/// Applies one page and advances the group's cursor, in one transaction, so
-/// a crash between them can neither re-read nor skip a page.
-///
-/// Returns how many expenses changed.
+/// Applies one page and advances the group's cursor, in one transaction, so a
+/// crash between them can neither re-read nor skip a page.
 Future<int> applyGroupChanges(
   AppDatabase db,
   api.ChangePage page, {

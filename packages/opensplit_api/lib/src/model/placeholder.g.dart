@@ -8,16 +8,13 @@ part of 'placeholder.dart';
 
 Placeholder _$PlaceholderFromJson(Map<String, dynamic> json) =>
     $checkedCreate('Placeholder', json, ($checkedConvert) {
-      $checkKeys(json, requiredKeys: const ['memberId', 'displayName']);
+      $checkKeys(json, requiredKeys: const ['id', 'displayName']);
       final val = Placeholder(
-        memberId: $checkedConvert('memberId', (v) => v as String),
+        id: $checkedConvert('id', (v) => v as String),
         displayName: $checkedConvert('displayName', (v) => v as String),
       );
       return val;
     });
 
 Map<String, dynamic> _$PlaceholderToJson(Placeholder instance) =>
-    <String, dynamic>{
-      'memberId': instance.memberId,
-      'displayName': instance.displayName,
-    };
+    <String, dynamic>{'id': instance.id, 'displayName': instance.displayName};

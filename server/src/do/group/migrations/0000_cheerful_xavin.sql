@@ -60,10 +60,14 @@ CREATE TABLE `events` (
 	`created_at` text NOT NULL,
 	`kind` text NOT NULL,
 	`subject_id` text,
-	`payload` text NOT NULL,
+	`entry` text,
+	`member` text,
+	`group` text,
+	`link` text,
 	`seq` integer NOT NULL,
 	`ordinal` integer DEFAULT 0 NOT NULL,
-	FOREIGN KEY (`actor_id`) REFERENCES `members`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`actor_id`) REFERENCES `members`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "events_one_payload" CHECK(("events"."entry" is not null) + ("events"."member" is not null) + ("events"."group" is not null) + ("events"."link" is not null) = 1)
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `events_position` ON `events` (`seq`,`ordinal`);--> statement-breakpoint

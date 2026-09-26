@@ -2,23 +2,11 @@ import { exports as workerExports } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import type { ApiError } from "../src/schemas/common";
-import type { AccountDeletion, Bootstrap, ChangePage, GroupLink, Joined, LinkPreview, Profile, ProfileList, ProfilePage } from "./api-types";
+import type { AccountDeletion, ChangePage, GroupIds, GroupLink, Joined, LinkPreview, Profile, ProfileList, ProfilePage } from "./api-types";
 import { freshId } from "./group";
 import { type Guest, signInAsGuest } from "./session";
 
-/**
- * The person, rather than the ledger.
- *
- * Three things live here and they are connected by one rule: **who you can
- * see**. A profile is visible if you share a live membership with its owner,
- * plus your own. These are the tests that hold `visibleProfiles` to that,
- * because a visibility bug in a profile feed is somebody's payment handle
- * shown to a stranger.
- *
- * Account deletion is the other half. It is the one operation in this API that
- * destroys data, and the thing it must *not* destroy is everybody else's
- * ledger: money you paid is a fact about their group as much as yours.
- */
+/** The person, rather than the ledger. */
 
 const ORIGIN = "https://opensplit.test";
 
@@ -94,10 +82,7 @@ describe("your own profile", () => {
     const me = await signInAsGuest();
     await writeProfile(me, "Priya", "priya@oksbi");
 
-    // Bank accounts close. A shape where this is inexpressible is a shape
-    // where a stale handle keeps being offered as somewhere to send money —
-    // which is what an optional field would have been, because the generated
-    // client omits a null rather than sending one.
+    // Bank accounts close.
     const cleared = await writeProfile(me, "Priya S", null);
     expect(cleared.upiVpa).toBeNull();
     expect(cleared.displayName).toBe("Priya S");
@@ -152,11 +137,11 @@ describe("the profile feed", () => {
     }
 
     const collected: string[] = [];
-    let cursor: ProfilePage = { profiles: [], cursor: null, cursorId: null, hasMore: true };
+    let cursor: ProfilePage = { profiles: [], cursor: null, hasMore: true };
     let pages = 0;
 
     while (cursor.hasMore && pages < 10) {
-      const query = cursor.cursor ? `?limit=2&since=${encodeURIComponent(cursor.cursor)}&sinceId=${cursor.cursorId}` : "?limit=2";
+      const query = cursor.cursor ? `?limit=2&after=${encodeURIComponent(cursor.cursor)}` : "?limit=2";
       cursor = await json<ProfilePage>(await call(`/api/profiles${query}`, host));
       collected.push(...cursor.profiles.map((row) => row.id));
       pages += 1;
@@ -165,9 +150,7 @@ describe("the profile feed", () => {
     expect(cursor.hasMore).toBe(false);
     expect(new Set(collected)).toEqual(new Set([host.id, ...friends.map((friend) => friend.id)]));
 
-    // No row twice. A cursor on the timestamp alone would either repeat the
-    // boundary row forever or skip past it, and which of the two you got would
-    // depend on how many profiles happened to share a millisecond.
+    // No row twice.
     expect(collected.length).toBe(new Set(collected).size);
   });
 
@@ -175,11 +158,17 @@ describe("the profile feed", () => {
     const stranger = await signInAsGuest();
     await named(stranger, "Zara");
 
-    const { profiles } = await json<ProfileList>(await call(`/api/profiles/by-ids?ids=${stranger.id},${ravi.id}`, ravi));
+    const { profiles } = await json<ProfileList>(await call("/api/profiles/lookup", ravi, { method: "POST", body: JSON.stringify({ ids: [stranger.id, ravi.id] }) }));
 
     // Present but empty rather than refused: the caller is asking about ids it
     // holds for its own reasons, and "you cannot see that" and "that does not
     // exist" are deliberately the same answer.
+    expect(profiles.map((row) => row.id)).toEqual([ravi.id]);
+  });
+
+  it("looks up more ids than D1 binds in one query", async () => {
+    const unknown = Array.from({ length: 150 }, (_, index) => `missing-${index}`);
+    const { profiles } = await json<ProfileList>(await call("/api/profiles/lookup", ravi, { method: "POST", body: JSON.stringify({ ids: [...unknown, ravi.id] }) }));
     expect(profiles.map((row) => row.id)).toEqual([ravi.id]);
   });
 
@@ -198,7 +187,7 @@ describe("the profile feed", () => {
 
     await share(host, friend, "Priya");
 
-    const { profiles } = await json<ProfileList>(await call(`/api/profiles/by-ids?ids=${friend.id}`, host));
+    const { profiles } = await json<ProfileList>(await call("/api/profiles/lookup", host, { method: "POST", body: JSON.stringify({ ids: [friend.id] }) }));
     expect(profiles).toEqual([expect.objectContaining({ id: friend.id, displayName: "Priya" })]);
   });
 });
@@ -214,8 +203,8 @@ describe("devices", () => {
     // Idempotent: a token is re-registered on every launch.
     expect((await call("/api/devices", first, { method: "PUT", body: JSON.stringify({ token, platform: "android" }) })).status).toBe(200);
 
-    // A phone that changes hands keeps its registration token, so the claim
-    // has to transfer rather than be refused — otherwise the previous owner's
+    // A phone that changes hands keeps its registration token, so the claim has
+    // to transfer rather than be refused — otherwise the previous owner's
     // notifications follow the new one.
     expect((await call("/api/devices", second, { method: "PUT", body: JSON.stringify({ token, platform: "android" }) })).status).toBe(200);
 
@@ -258,12 +247,8 @@ describe("deleting an account", () => {
     const deleted = await json<AccountDeletion>(await call("/api/account", solo, { method: "DELETE" }));
     expect(deleted).toEqual({ forgotten: 1, purged: 1 });
 
-    // Holding somebody's expense descriptions forever in a group with no
-    // living reader is the opposite of what deleting an account asks for.
-    //
-    // What is left is a tombstone, and it answers anybody — there is no
-    // membership left to check and nothing to protect, and refusing would
-    // leave every device that still holds a copy holding it forever.
+    // Holding somebody's expense descriptions forever in a group with no living
+    // reader is the opposite of what deleting an account asks for.
     const after = await signInAsGuest();
     const grave = await json<ChangePage>(await call(`/api/groups/${groupId}/changes?since=0`, after));
 
@@ -290,12 +275,11 @@ describe("deleting an account", () => {
 
     // The session is gone with the account, so the device is signed out by
     // consequence rather than by a second call.
-    expect((await call("/api/bootstrap", going)).status).toBe(401);
+    expect((await call("/api/groups", going)).status).toBe(401);
 
     // The row survives as a tombstone — the id must never be handed to a new
-    // account — but with nothing left in it. A UPI address belonging to an
-    // account that no longer exists is money sent nowhere.
-    const { profiles } = await json<ProfileList>(await call(`/api/profiles/by-ids?ids=${going.id}`, friend));
+    // account — but with nothing left in it.
+    const { profiles } = await json<ProfileList>(await call("/api/profiles/lookup", friend, { method: "POST", body: JSON.stringify({ ids: [going.id] }) }));
     expect(profiles).toEqual([]);
   });
 
@@ -305,11 +289,9 @@ describe("deleting an account", () => {
 });
 
 describe("a guest who never became anybody", () => {
-  it("still gets a profile, a bootstrap and an empty feed", async () => {
+  it("still gets a profile, no groups and an empty feed", async () => {
     const guest = await signInAsGuest();
-    const body = await json<Bootstrap>(await call("/api/bootstrap", guest));
-
-    expect(body).toEqual({ profileId: guest.id, displayName: null, upiVpa: null, isAnonymous: true, groupIds: [] });
+    expect(await json<GroupIds>(await call("/api/groups", guest))).toEqual({ groupIds: [] });
 
     // Visible only to themselves, which is the degenerate case of the rule
     // rather than a special one: nobody shares a group with them yet.

@@ -8,11 +8,6 @@ export 'package:opensplit_api/opensplit_api.dart' show Account, EmailFlow;
 import 'package:opensplit_api/opensplit_api.dart' show Account, EmailFlow;
 
 /// Raised when an identity cannot be attached because somebody already has it.
-///
-/// Thrown rather than quietly signing in, because those are opposite outcomes
-/// from the user's point of view: one keeps everything on this device, the
-/// other leaves it behind. The caller catches this, says so plainly, and only
-/// then asks again with signing in permitted.
 class IdentityAlreadyInUse implements Exception {
   const IdentityAlreadyInUse(this.message);
 
@@ -23,18 +18,6 @@ class IdentityAlreadyInUse implements Exception {
 }
 
 /// What attaching an identity did.
-///
-/// A sum type rather than a pair of identifiers to compare. "Did this device's
-/// ledger stay with the account" is the only question a caller has, and
-/// answering it by diffing ids put that derivation at every call site while
-/// exposing a value nothing else ever needed.
-///
-/// Which case applies cannot be inferred from which code path ran, and that is
-/// why this is decided here rather than by the caller. Signing in with Google
-/// using the address an existing email account already owns lands on *that
-/// same account*: the server attaches the identity by matching a verified
-/// email, so the sign-in branch ran and yet nothing moved. Only the resulting
-/// id settles it.
 sealed class IdentityOutcome {
   const IdentityOutcome({required this.account});
 
@@ -42,19 +25,11 @@ sealed class IdentityOutcome {
 }
 
 /// Nothing on this device has to move: the account id did not change.
-///
-/// Covers three arrivals that look different and are not: linking to the
-/// session in hand, a first sign-in with no session to lose, and the sign-in
-/// that lands back on the account this device was already using.
 final class SessionKept extends IdentityOutcome {
   const SessionKept({required super.account});
 }
 
 /// A different account holds the session now.
-///
-/// The ledger on this device stays with the account that wrote it, named by
-/// [strandedUserId] — which local database was left behind is the only part of
-/// the transition a caller can actually act on.
 final class SessionReplaced extends IdentityOutcome {
   const SessionReplaced({required super.account, required this.strandedUserId});
 
@@ -62,11 +37,6 @@ final class SessionReplaced extends IdentityOutcome {
 }
 
 /// What starting a Google flow did.
-///
-/// Two platforms answer differently and the difference is not hideable: a
-/// device that can mint an ID token in-process finishes here, and a browser
-/// that has to leave the page cannot. Making that explicit in the return type
-/// is what stops a caller awaiting a result that is never coming.
 sealed class GoogleAttempt {
   const GoogleAttempt();
 }
@@ -84,39 +54,12 @@ final class AttemptCancelled extends GoogleAttempt {
 }
 
 /// The page is navigating to Google.
-///
-/// There is no result to await. It arrives on the next launch, from
-/// [AuthService.resumeIdentityRedirect].
 final class AttemptRedirected extends GoogleAttempt {
   const AttemptRedirected();
 }
 
 /// Identity, kept behind an interface like everything else that touches a
 /// backend.
-///
-/// Being a guest is a choice somebody makes, not a state they are put in.
-///
-/// A session starts because somebody asked for one: Google, an email code, or
-/// being a guest. Signing in silently as a guest would let a throwaway account
-/// claim an invite meant for somebody who already has an account, spending the
-/// single-use token. Guests are still first class — nothing is gated, and an
-/// invite is shown before it is claimed.
-///
-/// ## Linking is not signing in
-///
-/// The distinction runs through every method here and it is the one that was
-/// got wrong. Attaching Google or an email address to an anonymous session has
-/// to *link* — same user id, same rows, nothing to migrate. An ordinary
-/// sign-in does not link: it authenticates, which means it establishes a
-/// different user and leaves the anonymous one behind holding every group the
-/// person had already created. The account is then a stranger to its own data:
-/// it is a member of none of those groups, so every write it makes against
-/// them is refused.
-///
-/// So the linking calls are [continueWithGoogle] and [sendEmailCode] /
-/// [verifyEmailCode], each of which tries to link first and only falls back to
-/// signing in when the identity demonstrably belongs to somebody already —
-/// reporting which of the two happened, because the caller has to say so.
 abstract interface class AuthService {
   Account? get currentUser;
 
@@ -125,59 +68,19 @@ abstract interface class AuthService {
   /// Creates a real account with no credentials attached.
   Future<Account> signInAnonymously();
 
-  /// Attaches Google to the current session, or signs in with it if there is
-  /// no session to attach it to.
-  ///
-  /// [returnTo] is where the user should land afterwards, as an internal route
-  /// — it survives the browser detour so an invite link opened by somebody with
-  /// no session still ends on the invite. It is validated before use; an
-  /// external destination is refused rather than followed.
-  ///
-  /// With no session this is simply a sign-in — the arrival is somebody who
-  /// chose "continue with Google" on a device holding nothing, so there is
-  /// nothing to weigh up and nothing to warn about.
-  ///
-  /// Reports [IdentityAlreadyInUse] when that Google account already belongs
-  /// to an OpenSplit user and [allowSignIn] is false — the point at which the
-  /// caller has to stop and say what signing in would cost, because by the time
-  /// the session has been replaced it is too late to ask. Thrown from here
-  /// where the flow completes in-process, and from [resumeIdentityRedirect]
-  /// where it had to leave the page; the caller's answer is the same either
-  /// way, which is why the refusal is one type and not two.
-  ///
-  /// With [allowSignIn] set, that same case signs in instead and the outcome
-  /// reports it.
+  /// Attaches Google to the current session, or signs in with it if there is no
+  /// session to attach it to.
   Future<GoogleAttempt> continueWithGoogle({
     required String returnTo,
     bool allowSignIn = false,
   });
 
-  /// Finishes a Google flow that left the page, if this launch is a return
-  /// from one.
-  ///
-  /// Null when it is not, which is almost every launch. Throws
-  /// [IdentityAlreadyInUse] on the same condition the in-process path throws
-  /// it on — the difference is only that the refusal comes back from the
-  /// browser rather than from a call, so it surfaces on arrival instead of
-  /// inline. The caller asks the same question and calls [continueWithGoogle]
-  /// again with [allowSignIn] set.
-  ///
-  /// Safe to call unconditionally at startup, and safe to call twice: the
-  /// record it consumes is cleared as it is read, and an attempt abandoned at
-  /// Google expires rather than waiting to fire against an unrelated launch.
+  /// Finishes a Google flow that left the page, if this launch is a return from
+  /// one.
   Future<IdentityOutcome?> resumeIdentityRedirect();
 
-  /// Sends an eight-digit code to [email], attaching it to the current session if
-  /// the address is free and starting a sign-in if it is not.
-  ///
-  /// A code, not a magic link: magic links open in whichever browser the mail
-  /// app prefers, lose the app's context entirely, and are routinely consumed
-  /// by corporate mail scanners before the recipient ever sees them. The
-  /// Worker composes the message itself — see `server/src/email/sender.ts` —
-  /// so there is no template that can be configured into not carrying the
-  /// code, which is a failure the previous backend made easy.
-  ///
-  /// The returned flow must be handed back to [verifyEmailCode].
+  /// Sends an eight-digit code to [email], attaching it to the current session
+  /// if the address is free and starting a sign-in if it is not.
   Future<EmailFlow> sendEmailCode(String email);
 
   /// Completes the flow [sendEmailCode] started. [flow] must be the value it
@@ -193,16 +96,5 @@ abstract interface class AuthService {
   Future<void> signOut();
 
   /// Deletes this account on the server, permanently.
-  ///
-  /// Not the same as [signOut] and not recoverable. The server drops the
-  /// account, its profile, its sign-in identities and its push registrations,
-  /// and deletes outright any group nobody else could ever read again.
-  /// Memberships in shared groups become placeholders with the name intact, so
-  /// co-members' balances and history are exactly as they were — the other
-  /// side of a shared ledger is their record as much as it is this account's.
-  ///
-  /// Leaves the session alone. The caller decides what to do with the device,
-  /// because wiping local storage and signing out is the same work sign-out
-  /// already does.
   Future<void> deleteAccount();
 }

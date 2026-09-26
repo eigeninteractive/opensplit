@@ -21,7 +21,7 @@ class ReferenceApi {
   const ReferenceApi(this._dio);
 
   /// Exchange rates published on or after a date
-  /// Against USD, which is stored as exactly 1 — so any pair is a division and there is no such thing as a supported *pair*, only a supported currency. Rates are immutable once published, so a device keeps a high-water mark rather than a cursor and asks for everything after it.
+  /// Against USD. Rates are immutable, so a device keeps a high-water mark and asks for everything after it; the most recent months are served when the window is too wide.
   ///
   /// Parameters:
   /// * [since]
@@ -92,7 +92,7 @@ class ReferenceApi {
   }
 
   /// Every currency and category the server knows about
-  /// Whole rather than paged, which is proportionate rather than lazy: there are a few dozen rows between them and they change about never. Send the &#x60;ETag&#x60; back as &#x60;If-None-Match&#x60; to get a 304. The client merges with an upsert and never deletes — a category withdrawn here is still on the entries that used it.
+  /// Send the &#x60;ETag&#x60; back as &#x60;If-None-Match&#x60; to get a 304.
   ///
   /// Parameters:
   /// * [ifNoneMatch]
@@ -167,7 +167,7 @@ class ReferenceApi {
   }
 
   /// Ask for a day the server has never needed
-  /// Fire and forget: a device recording an expense backdated past what the server holds says so, and the rate arrives on a later sync. It cannot wait, because a rate is display-only and must never be in the way of recording money. Heavily throttled — six devices in one group sync the same backdated expense within a second of each other.
+  /// Fire and forget, and heavily throttled: the rate arrives on a later sync.
   ///
   /// Parameters:
   /// * [fxBackfillRequest]

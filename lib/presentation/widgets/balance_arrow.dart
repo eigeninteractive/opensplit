@@ -3,20 +3,6 @@ import 'package:flutter/material.dart';
 import '../theme.dart';
 
 /// Which way a balance goes, as a shape.
-///
-/// Direction is already carried by the wording next to every balance in this
-/// app, and by colour. Neither is enough on its own: wording needs reading, and
-/// roughly one man in twelve cannot separate the green from the red. An arrow
-/// is a third signal that survives both — it is legible at a glance and it does
-/// not depend on hue at all.
-///
-/// Two named icons rather than one glyph rotated in code. The rotation trick
-/// saves an icon and costs a reader working out which direction `turns: 0.5`
-/// leaves you pointing; `arrow_upward` and `arrow_downward` say what they are.
-/// Rounded variants, to match the shape language of the rest of Material 3.
-///
-/// Renders nothing at all for a settled balance. A zero with an arrow beside it
-/// would be claiming a direction that does not exist.
 class BalanceArrow extends StatelessWidget {
   const BalanceArrow({super.key, required this.balanceMinor, this.size});
 
@@ -45,10 +31,6 @@ class BalanceArrow extends StatelessWidget {
 }
 
 /// An arrow and an amount, as one unit.
-///
-/// The amount is rendered without a sign, because the arrow carries it. A minus
-/// sign and a downward arrow saying the same thing is redundant, and "-₹500"
-/// read aloud is a worse sentence than "you owe ₹500".
 class BalanceAmount extends StatelessWidget {
   const BalanceAmount({
     super.key,
@@ -61,21 +43,12 @@ class BalanceAmount extends StatelessWidget {
   final int balanceMinor;
 
   /// The already-formatted, unsigned amount.
-  ///
-  /// Sometimes a bare figure and sometimes a short phrase around one — "₹500"
-  /// in a column of contributions, "is owed ₹500" beside a name.
   final String text;
 
   /// What a screen reader should say instead — in words, with the direction.
   final String semanticsLabel;
 
   /// Carries the weight and the face, and only the colour is applied over it.
-  ///
-  /// Which one is right depends on what [text] is, so the caller chooses. A
-  /// bare figure wants `moneyStyle(...)`, the tabular face that lets a column
-  /// of amounts line up. A phrase wants the ordinary text face at a heavier
-  /// weight, because setting whole words in a monospace breaks the line for
-  /// nothing — there is no column to align a sentence against.
   final TextStyle? style;
 
   @override

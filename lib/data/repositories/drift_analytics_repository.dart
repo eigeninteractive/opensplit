@@ -7,36 +7,14 @@ import '../local/database.dart';
 import 'drift_entry_repository.dart';
 
 /// Local analytics.
-///
-/// Every one of these is SQL over data already on the device: no endpoint, no
-/// per-query cost, no cache to invalidate, and it all works with no connection.
-/// Searching your own expense history is not something worth charging for.
-///
-/// All of it is watched rather than fetched. Every query here already declares
-/// what it reads from, which is the expensive half of making it live, and the
-/// alternative is a screen that answers as of the moment it was opened: a sync
-/// landing behind an open Insights tab, or an expense added in the pane beside
-/// it, would leave totals that disagree with the list they were computed from
-/// and nothing on screen to say so.
-///
-/// Settlements are excluded throughout. Paying a friend back is not spending,
-/// and counting it would double every settled expense.
 final class DriftAnalyticsRepository {
   /// [_entries] hydrates the rows a search matches.
-  ///
-  /// Injected rather than constructed here, so there is one place that knows
-  /// how an entry is assembled from its three tables and analytics is a caller
-  /// of it rather than a second copy.
   DriftAnalyticsRepository(this._db, this._entries);
 
   final AppDatabase _db;
   final DriftEntryRepository _entries;
 
   /// Builds the shared WHERE clause and its variables.
-  ///
-  /// `kind = 'expense'` and `deleted_at IS NULL` are not optional: a settlement
-  /// is a transfer, not spending, and counting one would inflate every figure
-  /// on the screen.
   ({String sql, List<Variable<Object>> vars}) _where(
     AnalyticsFilter filter, {
     String alias = 'e',
@@ -85,11 +63,6 @@ final class DriftAnalyticsRepository {
   }
 
   /// Turns user input into an FTS5 query.
-  ///
-  /// Each term is quoted so that punctuation cannot be read as FTS5 operators —
-  /// an apostrophe or a stray `*` would otherwise be a syntax error thrown at
-  /// someone who was only typing a restaurant name. A trailing `*` makes it
-  /// match as you type.
   static String? _ftsMatch(String query) {
     final terms = query
         .replaceAll('"', ' ')

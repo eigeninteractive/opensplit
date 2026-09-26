@@ -6,22 +6,7 @@ import type { GroupLink, Invite, Joined, LinkPreview, LinkRevocation, LiveLink, 
 import { freshId } from "./group";
 import { type Guest, signInAsGuest } from "./session";
 
-/**
- * Arriving, over HTTP.
- *
- * `invites.test.ts` already holds the rules — who may mint, what a spent token
- * does, that claiming a place moves no money. This suite is about the layer on
- * top of them, and specifically about the one thing that layer has to do and
- * the Durable Object cannot: turn a token somebody tapped into the group whose
- * object knows what it means. Everything here goes through `link_tokens` in D1,
- * which is written by the object's outbox rather than by the request, so a
- * route that never flushed would fail here and nowhere else.
- *
- * The other half is the ordering. Previewing a link with no session at all is
- * not a convenience — it is the fix for the bug that stranded people outside
- * their own groups — so it is asserted as a property of the route rather than
- * left to the client to use correctly.
- */
+/** Arriving, over HTTP. */
 
 const ORIGIN = "https://opensplit.test";
 
@@ -73,9 +58,7 @@ describe("an invite", () => {
     const minted = await json<Invite>(await call(`/api/groups/${id}/members/${slotId}/invite`, ravi, { method: "POST" }));
     expect(minted.memberId).toBe(slotId);
 
-    // No session. This is the whole ordering fix: somebody who already has an
-    // account sees what they were sent before anything claims the slot on
-    // their behalf.
+    // No session.
     const preview = await call(`/api/links/${minted.token}`, null);
     expect(preview.status).toBe(200);
 
@@ -89,9 +72,7 @@ describe("an invite", () => {
       isRedeemed: false,
       isExpired: false,
       isRevoked: false,
-      // False with no session, rather than unknown. A screen that cannot tell
-      // "you are already in this group" from "we did not ask" offers a Join
-      // button that is going to be refused.
+      // False with no session, rather than unknown.
       isMember: false,
     });
 
@@ -100,8 +81,8 @@ describe("an invite", () => {
     expect(joined.member.profileId).toBe(priya.id);
 
     // The place was claimed, not duplicated: one column changed on a row that
-    // already existed, which is the entire payoff of members being
-    // group-scoped rather than accounts.
+    // already existed, which is the entire payoff of members being group-scoped
+    // rather than accounts.
     expect(joined.member.displayName).toBe("Priya");
   });
 
@@ -161,9 +142,7 @@ describe("an open link", () => {
   it("is not a way for a stranger to get one", async () => {
     const { id } = await makeGroup(ravi);
 
-    // The difference between reading a link and being handed one. A preview
-    // answers whoever holds the URL; this hands a working URL out, so anybody
-    // who could call it could invite the world in.
+    // The difference between reading a link and being handed one.
     for (const method of ["GET", "POST", "DELETE"]) {
       const refused = await call(`/api/groups/${id}/link`, priya, { method });
       expect(refused.status, method).toBe(403);
@@ -181,7 +160,7 @@ describe("an open link", () => {
     expect(anonymous.status).toBe(401);
 
     const { placeholders } = await json<PlaceholderList>(await call(`/api/links/${minted.token}/placeholders`, priya));
-    expect(placeholders).toEqual([{ memberId: slotId, displayName: "Priya" }]);
+    expect(placeholders).toEqual([{ id: slotId, displayName: "Priya" }]);
 
     // Claiming one is what stops a group of six becoming a group of twelve
     // when one link is pasted into a chat.
@@ -202,12 +181,9 @@ describe("an open link", () => {
     expect(joined.member.displayName).toBe("Zara");
     expect(joined.member.profileId).toBe(zara.id);
 
-    // A name is the one thing this branch cannot do without, and the refusal
-    // is the object's rather than the schema's: `displayName` is legitimately
-    // null when a placeholder is being claimed instead.
-    //
-    // No sentinel. "Someone" in a ledger is worse than being asked, and a
-    // sentinel in the profile could never be told from a name somebody meant.
+    // A name is the one thing this branch cannot do without, and the refusal is
+    // the object's rather than the schema's: `displayName` is legitimately null
+    // when a placeholder is being claimed instead.
     const nameless = await signInAsGuest();
     const refused = await call(`/api/links/${minted.token}/join`, nameless, { method: "POST", body: JSON.stringify({ memberId: null, displayName: null }) });
     expect(refused.status).toBe(400);
@@ -238,9 +214,8 @@ describe("the name, travelling the other way", () => {
 
     // Somebody arriving on an invite signed in as a guest a moment earlier and
     // has no name at all, while the group already knows them as whatever was
-    // typed on the placeholder. A group's object holds member names and D1
-    // holds the account's; the join route is the only place the two meet.
-    const { profiles } = await json<ProfileList>(await call(`/api/profiles/by-ids?ids=${arriving.id}`, ravi));
+    // typed on the placeholder.
+    const { profiles } = await json<ProfileList>(await call("/api/profiles/lookup", ravi, { method: "POST", body: JSON.stringify({ ids: [arriving.id] }) }));
     expect(profiles).toEqual([expect.objectContaining({ id: arriving.id, displayName: "Priya" })]);
   });
 
@@ -253,11 +228,9 @@ describe("the name, travelling the other way", () => {
     const claimed = await json<Joined>(await call(`/api/links/${minted.token}/join`, arriving, { method: "POST", body: JSON.stringify({ memberId: null, displayName: null }) }));
 
     // The slot keeps the name the group knows, and the account keeps its own.
-    // That "only if it has none" is the entire check, and it is why a guest's
-    // profile carries a null rather than the anonymous plugin's invention.
     expect(claimed.member.displayName).toBe("P");
 
-    const { profiles } = await json<ProfileList>(await call(`/api/profiles/by-ids?ids=${arriving.id}`, ravi));
+    const { profiles } = await json<ProfileList>(await call("/api/profiles/lookup", ravi, { method: "POST", body: JSON.stringify({ ids: [arriving.id] }) }));
     expect(profiles[0]?.displayName).toBe("Priya Sharma");
   });
 

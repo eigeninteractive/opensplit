@@ -18,7 +18,7 @@ class AccountApi {
   const AccountApi(this._dio);
 
   /// Delete this account, permanently
-  /// Not a sign-out and not recoverable. It does not remove other people&#39;s ledgers: money you paid, money you owe and the settlements between you are facts about their group as much as yours, so your member row keeps its name and loses its account — exactly the state of somebody a friend added who never signed up. A group where you were the last account holder is collected outright instead, because nobody left could ever read it again. The session is left alone; the caller decides what to do with the device.
+  /// Other people&#39;s ledgers stay: your member rows become placeholders that keep your name. A group where you were the last account holder is collected. The session is left for the caller to clear.
   ///
   /// Parameters:
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
@@ -42,7 +42,18 @@ class AccountApi {
     final _options = Options(
       method: r'DELETE',
       headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookie',
+            'keyName': 'better-auth.session_token',
+            'where': '',
+          },
+          {'type': 'http', 'scheme': 'bearer', 'name': 'bearer'},
+        ],
+        ...?extra,
+      },
       validateStatus: validateStatus,
     );
 

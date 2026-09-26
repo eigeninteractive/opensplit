@@ -5,19 +5,6 @@ import '../../application/providers.dart';
 import '../../data/sync/outbox_queue.dart';
 
 /// Says out loud that something recorded on this device never reached anyone.
-///
-/// The outbox sets aside a write the server refuses in a way retrying cannot
-/// fix, so that one poisoned item cannot wedge everything queued behind it.
-/// That is right, but on its own it produces the worst failure this app has:
-/// not a crash, but an expense that looks saved forever on one phone and does
-/// not exist for anybody else — discovered weeks later as two people reading
-/// different balances, with nothing anywhere to explain it.
-///
-/// So it is stated plainly and it does not go away on its own. Offline is
-/// silent, because offline is normal and resolves itself; this is neither.
-///
-/// Two ways out: try again, for a cause that has since been fixed, or discard,
-/// which puts back the group's version of whatever was refused.
 class UnsyncedChangesBanner extends ConsumerWidget {
   const UnsyncedChangesBanner({super.key, this.padding = EdgeInsets.zero});
 
@@ -126,10 +113,6 @@ class UnsyncedChangesBanner extends ConsumerWidget {
   }
 
   /// The server's own words, unedited.
-  ///
-  /// Almost nobody will read this. The one person who does is trying to work
-  /// out why their balance is wrong, and a paraphrase would cost them the only
-  /// evidence there is.
   void _showDetails(BuildContext context, List<FailedWrite> failures) {
     showDialog<void>(
       context: context,

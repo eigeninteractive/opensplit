@@ -14,9 +14,9 @@ Device _$DeviceFromJson(Map<String, dynamic> json) =>
         platform: $checkedConvert(
           'platform',
           (v) => $enumDecode(
-            _$DevicePlatformEnumEnumMap,
+            _$PlatformEnumMap,
             v,
-            unknownValue: DevicePlatformEnum.unknownDefaultOpenApi,
+            unknownValue: Platform.unknownDefaultOpenApi,
           ),
         ),
       );
@@ -25,11 +25,11 @@ Device _$DeviceFromJson(Map<String, dynamic> json) =>
 
 Map<String, dynamic> _$DeviceToJson(Device instance) => <String, dynamic>{
   'token': instance.token,
-  'platform': _$DevicePlatformEnumEnumMap[instance.platform]!,
+  'platform': _$PlatformEnumMap[instance.platform]!,
 };
 
-const _$DevicePlatformEnumEnumMap = {
-  DevicePlatformEnum.android: 'android',
-  DevicePlatformEnum.web: 'web',
-  DevicePlatformEnum.unknownDefaultOpenApi: 'unknown_default_open_api',
+const _$PlatformEnumMap = {
+  Platform.android: 'android',
+  Platform.web: 'web',
+  Platform.unknownDefaultOpenApi: 'unknown_default_open_api',
 };

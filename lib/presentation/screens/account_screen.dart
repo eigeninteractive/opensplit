@@ -36,9 +36,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     // Filling a form from asynchronous data is initialisation, not something to
     // do while building: writing to a controller notifies the field attached to
     // it, and doing that from inside a build is how a widget ends up marking
-    // itself dirty mid-frame. listenManual fires once with whatever is already
-    // known and again when the profile lands, runs outside the build phase, and
-    // unsubscribes with the widget.
+    // itself dirty mid-frame.
     ref.listenManual(
       myProfileProvider,
       (_, next) => _seed(next.value),
@@ -135,12 +133,6 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   }
 
   /// Deletes the account, after saying precisely what that costs.
-  ///
-  /// Two steps rather than one, and the second names numbers. Play requires
-  /// this to be reachable in the app rather than only by email, which means it
-  /// sits a few taps from a screen people open to change their name — so the
-  /// only protection against a mis-tap is a dialog nobody could confirm by
-  /// accident.
   Future<void> _deleteAccount() async {
     final impact = await ref.read(deletionImpactProvider.future);
     if (!mounted) return;
@@ -225,8 +217,6 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         SliverList.list(
           children: [
             // The prompt to attach a real account, when there is not one yet.
-            // Renders nothing once there is, rather than becoming a permanent
-            // banner about a settled question.
             const AccountSection(),
 
             if (account != null && !account.isAnonymous)
@@ -277,11 +267,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
 
             if (account != null) ...[
               const Divider(height: 48),
-              // Offered only to an account somebody can get back into. Signing
-              // out of a guest account is not the reversible thing the word
-              // promises: nothing but this device identifies it, so leaving is
-              // leaving for good — which is what Delete account below does,
-              // properly and with the warning it deserves.
+              // Offered only to an account somebody can get back into.
               if (!account.isAnonymous)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
@@ -296,12 +282,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                   ),
                   onTap: _signOut,
                 )
-              // Said out loud rather than left as a gap. Somebody looking for
-              // sign out and finding only Delete account cannot tell whether
-              // the control is missing or the app is broken, and the answer —
-              // that there is nowhere to sign back in from — is also the
-              // reason to attach an address, which is the next thing they
-              // should do.
+              // Said out loud rather than left as a gap.
               else
                 ListTile(
                   contentPadding: EdgeInsets.zero,

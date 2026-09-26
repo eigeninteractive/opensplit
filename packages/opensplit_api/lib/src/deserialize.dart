@@ -1,6 +1,5 @@
 import 'package:opensplit_api/src/model/account.dart';
 import 'package:opensplit_api/src/model/account_deletion.dart';
-import 'package:opensplit_api/src/model/bootstrap.dart';
 import 'package:opensplit_api/src/model/category.dart';
 import 'package:opensplit_api/src/model/change_page.dart';
 import 'package:opensplit_api/src/model/currency.dart';
@@ -20,9 +19,12 @@ import 'package:opensplit_api/src/model/fx_backfill_response.dart';
 import 'package:opensplit_api/src/model/fx_page.dart';
 import 'package:opensplit_api/src/model/fx_rate.dart';
 import 'package:opensplit_api/src/model/google_identity_request.dart';
+import 'package:opensplit_api/src/model/google_redirect.dart';
+import 'package:opensplit_api/src/model/google_redirect_request.dart';
 import 'package:opensplit_api/src/model/group.dart';
 import 'package:opensplit_api/src/model/group_create.dart';
 import 'package:opensplit_api/src/model/group_event_payload.dart';
+import 'package:opensplit_api/src/model/group_ids.dart';
 import 'package:opensplit_api/src/model/group_link.dart';
 import 'package:opensplit_api/src/model/group_update.dart';
 import 'package:opensplit_api/src/model/health.dart';
@@ -44,9 +46,12 @@ import 'package:opensplit_api/src/model/placeholder.dart';
 import 'package:opensplit_api/src/model/placeholder_list.dart';
 import 'package:opensplit_api/src/model/profile.dart';
 import 'package:opensplit_api/src/model/profile_list.dart';
+import 'package:opensplit_api/src/model/profile_lookup.dart';
 import 'package:opensplit_api/src/model/profile_page.dart';
 import 'package:opensplit_api/src/model/profile_update.dart';
+import 'package:opensplit_api/src/model/push_data.dart';
 import 'package:opensplit_api/src/model/reference.dart';
+import 'package:opensplit_api/src/model/session.dart';
 import 'package:opensplit_api/src/model/share.dart';
 
 final _regList = RegExp(r'^List<(.*)>$');
@@ -76,8 +81,6 @@ ReturnType deserialize<ReturnType, BaseType>(
     case 'AccountDeletion':
       return AccountDeletion.fromJson(value as Map<String, dynamic>)
           as ReturnType;
-    case 'Bootstrap':
-      return Bootstrap.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'Category':
       return Category.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'ChangePage':
@@ -128,6 +131,12 @@ ReturnType deserialize<ReturnType, BaseType>(
     case 'GoogleIdentityRequest':
       return GoogleIdentityRequest.fromJson(value as Map<String, dynamic>)
           as ReturnType;
+    case 'GoogleRedirect':
+      return GoogleRedirect.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
+    case 'GoogleRedirectRequest':
+      return GoogleRedirectRequest.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
     case 'Group':
       return Group.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'GroupCreate':
@@ -135,6 +144,8 @@ ReturnType deserialize<ReturnType, BaseType>(
     case 'GroupEventPayload':
       return GroupEventPayload.fromJson(value as Map<String, dynamic>)
           as ReturnType;
+    case 'GroupIds':
+      return GroupIds.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'GroupLink':
       return GroupLink.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'GroupUpdate':
@@ -144,6 +155,7 @@ ReturnType deserialize<ReturnType, BaseType>(
     case 'IdentityOutcome':
       return IdentityOutcome.fromJson(value as Map<String, dynamic>)
           as ReturnType;
+    case 'IdentityOutcomeKind':
     case 'Invite':
       return Invite.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'JoinRequest':
@@ -153,6 +165,7 @@ ReturnType deserialize<ReturnType, BaseType>(
     case 'LinkEventPayload':
       return LinkEventPayload.fromJson(value as Map<String, dynamic>)
           as ReturnType;
+    case 'LinkKind':
     case 'LinkPreview':
       return LinkPreview.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'LinkRevocation':
@@ -178,18 +191,26 @@ ReturnType deserialize<ReturnType, BaseType>(
     case 'PlaceholderList':
       return PlaceholderList.fromJson(value as Map<String, dynamic>)
           as ReturnType;
+    case 'Platform':
     case 'Profile':
       return Profile.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'ProfileList':
       return ProfileList.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'ProfileLookup':
+      return ProfileLookup.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
     case 'ProfilePage':
       return ProfilePage.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'ProfileUpdate':
       return ProfileUpdate.fromJson(value as Map<String, dynamic>)
           as ReturnType;
+    case 'PushData':
+      return PushData.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'Reference':
       return Reference.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'Retry':
+    case 'Session':
+      return Session.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'Share':
       return Share.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'SplitKind':

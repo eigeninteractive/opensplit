@@ -20,11 +20,6 @@ import '../widgets/currency_picker.dart';
 
 /// Records a payment between two members, optionally handing off to a UPI app
 /// first.
-///
-/// The handoff and the record are deliberately separate steps. A UPI intent
-/// returns no reliable confirmation — the app cannot know whether money moved —
-/// so nothing is written until the user says it did. No copy on this screen may
-/// suggest OpenSplit checked.
 class SettleUpScreen extends ConsumerStatefulWidget {
   const SettleUpScreen({
     super.key,
@@ -88,17 +83,6 @@ class _SettleUpScreenState extends ConsumerState<SettleUpScreen> {
 
     // Revalidate on the way in, and this is the one screen where it is not
     // merely tidiness.
-    //
-    // Everywhere else, stale-while-revalidate is exactly right: a slightly old
-    // group name or member name costs nothing, and the whole app is built on
-    // rendering what the device knows and refreshing behind it. A payment
-    // handle is different. Handing off to a UPI app with a VPA somebody changed
-    // last week sends real money to an address they no longer hold, and the
-    // person paying has no way to know the prefilled value is out of date.
-    //
-    // Failures are swallowed inside the provider, so this cannot block or
-    // error-surface the screen -- offline, it simply shows what it has, which
-    // is the same thing it did before.
     ref.watch(groupSyncProvider(widget.groupId));
 
     final ledger = ref.watch(groupLedgerProvider(widget.groupId));
@@ -112,12 +96,8 @@ class _SettleUpScreenState extends ConsumerState<SettleUpScreen> {
     final currency = currencies[_currencyCode];
     final payee = _to == null ? null : ledger.memberById(_to!);
 
-    // Fill the payee's handle the first time we learn it, without stamping
-    // over anything the user has typed.
-    //
-    // Their account's handle wins, and the member row's is the fallback for
-    // somebody who has no account — which is exactly who most often needs
-    // paying, since a placeholder is a real person a friend added.
+    // Fill the payee's handle the first time we learn it, without stamping over
+    // anything the user has typed.
     final knownVpa = payee == null ? null : ledger.upiOf(payee);
     if (_payeeVpa.text.isEmpty && knownVpa != null) {
       _payeeVpa.text = knownVpa;
@@ -268,10 +248,7 @@ class _SettleUpScreenState extends ConsumerState<SettleUpScreen> {
       goBack(context, '/g/${widget.groupId}');
 
       // The one place the app asks for a review: a debt has just been cleared,
-      // which is the app finishing the thing it exists to do. Deliberately
-      // after the navigation and deliberately not awaited — nothing here waits
-      // on it, and nothing about the settlement depends on the outcome, which
-      // Play's quota means is usually "nothing was shown" anyway.
+      // which is the app finishing the thing it exists to do.
       final review = ref.read(reviewPromptProvider);
       unawaited(review.isDue().then((due) => due ? review.ask() : null));
     } catch (error) {

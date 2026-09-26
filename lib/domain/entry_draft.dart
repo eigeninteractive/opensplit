@@ -4,10 +4,6 @@ import 'split/splitter.dart';
 
 /// A user's intent to record an entry, before it has been resolved into
 /// balanced payers and shares.
-///
-/// Deliberately not an [Entry]: it carries the split *rule* the user chose and
-/// the total, but not the resolved per-member amounts, because those are
-/// derived and must not be supplied by a caller who could get them wrong.
 class EntryDraft {
   const EntryDraft({
     required this.groupId,
@@ -27,10 +23,6 @@ class EntryDraft {
   });
 
   /// A settlement: one person pays another, recorded manually.
-  ///
-  /// Modelled as an ordinary entry with a single payer and a single share so it
-  /// folds through the identical balance path — the payer goes into credit,
-  /// cancelling exactly the debt the expenses created.
   factory EntryDraft.settlement({
     required String groupId,
     required String currency,
@@ -84,15 +76,6 @@ class EntryDraft {
 }
 
 /// Turns a [draft] into a balanced [Entry].
-///
-/// This is the only place an [Entry] is constructed from user input, which is
-/// what makes "every stored entry balances" a property of the code rather than
-/// a hope. The split is resolved and the payers validated here; if either fails
-/// the entry is never built at all, so an unbalanced row cannot reach the
-/// database to be rejected by the server's deferred trigger one sync later.
-///
-/// [id], [now] and [clientKey] are injected rather than generated inside, so
-/// the function stays pure and testable.
 Entry composeEntry(
   EntryDraft draft, {
   required String id,
@@ -105,8 +88,8 @@ Entry composeEntry(
   }
 
   // Seeded with the entry id, so the person who absorbs a rounding leftover
-  // varies from expense to expense instead of being the same member every
-  // time — and so re-editing this entry reproduces the identical split.
+  // varies from expense to expense instead of being the same member every time
+  // — and so re-editing this entry reproduces the identical split.
   final shares = draft.split.resolve(draft.amountMinor, seed: id);
   final payers = resolvePayers(
     totalMinor: draft.amountMinor,

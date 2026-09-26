@@ -6,13 +6,6 @@ import 'package:opensplit/config.dart';
 import 'package:opensplit/data/sync/invites.dart';
 
 /// The one host this app claims.
-///
-/// Two files have to agree about it and neither reads the other: `config.dart`
-/// decides the host every invite link is *minted* with, and the App Links
-/// intent filter decides which hosts Android will *open* natively. If the
-/// filter loses the host links are made with, every link opens in a browser
-/// instead of the app — silently, on other people's phones, long after the
-/// change that caused it.
 void main() {
   group('legal pages', _legalPages);
   late final String manifest;
@@ -37,7 +30,7 @@ void main() {
 
     // More than one is not a bug in itself — it is a promise to serve
     // assetlinks.json from each of them, matching the signing key, for as long
-    // as any link naming them survives. One is the decision this project made.
+    // as any link naming them survives.
     expect(
       hosts,
       [linkHost],
@@ -76,11 +69,8 @@ void main() {
   });
 
   test('claims the path invite links are actually minted under', () {
-    // The host is no longer all app: the root is static marketing pages and
-    // the client is served from /app/. Two places encode that split and
-    // neither reads the other — joinUrl here, pathPrefix in the manifest. Let
-    // them drift and every invite link opens in a browser instead of the
-    // installed app, silently, on other people's phones.
+    // The host is no longer all app: the root is static marketing pages and the
+    // client is served from /app/.
     final prefixes = RegExp(
       r'android:pathPrefix="([^"]+)"',
     ).allMatches(manifest).map((m) => m.group(1)!).toList();
@@ -102,9 +92,7 @@ void main() {
       r'android:pathPrefix="([^"]+)"',
     ).firstMatch(manifest)!.group(1)!;
 
-    // The other half of the same decision. A privacy policy that opens inside
-    // the app it describes is no use to a reviewer checking it exists, or to
-    // somebody who has already uninstalled.
+    // The other half of the same decision.
     for (final url in [privacyPolicyUrl, termsUrl, deleteAccountUrl]) {
       expect(
         Uri.parse(url).path,
@@ -116,12 +104,6 @@ void main() {
 }
 
 /// The pages the store listing points at, and the app links out to.
-///
-/// Three things have to agree and none of them reads the others: the URL
-/// submitted to Play Console, the getter the Settings screen launches, and a
-/// file that actually exists in `site/`. A rename breaks the middle one
-/// silently — and a Play reviewer sees a 404 where a privacy policy should
-/// be.
 void _legalPages() {
   for (final (name, url) in [
     ('privacy', privacyPolicyUrl),
@@ -143,10 +125,9 @@ void _legalPages() {
     });
 
     test('$name answers at its own address, without a redirect', () {
-      // A page kept as `<name>/index.html` is answered with a 307 to
-      // `<name>/` by Cloudflare's asset router, and this URL is the one in the
-      // Play Console listing and in the canonical tag. A published address
-      // should answer.
+      // A page kept as `<name>/index.html` is answered with a 307 to `<name>/`
+      // by Cloudflare's asset router, and this URL is the one in the Play
+      // Console listing and in the canonical tag.
       expect(
         Directory('site/$name').existsSync(),
         isFalse,
@@ -156,10 +137,10 @@ void _legalPages() {
   }
 
   test('none of them is carrying a placeholder', () {
-    // They shipped with an address and a jurisdiction nobody had filled in,
-    // and a page in that state reads perfectly well — it simply tells people
-    // to write to nobody, which is not something a reviewer or a user would
-    // notice on our behalf.
+    // They shipped with an address and a jurisdiction nobody had filled in, and
+    // a page in that state reads perfectly well — it simply tells people to
+    // write to nobody, which is not something a reviewer or a user would notice
+    // on our behalf.
     for (final name in ['privacy', 'terms', 'delete-account']) {
       final page = File('site/$name.html').readAsStringSync();
       expect(

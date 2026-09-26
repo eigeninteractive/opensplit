@@ -31,8 +31,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const _AppearanceSetting(),
             const SizedBox(height: 24),
             const _WallpaperSetting(),
-            // Hidden entirely rather than shown broken when the build has
-            // no FCM credentials, matching how every other integration behaves
+            // Hidden entirely rather than shown broken when the build has no
+            // FCM credentials, matching how every other integration behaves
             // here.
             if (hasPush) ...[
               const Divider(height: 48),
@@ -88,14 +88,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 }
 
 /// What the account is, at the top of the screen where it is read first.
-///
-/// Settings pages put the account first because it is the thing a user checks
-/// rather than changes, and because "am I actually signed in?" is the question
-/// this screen most often gets opened to answer.
-///
-/// Leads to a screen rather than expanding in place. The linking flow has its
-/// own state — an email field, a sent code, an error — and a settings list is
-/// the wrong container for something with steps.
 class _AccountRow extends ConsumerWidget {
   const _AccountRow();
 
@@ -144,11 +136,6 @@ class _AccountRow extends ConsumerWidget {
 }
 
 /// Light, dark, or whatever the platform is doing.
-///
-/// A SegmentedButton rather than three radio tiles or a dropdown: Material 3
-/// defines it for exactly this shape of choice — a small set of mutually
-/// exclusive options, all worth showing at once, where the selected one should
-/// be readable without opening anything.
 class _AppearanceSetting extends ConsumerWidget {
   const _AppearanceSetting();
 
@@ -201,11 +188,6 @@ class _AppearanceSetting extends ConsumerWidget {
 }
 
 /// A link out to one of the pages the store listing also points at.
-///
-/// Opens the real page rather than rendering the text in the app. There is one
-/// copy of a policy, it is the copy Google Play was given, and it can be
-/// corrected without shipping a build — which matters most for exactly the
-/// documents that have to stay accurate.
 class _LegalLink extends StatelessWidget {
   const _LegalLink({
     required this.icon,
@@ -237,12 +219,6 @@ class _LegalLink extends StatelessWidget {
 }
 
 /// Whether the app takes its colours from the wallpaper, and whether it can.
-///
-/// Both halves matter, and the second is why this row exists at all. Material
-/// You is invisible when it is working — the app simply looks like the rest of
-/// the phone — and identical to a bug when it is not. Saying which is happening
-/// turns "the colours never change" from something to investigate into
-/// something to read.
 class _WallpaperSetting extends ConsumerWidget {
   const _WallpaperSetting();
 
@@ -289,8 +265,7 @@ class _WallpaperSetting extends ConsumerWidget {
         ),
         const SizedBox(height: 8),
         // The palette itself, so that "it is on and nothing changed" is
-        // answerable by looking rather than by guessing. A wallpaper can be
-        // very nearly grey, and that is what this shows when it is.
+        // answerable by looking rather than by guessing.
         Row(
           children: [
             for (final swatch in [
@@ -326,11 +301,6 @@ class _WallpaperSetting extends ConsumerWidget {
 }
 
 /// The switch that governs whether this device is told about group activity.
-///
-/// This is the only place the app asks for notification permission unprompted,
-/// and it asks only when the switch is turned on — a deliberate action, taken
-/// on a screen the user navigated to. Nothing about launching the app produces
-/// a system dialog.
 class _NotificationSetting extends ConsumerStatefulWidget {
   const _NotificationSetting();
 
@@ -355,8 +325,7 @@ class _NotificationSettingState extends ConsumerState<_NotificationSetting> {
       if (!mounted || granted) return;
 
       // The switch springs back, because it would otherwise claim a state the
-      // OS has refused. Android stops showing the dialog after a second
-      // refusal, so "try again" is not useful advice — system settings is.
+      // OS has refused.
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(

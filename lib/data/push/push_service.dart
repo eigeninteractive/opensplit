@@ -5,28 +5,14 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:opensplit_api/opensplit_api.dart' show EventKind, PushData;
 
 import '../../config.dart';
-import '../../domain/models/kinds.dart';
 import 'background_handler.dart';
 import 'notification_channel.dart';
+import 'push_data.dart';
 
 /// Wakes the app when something changes, and lets the app say what changed.
-///
-/// The message from the server is data-only and carries nothing but ids. The
-/// device pulls the delta, computes, and posts a LOCAL notification whose text
-/// comes from the same Dart that renders the screen — so the banner and the app
-/// can never disagree about an amount. A server-formatted notification would be
-/// a second implementation of currency exponents, rounding and split
-/// arithmetic, drifting silently from the first.
-///
-/// This also replaces holding a realtime subscription open. Peak concurrent
-/// realtime peers is what a hosted backend bills for; a push costs nothing.
-///
-/// Nothing here asks for permission. [initialize] wires up messaging and
-/// nothing more; [requestPermission] is separate and is only ever called from
-/// an explicit user action. That split is deliberate — see the note on
-/// [requestPermission].
 class PushService {
   PushService({
     required this.onWake,
@@ -40,10 +26,6 @@ class PushService {
   final Future<void> Function(String groupId) onWake;
 
   /// Produce the notification text, after the delta has landed.
-  ///
-  /// Null for an event this build has no sentence for, which is how a kind the
-  /// server has learned and this client has not ends up waking the device,
-  /// syncing it, and then quietly drawing nothing.
   final Future<({String title, String body})?> Function(
     String groupId,
     EventKind kind,
@@ -69,10 +51,6 @@ class PushService {
   StreamSubscription<RemoteMessage>? _opened;
 
   /// Sets everything up, or does nothing at all if push is not configured.
-  ///
-  /// Returning quietly matters: a build without FCM credentials is a perfectly
-  /// good build of this app — sync still works, it simply waits for the next
-  /// time a screen is opened.
   Future<void> initialize() {
     if (!hasPush || _ready) return Future.value();
     return _initializing ??= _initialize().whenComplete(
@@ -151,9 +129,7 @@ class PushService {
 
     // FCM rotates a registration token on reinstall, on restore to a new
     // device, and whenever it decides one is stale — after 270 days of
-    // inactivity it garbage-collects them outright. Without this subscription
-    // the server keeps the dead token, and the user simply stops receiving
-    // anything with no error anywhere to explain it.
+    // inactivity it garbage-collects them outright.
     _refresh ??= FirebaseMessaging.instance.onTokenRefresh.listen((
       token,
     ) async {
@@ -177,12 +153,6 @@ class PushService {
   }
 
   /// Asks the OS for permission to post notifications.
-  ///
-  /// Only ever called from a deliberate user action, never on launch. Android
-  /// 13+ shows the system dialog once or twice and then treats further asks as
-  /// permanently denied, with system settings as the only way back. Spending
-  /// that on a first-run user who has not yet created a group is spending it at
-  /// the moment they have the least reason to say yes.
   Future<bool> requestPermission() async {
     if (!hasPush) return false;
     await initialize();
@@ -216,10 +186,9 @@ class PushService {
   /// A message that arrived while somebody was looking at the app.
   Future<void> _handle(RemoteMessage message) async {
     if (!isEnabled()) return;
-    final groupId = message.data['group_id'];
-    final subjectId = message.data['subject_id'];
-    final kind = fromWire(EventKind.values, message.data['kind'] as String?);
-    if (groupId is! String || subjectId is! String || kind == null) return;
+    final push = readPushData(message.data);
+    if (push == null) return;
+    final PushData(:groupId, :subjectId, :kind) = push;
 
     // Sync first. The notification describes what is now on the device, not
     // what a server guessed the recipient's share would be.
@@ -249,8 +218,7 @@ class PushService {
   }
 
   void _open(RemoteMessage message) {
-    final groupId = message.data['group_id'];
-    if (groupId is! String) return;
-    onOpenGroup(groupId);
+    final push = readPushData(message.data);
+    if (push != null) onOpenGroup(push.groupId);
   }
 }

@@ -1,21 +1,7 @@
 import { env } from "cloudflare:workers";
 import { importJWK, type JWK, SignJWT } from "jose";
 
-/**
- * A Google sign-in, driven through the real verification path.
- *
- * Better Auth verifies an ID token properly: RS256, against the JWKS at
- * `googleapis.com/oauth2/v3/certs`, checking the audience against the
- * configured client id and refusing anything stale. None of that is stubbed —
- * `vitest.config.ts` generates a keypair, serves its public half where Google's
- * would be, and hands the private half in as a binding so these tokens are
- * genuinely signed.
- *
- * Which matters, because the branches these tests cover decide whether
- * somebody's ledger survives attaching an account. A test that bypassed
- * verification would prove the branch ran, not that it ran for a token the
- * server actually accepted.
- */
+/** A Google sign-in, driven through the real verification path. */
 
 export interface GoogleIdentity {
   /**

@@ -11,14 +11,6 @@ import '../widgets/identity_choices.dart';
 import '../widgets/page_body.dart';
 
 /// The critical path: someone taps a link a friend sent them.
-///
-/// It reads the invite before spending it, and that ordering is the whole
-/// screen: claiming first would let a throwaway guest account take the place
-/// of somebody who already has an account, and spend the single-use token.
-///
-/// So: show what the link is for, ask who they are, then claim once. There is
-/// no wall — being a guest is one of the three answers — and there is a way
-/// to say no, for a link that was meant for somebody else.
 class JoinScreen extends ConsumerStatefulWidget {
   const JoinScreen({super.key, required this.token});
 
@@ -35,10 +27,6 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
   bool _joining = false;
 
   /// The unclaimed places an open link's group is holding.
-  ///
-  /// Null until asked for, which is deliberately not until there is a session:
-  /// these are other people's names, and the server refuses to list them to
-  /// somebody who has not said who they are.
   List<api.Placeholder>? _places;
   bool _loadingPlaces = false;
 
@@ -46,10 +34,6 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
   String? _chosenMemberId;
 
   /// The name to arrive under, for somebody who is not one of the places.
-  ///
-  /// Only ever read on that branch. Claiming a place keeps the name the group
-  /// already wrote on it, and the account adopts that name rather than the
-  /// other way round.
   final _name = TextEditingController();
 
   @override
@@ -157,10 +141,6 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
   }
 
   /// Leaves this account and comes back to the same link.
-  ///
-  /// Safe to offer precisely because nothing has been claimed yet: the token is
-  /// still unspent, so signing out and returning is a real way to fix having
-  /// opened somebody else's invite while signed in as yourself.
   Future<void> _switchAccount() async {
     await ref.read(sessionControllerProvider.notifier).signOut();
     if (mounted) {
@@ -321,9 +301,7 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
           IdentityChoices(
             onSignedIn: () async {
               await _loadPlaces();
-              // Not joined yet, deliberately. An open link has a question
-              // after the account one -- which of these people are you -- and
-              // answering the first should not answer the second by default.
+              // Not joined yet, deliberately.
               if (mounted) setState(() {});
             },
             guestNote:
@@ -337,10 +315,7 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
             loading: _loadingPlaces,
             chosen: _chosenMemberId,
             joining: _joining,
-            // Asked for only when there is nowhere to take it from. Anybody
-            // who signed in with Google or an email address already has a
-            // name; a guest has none, and a member row without one is not a
-            // row this ledger can hold.
+            // Asked for only when there is nowhere to take it from.
             name: account.displayName == null ? _name : null,
             onChoose: (memberId) => setState(() => _chosenMemberId = memberId),
             onJoin: _join,
@@ -365,16 +340,6 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
 }
 
 /// "Are you one of these people?"
-///
-/// The whole reason an open link does not turn a group of six into a group of
-/// twelve. Somebody makes the group, types in everyone on the trip, and posts
-/// one link; without this, each arrival becomes a new member beside the
-/// placeholder that was already them, and somebody spends an evening merging
-/// rows by hand. Claiming one is the same single-column update a named invite
-/// performs, so no balance moves and no expense is rewritten.
-///
-/// "I'm not listed" is a real option and sits with the others rather than below
-/// them, because for a group that named nobody it is the only true answer.
 class _ChoosePlace extends StatelessWidget {
   const _ChoosePlace({
     required this.places,
@@ -449,7 +414,7 @@ class _ChoosePlace extends StatelessWidget {
                 for (final place in waiting)
                   RadioListTile<String?>(
                     contentPadding: EdgeInsets.zero,
-                    value: place.memberId,
+                    value: place.id,
                     title: Text(place.displayName),
                   ),
                 const RadioListTile<String?>(
@@ -464,10 +429,7 @@ class _ChoosePlace extends StatelessWidget {
         ],
 
         // A guest arriving as somebody new has no name anywhere: not on their
-        // account, and not on a placeholder they are declining to claim. The
-        // server refuses the join rather than inventing one — "Someone" in a
-        // ledger is worse than being asked — so this is where the asking
-        // happens, and only in that case.
+        // account, and not on a placeholder they are declining to claim.
         if (name != null && chosen == null) ...[
           TextField(
             controller: name,
@@ -548,10 +510,7 @@ class _Claim extends ConsumerWidget {
         const SizedBox(height: 12),
         Text(
           // Stated plainly, because this is the moment somebody discovers they
-          // opened a link meant for a different person. Claiming a place named
-          // for somebody else is not forbidden — a placeholder is only ever
-          // what a friend happened to type — but it should never happen by
-          // accident.
+          // opened a link meant for a different person.
           'You are signed in as $who. Joining puts you in the place '
           '${preview.inviter} labelled “$memberName”.',
           textAlign: TextAlign.center,

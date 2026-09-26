@@ -19,7 +19,7 @@ class EntriesApi {
   const EntriesApi(this._dio);
 
   /// Soft-delete an expense
-  /// Deleting always moves money, so unlike a prose edit it must carry the exact version the device last saw. The row stays in the feed with &#x60;deletedAt&#x60; set; nothing here can remove it.
+  /// Deleting always moves money, so it must carry the exact version the device last saw.
   ///
   /// Parameters:
   /// * [groupId]
@@ -61,7 +61,18 @@ class EntriesApi {
     final _options = Options(
       method: r'DELETE',
       headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookie',
+            'keyName': 'better-auth.session_token',
+            'where': '',
+          },
+          {'type': 'http', 'scheme': 'bearer', 'name': 'bearer'},
+        ],
+        ...?extra,
+      },
       validateStatus: validateStatus,
     );
 
@@ -148,7 +159,18 @@ class EntriesApi {
     final _options = Options(
       method: r'POST',
       headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookie',
+            'keyName': 'better-auth.session_token',
+            'where': '',
+          },
+          {'type': 'http', 'scheme': 'bearer', 'name': 'bearer'},
+        ],
+        ...?extra,
+      },
       validateStatus: validateStatus,
     );
 
@@ -193,7 +215,7 @@ class EntriesApi {
   }
 
   /// Record or edit an expense, whole
-  /// Whole rather than by column: an amount, its payers and its shares are one coherent fact. Send &#x60;baseSeq&#x60; to be told when somebody else has moved the money since you composed the edit — a stale base is refused only when applying the write would move money, so two people fixing a typo never arbitrate.
+  /// A stale &#x60;baseSeq&#x60; is refused only when the write would move money, so two people fixing a typo never arbitrate.
   ///
   /// Parameters:
   /// * [groupId]
@@ -226,7 +248,18 @@ class EntriesApi {
     final _options = Options(
       method: r'POST',
       headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookie',
+            'keyName': 'better-auth.session_token',
+            'where': '',
+          },
+          {'type': 'http', 'scheme': 'bearer', 'name': 'bearer'},
+        ],
+        ...?extra,
+      },
       contentType: 'application/json',
       validateStatus: validateStatus,
     );

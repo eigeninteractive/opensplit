@@ -1,14 +1,7 @@
 import { env, exports as workerExports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
-/**
- * Phase 0's exit criterion, as a test: the Worker answers, the bindings
- * resolve, and the routing model behaves the way the configuration claims.
- *
- * The last of those is the one worth having. "Assets are served first and a
- * miss falls through to the Worker" is a sentence in the docs; this is the
- * thing that says it is true of this configuration.
- */
+/** Phase 0's exit criterion, as a test: the Worker answers, the bindings resolve, and the routing model behaves the way the configuration claims. */
 describe("the Worker is wired up", () => {
   it("answers a health check", async () => {
     const response = await workerExports.default.fetch("https://opensplit.test/api/health");
@@ -45,13 +38,7 @@ describe("the Worker is wired up", () => {
     expect(health.status).toBe(200);
   });
 
-  /**
-   * These three run against `test/fixtures/assets`, not the real bundle — see
-   * vitest.config.ts. What they pin down is which document each kind of miss
-   * is answered with, which is the whole of `app.ts`'s catch-all and the
-   * reason `assets.not_found_handling` is left off: every setting it offers
-   * would answer at least one of these with the wrong one.
-   */
+  /** These three run against `test/fixtures/assets`, not the real bundle — see vitest.config.ts. */
   it("serves a deep link from the client's own document", async () => {
     const response = await workerExports.default.fetch("https://opensplit.test/app/join/some-token");
 
@@ -67,8 +54,7 @@ describe("the Worker is wired up", () => {
 
     expect(response.status).toBe(404);
     // The status and the document have to disagree with each other in exactly
-    // this way: a real 404 for a crawler, a readable page for a person. The
-    // asset store holds /404.html with a 200, so the Worker restamps it.
+    // this way: a real 404 for a crawler, a readable page for a person.
     expect(body).toContain("Not found");
     expect(body).not.toContain("Client shell");
   });

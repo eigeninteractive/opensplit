@@ -5,17 +5,6 @@ import '../../application/providers.dart';
 import '../../config.dart';
 
 /// Offers notifications at the one moment they obviously matter.
-///
-/// Called after someone shares an invite — the point at which this stops being
-/// a private ledger and becomes a shared one, and "tell me when they add
-/// something" first means anything. Asking at launch instead would spend
-/// Android's very small budget of permission dialogs on a user who has not yet
-/// created a group, and a second refusal there makes the system dialog stop
-/// appearing at all.
-///
-/// A rationale is shown first, in-app, where a "Not now" costs nothing. Only
-/// "Yes" reaches the OS prompt, so the expensive dialog is only ever spent on
-/// someone who has already said they want it.
 Future<void> offerNotifications(BuildContext context, WidgetRef ref) async {
   if (!hasPush) return;
 

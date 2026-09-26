@@ -8,25 +8,9 @@ import '../models/member.dart';
 import '../models/profile.dart';
 
 /// The version stamped into every export.
-///
-/// Present from the first release rather than added when it is first needed:
-/// a file with no version is one nothing can ever safely read, because there is
-/// no way to tell it apart from a future shape that happens to share keys.
 const jsonExportVersion = 1;
 
 /// A complete, self-contained copy of one group.
-///
-/// The counterpart to the CSV, not a second format of it. CSV is for a person
-/// with a spreadsheet: flat, one row per expense, lossy about anything that is
-/// not a row. This is for getting the group back — every member including the
-/// ones who never claimed an account, every payer and share with its original
-/// weight, the fx snapshot each entry was recorded against, and the activity
-/// log. Enough to reconstruct the ledger exactly, or to hand to anything that
-/// wants to read it without asking the server.
-///
-/// Names are resolved and written out alongside the ids. An archive whose
-/// member ids mean nothing without a running copy of this app is not much of an
-/// archive.
 String groupToJson({
   required Group group,
   required List<Member> members,
@@ -52,9 +36,7 @@ String groupToJson({
         {
           'id': member.id,
           'name': nameOf(member),
-          // Both are kept. `name` is what to show; these two say where it came
-          // from, which is the difference between a person who has an account
-          // and a placeholder somebody typed.
+          // Both are kept.
           'placeholder_name': member.displayName,
           'has_account': member.profileId != null,
           'upi_vpa': profiles[member.profileId]?.upiVpa ?? member.upiVpa,
@@ -71,10 +53,7 @@ String groupToJson({
           'category': categoryNames[entry.categoryId],
           'category_id': entry.categoryId,
           'currency': entry.currency,
-          // Minor units, deliberately. This file is for machines, and a
-          // rendered "₹400.00" would have to be parsed back through a currency
-          // table to be usable — losing exactness on the way for the currencies
-          // where it matters most.
+          // Minor units, deliberately.
           'amount_minor': entry.amountMinor,
           'date': calendarDate(entry.entryDate),
           // When and where it happened, when known: an instant in UTC and
@@ -84,8 +63,7 @@ String groupToJson({
           'split_kind': entry.splitKind.name,
           'notes': entry.notes,
           // What a unit of this currency was worth on the day, as recorded then
-          // and never re-fetched. Without it a converted total cannot be
-          // reproduced from this file.
+          // and never re-fetched.
           'fx': entry.fxRate == null
               ? null
               : {
@@ -106,11 +84,6 @@ String groupToJson({
                 // amounts cannot be re-edited as "2:1:1", and one holding only
                 // the rule would let a later rounding change move money that
                 // has already been settled.
-                //
-                // Written as the stored integer, scaled by a million, rather
-                // than as a decimal. That is the exact value; rendering it as
-                // 0.333333 would make the file disagree with the ledger it came
-                // from in the third place.
                 'weight_micros': share.weightMicros,
               },
           ],
@@ -129,11 +102,6 @@ String groupToJson({
 }
 
 /// One line of the record, as JSON.
-///
-/// `kind` is the server's own spelling in every case, so a reader of the file
-/// and a reader of the database are looking at the same vocabulary. The entry
-/// kinds are the exception and are qualified -- `entry.created` rather than a
-/// bare `created` -- because "created" on its own does not say created what.
 Map<String, Object?> _eventToJson(GroupEvent event) {
   final common = {
     'id': event.id,

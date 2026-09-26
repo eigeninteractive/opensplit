@@ -6,28 +6,14 @@ import type { Group } from "../src/do/group";
 import type { append } from "../src/do/group/events";
 import migrations from "../src/do/group/migrations/migrations.js";
 import { kindOf, refusalCodes, statusFor } from "../src/do/group/refusal";
-import { isMemberEvent } from "../src/schemas/ledger";
 import { evenly, freshId, makeGroup, ok, RAVI, stub } from "./group";
 
 const DAYS = 24 * 60 * 60 * 1000;
 
-/**
- * The object as a Cloudflare object, rather than as a ledger: its migrations,
- * its alarm, and the type its methods actually present across the RPC
- * boundary.
- *
- * The parts with no ledger semantics at all, and therefore the parts nothing
- * else in this suite would notice breaking.
- */
+/** The object as a Cloudflare object, rather than as a ledger: its migrations, its alarm, and the type its methods actually present across the RPC boundary. */
 
 describe("the schema this object migrates itself to", () => {
-  /**
-   * Migrations here are lazy and per object — a group nobody has touched for
-   * six months migrates on its next open — which is the property that makes
-   * re-application worth testing at all. A `wrangler d1 migrations apply`
-   * runs once against one database; this runs on every open of every object,
-   * forever.
-   */
+  /** Migrations here are lazy and per object — a group nobody has touched for six months migrates on its next open — which is the property that makes re-application worth testing at all. */
   it("is applied exactly once, however many times the object is opened", async () => {
     const { groupId, ravi, priya } = await makeGroup();
     ok(await stub(groupId).upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 450), RAVI));
@@ -126,19 +112,7 @@ describe("the derived index in D1, when D1 is not answering", () => {
 });
 
 describe("what the RPC boundary actually carries", () => {
-  /**
-   * A guard against a failure that costs nothing at runtime and everything at
-   * review time.
-   *
-   * workerd types an RPC method's return by what it can structured-clone, and
-   * `unknown` is not that. A `Result<ChangePage>` whose event payload was
-   * `Record<string, unknown>` therefore lost its entire success branch: every
-   * `changes()` call typed as the refusal alone, every read of a page was
-   * `unknown`, and nothing failed — the tests passed, the handler compiled.
-   *
-   * This is a type assertion rather than an assertion about a value, and the
-   * `npm run typecheck` over `test/` is what runs it.
-   */
+  /** A guard against a failure that costs nothing at runtime and everything at review time. */
   it("includes the success branch of every method that returns one", async () => {
     const object = env.GROUP.getByName("type-check");
 
@@ -155,8 +129,8 @@ describe("what the RPC boundary actually carries", () => {
     // And the page really does arrive whole at runtime, not just in the types.
     const { groupId } = await makeGroup();
     const page = ok(await stub(groupId).changes(RAVI, 0, 100));
-    const added = page.events.filter(isMemberEvent).at(0);
-    expect(added?.payload.displayName).toBe("Priya");
+    const added = page.events.find((event) => event.kind === "member_added");
+    expect(added?.member?.displayName).toBe("Priya");
   });
 
   /**
@@ -173,8 +147,8 @@ describe("what the RPC boundary actually carries", () => {
       actorId: null,
       kind: "member_renamed",
       subjectId: "member-1",
-      // @ts-expect-error a member event carries a name, not a group's name
-      payload: { name: "Goa trip", previousName: null },
+      // @ts-expect-error a member event carries a member payload, not a group's
+      group: { name: "Goa trip", previousName: null },
     } satisfies Appendable;
 
     expect(wrong.kind).toBe("member_renamed");

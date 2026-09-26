@@ -23,10 +23,6 @@ final class DriftGroupRepository {
   final DateTime Function() _clock;
 
   /// Groups this user belongs to, newest activity first.
-  ///
-  /// A stream rather than a future because every screen is driven by the local
-  /// database: a sync that lands in the background updates the UI without any
-  /// screen having to know a sync happened.
   Stream<List<Group>> watchGroups({bool includeArchived = false}) {
     final query = _db.select(_db.groups)
       ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]);
@@ -71,14 +67,6 @@ final class DriftGroupRepository {
   }
 
   /// Creates a group along with its first member — whoever made it.
-  ///
-  /// One operation because a group with no members is not a valid state; it
-  /// would render as an empty screen with no way to add an expense.
-  ///
-  /// That first member is not privileged in any way. `groups.created_by`
-  /// records who made it, and names the member rather than the account — so it
-  /// still resolves after that person deletes their account, and it is what
-  /// tells the push which of a new group's members travels with the group.
   Future<({Group group, Member creator})> createGroup({
     required String name,
     required String defaultCurrency,
@@ -122,13 +110,6 @@ final class DriftGroupRepository {
   }
 
   /// Writes a group's editable fields.
-  ///
-  /// `defaultCurrency` is deliberately not among them, even though the column
-  /// is writable. Every entry carries an `fx_rate` snapshot taken against the
-  /// group's default at the time it was recorded, so changing the default
-  /// afterwards would silently reinterpret every one of those numbers against a
-  /// currency they were never converted to. Nothing in the UI offers it, and
-  /// this is where that would stop being true.
   Future<void> updateGroup(Group group) async {
     final trimmed = group.name.trim();
     if (trimmed.isEmpty) {
@@ -141,9 +122,7 @@ final class DriftGroupRepository {
           name: Value(trimmed),
           simplifyDebts: Value(group.simplifyDebts),
           archivedAt: Value(group.archivedAt),
-          // Bumped on every local write. Without this a rename made offline
-          // keeps its old version, and the next pull sees the server as newer
-          // and discards the edit before the outbox has had a chance to send it.
+          // Bumped on every local write.
         ),
       );
       await outbox?.enqueue(OutboxTarget.group, group.id);
@@ -152,18 +131,6 @@ final class DriftGroupRepository {
 
   /// Leaves a group: marks your own member row as having left, and archives the
   /// group on this device.
-  ///
-  /// Two steps because they answer different questions. `left_at` is the fact
-  /// the rest of the group needs — it is what stops you being counted in new
-  /// splits, and what makes the server stop letting you read the group at all.
-  /// Archiving is this device's own bookkeeping: once the leave has landed
-  /// nothing here can ever sync again, so the group would otherwise sit in the
-  /// list quietly going stale.
-  ///
-  /// Not a local delete, and that ordering matters. The leave has to survive
-  /// long enough to be pushed, and the outbox pushes by reading the row back —
-  /// so deleting the group offline would drop the very write that tells anyone
-  /// you left.
   Future<void> leaveGroup({
     required String groupId,
     required String memberId,
@@ -197,7 +164,7 @@ final class DriftGroupRepository {
 
     // A placeholder — profileId null — is a full member from this moment: they
     // can pay, owe and be settled with, all before they have ever heard of the
-    // app. That is the entire point of members being group-scoped.
+    // app.
     final member = Member(
       id: _uuid.v4(),
       groupId: groupId,
@@ -231,12 +198,6 @@ final class DriftGroupRepository {
 
   /// Marks a member as having left. Never deletes: their past entries have to
   /// keep making sense.
-  ///
-  /// The server refuses this for anybody but yourself unless they are settled
-  /// up — removing somebody also cuts off their read access, and the person
-  /// most worth cutting off is the one still owed money. Callers should not
-  /// offer it for an unsettled member; see `updateMember` in the group's
-  /// Durable Object, which is where that rule lives.
   Future<void> removeMember(String memberId) async {
     // Marked as left, never deleted. Their name still has to render on every
     // expense they were part of, and their balance still has to be settleable.
@@ -248,9 +209,6 @@ final class DriftGroupRepository {
   }
 
   /// Records a UPI handle against a member of a group.
-  ///
-  /// Group-scoped rather than on the profile, so a placeholder — someone who
-  /// has never opened the app — can still be paid. Pass null to clear it.
   Future<void> setMemberUpiVpa(String memberId, String? vpa) async {
     final trimmed = vpa?.trim();
     if (trimmed != null && trimmed.isNotEmpty && !isValidUpiVpa(trimmed)) {
@@ -269,15 +227,6 @@ final class DriftGroupRepository {
   }
 
   /// How this account's groups would fare if the account were deleted.
-  ///
-  /// `solo` counts groups where nobody else has an account. Placeholders do not
-  /// count, because nobody can sign in as one — those groups become unreadable
-  /// by anyone the moment the last profile goes, so the server deletes them
-  /// outright and this is what warns about it first.
-  ///
-  /// One query rather than one per group: a person's whole membership list is
-  /// a few dozen rows at most, and the alternative is N round trips to answer
-  /// a question asked once, inside a confirmation dialog.
   Future<({int solo, int shared})> membershipBreakdown(String profileId) async {
     final rows = await _db.select(_db.members).get();
 

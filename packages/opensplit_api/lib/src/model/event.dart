@@ -3,7 +3,11 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:opensplit_api/src/model/entry_snapshot.dart';
 import 'package:opensplit_api/src/model/event_kind.dart';
+import 'package:opensplit_api/src/model/link_event_payload.dart';
+import 'package:opensplit_api/src/model/group_event_payload.dart';
+import 'package:opensplit_api/src/model/member_event_payload.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 part 'event.g.dart';
@@ -27,7 +31,13 @@ class Event {
 
     required this.subjectId,
 
-    required this.payload,
+    required this.entry,
+
+    required this.member,
+
+    required this.group,
+
+    required this.link,
 
     required this.seq,
 
@@ -54,9 +64,17 @@ class Event {
   @JsonKey(name: r'subjectId', required: true, includeIfNull: true)
   final String? subjectId;
 
-  /// The after-image, in whatever shape `kind` calls for: EntrySnapshot, MemberEventPayload, GroupEventPayload or LinkEventPayload.
-  @JsonKey(name: r'payload', required: true, includeIfNull: false)
-  final Map<String, Object?> payload;
+  @JsonKey(name: r'entry', required: true, includeIfNull: true)
+  final EntrySnapshot? entry;
+
+  @JsonKey(name: r'member', required: true, includeIfNull: true)
+  final MemberEventPayload? member;
+
+  @JsonKey(name: r'group', required: true, includeIfNull: true)
+  final GroupEventPayload? group;
+
+  @JsonKey(name: r'link', required: true, includeIfNull: true)
+  final LinkEventPayload? link;
 
   // minimum: 0
   @JsonKey(name: r'seq', required: true, includeIfNull: false)
@@ -75,7 +93,10 @@ class Event {
           other.createdAt == createdAt &&
           other.kind == kind &&
           other.subjectId == subjectId &&
-          other.payload == payload &&
+          other.entry == entry &&
+          other.member == member &&
+          other.group == group &&
+          other.link == link &&
           other.seq == seq &&
           other.ordinal == ordinal;
 
@@ -86,7 +107,10 @@ class Event {
       createdAt.hashCode +
       kind.hashCode +
       (subjectId == null ? 0 : subjectId.hashCode) +
-      payload.hashCode +
+      (entry == null ? 0 : entry.hashCode) +
+      (member == null ? 0 : member.hashCode) +
+      (group == null ? 0 : group.hashCode) +
+      (link == null ? 0 : link.hashCode) +
       seq.hashCode +
       ordinal.hashCode;
 

@@ -1,13 +1,4 @@
 /// Turns a computed diff into something a person can read.
-///
-/// Kept in the domain, away from widgets, because the awkward part is not
-/// layout: the snapshots hold everything in the columns' own terms —
-/// `amount_minor`, `split_kind`, minor units, enum names, member ids — and a
-/// feed has to say it the way the people in the group would.
-///
-/// Unknown fields are rendered rather than dropped. A column added to the
-/// snapshot later should show up as a plain, slightly clumsy line instead of
-/// silently disappearing from the record.
 library;
 
 import '../activity/snapshot_diff.dart';
@@ -15,10 +6,6 @@ import '../models/currency.dart';
 import '../models/entry_event.dart';
 
 /// One rendered line, e.g. "the amount, from ₹400.00 to ₹300.00".
-///
-/// [memberNames] resolves the per-member share and payment lines. Without it
-/// they still render, naming a raw id — clumsy, but never silently absent,
-/// since those are the lines that say who gained and who lost.
 String describeChange(
   FieldChange change, {
   Currency? currency,
@@ -35,12 +22,6 @@ String describeChange(
 }
 
 /// The human name for a field, including the per-member ones.
-///
-/// A share line is the most important thing this file renders. An edit that
-/// re-splits a bill without touching its total moves money between people and
-/// changes no number anybody would think to check, so "Ravi's share, from
-/// ₹200.00 to ₹300.00" is the whole point of the feed rather than a detail in
-/// it.
 String _label(String field, Map<String, String>? memberNames) {
   final separator = field.indexOf(':');
   if (separator < 0) return _labels[field] ?? field.replaceAll('_', ' ');
@@ -86,10 +67,6 @@ const _splitKinds = {
 };
 
 /// Renders one side of a change in the units the group thinks in.
-///
-/// Amounts are the reason this exists: the column holds minor units, so an
-/// unrendered diff reads "from 40000 to 30000" for what everybody involved
-/// remembers as ₹400 and ₹300.
 String? _value(String field, String? raw, Currency? currency) {
   if (raw == null || raw.isEmpty) return null;
 

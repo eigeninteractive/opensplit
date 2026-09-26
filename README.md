@@ -102,33 +102,23 @@ lookup to answer "is this person a member".
 ```bash
 dart run tool/build_web.dart                           # the whole front end
 cd server && npm run db:migrate:local && npm run dev   # in one terminal
-flutter test test/data/cloudflare_integration_test.dart
+flutter test --tags integration
 ```
 
-The full build and not `--site-only`, because this suite also asserts that a
-cold deep link into `/app` arrives cross-origin isolated — which is a fact
-about the Worker and the asset router together, and the only place it is
-checked.
+The full build and not `--site-only`, because one of these asserts that a cold
+deep link into `/app` arrives cross-origin isolated — a fact about the Worker
+and the asset router together, checked nowhere else.
 
-That runs the real adapter against a local `wrangler dev` — the actual Worker,
-over local D1, KV and Durable Object storage. Nothing in it touches a
-Cloudflare account and it needs no credentials.
+These run the app's sync, sessions and generated client against the real
+Worker over local D1, KV and Durable Object storage. There is no fake server:
+the rules they exercise are the server's own. Nothing touches a Cloudflare
+account and no credentials are needed.
 
-It skips itself when nothing is listening, so `flutter test` stays green
-without it — which is also why it has to be run somewhere that *does* have a
-backend, or it never runs at all. If another Worker already has port 8787, run
-this one elsewhere (`npx wrangler dev --port 8797`) and pass
-`--dart-define=API_BASE_URL=http://127.0.0.1:8797`; anything else answering on
-8787 fails the suite rather than skipping it. CI does, in the `backend` job, and passes
-`--dart-define=REQUIRE_BACKEND=true` so that a missing Worker there is a
-failure rather than a quiet skip.
-
-It is the only test that goes near the wire. The Vitest suite proves the
-Durable Object against `workerd` and `sync_test.dart` proves the sync algorithm
-against a fake, but neither can catch a generated client calling a path that
-moved, a field that does not survive the JSON round trip, a refusal code mapped
-to the wrong kind, or a payload key the server spells one way and the app reads
-another.
+They skip themselves unless an OpenSplit Worker answers `/api/health`, so
+`flutter test` stays green without one. To use another port (`npx wrangler dev
+--port 8797`), pass `--dart-define=API_BASE_URL=http://127.0.0.1:8797`. CI runs
+them in the `backend` job with `--dart-define=REQUIRE_BACKEND=true`, so a
+missing Worker there fails rather than skips.
 
 ### The local database schema is versioned
 

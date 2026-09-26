@@ -1,6 +1,7 @@
 import { env, exports as workerExports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
+import type { Session } from "../src/schemas/identity";
 import { signInAsGuest } from "./session";
 
 interface ProfileRow {
@@ -28,15 +29,7 @@ describe("guest accounts", () => {
     expect(await profileOf(guest.id)).not.toBeNull();
   });
 
-  /**
-   * The guard on the invite-claim path.
-   *
-   * Claiming a placeholder adopts the name a friend typed, but only when the
-   * profile has no name of its own. The anonymous plugin invents a display
-   * name; storing it would make that check always false, and somebody arriving
-   * on a link would show up to their friends as whatever the plugin made up
-   * instead of as the person they were invited as.
-   */
+  /** The guard on the invite-claim path. */
   it("does not store the name the anonymous plugin invents", async () => {
     const guest = await signInAsGuest();
 
@@ -47,11 +40,11 @@ describe("guest accounts", () => {
   it("resolves the session from a bearer token", async () => {
     const guest = await signInAsGuest();
 
-    const response = await workerExports.default.fetch("https://opensplit.test/api/auth/get-session", { headers: { Authorization: `Bearer ${guest.token}` } });
+    const response = await workerExports.default.fetch("https://opensplit.test/api/identity/session", { headers: { Authorization: `Bearer ${guest.token}` } });
 
     expect(response.status).toBe(200);
-    const body = (await response.json()) as { user?: { id: string } } | null;
-    expect(body?.user?.id).toBe(guest.id);
+    const body = (await response.json()) as Session;
+    expect(body.account).toEqual({ id: guest.id, isAnonymous: true, email: null, displayName: null });
   });
 
   it("gives two guests two accounts", async () => {

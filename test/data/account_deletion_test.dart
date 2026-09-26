@@ -6,11 +6,6 @@ import 'package:test/test.dart';
 import '../harness.dart';
 
 /// What the confirmation dialog tells somebody before they delete an account.
-///
-/// The distinction it is drawing is the one people get wrong: a group nobody
-/// else has an account in disappears with them, and a shared one does not. The
-/// server makes the same distinction when it forgets a profile, and this is
-/// the client's copy of it — see `server/test/dormancy.test.ts`.
 void main() {
   late AppDatabase db;
   late DriftGroupRepository groups;
@@ -83,11 +78,7 @@ void main() {
   });
 
   // The other half of "a group outlives its creator", and the reason it is no
-  // longer a question about nulls. `created_by` names the member who made the
-  // group rather than the account behind them, and a member is a place in a
-  // group that outlives whoever claimed it -- so deleting an account cannot
-  // empty this column, and there is no state where a group has forgotten who
-  // started it.
+  // longer a question about nulls.
   group('a group whose creator deleted their account', () {
     test('still says who started it, because that is a member', () async {
       final created = await groups.createGroup(
@@ -97,8 +88,7 @@ void main() {
       );
 
       // Created with no account at all, which used to leave this null -- the
-      // column held a profile id, and there was no profile. It names the
-      // member now, and a member exists whether or not anybody has signed in.
+      // column held a profile id, and there was no profile.
       expect(created.group.createdBy, created.creator.id);
       final stored = await groups.watchGroup(created.group.id).first;
       expect(stored?.createdBy, created.creator.id);

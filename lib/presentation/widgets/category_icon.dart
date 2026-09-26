@@ -1,13 +1,6 @@
 import 'package:flutter/material.dart';
 
 /// Resolves a category's stored icon name to a Material icon.
-///
-/// A static map, not `IconData(codePoint, fontFamily: 'MaterialIcons')`. Both
-/// compile, but building an IconData from a runtime value defeats icon
-/// tree-shaking — Flutter cannot know which glyphs are reachable, so
-/// `--tree-shake-icons` either bails out or the build fails outright, and the
-/// whole Material icon font ships in the bundle. On the web that is most of a
-/// megabyte for twenty icons.
 const Map<String, IconData> _icons = {
   'restaurant': Icons.restaurant_rounded,
   'local_grocery_store': Icons.local_grocery_store_rounded,
@@ -32,8 +25,4 @@ const Map<String, IconData> _icons = {
 };
 
 /// The icon for [name], falling back to the one "Other" uses.
-///
-/// A fallback rather than an assert: the name arrives from a database row that
-/// may have been written by a newer build, and an unrecognised category is a
-/// reason to draw a generic glyph, not to crash the expense editor.
 IconData categoryIcon(String name) => _icons[name] ?? Icons.category_rounded;

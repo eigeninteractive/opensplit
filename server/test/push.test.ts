@@ -2,21 +2,9 @@ import { env } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { deviceTokens } from "../src/db/d1/schema";
-import { evenly, freshId, makeGroup, makeGroupOfTwo, ok, PRIYA, RAVI, stub, ZARA } from "./group";
+import { BY_INVITE, editGroup, editMember, evenly, freshId, makeGroup, makeGroupOfTwo, ok, PRIYA, RAVI, stub, ZARA } from "./group";
 
-/**
- * Who gets woken, and who does not.
- *
- * The send itself is one `fetch` to Google and is stubbed; what is worth
- * testing is the selection, which is where every real mistake lives. Waking the
- * person who just recorded the expense, waking somebody who left three months
- * ago, waking a whole group because one of them tapped Share — each is a
- * plausible bug that no amount of care in the FCM call would catch.
- *
- * The dispatch happens inside `ctx.waitUntil`, so these tests drive the group's
- * object directly and then wait for the queued work rather than asserting
- * immediately after the call returns.
- */
+/** Who gets woken, and who does not. */
 
 const FCM_HOST = "fcm.googleapis.com";
 const TOKEN_HOST = "oauth2.googleapis.com";
@@ -35,25 +23,10 @@ async function registerDevice(profileId: string, token: string) {
   await drizzle(env.DB).insert(deviceTokens).values({ token, profileId, platform: "android", updatedAt: new Date().toISOString() }).onConflictDoUpdate({ target: deviceTokens.token, set: { profileId } });
 }
 
-/**
- * Lets the queued `waitUntil` work finish.
- *
- * A macrotask turn rather than a fixed delay: the dispatch is a chain of
- * already-resolved promises around a stubbed fetch, so there is nothing to wait
- * *for* — only a turn of the loop to yield.
- */
+/** Lets the queued `waitUntil` work finish. */
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-/**
- * Draws a line under the setup.
- *
- * Building a fixture writes to the group — `makeGroupOfTwo` spends an invite,
- * which is a `member_joined` — so those pushes are queued before the test has
- * acted at all. Waiting for them and then clearing the record is what makes the
- * assertions about the act rather than about the arrangement. Getting this
- * wrong does not fail loudly: it attributes one test's notifications to the
- * next one.
- */
+/** Draws a line under the setup. */
 async function arranged() {
   await settled();
   sent.length = 0;
@@ -61,19 +34,11 @@ async function arranged() {
 
 beforeAll(() => {
   env.FCM_PROJECT_ID = "opensplit-test";
-  // A throwaway key, generated for this file and used nowhere else. Nothing
-  // verifies a signature made with it — the token endpoint is stubbed — but
-  // `importPKCS8` parses it for real, so it has to be a real key.
+  // A throwaway key, generated for this file and used nowhere else.
   env.FCM_SERVICE_ACCOUNT = JSON.stringify({ client_email: "push@opensplit.test", private_key: TEST_KEY });
 });
 
-/**
- * The stub is installed for every test, including the setup.
- *
- * Not only around the act: a fixture's own writes send too, and letting those
- * reach the real network would make the suite depend on Google being up to
- * answer a question about who we chose to wake.
- */
+/** The stub is installed for every test, including the setup. */
 beforeEach(() => {
   sent = [];
   failWith = undefined;
@@ -98,13 +63,7 @@ beforeEach(() => {
   });
 });
 
-/**
- * Registrations do not survive a test.
- *
- * They live in D1, which the pool shares across this file, and every account
- * here is one of three fixed ids — so a token left behind by one test is a
- * second device the next test never asked for.
- */
+/** Registrations do not survive a test. */
 afterEach(async () => {
   await settled();
   await drizzle(env.DB).delete(deviceTokens);
@@ -121,9 +80,7 @@ describe("recording an expense", () => {
     ok(await stub(fixture.groupId).upsertEntry(evenly(freshId("e"), fixture.ravi.id, [fixture.ravi.id, fixture.priya.id], 40000), RAVI));
     await settled();
 
-    // The actor is excluded, not the author. On an edit those are usually
-    // different people, and the author is precisely who needs to hear that
-    // somebody changed their expense.
+    // The actor is excluded, not the author.
     expect(sent.map((message) => message.token)).toEqual(["device-priya"]);
   });
 
@@ -136,15 +93,12 @@ describe("recording an expense", () => {
     ok(await stub(fixture.groupId).upsertEntry(evenly(entryId, fixture.ravi.id, [fixture.ravi.id, fixture.priya.id], 40000), RAVI));
     await settled();
 
-    // No amount, no description, no name. The device pulls the delta anyway,
-    // so anything here would be a second source of truth — and formatting the
-    // text on the server means reimplementing currency exponents and each
-    // recipient's share outside Dart, where it drifts silently.
+    // No amount, no description, no name.
     expect(sent[0]?.data).toEqual({
       kind: "entry",
-      event_id: expect.any(String),
-      subject_id: entryId,
-      group_id: fixture.groupId,
+      eventId: expect.any(String),
+      subjectId: entryId,
+      groupId: fixture.groupId,
     });
   });
 
@@ -172,15 +126,14 @@ describe("what does not wake a device", () => {
     await arranged();
     const object = stub(fixture.groupId);
 
-    ok(await object.update({ name: "Goa, again" }, RAVI));
-    ok(await object.update({ archivedAt: new Date().toISOString() }, RAVI));
-    ok(await object.update({ archivedAt: null }, RAVI));
+    ok(await editGroup(fixture.groupId, RAVI, { name: "Goa, again" }));
+    ok(await editGroup(fixture.groupId, RAVI, { archivedAt: new Date().toISOString() }));
+    ok(await editGroup(fixture.groupId, RAVI, { archivedAt: null }));
     ok(await object.createLink(RAVI));
     await settled();
 
     // These belong in the activity feed, which is read on purpose, rather than
-    // on a lock screen. `link_created` in particular would wake a whole group
-    // to say that one of them tapped Share.
+    // on a lock screen.
     expect(sent).toEqual([]);
   });
 
@@ -197,11 +150,25 @@ describe("what does not wake a device", () => {
     expect(sent).toEqual([]);
   });
 
+  it("a retried push that changes nothing", async () => {
+    const fixture = await makeGroupOfTwo();
+    await registerDevice(PRIYA, "device-priya");
+    const expense = evenly(freshId("e"), fixture.ravi.id, [fixture.ravi.id, fixture.priya.id], 40000);
+    ok(await stub(fixture.groupId).upsertEntry(expense, RAVI));
+
+    // The response was lost and the outbox sends the same row again.
+    await arranged();
+    ok(await stub(fixture.groupId).upsertEntry(expense, RAVI));
+    await settled();
+
+    expect(sent).toEqual([]);
+  });
+
   it("a change in a group somebody has left", async () => {
     const fixture = await makeGroupOfTwo();
     await registerDevice(PRIYA, "device-priya-left");
 
-    ok(await stub(fixture.groupId).updateMember(fixture.priya.id, { leftAt: new Date().toISOString() }, PRIYA));
+    ok(await editMember(fixture.groupId, fixture.priya.id, PRIYA, { leftAt: new Date().toISOString() }));
 
     await arranged();
     ok(await stub(fixture.groupId).upsertEntry(evenly(freshId("e"), fixture.ravi.id, [fixture.ravi.id], 10000), RAVI));
@@ -235,7 +202,7 @@ describe("somebody arriving", () => {
     const invite = ok(await stub(fixture.groupId).createInvite(fixture.priya.id, RAVI));
 
     await arranged();
-    ok(await stub(fixture.groupId).join(invite.token, ZARA));
+    ok(await stub(fixture.groupId).join(invite.token, ZARA, BY_INVITE));
     await settled();
 
     // Nobody did this to the arrival, and they do not need telling they just
@@ -302,13 +269,7 @@ describe("with no Firebase configured", () => {
   });
 });
 
-/**
- * A throwaway RSA key in PKCS#8, for `importPKCS8` to parse.
- *
- * Generated for this file and used nowhere else. Nothing verifies a signature
- * made with it: the token endpoint is stubbed, and what is under test is who
- * gets a message rather than whether Google would accept the assertion.
- */
+/** A throwaway RSA key in PKCS#8, for `importPKCS8` to parse. */
 const TEST_KEY = `-----BEGIN PRIVATE KEY-----
 MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDCU1rKFZ9qx7q/
 nNioLW/PdveWD6Y9UjznfhLCW40qymG9BJskCM9d83NriTlt8E+K9tTCtv0TQH9t

@@ -3,6 +3,7 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:opensplit_api/src/model/platform.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 part 'device.g.dart';
@@ -24,9 +25,9 @@ class Device {
     name: r'platform',
     required: true,
     includeIfNull: false,
-    unknownEnumValue: DevicePlatformEnum.unknownDefaultOpenApi,
+    unknownEnumValue: Platform.unknownDefaultOpenApi,
   )
-  final DevicePlatformEnum platform;
+  final Platform platform;
 
   @override
   bool operator ==(Object other) =>
@@ -44,20 +45,4 @@ class Device {
   String toString() {
     return toJson().toString();
   }
-}
-
-enum DevicePlatformEnum {
-  @JsonValue(r'android')
-  android(r'android'),
-  @JsonValue(r'web')
-  web(r'web'),
-  @JsonValue(r'unknown_default_open_api')
-  unknownDefaultOpenApi(r'unknown_default_open_api');
-
-  const DevicePlatformEnum(this.value);
-
-  final String value;
-
-  @override
-  String toString() => value;
 }

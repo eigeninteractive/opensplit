@@ -22,6 +22,8 @@ class EntryInput {
   EntryInput({
     required this.id,
 
+    required this.clientKey,
+
     required this.kind,
 
     required this.description,
@@ -46,8 +48,6 @@ class EntryInput {
 
     required this.notes,
 
-    required this.clientKey,
-
     required this.payers,
 
     required this.shares,
@@ -57,6 +57,9 @@ class EntryInput {
 
   @JsonKey(name: r'id', required: true, includeIfNull: false)
   final String id;
+
+  @JsonKey(name: r'clientKey', required: true, includeIfNull: true)
+  final String? clientKey;
 
   @JsonKey(
     name: r'kind',
@@ -106,9 +109,6 @@ class EntryInput {
   @JsonKey(name: r'notes', required: true, includeIfNull: true)
   final String? notes;
 
-  @JsonKey(name: r'clientKey', required: true, includeIfNull: true)
-  final String? clientKey;
-
   @JsonKey(name: r'payers', required: true, includeIfNull: false)
   final List<Payer> payers;
 
@@ -124,6 +124,7 @@ class EntryInput {
       identical(this, other) ||
       other is EntryInput &&
           other.id == id &&
+          other.clientKey == clientKey &&
           other.kind == kind &&
           other.description == description &&
           other.categoryId == categoryId &&
@@ -136,7 +137,6 @@ class EntryInput {
           other.fxRate == fxRate &&
           other.fxSource == fxSource &&
           other.notes == notes &&
-          other.clientKey == clientKey &&
           other.payers == payers &&
           other.shares == shares &&
           other.baseSeq == baseSeq;
@@ -144,6 +144,7 @@ class EntryInput {
   @override
   int get hashCode =>
       id.hashCode +
+      (clientKey == null ? 0 : clientKey.hashCode) +
       kind.hashCode +
       description.hashCode +
       (categoryId == null ? 0 : categoryId.hashCode) +
@@ -156,7 +157,6 @@ class EntryInput {
       (fxRate == null ? 0 : fxRate.hashCode) +
       (fxSource == null ? 0 : fxSource.hashCode) +
       (notes == null ? 0 : notes.hashCode) +
-      (clientKey == null ? 0 : clientKey.hashCode) +
       payers.hashCode +
       shares.hashCode +
       (baseSeq == null ? 0 : baseSeq.hashCode);

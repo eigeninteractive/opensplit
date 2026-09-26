@@ -19,7 +19,7 @@ class DevicesApi {
   const DevicesApi(this._dio);
 
   /// Stop waking this device
-  /// Only removes a token that belongs to this account, so signing out on one phone cannot silence somebody else&#39;s.
+  /// Only removes a token that belongs to this account.
   ///
   /// Parameters:
   /// * [token]
@@ -50,7 +50,18 @@ class DevicesApi {
     final _options = Options(
       method: r'DELETE',
       headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookie',
+            'keyName': 'better-auth.session_token',
+            'where': '',
+          },
+          {'type': 'http', 'scheme': 'bearer', 'name': 'bearer'},
+        ],
+        ...?extra,
+      },
       validateStatus: validateStatus,
     );
 
@@ -96,7 +107,7 @@ class DevicesApi {
   }
 
   /// Where to wake this account
-  /// Idempotent, and a transfer rather than a refusal when the token already belongs to somebody else: a phone that changes hands keeps its registration token, so the previous owner&#39;s claim on it has to yield or their notifications follow the new one.
+  /// Idempotent, and a transfer when the token belonged to somebody else: phones change hands.
   ///
   /// Parameters:
   /// * [device]
@@ -122,7 +133,18 @@ class DevicesApi {
     final _options = Options(
       method: r'PUT',
       headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookie',
+            'keyName': 'better-auth.session_token',
+            'where': '',
+          },
+          {'type': 'http', 'scheme': 'bearer', 'name': 'bearer'},
+        ],
+        ...?extra,
+      },
       contentType: 'application/json',
       validateStatus: validateStatus,
     );

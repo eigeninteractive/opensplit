@@ -1,13 +1,4 @@
-/**
- * Sending email, behind one method.
- *
- * Cloudflare's own Email Sending would be the obvious choice — `env.EMAIL.send()`,
- * no third party, no API key — but it is Workers Paid only, and this runs on
- * Free. Resend's free tier is 3,000 a month against an already-verified domain,
- * so that is what is wired up.
- *
- * The interface exists so that swapping back is this file and nothing else.
- */
+/** Sign-in codes go out through Resend (Cloudflare Email Sending needs Workers Paid). */
 export interface EmailMessage {
   to: string;
   subject: string;
@@ -26,13 +17,7 @@ export class EmailNotSent extends Error {
   }
 }
 
-/**
- * Where sign-in codes come from.
- *
- * A subdomain of the brand's zone rather than the app's own host, because that
- * is the domain already verified with the sending provider — and a sending
- * domain's reputation is a separate thing from where the app is served.
- */
+/** The brand domain already verified with the provider. */
 const FROM = "OpenSplit <no-reply@support.eigeninteractive.com>";
 
 class ResendSender implements EmailSender {
@@ -55,22 +40,13 @@ class ResendSender implements EmailSender {
     });
 
     if (!response.ok) {
-      // The body carries Resend's reason; the address never does, so this is
-      // safe to log and useful when a domain falls out of verification.
+      // Resend's reason, never the address.
       throw new EmailNotSent(`Resend refused the message: ${response.status} ${await response.text()}`);
     }
   }
 }
 
-/**
- * What runs when no API key is configured.
- *
- * Deliberately not a failure. A local `wrangler dev` with no Resend account
- * must still be able to complete a sign-in, so the code goes to the console
- * where the developer can read it. Anything that reaches production without a
- * key would be silently not sending mail, which is why `createEmailSender`
- * says so loudly on construction rather than per message.
- */
+/** Local development without a key: the code goes to the console. */
 class ConsoleSender implements EmailSender {
   async send(message: EmailMessage): Promise<void> {
     console.log(`[email] to=${message.to} subject=${message.subject}`);
@@ -86,14 +62,7 @@ export function createEmailSender(env: Env): EmailSender {
   return new ResendSender(env.RESEND_API_KEY);
 }
 
-/**
- * The one message this application sends.
- *
- * A code rather than a magic link, and that is a decision worth keeping: links
- * open in whichever browser the mail app prefers, lose the app's context
- * entirely, and are routinely consumed by corporate mail scanners before the
- * recipient sees them.
- */
+/** A code rather than a magic link: links open in the wrong browser and mail scanners consume them. */
 export function signInCodeMessage(to: string, code: string): EmailMessage {
   const text = `Your OpenSplit code is ${code}
 

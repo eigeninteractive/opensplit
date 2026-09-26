@@ -1,17 +1,9 @@
 import { env } from "cloudflare:workers";
 import { expect } from "vitest";
 import type { Result } from "../src/do/group/refusal";
-import type { Entry, EntryInput, Group, Member } from "../src/schemas/ledger";
+import type { Entry, EntryInput, Group, GroupUpdate, JoinRequest, Member, MemberUpdate } from "../src/schemas/ledger";
 
-/**
- * A group with people in it.
- *
- * Every row below is written through the same method the app calls, by a
- * caller who has to be allowed to write it — never by reaching past the rules
- * to insert directly. A fixture that needs a privilege the app does not have
- * is a fixture setting up a state the app cannot reach, and the test standing
- * on it proves nothing about the product.
- */
+/** A group with people in it. */
 
 /** Stable ids, so a failure names a person rather than a UUID. */
 export const RAVI = "11111111-1111-4111-8111-111111111111";
@@ -22,13 +14,7 @@ export function stub(groupId: string) {
   return env.GROUP.getByName(groupId);
 }
 
-/**
- * Unwraps a `Result`, failing the test with the refusal's own words.
- *
- * Worth a helper rather than a `!`: a refused call here should read as "the
- * object said no, and this is what it said", not as a `TypeError` on the next
- * line about reading a property of undefined.
- */
+/** Unwraps a `Result`, failing the test with the refusal's own words. */
 export function ok<T>(result: Result<T>): T {
   if (!result.ok) expect.unreachable(`Refused with ${result.error.code}: ${result.error.message}`);
   return result.value;
@@ -84,12 +70,7 @@ export async function makeGroup(options: { groupId?: string; name?: string; curr
   return { groupId, group, ravi, priya };
 }
 
-/**
- * An expense, balanced, with sensible defaults.
- *
- * Defaults matter here: a test about authorship should not have to spell out a
- * split, and a test about splits should not have to spell out a currency.
- */
+/** An expense, balanced, with sensible defaults. */
 export function expense(overrides: Partial<EntryInput> & Pick<EntryInput, "id" | "amountMinor" | "payers" | "shares">): EntryInput {
   return {
     kind: "expense",
@@ -121,22 +102,44 @@ export function evenly(id: string, payer: string, between: string[], amountMinor
   return expense({ id, amountMinor, payers: [{ memberId: payer, amountMinor }], shares });
 }
 
-/**
- * The same group, with Priya's place claimed by a real account.
- *
- * Most of the column rules are only expressible with two account holders in
- * one group — "a member cannot rename another account holder" needs another
- * account holder — and the only way to produce one is the way the app does:
- * mint an invite and spend it.
- */
+/** The same group, with Priya's place claimed by a real account. */
 export async function makeGroupOfTwo(): Promise<Fixture & { priyaProfile: string }> {
   const fixture = await makeGroup();
   const object = stub(fixture.groupId);
 
   const invite = ok(await object.createInvite(fixture.priya.id, RAVI));
-  const priya = ok(await object.join(invite.token, PRIYA));
+  const { member: priya } = ok(await object.join(invite.token, PRIYA, BY_INVITE));
 
   return { ...fixture, priya, priyaProfile: PRIYA };
+}
+
+/** An invite names its own placeholder, so the request chooses nothing. */
+export const BY_INVITE: JoinRequest = { memberId: null, displayName: null };
+
+/** Changes some of a group's fields the way the app does: read the row, send all of it. */
+export async function editGroup(groupId: string, profileId: string, changes: Partial<GroupUpdate>) {
+  const object = stub(groupId);
+  const group = ok(await object.changes(profileId, 0, 500)).group;
+  if (!group) expect.unreachable("No group row to edit.");
+  const { name, simplifyDebts, archivedAt } = group;
+  return object.update({ name, simplifyDebts, archivedAt, ...changes }, profileId);
+}
+
+/** The same for a member row. */
+export async function editMember(groupId: string, memberId: string, profileId: string, changes: Partial<MemberUpdate>) {
+  const object = stub(groupId);
+  const member = await memberRow(groupId, memberId, profileId);
+  const { displayName, upiVpa, leftAt } = member;
+  return object.updateMember(memberId, { displayName, upiVpa, leftAt, ...changes }, profileId);
+}
+
+/** A member row as the group object currently holds it. Read as `RAVI`, who is in every fixture. */
+async function memberRow(groupId: string, memberId: string, profileId: string): Promise<Member> {
+  const page = await stub(groupId).changes(profileId, 0, 500);
+  const fallback = page.ok ? page : await stub(groupId).changes(RAVI, 0, 500);
+  const member = ok(fallback).members.find((row) => row.id === memberId);
+  if (!member) expect.unreachable(`No member ${memberId}.`);
+  return member;
 }
 
 export function sumOf(rows: { amountMinor: number }[]): number {

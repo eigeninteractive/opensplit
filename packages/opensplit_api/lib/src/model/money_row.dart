@@ -20,6 +20,7 @@ class MoneyRow {
   @JsonKey(name: r'memberId', required: true, includeIfNull: false)
   final String memberId;
 
+  // minimum: 0
   @JsonKey(name: r'amountMinor', required: true, includeIfNull: false)
   final int amountMinor;
 

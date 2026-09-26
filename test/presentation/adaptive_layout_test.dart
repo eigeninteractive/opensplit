@@ -78,9 +78,7 @@ void main() {
     });
   });
 
-  // One set of destinations, two presentations of it. Which one is on screen
-  // is the only thing the width decides — there is never both, and never
-  // neither.
+  // One set of destinations, two presentations of it.
   group('the navigation surface', () {
     testWidgets('stays usable on a small screen at 200% text scale', (
       tester,

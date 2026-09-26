@@ -28,11 +28,6 @@ extension CurrencyAmounts on Currency {
   }
 
   /// Parses user input in major units into minor units.
-  ///
-  /// Returns null when [input] is not a well-formed amount for this currency,
-  /// including when it carries more decimal places than the currency has —
-  /// `1.005` is not a representable INR amount and silently rounding it is how
-  /// money quietly goes missing.
   int? parseToMinor(String input) {
     final trimmed = input.trim().replaceAll(',', '');
     if (trimmed.isEmpty) return null;

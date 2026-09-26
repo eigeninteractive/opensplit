@@ -5,19 +5,9 @@ export '../models/kinds.dart' show SplitKind;
 
 /// A share after resolution: what this member owes, plus the rule that produced
 /// it.
-///
-/// Both halves are persisted. [amountMinor] is an immutable historical fact —
-/// if only the rule were stored, a future rounding fix would retroactively move
-/// money that has already been settled. [weightMicros] keeps the user's intent
-/// ("2:1:1") editable — if only the amount were stored, reopening the split
-/// screen could not show what was originally meant. It is null for
-/// [SplitKind.exact], where the amount *is* the input.
 typedef ResolvedShare = ({String memberId, int amountMinor, int? weightMicros});
 
 /// Raised when a split cannot be resolved because the inputs are inconsistent.
-///
-/// These are user-facing conditions ("percentages add up to 97%"), not bugs, so
-/// they carry a message the UI can show directly.
 class SplitException implements Exception {
   const SplitException(this.message);
   final String message;
@@ -27,33 +17,16 @@ class SplitException implements Exception {
 }
 
 /// How an entry's total is divided among members.
-///
-/// Every variant resolves to the same shape — integer minor units summing to
-/// exactly the entry total — so downstream code (the balance fold, the sync
-/// payload, the invariant trigger) never branches on split kind.
 sealed class SplitSpec {
   const SplitSpec();
 
   SplitKind get kind;
 
   /// Resolves this specification against [totalMinor].
-  ///
-  /// The result sums to exactly [totalMinor] and is ordered by member id.
-  /// Throws [SplitException] if the inputs do not describe a valid split.
-  ///
-  /// [seed] decides which party absorbs a rounding leftover when several have
-  /// an equal claim to it — an equal split gives everyone the same remainder,
-  /// so without it the same person would absorb the extra minor unit on every
-  /// such expense. Callers pass the entry id, which keeps the result a pure
-  /// function of the entry and reproduces it exactly on an edit.
   List<ResolvedShare> resolve(int totalMinor, {String? seed});
 }
 
 /// Split evenly. The overwhelming majority of real expenses.
-///
-/// Rounding leftovers are distributed by largest remainder, so ₹100 across
-/// three people is 33.34 / 33.33 / 33.33 rather than three amounts that quietly
-/// fail to add up.
 final class EqualSplit extends SplitSpec {
   const EqualSplit(this.memberIds);
 
@@ -169,10 +142,6 @@ final class SharesSplit extends SplitSpec {
 }
 
 /// Proportional split by percentage. Percentages must total exactly 100.
-///
-/// Percentages are held as integer micros (33.333333% is `33333333`) to match
-/// the `numeric(24,6)` weight column and to make "adds up to 100" an exact
-/// integer comparison rather than a float tolerance.
 final class PercentSplit extends SplitSpec {
   const PercentSplit(this.percentMicrosByMemberId);
 
@@ -222,13 +191,6 @@ final class PercentSplit extends SplitSpec {
 }
 
 /// Validates the payer side of an entry.
-///
-/// Payers are always explicit amounts — there is no "split the paying" mode —
-/// so this only checks the invariant the server will enforce anyway, but does
-/// it before the row is written rather than after a round trip.
-///
-/// Returns the payers ordered by member id. Throws [SplitException] on
-/// mismatch.
 List<({String memberId, int amountMinor})> resolvePayers({
   required int totalMinor,
   required Map<String, int> amountsByMemberId,

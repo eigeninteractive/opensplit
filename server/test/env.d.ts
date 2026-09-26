@@ -1,12 +1,6 @@
 import type { D1Migration } from "@cloudflare/vitest-plugin";
 
-/**
- * Bindings that exist only under test, declared where the runtime expects them.
- *
- * `Cloudflare.Env` rather than the `ProvidedEnv` interface older versions of the
- * pool used: the plugin types `env` as `Cloudflare.Env`, so an augmentation of
- * anything else compiles and silently does nothing.
- */
+/** Bindings that exist only under test, declared where the runtime expects them. */
 declare global {
   namespace Cloudflare {
     interface Env {

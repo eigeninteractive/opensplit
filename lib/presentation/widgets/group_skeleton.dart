@@ -2,21 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/widget_previews.dart';
 
 /// The group list as it looks before the local database has answered.
-///
-/// Built out of the same widgets as the real list — `Card.outlined` wrapping a
-/// `ListTile` with an avatar and two lines — rather than out of measurements
-/// copied from it. That is the whole design of this file. A skeleton exists to
-/// make the swap invisible, and the only way to be sure a placeholder is
-/// exactly as tall as the thing replacing it is for the two to be laid out by
-/// the same code. The previous version reproduced the tile as a Row with hand
-/// derived padding, which was right on the day it was written and would drift
-/// the first time a density, a text scale or a type ramp moved underneath it.
-///
-/// `web/index.html` draws a third copy, in CSS, before the engine has even
-/// downloaded. It cannot share widgets, so it is held to the same geometry by a
-/// test that renders this widget, measures a card, and asserts the stylesheet
-/// carries that number — see `theme_test.dart`. The app decides the shape; the
-/// stylesheet follows it.
 class GroupListSkeleton extends StatefulWidget {
   const GroupListSkeleton({super.key, this.cards = 3});
 
@@ -30,18 +15,6 @@ class GroupListSkeleton extends StatefulWidget {
 class _GroupListSkeletonState extends State<GroupListSkeleton>
     with SingleTickerProviderStateMixin {
   /// How many times the bars breathe before coming to rest.
-  ///
-  /// The CSS this mirrors says `infinite`, and that is the one line of it not
-  /// worth reproducing. A repeating controller schedules a frame forever, which
-  /// means any `pumpAndSettle` taken while this is on screen never settles —
-  /// and this is the home screen's loading state, so that is most of them. The
-  /// same hazard is why `CircularProgressIndicator` cannot be settled either;
-  /// the difference is that one is Flutter's to own and this one is ours.
-  ///
-  /// Bounding it costs nothing real. The pulse is there to say "not frozen"
-  /// while a local SQLite read finishes, which takes milliseconds; if it has
-  /// breathed five times the read is not coming and the honest signal is the
-  /// sync notice, not more motion.
   static const _cycles = 5;
 
   /// One controller for every bar on screen rather than one per card. The
@@ -59,10 +32,6 @@ class _GroupListSkeletonState extends State<GroupListSkeleton>
   }
 
   /// The title and detail widths, per card.
-  ///
-  /// Varied because three identical cards read as a graphic rather than as
-  /// content arriving. Repeated modulo the count, so a longer list keeps the
-  /// same texture.
   static const _widths = <(double, double)>[
     (0.62, 0.40),
     (0.44, 0.56),
@@ -98,9 +67,6 @@ class _GroupListSkeletonState extends State<GroupListSkeleton>
 }
 
 /// One card of the skeleton.
-///
-/// Public only so a test can render one and measure it; nothing else should
-/// build this directly.
 class SkeletonGroupCard extends StatelessWidget {
   const SkeletonGroupCard({
     super.key,
@@ -156,12 +122,6 @@ class SkeletonGroupCard extends StatelessWidget {
 }
 
 /// A bar standing in for a line of text.
-///
-/// The slot's height comes from a real, invisible [Text] set in the style the
-/// line will actually use, rather than from a number read off the type scale.
-/// That is what keeps the card exactly as tall as the one replacing it —
-/// including at a large system font size, which a hardcoded height would
-/// ignore, and through any later change to the app's type ramp.
 class _Line extends StatelessWidget {
   const _Line({
     required this.style,

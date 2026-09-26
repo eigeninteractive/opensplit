@@ -154,7 +154,7 @@ base=https://opensplit.eigeninteractive.com
 curl -s $base/api/reference | head -c 120
 
 # D1 is bound and writable. A guest sign-in writes a user and a session.
-curl -s -X POST $base/api/auth/sign-in/anonymous -H 'content-type: application/json'
+curl -s -X POST $base/api/identity/guest
 
 # A group object can be created and reached at all.
 npx wrangler tail --format pretty

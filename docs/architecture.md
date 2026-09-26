@@ -86,27 +86,54 @@ for data that ships with the code anyway.
 Each shape is declared once and derived from there:
 
 ```
-Drizzle tables ──drizzle-zod──▶ Zod row schemas ─┐
-                  hand-written Zod request bodies ┴─▶ OpenAPI (docs/openapi.json)
-    ──openapi-generator──▶ packages/opensplit_api (Dart) ──lib/data/sync/wire.dart──▶ Drift rows
+Drizzle tables ──drizzle-zod──▶ Zod rows, and request bodies picked from them
+    ──@hono/zod-openapi──▶ docs/openapi.json
+    ──openapi-generator (dart-dio)──▶ packages/opensplit_api
+    ──lib/data/sync/wire.dart──▶ Drift rows
 ```
 
-- **Rows the server returns are derived from their tables** with drizzle-zod,
-  so a column is declared in one place. Overrides give a column its wire type
-  where SQLite has none: a timestamp, a date, a named enum, a meaningful range.
-- **Request bodies are written out**, because they are narrower than the rows
-  they write (no `createdBy`, no `seq`) and carry the validation.
-- **The enum vocabularies** (entry, split and event kinds) are one list each in
-  the Drizzle schema, used by the column, the Zod enum and so the Dart enum. A
-  value a build does not know decodes to the generator's `unknownDefaultOpenApi`
-  rather than failing the page.
-- **The app uses the generated types directly**, including the error envelope
-  (`ApiFailure`) and the activity payloads. `wire.dart` is the only translation,
-  and exists because a local row is not a server row: it can exist before the
-  server has seen it (null `seq`), it carries the `groupId` a page states once,
-  an expense is three tables, and a date is a `DateTime`.
+- **Rows are their tables.** `createSelectSchema(table, refine)` derives each
+  row; the refinements give a column its wire type where SQLite has none (a
+  timestamp, a date, a named enum, a length or a regex). Refinements are
+  functions, so drizzle-zod still applies each column's own nullability.
+- **Request bodies are `.pick()`s of those rows**, so a column's type and its
+  validation are stated once for both directions. `EntryInput` picks the
+  entry's editable columns from one list (`editableEntryColumns`), which the
+  group object also uses to decide whether a save changed anything.
+- **Closed vocabularies** (entry, split, event and link kinds, platforms,
+  outbox kinds, chores) are one `as const` list each, used by the column, the
+  Zod enum and so the Dart enum. An unknown value decodes to the generator's
+  `unknownDefaultOpenApi`.
+- **An event carries its payload in a typed field per shape** — `entry`,
+  `member`, `group`, `link`, exactly one set, chosen by `kind` — rather than one
+  untyped `payload`. The generator cannot read `oneOf`; separate nullable
+  fields give the app a generated class for each without it. The object stores
+  them the same way, so the table *is* the wire row.
+- **The push message is a contract type** (`PushData`), registered as a
+  component though no route returns it, and parsed on the device with the
+  generated class.
+- **Every session operation is an `/api/identity/*` route** returning contract
+  types (`Session`, `IdentityOutcome`, `GoogleRedirect`), each calling Better
+  Auth's server API. Better Auth's own HTTP handler is mounted only for the
+  OAuth callback Google redirects to. Its `openAPI()` plugin emits 3.1 with
+  loose schemas, and merging it would put those in the app.
+- **Security is declared** (`bearer`, `cookie`), so the generated client's own
+  bearer interceptor attaches the Android token; the app sets it with
+  `setBearerAuth` when the session changes.
+- **The app uses the generated types directly.** `wire.dart` is the only
+  translation, because a local row is not a server row: it can exist before
+  the server has seen it (null `seq`), it carries the `groupId` a page states
+  once, an expense is three tables, a date is a `DateTime`, and an instant
+  leaves as UTC.
 - CI regenerates the contract and the client (`dart run
   tool/generate_api_client.dart --check`) and fails on any difference.
+- **There is no fake server.** The app's sync, session and client tests run
+  against a local `wrangler dev` (`flutter test --tags integration`), so the
+  rules they exercise are the server's own.
+
+A generator quirk worth knowing: a named component first reached through
+`.nullable()` is emitted nullable everywhere. `app.ts` registers the ones held
+as nullable before any route uses them.
 
 ### Required, nullable, optional
 
@@ -184,8 +211,9 @@ holds a bearer token. The token arrives in the `set-auth-token` **response
 header**; the `token` field in the response body is the unsigned first half of
 one and is not a credential.
 
-**The three identity endpoints are ours, not Better Auth's** — `/api/identity/
-google`, `/email`, `/email/verify`. Attaching an identity to a guest session and
+**The identity endpoints are ours, not Better Auth's** — `/api/identity/
+guest`, `/session`, `/sign-out`, `/google`, `/google/redirect`, `/email`,
+`/email/verify`. Attaching an identity to a guest session and
 signing in to an existing account are opposite outcomes: one keeps everything on
 this device, the other leaves it behind. Better Auth's own endpoints will do
 either without saying which happened, so these wrap it and report the outcome by

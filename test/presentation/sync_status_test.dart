@@ -120,11 +120,6 @@ void main() {
 }
 
 /// How many times [_StatusController] was asked to retry.
-///
-/// Off the notifier for the reason riverpod_lint gives: its public surface is
-/// meant to be `state`, and a spy's tally is not state anything renders -- it
-/// is what the test asserts on. A final field holding a mutable counter is
-/// both what the rule permits and a clearer separation.
 class _Calls {
   int retries = 0;
 }

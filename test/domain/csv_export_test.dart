@@ -143,8 +143,7 @@ void main() {
 
   group('a description is somebody else\'s input', () {
     // Every field in this file is free text a member of the group typed, and
-    // the person opening the export is somebody else. Excel, Sheets and
-    // LibreOffice all execute a cell that begins = + - or @.
+    // the person opening the export is somebody else.
     for (final lead in ['=', '+', '-', '@']) {
       test('a leading $lead is not left as a live formula', () {
         final csv = entriesToCsv(

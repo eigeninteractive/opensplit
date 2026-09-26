@@ -1,35 +1,27 @@
 import { z } from "@hono/zod-openapi";
 import type { Context } from "hono";
 
+import { requireSession, withSession } from "../context";
 import { kindOf, type Result, statusFor } from "../do/group/refusal";
 import { apiError, errorResponse, IdSchema } from "../schemas/common";
 
-/**
- * What every route module here shares: how to address a group, and how a
- * refusal becomes an HTTP response.
- *
- * Extracted rather than duplicated because the alternative is three copies of
- * the refusal table, which is the one thing in this layer that must be
- * identical everywhere — a route that documented four of the seven statuses
- * would be documenting a guess, and one that forgot the retry kind would hand
- * the device a "no" it does not know what to do with.
- */
+/** What every route module shares: session guards, addressing, and how a refusal becomes a response. */
 
-/**
- * A sequence number arriving in a query string.
- *
- * Coerced, because a query parameter is a string and `SeqSchema` is an
- * integer: without this every `?since=0` is a 400 that parses as an empty
- * page, which is exactly as confusing to debug as it sounds. Path and body
- * fields are not coerced — JSON already has numbers, and silently accepting
- * `"1000"` as an amount is not a kindness.
- */
+type Security = Record<string, string[]>[];
+
+/** A bearer token on Android, the HttpOnly session cookie on the web. */
+const session: Security = [{ bearer: [] }, { cookie: [] }];
+
+/** Spread into a route that requires a session. */
+export const signedIn = { middleware: requireSession, security: session };
+
+/** Spread into a route that reads the session when there is one. */
+export const maybeSignedIn = { middleware: withSession, security: [{}, ...session] as Security };
+
+/** Coerced, because a query parameter is a string. */
 export const SeqQuerySchema = z.coerce.number().int().nonnegative().openapi({ type: "integer", example: 412 });
 
-/**
- * The same, where it must be sent. Stated, because coercion turns `null` into
- * 0, so the generator reads the schema as nullable and documents it optional.
- */
+/** Coercion turns null into 0, so the generator would call it optional; state it. */
 export const RequiredSeqQuerySchema = SeqQuerySchema.openapi({ param: { required: true } });
 
 export const GroupPathSchema = z.object({
@@ -49,18 +41,8 @@ export const TokenPathSchema = z.object({
 });
 
 /**
- * Every refusal the Durable Object can give, on every route that can reach it.
- *
- * Spread wholesale rather than picked per route, and that is honest rather
- * than lazy: the object decides, the handler cannot know which subset applies,
- * and a route that documented four of the seven would be documenting a guess.
- *
- * Deliberately not `as const`. `@hono/zod-openapi` builds a handler's allowed
- * return type from the `responses` it can read, and `readonly` properties are
- * not among them — so with `as const` every error status vanished from the
- * union and returning one was a type error against the 200 alone. The failure
- * reads as "your refusal is missing fourteen properties of Group", which is a
- * long way from "this object is frozen".
+ * Every refusal a group object can give, on every route that reaches one. Not
+ * `as const`: zod-openapi cannot read readonly responses when typing a handler.
  */
 export const refusals = {
   400: errorResponse("The request is malformed."),
@@ -72,34 +54,15 @@ export const refusals = {
   422: errorResponse("The expense does not add up."),
 };
 
-export type RefusalStatus = 400 | 401 | 403 | 404 | 409 | 410 | 422;
+type WorkerEnv = { Bindings: Env };
 
-/**
- * One refusal vocabulary translated into another, in one place.
- *
- * The object speaks in codes because a code is the thing that survives being
- * read by a client. This adds the status, which is what makes the response an
- * HTTP response, and the retry kind, which is what the device acts on — see
- * `ErrorSchema`. None of the three is derived from the others.
- */
 export function respond<T extends object, E extends WorkerEnv>(c: Context<E>, result: Result<T>) {
   if (result.ok) return c.json(result.value, 200);
-
   const { code, message } = result.error;
-  return c.json(apiError(code, message, kindOf(code)), statusFor(code) as RefusalStatus);
+  return c.json(apiError(code, message, kindOf(code)), statusFor(code));
 }
 
-/** The group's object, addressed by the id the client minted for it. */
+/** The group's object, addressed by the id the client minted. */
 export function group<E extends WorkerEnv>(c: Context<E>, groupId: string) {
   return c.env.GROUP.getByName(groupId);
 }
-
-/**
- * Generic over the whole Hono environment rather than pinned to one.
- *
- * `Context<E>` is invariant in `E` — it carries a `set` that writes into the
- * variables — so a helper declared against a base type cannot be handed a
- * context that has more in it. Both apps here need these two, and one of them
- * has a session while the other deliberately does not.
- */
-type WorkerEnv = { Bindings: Env; Variables: Record<string, unknown> };

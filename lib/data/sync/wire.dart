@@ -1,17 +1,4 @@
 /// Where the generated wire types meet local storage, in both directions.
-///
-/// The only translation between the two, and it exists because a local row is
-/// not a server row:
-///
-/// - it can exist before the server has seen it, so `seq` is nullable here
-///   and required on the wire;
-/// - one local database holds every group, so rows carry the `groupId` that
-///   the server states once per page;
-/// - an expense is three tables here and one nested object on the wire;
-/// - a calendar date is a `DateTime` here and `yyyy-MM-dd` on the wire.
-///
-/// Requests are built from the current local row at push time, which is why
-/// the outbound half is here too.
 library;
 
 import 'package:opensplit_api/opensplit_api.dart' as api;
@@ -19,8 +6,6 @@ import 'package:opensplit_api/opensplit_api.dart' as api;
 import '../../domain/calendar_date.dart';
 import '../../domain/models/entry.dart';
 import '../local/database.dart';
-
-// ------------------------------------------------------------------- inbound
 
 extension GroupFromWire on api.Group {
   Group toRow() => Group(
@@ -94,15 +79,18 @@ extension EventFromWire on api.Event {
     createdAt: createdAt,
     kind: kind,
     subjectId: subjectId,
-    payload: payload,
+    entry: entry,
+    member: member,
+    group: group,
+    link: link,
     seq: seq,
     ordinal: ordinal,
     isProvisional: false,
   );
 }
 
-/// A deleted account arrives emptied rather than removed, and renders as
-/// nobody, so `deletedAt` has no local column.
+/// A deleted account arrives emptied and renders as nobody, so `deletedAt`
+/// has no local column.
 extension ProfileFromWire on api.Profile {
   Profile toRow() => Profile(
     id: id,
@@ -121,27 +109,24 @@ extension CategoryFromWire on api.Category {
   Category toRow() => Category(id: id, name: name, icon: icon);
 }
 
-// ------------------------------------------------------------------ outbound
-
 extension EntryToWire on Entry {
-  /// The request that records this entry. [Entry.seq] goes as `baseSeq`: the
-  /// version this edit was composed against, null for a row the server has
-  /// never seen.
+  /// [Entry.seq] goes as `baseSeq`: the version this edit was composed
+  /// against, null for a row the server has never seen.
   api.EntryInput toInput() => api.EntryInput(
     id: id,
+    clientKey: clientKey,
     kind: kind,
     description: description,
     categoryId: categoryId,
     currency: currency,
     amountMinor: amountMinor,
     entryDate: calendarDate(entryDate),
-    occurredAt: occurredAt,
+    occurredAt: occurredAt?.toUtc(),
     timeZone: timeZone,
     splitKind: splitKind,
     fxRate: fxRate,
     fxSource: fxSource,
     notes: notes,
-    clientKey: clientKey,
     baseSeq: seq,
     payers: [
       for (final payer in payers)
@@ -172,7 +157,7 @@ extension GroupToWire on Group {
   api.GroupUpdate toUpdate() => api.GroupUpdate(
     name: name,
     simplifyDebts: simplifyDebts,
-    archivedAt: archivedAt,
+    archivedAt: archivedAt?.toUtc(),
   );
 }
 
@@ -183,7 +168,7 @@ extension MemberToWire on Member {
   api.MemberUpdate toUpdate() => api.MemberUpdate(
     displayName: displayName,
     upiVpa: upiVpa,
-    leftAt: leftAt,
+    leftAt: leftAt?.toUtc(),
   );
 }
 

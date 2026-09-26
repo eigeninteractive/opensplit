@@ -16,22 +16,10 @@ import 'presentation/app.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // google_fonts falls back to downloading a face it cannot find in the
-  // bundle. Everything this app uses is bundled, so a miss is a packaging
-  // mistake, and it should surface as one rather than as a silent request to
-  // Google on a user's first launch — which is exactly what an app promising
-  // to work offline and report nothing must not do.
+  // google_fonts falls back to downloading a face it cannot find in the bundle.
   GoogleFonts.config.allowRuntimeFetching = false;
 
   // The faces ship with their licence, and the app can show it.
-  //
-  // Flutter's licence page is built from [LicenseRegistry], which is populated
-  // from the LICENSE file of every *package* in the build. These four faces are
-  // not a package — they are .ttf files in `assets/`, and package:google_fonts
-  // registers nothing of its own -- so the one screen that offers "the packages
-  // this app is built on, and their terms" was missing the only third-party
-  // work the app actually redistributes. The OFL asks for the notice and the
-  // licence to accompany every copy; this is the copy a user can read.
   LicenseRegistry.addLicense(() async* {
     yield LicenseEntryWithLineBreaks(const [
       'Instrument Sans',
@@ -39,22 +27,17 @@ Future<void> main() async {
     ], await rootBundle.loadString('assets/google_fonts/LICENSE'));
   });
 
-  // Real paths, not hash fragments. A fragment is never sent to the server, so
-  // a `#/g/123` URL cannot be an Android App Link — the whole "tap a shared
-  // link and land in the group" flow depends on this one line.
+  // Real paths, not hash fragments.
   usePathUrlStrategy();
 
   final prefs = await SharedPreferences.getInstance();
 
-  // Nothing to initialise for the backend: the session is a stored token and
-  // a cached account that `BetterAuthService` reads synchronously from the
-  // preferences above and revalidates later. A device with no connectivity
-  // launches normally and simply does not sync.
+  // Nothing to initialise for the backend: the session is a stored token and a
+  // cached account that `BetterAuthService` reads synchronously from the
+  // preferences above and revalidates later.
 
   // A build that cannot reach its backend says so, rather than looking correct
-  // and quietly doing nothing. See [configurationProblem]: this only ever fires
-  // on a release build that was made without its dart-defines, which is
-  // indistinguishable from a working one until somebody tries to sign in.
+  // and quietly doing nothing.
   final problem = configurationProblem;
   if (problem != null) {
     developer.log(
@@ -63,10 +46,7 @@ Future<void> main() async {
       level: 1000, // SEVERE
     );
     // Scoped like the real launch below, though this screen reads nothing from
-    // a provider. It costs an empty container and buys an invariant with no
-    // exceptions in it: every runApp in this app is inside a ProviderScope,
-    // which is a cheaper thing to hold in your head than one that is true
-    // apart from the error path.
+    // a provider.
     runApp(ProviderScope(child: _Misconfigured(problem)));
     return;
   }
@@ -80,10 +60,6 @@ Future<void> main() async {
 }
 
 /// Shown instead of the app when the build itself is wrong.
-///
-/// Deliberately plain: no theme, no router, no providers. Everything that would
-/// make this look like the app is a thing that could fail for the same reason
-/// the app cannot run.
 class _Misconfigured extends StatelessWidget {
   const _Misconfigured(this.problem);
 

@@ -3,11 +3,6 @@ import 'package:drift/drift.dart';
 import '../local/database.dart';
 
 /// Reads the fixed category list seeded into the local database.
-///
-/// There is no create and no delete. The list is reference data, the same on
-/// every device and on the server, which is the only way an entry's category
-/// can mean the same thing to the person who recorded it and the person
-/// reading the group's spending a month later.
 final class DriftCategoryRepository {
   DriftCategoryRepository(this._db);
 

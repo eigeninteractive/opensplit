@@ -59,6 +59,7 @@ const _$ErrorCodeEnumMap = {
   ErrorCode.notFound: 'not_found',
   ErrorCode.internal: 'internal',
   ErrorCode.identityAlreadyInUse: 'identity_already_in_use',
+  ErrorCode.authFailed: 'auth_failed',
   ErrorCode.unknownDefaultOpenApi: 'unknown_default_open_api',
 };
 

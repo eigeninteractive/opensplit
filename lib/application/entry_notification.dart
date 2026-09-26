@@ -9,23 +9,6 @@ import '../domain/models/group_event.dart';
 import '../domain/notification_text.dart';
 
 /// Turns an event that has just landed on this device into notification text.
-///
-/// Takes its repositories rather than a `Ref` on purpose. It runs in two very
-/// different places — the app, with Riverpod holding everything, and the push
-/// background isolate, which has no provider container and builds its own
-/// dependencies — and the wording of a notification must not depend on which.
-/// Passing them in is what lets both call the same function instead of keeping
-/// two copies of "what does this expense say".
-///
-/// Returns null when the entry is not on the device, which happens when a wake
-/// arrives for a group this account has since left, or when the sync that was
-/// meant to fetch it could not reach the server.
-///
-/// Also null when the device holds the expense but no record of anything having
-/// happened to it. That is not a state worth guessing about: the wake is sent
-/// by the group's object after it writes the record, so the two arrive together or the
-/// sync did not complete, and a banner assembled from half a pull would be
-/// describing something it cannot see.
 Future<({String title, String body})?> composeEventNotification({
   required DriftEntryRepository entries,
   required DriftGroupRepository groups,
@@ -46,9 +29,7 @@ Future<({String title, String body})?> composeEventNotification({
   if (!_worthABanner.contains(kind)) return null;
 
   // What happened, and who did it -- read off the record rather than inferred
-  // from the row it describes. For an expense, `created_by` is who first typed
-  // it, which on an edit is usually the person being told about it rather than
-  // the person who caused the message.
+  // from the row it describes.
   final change = await activity.latestFor(subjectId);
   if (change == null) return null;
 
@@ -63,9 +44,7 @@ Future<({String title, String body})?> composeEventNotification({
     return memberDisplayName(member, knownProfiles[member.profileId]);
   }
 
-  // Somebody arriving or leaving. Named from the member row that has just
-  // synced rather than from anything the server sent, which is the same rule
-  // the expense branch below follows.
+  // Somebody arriving or leaving.
   if (change is MemberChanged) {
     return describeMemberEvent(
       groupName: group?.name ?? 'OpenSplit',
@@ -111,10 +90,6 @@ Future<({String title, String body})?> composeEventNotification({
 }
 
 /// The kinds that produce a banner at all.
-///
-/// The server's list (`server/src/do/group/notices.ts`), said again on the
-/// receiving end, so a server ahead of this build cannot wake a device for
-/// something it has no sentence for.
 const _worthABanner = {
   EventKind.entry,
   EventKind.memberJoined,
@@ -122,8 +97,4 @@ const _worthABanner = {
 };
 
 /// The group route a notification should open.
-///
-/// The group owns refresh and renders saved data while it runs. Opening an
-/// editor before the notified entry has reached the foreground database can
-/// only produce an empty form, which falsely looks editable.
 String groupNotificationRoute(String groupId) => '/g/$groupId';

@@ -1,16 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { evenly, freshId, makeGroup, ok, PRIYA, RAVI, refusal, stub, sumOf, ZARA } from "./group";
+import { BY_INVITE, evenly, freshId, makeGroup, ok, PRIYA, refusal, stub, sumOf, ZARA } from "./group";
 
-/**
- * Invites, links, and what a stranger can reach: a token spent exactly once,
- * an expired one, a revoked one, and a group nobody outside it can read.
- *
- * "Zara sees nothing" is one test rather than five, because there is one way
- * to reach a group — calling its object — and it answers one way. The rest of
- * this file is the interesting part: a token is the only proof of anything,
- * and it has to be spendable exactly once.
- */
+/** Invites, links, and what a stranger can reach: a token spent exactly once, an expired one, a revoked one, and a group nobody outside it can read. */
 
 describe("a stranger holding no token", () => {
   it("sees nothing of a group they are not in, whatever they ask for", async () => {
@@ -22,7 +14,7 @@ describe("a stranger holding no token", () => {
     expect(refusal(await stub(groupId).changes(ZARA, 0, 100)).code).toBe("not_member");
     expect(refusal(await stub(groupId).createInvite(priya.id, ZARA)).code).toBe("not_member");
     expect(refusal(await stub(groupId).createLink(ZARA)).code).toBe("not_member");
-    expect(refusal(await stub(groupId).update({ name: "Zara's now" }, ZARA)).code).toBe("not_member");
+    expect(refusal(await stub(groupId).update({ name: "Zara's now", simplifyDebts: true, archivedAt: null }, ZARA)).code).toBe("not_member");
   });
 });
 
@@ -61,7 +53,7 @@ describe("an invite to one named place", () => {
     const entriesBefore = before.entries.map((entry) => ({ id: entry.id, payers: entry.payers, shares: entry.shares }));
 
     const invite = ok(await object.createInvite(priya.id, profile));
-    const claimed = ok(await object.join(invite.token, PRIYA));
+    const claimed = ok(await object.join(invite.token, PRIYA, BY_INVITE)).member;
 
     expect(claimed.id).toBe(priya.id);
     expect(claimed.profileId).toBe(PRIYA);
@@ -77,13 +69,13 @@ describe("an invite to one named place", () => {
     const object = stub(groupId);
     const invite = ok(await object.createInvite(priya.id, ravi.profileId ?? ""));
 
-    ok(await object.join(invite.token, PRIYA));
-    expect(refusal(await object.join(invite.token, ZARA)).code).toBe("invite_spent");
+    ok(await object.join(invite.token, PRIYA, BY_INVITE));
+    expect(refusal(await object.join(invite.token, ZARA, BY_INVITE)).code).toBe("invite_spent");
   });
 
   it("is refused when the token names nothing", async () => {
     const { groupId } = await makeGroup();
-    expect(refusal(await stub(groupId).join(freshId("t"), PRIYA)).code).toBe("invite_invalid");
+    expect(refusal(await stub(groupId).join(freshId("t"), PRIYA, BY_INVITE)).code).toBe("invite_invalid");
     expect(ok(await stub(groupId).peekLink(freshId("t"), null))).toBeNull();
   });
 
@@ -95,8 +87,8 @@ describe("an invite to one named place", () => {
     const first = ok(await object.createInvite(priya.id, profile));
     const second = ok(await object.createInvite(priya.id, profile));
 
-    expect(refusal(await object.join(first.token, PRIYA)).code).toBe("invite_invalid");
-    expect(ok(await object.join(second.token, PRIYA)).id).toBe(priya.id);
+    expect(refusal(await object.join(first.token, PRIYA, BY_INVITE)).code).toBe("invite_invalid");
+    expect(ok(await object.join(second.token, PRIYA, BY_INVITE)).member.id).toBe(priya.id);
   });
 
   it("cannot give one account a second place in the same group", async () => {
@@ -104,10 +96,10 @@ describe("an invite to one named place", () => {
     const object = stub(groupId);
     const invite = ok(await object.createInvite(priya.id, ravi.profileId ?? ""));
 
-    expect(refusal(await object.join(invite.token, ravi.profileId ?? "")).code).toBe("already_member");
+    expect(refusal(await object.join(invite.token, ravi.profileId ?? "", BY_INVITE)).code).toBe("already_member");
   });
 
-  it("clamps an absurd lifetime rather than honouring it", async () => {
+  it("expires, so a link forwarded into a chat does not live forever", async () => {
     const { groupId, priya, ravi } = await makeGroup();
     const invite = ok(await stub(groupId).createInvite(priya.id, ravi.profileId ?? ""));
 
@@ -123,7 +115,7 @@ describe("the group's one open link", () => {
     const profile = ravi.profileId ?? "";
 
     const link = ok(await object.createLink(profile));
-    const joined = ok(await object.join(link.token, ZARA, { displayName: "Zara" }));
+    const joined = ok(await object.join(link.token, ZARA, { memberId: null, displayName: "Zara" })).member;
 
     expect(joined.profileId).toBe(ZARA);
     expect(joined.displayName).toBe("Zara");
@@ -141,14 +133,14 @@ describe("the group's one open link", () => {
     const first = ok(await object.createLink(profile));
     const second = ok(await object.createLink(profile));
 
-    expect(refusal(await object.join(first.token, ZARA, { displayName: "Zara" })).code).toBe("invite_invalid");
-    expect(ok(await object.join(second.token, ZARA, { displayName: "Zara" })).displayName).toBe("Zara");
+    expect(refusal(await object.join(first.token, ZARA, { memberId: null, displayName: "Zara" })).code).toBe("invite_invalid");
+    expect(ok(await object.join(second.token, ZARA, { memberId: null, displayName: "Zara" })).member.displayName).toBe("Zara");
 
     /**
      * A rotation is one change that says two things, so both lines share a
      * sequence number and a timestamp. `ordinal` is the only thing that keeps
-     * them from rendering as a link created and then immediately revoked,
-     * which reads as the opposite of what happened.
+     * them from rendering as a link created and then immediately revoked, which
+     * reads as the opposite of what happened.
      */
     const page = ok(await object.changes(profile, 0, 500));
     const rotation = page.events.filter((event) => event.kind === "link_revoked" || event.kind === "link_created");
@@ -165,7 +157,7 @@ describe("the group's one open link", () => {
     const link = ok(await object.createLink(profile));
     expect(ok(await object.revokeLink(profile)).revoked).toBe(link.token);
 
-    expect(refusal(await object.join(link.token, ZARA, { displayName: "Zara" })).code).toBe("invite_spent");
+    expect(refusal(await object.join(link.token, ZARA, { memberId: null, displayName: "Zara" })).code).toBe("invite_spent");
 
     const page = ok(await object.changes(profile, 0, 500));
     const kinds = page.events.map((event) => event.kind);
@@ -183,24 +175,14 @@ describe("the group's one open link", () => {
     const profile = ravi.profileId ?? "";
 
     const link = ok(await object.createLink(profile));
-    const spare = ok(await object.placeholders(link.token, RAVI));
+    const spare = ok(await object.placeholders(link.token)).placeholders;
 
     expect(spare.map((row) => row.displayName)).toEqual(["Priya"]);
-    expect(spare.map((row) => row.memberId)).not.toContain(ravi.id);
+    expect(spare.map((row) => row.id)).not.toContain(ravi.id);
 
-    const claimed = ok(await object.join(link.token, PRIYA, { memberId: priya.id }));
+    const claimed = ok(await object.join(link.token, PRIYA, { memberId: priya.id, displayName: null })).member;
     expect(claimed.id).toBe(priya.id);
-    expect(ok(await object.placeholders(link.token, RAVI))).toHaveLength(0);
-  });
-
-  it("does not offer a member list to somebody with no session at all", async () => {
-    const { groupId, ravi } = await makeGroup();
-    const link = ok(await stub(groupId).createLink(ravi.profileId ?? ""));
-
-    // `peek` answers anybody: it says only what the link already implies. The
-    // names of everybody in a group are more than that.
-    expect(ok(await stub(groupId).peekLink(link.token, null))).not.toBeNull();
-    expect(refusal(await stub(groupId).placeholders(link.token, null)).code).toBe("not_member");
+    expect(ok(await object.placeholders(link.token)).placeholders).toHaveLength(0);
   });
 
   it("does not offer a member list to somebody holding a revoked token", async () => {
@@ -211,7 +193,7 @@ describe("the group's one open link", () => {
     const link = ok(await object.createLink(profile));
     ok(await object.revokeLink(profile));
 
-    expect(refusal(await object.placeholders(link.token, RAVI)).code).toBe("invite_spent");
+    expect(refusal(await object.placeholders(link.token)).code).toBe("invite_spent");
   });
 
   it("refuses a second claim on a place taken between the peek and the join", async () => {
@@ -219,8 +201,8 @@ describe("the group's one open link", () => {
     const object = stub(groupId);
     const link = ok(await object.createLink(ravi.profileId ?? ""));
 
-    ok(await object.join(link.token, PRIYA, { memberId: priya.id }));
-    expect(refusal(await object.join(link.token, ZARA, { memberId: priya.id })).code).toBe("slot_taken");
+    ok(await object.join(link.token, PRIYA, { memberId: priya.id, displayName: null }));
+    expect(refusal(await object.join(link.token, ZARA, { memberId: priya.id, displayName: null })).code).toBe("slot_taken");
   });
 
   it("tells somebody who is already in the group that they are", async () => {
@@ -242,7 +224,7 @@ describe("what joining does to the ledger", () => {
 
     const entry = ok(await object.upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 1500), profile));
     const invite = ok(await object.createInvite(priya.id, profile));
-    ok(await object.join(invite.token, PRIYA));
+    ok(await object.join(invite.token, PRIYA, BY_INVITE));
 
     const page = ok(await object.changes(profile, 0, 500));
     const after = page.entries.find((row) => row.id === entry.id);

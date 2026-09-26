@@ -18,10 +18,6 @@ final class DriftProfileRepository {
   )..where((t) => t.id.equals(profileId))).watchSingleOrNull();
 
   /// Every profile this device knows about, keyed by id.
-  ///
-  /// The whole table, deliberately: it holds one row per person you share a
-  /// group with, which is tens, and every screen that renders a name needs the
-  /// lookup. Fetching them per member would be a query per row of every list.
   Stream<Map<String, Profile>> watchAll() =>
       _db.select(_db.profiles).watch().map(_byId);
 

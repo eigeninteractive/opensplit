@@ -10,14 +10,6 @@ import '../../domain/export/csv_export.dart';
 import '../../domain/export/json_export.dart';
 
 /// Exports the group, in whichever of the two formats is wanted.
-///
-/// They are not the same file in different clothes. **CSV** is the filtered
-/// view for a person with a spreadsheet: flat, one row per expense, honouring
-/// whatever the analytics filter currently selects, because the useful export
-/// is usually a slice — one trip, one category, one person. **JSON** ignores
-/// the filter and takes everything: members who never claimed an account, the
-/// weights behind each split, the fx snapshot each entry was recorded against,
-/// and the activity log. It is the copy you keep.
 class ExportButton extends ConsumerStatefulWidget {
   const ExportButton({super.key, required this.groupId});
 

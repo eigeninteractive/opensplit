@@ -1,9 +1,4 @@
 /// An expense happens on a day, not at an instant.
-///
-/// Dart has no date-only type, so a day is a `DateTime` at UTC midnight,
-/// written `yyyy-MM-dd` on the wire and in the local database.
-/// [calendarDate] formats the value's own fields rather than converting
-/// through a time zone, so a value at local midnight gives the same day.
 library;
 
 import 'package:intl/intl.dart';

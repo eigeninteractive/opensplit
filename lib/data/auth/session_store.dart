@@ -5,58 +5,30 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../domain/repositories/auth_service.dart';
 
-/// The session this device holds, as it survives a restart.
-///
-/// ## Why the account is cached and not just fetched
-///
-/// [SessionController] reads `currentUser` synchronously, and that is
-/// deliberate: an asynchronous read there put a flash of the welcome screen in
-/// front of everybody who was already signed in, on every launch, because
-/// Riverpod's first state for a `Future` is always loading and the router read
-/// loading as signed out.
-///
-/// So the answer has to be in hand before `runApp`, and a network round trip
-/// cannot be. What is stored is a cache of the last answer the server gave;
-/// [BetterAuthService] revalidates it against the server immediately afterwards
-/// and emits a correction if it has changed. The server remains the authority
-/// on every request — nothing here grants anything.
+/// The session as it survives a restart: a cache of the server's last answer,
+/// readable synchronously so a signed-in launch never flashes the welcome
+/// screen. [BetterAuthService] revalidates it straight away.
 class StoredSession {
   const StoredSession({required this.account, required this.token});
 
-  factory StoredSession.fromJson(Map<String, Object?> json) => StoredSession(
-    account: Account(
-      id: json['id']! as String,
-      isAnonymous: json['isAnonymous']! as bool,
-      email: json['email'] as String?,
-      displayName: json['displayName'] as String?,
-    ),
+  /// The account's own fields plus `token`, flat, as older builds wrote it.
+  factory StoredSession.fromJson(Map<String, dynamic> json) => StoredSession(
+    account: Account.fromJson(json),
     token: json['token'] as String?,
   );
 
   final Account account;
 
-  /// The bearer token, on the platforms that have to carry one.
-  ///
-  /// Null on the web, and never written there. The browser holds the session in
-  /// a first-party `HttpOnly` cookie that JavaScript cannot read, which is what
-  /// stops a compromised dependency stealing it — copying the same session into
-  /// `localStorage` would hand that protection straight back.
-  ///
-  /// Android has no cookie jar a background isolate can reach, so there the
-  /// token is the only way a push handler can sync before it draws a
-  /// notification.
+  /// The bearer token on Android, where a background isolate has no cookie
+  /// jar. Never stored on the web, whose HttpOnly cookie JavaScript cannot read.
   final String? token;
 
   Map<String, Object?> toJson() => {
-    'id': account.id,
-    'isAnonymous': account.isAnonymous,
-    'email': account.email,
-    'displayName': account.displayName,
+    ...account.toJson(),
     if (!kIsWeb) 'token': token,
   };
 }
 
-/// Where [StoredSession] lives between launches.
 class SessionStore {
   const SessionStore(this._preferences);
 
@@ -64,19 +36,14 @@ class SessionStore {
 
   static const _key = 'opensplit.session';
 
-  /// Synchronous, which is the whole reason this takes a loaded
-  /// [SharedPreferences] rather than fetching one.
+  /// Synchronous, so it needs an already loaded [SharedPreferences].
   StoredSession? read() {
     final raw = _preferences.getString(_key);
     if (raw == null) return null;
-
     try {
-      return StoredSession.fromJson(jsonDecode(raw) as Map<String, Object?>);
-    } on FormatException {
-      return null;
-    } on TypeError {
-      // Written by an older build with a different shape. Nothing to restore,
-      // and revalidation will produce the real answer a moment later.
+      return StoredSession.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    } on Object {
+      // Unreadable: revalidation produces the real answer a moment later.
       return null;
     }
   }
@@ -90,15 +57,8 @@ class SessionStore {
   }
 }
 
-/// The session a background isolate is allowed to use.
-///
-/// A separate entry point rather than [SessionStore.read] because the isolate
-/// has different rules. It never refreshes or rotates anything — the foreground
-/// owns the session — and it only runs at all once notifications have been
-/// asked for, which is the flag checked here.
-///
-/// Returns null on the web, where there is no background isolate and no stored
-/// token to give one.
+/// The session a background isolate may use: read-only, Android-only, and
+/// only once notifications have been asked for.
 Future<StoredSession?> readBackgroundSession() async {
   if (kIsWeb) return null;
 

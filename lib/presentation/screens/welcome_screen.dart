@@ -1,21 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../domain/repositories/auth_service.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/identity_choices.dart';
 import '../widgets/page_body.dart';
 
 /// Where somebody with no session lands.
-///
-/// The three routes are offered together and none of them is a wall: being a
-/// guest is one tap, it is a real account, and everything works afterwards.
-/// See [AuthService] for why the app never picks for them.
-///
-/// Nothing here navigates once one of them succeeds. The router's guard
-/// already sends a signed-in visitor from `/welcome` to wherever they were
-/// headed — see [redirectAppRoute] — and a second `context.go` here would race
-/// it.
 class WelcomeScreen extends ConsumerWidget {
   const WelcomeScreen({super.key});
 

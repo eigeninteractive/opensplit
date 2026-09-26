@@ -1,10 +1,7 @@
 /**
- * OpenSplit's backend: one Worker serving the static site, the Flutter web
- * bundle and the API, with one Durable Object per group.
- *
- * See docs/architecture.md for why it is shaped this way, and docs/runbook.md
- * for the commands that create the resources named below. Nothing here is
- * created automatically.
+ * One Worker serving the static site, the Flutter web client and the API, with
+ * one Durable Object per group. docs/architecture.md explains the shape;
+ * docs/runbook.md creates the resources named here.
  */
 {
   "$schema": "node_modules/wrangler/config-schema.json",
@@ -12,52 +9,22 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-09-23",
 
-  // Better Auth reaches for node built-ins (crypto, buffer). Without this the
-  // Worker fails at import time, not at request time, which is at least loud.
+  // Better Auth needs node built-ins; without this the Worker fails at import.
   "compatibility_flags": ["nodejs_compat"],
 
   "observability": { "enabled": true },
   "upload_source_maps": true,
 
-  /**
-   * The Durable Object's own migrations, bundled as strings.
-   *
-   * `drizzle-kit generate --config drizzle.do.config.ts` writes SQL files and
-   * a `migrations.js` that imports them; `migrate()` applies whichever have
-   * not run yet, per object, inside `blockConcurrencyWhile` on first open
-   * after a deploy. There is no `wrangler d1 migrations apply` equivalent for
-   * a Durable Object — each one migrates itself, lazily — so the SQL has to
-   * travel inside the Worker script.
-   *
-   * `fallthrough` so this adds to the default rules rather than replacing
-   * them, which would silently turn off source-map and WASM handling.
-   */
+  // Durable Object migrations travel in the bundle as text; each object applies its own.
+  // `fallthrough` keeps the default rules (source maps, WASM).
   "rules": [{ "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }],
 
   /**
-   * The whole front end, served from the same origin as the API.
-   *
-   * `directory` is the output of `dart run tool/build_web.dart`: the static
-   * site at the root and the Flutter client under `/app/`, with `_headers`
-   * beside them. It is a build artifact and is not committed, so
-   * `wrangler dev` needs it to exist — `--site-only` builds the root of it in
-   * about a second, without a Flutter toolchain, which is what CI and anybody
-   * working only on the server should run.
-   *
-   * Static assets are served ahead of the Worker script, so a request for
-   * `main.dart.js` never invokes it. Anything with no matching asset falls
-   * through to `src/index.ts`, which answers a deep link such as
-   * `/app/join/:token` with `/app/index.html`.
-   *
-   * `not_found_handling` is deliberately left at its default. Both other
-   * settings answer the wrong document: `single-page-application` would give
-   * the marketing site's `index.html` to `/app/join/xyz`, and `404-page` would
-   * give it `/404.html`. A cold deep link has to arrive at the client.
-   *
-   * `run_worker_first` for the API and nothing else. Without it every API call
-   * is an asset lookup that misses before the Worker is invoked, and — the part
-   * that would be hard to diagnose — a file the web build happened to emit at
-   * an `/api/...` path would silently shadow the endpoint.
+   * The front end from `dart run tool/build_web.dart` (`--site-only` for the
+   * site alone), same origin as the API. Assets are served before the Worker;
+   * `/api/*` runs the Worker first so no emitted file can shadow an endpoint.
+   * `not_found_handling` stays default: `src/app.ts` answers `/app/*` deep links
+   * with the client's document, which neither built-in mode does.
    */
   "assets": {
     "directory": "../build/web",
@@ -65,21 +32,7 @@
     "run_worker_first": ["/api/*"]
   },
 
-  /**
-   * One origin, and only one.
-   *
-   * `workers_dev` off because `opensplit.<subdomain>.workers.dev` would be a
-   * second, indexable origin serving the same client — and this client is
-   * local-first. Its database, its session and its service worker registration
-   * are all keyed to the origin, so a person who opened the app there would get
-   * a second, silently separate copy of their own data. Preview URLs are off
-   * for the same reason.
-   *
-   * The custom domain is attached by `wrangler deploy` once the zone exists;
-   * see docs/runbook.md. A deploy before that fails loudly, which is the
-   * intent — the alternative is a Worker that is live on an address nobody has
-   * been told about.
-   */
+  // One origin only: the client is local-first, and a second origin would be a silently separate copy of someone's data.
   "workers_dev": false,
   "preview_urls": false,
   "routes": [{ "pattern": "opensplit.eigeninteractive.com", "custom_domain": true }],
@@ -88,24 +41,12 @@
     "bindings": [{ "name": "GROUP", "class_name": "Group" }, { "name": "FX", "class_name": "Fx" }]
   },
 
-  /**
-   * The declarative `exports` map, not the legacy `migrations` array. The two
-   * are mutually exclusive, and once deployed with `exports` there is no going
-   * back — which is fine, because this is a new namespace.
-   *
-   * `storage: "sqlite"` is the only option for a new class, and is what gives
-   * the SQL API and point-in-time recovery.
-   */
   "exports": {
     "Group": { "type": "durable-object", "storage": "sqlite" },
     "Fx": { "type": "durable-object", "storage": "sqlite" }
   },
 
-  /**
-   * `database_id` is a placeholder. `wrangler dev` and the test pool ignore it
-   * and keep a local SQLite file; a real deploy needs the id printed by
-   * `wrangler d1 create opensplit`. See the runbook.
-   */
+  // Placeholder id: local runs ignore it; a deploy needs `wrangler d1 create opensplit`'s.
   "d1_databases": [
     {
       "binding": "DB",
@@ -115,29 +56,10 @@
     }
   ],
 
-  /**
-   * Everything derived, global and rebuildable: one blob per month of exchange
-   * rates, and the FCM access token a hundred group objects would otherwise
-   * each mint for themselves.
-   *
-   * One namespace rather than two, because both hold the same kind of thing —
-   * identical for every user, reconstructible from its source, and wrong only
-   * until the next write. Also a placeholder id; see the runbook.
-   */
+  // Derived, rebuildable data: month blobs of rates and the cached FCM token. Placeholder id.
   "kv_namespaces": [{ "binding": "CACHE", "id": "0000000000000000000000000000000f" }],
 
-  /**
-   * Two schedules, not three.
-   *
-   * There is deliberately no nightly sweep for dormancy. A Durable Object
-   * sets its own alarm, so each group carries its own clock: one wake-up in
-   * three months instead of ninety that find nothing to do, and no fan-out
-   * proportional to the number of groups.
-   *
-   * What is left here is genuinely global — rates nobody owns, accounts that
-   * belong to no group, and checking that D1's derived index still agrees with
-   * the objects that are the truth.
-   */
+  // No dormancy sweep: each group object arms its own alarm.
   "triggers": {
     "crons": [
       "0 4 * * *", // exchange rates
@@ -145,19 +67,7 @@
     ]
   },
 
-  /**
-   * The origin this Worker believes it is, which Better Auth uses as its
-   * `baseURL` and as its sole trusted origin — so it decides where the Google
-   * callback comes back to and which `Origin` headers are allowed to carry a
-   * session cookie.
-   *
-   * The deployed value, stated here. Local runs override it in `.dev.vars` and
-   * the test suite sets its own in `vitest.config.ts`, which is the right way
-   * round: a wrong value in production is a broken sign-in for everybody, and a
-   * wrong value locally is a broken sign-in for one developer who can see the
-   * error. The reverse arrangement — a localhost default here — is how a
-   * deployed Worker ends up redirecting people to their own machine.
-   */
+  // Better Auth's baseURL and sole trusted origin. Local runs override it in .dev.vars, tests in vitest.config.ts.
   "vars": {
     "APP_ORIGIN": "https://opensplit.eigeninteractive.com"
   }

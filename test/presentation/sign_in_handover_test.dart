@@ -13,17 +13,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../harness.dart';
 
 /// What signing in looks like, frame by frame.
-///
-/// The handover from the welcome screen to the app is not a navigation and must
-/// not look like one. It used to be two of them: the screen called `context.go`
-/// itself while the router's guard independently redirected off `/welcome`, and
-/// on top of that the destinations arrived with the platform's page transition
-/// — Cupertino's horizontal slide on the web. The result was a welcome screen
-/// that stayed on screen sliding leftwards for the better part of a second
-/// after the group list had already rendered underneath it.
-///
-/// pumpAndSettle cannot see any of that. It is precisely the frames in between
-/// that were wrong, so this counts them.
 void main() {
   testWidgets('the welcome screen is gone the frame after a guest signs in', (
     tester,
@@ -42,10 +31,8 @@ void main() {
           sharedPreferencesProvider.overrideWithValue(preferences),
           authServiceProvider.overrideWithValue(auth),
           appDatabaseProvider.overrideWithValue(db),
-          // No network here either -- see the note in signedInApp. A signed-in app
-          // left with the default base URL reaches for localhost, fails, and leaves
-          // a retry timer pending past the end of the test.
-          remoteLedgerApiProvider.overrideWithValue(null),
+          // No network here either -- see the note in signedInApp.
+          apiClientProvider.overrideWithValue(null),
         ],
         child: const OpenSplitApp(),
       ),
@@ -56,8 +43,8 @@ void main() {
     await tester.tap(find.text('Continue as guest'));
 
     // Deliberately one frame at a time, and deliberately counting rather than
-    // asserting on the end state: the bug was never visible once things came
-    // to rest.
+    // asserting on the end state: the bug was never visible once things came to
+    // rest.
     var framesShowingWelcome = 0;
     for (var frame = 0; frame < 45; frame++) {
       await tester.pump(const Duration(milliseconds: 16));
@@ -95,10 +82,8 @@ void main() {
         sharedPreferencesProvider.overrideWithValue(preferences),
         authServiceProvider.overrideWithValue(auth),
         appDatabaseProvider.overrideWithValue(db),
-        // No network here either -- see the note in signedInApp. A signed-in app
-        // left with the default base URL reaches for localhost, fails, and leaves
-        // a retry timer pending past the end of the test.
-        remoteLedgerApiProvider.overrideWithValue(null),
+        // No network here either -- see the note in signedInApp.
+        apiClientProvider.overrideWithValue(null),
       ],
     );
     addTearDown(container.dispose);
@@ -119,9 +104,7 @@ void main() {
     await tester.tap(find.text('Continue as guest'));
     await tester.pumpAndSettle();
 
-    // This is what the welcome screen used to duplicate. It is the reason the
-    // screen may safely do nothing at all when a session appears, so if it ever
-    // stops being true, deleting that `context.go` was the wrong call.
+    // This is what the welcome screen used to duplicate.
     expect(router.state.uri.path, '/settings');
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -130,10 +113,6 @@ void main() {
 }
 
 /// Signed out until somebody asks to be a guest.
-///
-/// The auth event arrives a turn after the call returns, the way the real
-/// service's does — the session is real before the stream says so, and nothing
-/// may depend on the order of those two.
 class _BecomesGuest implements AuthService {
   static final _guest = Account(
     id: 'guest-1',

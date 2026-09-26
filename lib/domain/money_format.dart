@@ -5,18 +5,6 @@ import 'models/currency.dart';
 const _indianGrouping = {'INR', 'NPR', 'LKR', 'PKR', 'BDT'};
 
 /// Formats [amountMinor] for display.
-///
-/// Lives in the domain rather than the presentation layer because it is used by
-/// two things that must never disagree: the screens, and the text of a local
-/// notification. Two implementations of grouping and exponents would drift, and
-/// the failure mode is a banner that quotes a different figure from the app.
-///
-/// The whole path is integer arithmetic. Converting to a double to hand off to
-/// a number formatter would be the one place float sneaks into a money app, and
-/// it is avoidable: the grouping is done on the digit string.
-///
-/// [currency] may be null while reference data is still loading, in which case
-/// the raw minor units are shown rather than a wrong-by-a-factor-of-100 figure.
 String formatMoney(
   Currency? currency,
   int amountMinor, {

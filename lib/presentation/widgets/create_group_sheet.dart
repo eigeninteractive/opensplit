@@ -13,10 +13,6 @@ Future<void> showCreateGroupSheet(BuildContext context) => showModalBottomSheet(
 );
 
 /// Naming a group, and — exactly once, ever — naming yourself.
-///
-/// The name field is shown only when the account has no name
-/// ([Profile.displayName] is null), and answering it is an account edit. Once
-/// there is a name it has one home, the account, and is not edited here.
 class _CreateGroupSheet extends ConsumerStatefulWidget {
   const _CreateGroupSheet();
 
@@ -39,10 +35,6 @@ class _CreateGroupSheetState extends ConsumerState<_CreateGroupSheet> {
   }
 
   /// The account's name, or null if nobody has chosen one.
-  ///
-  /// Watched rather than read once in `initState`. The profile arrives from a
-  /// database stream, so on the first frame there is nothing yet — reading it
-  /// there is why the field could open blank for someone who did have a name.
   String? get _accountName {
     final name = ref.watch(myProfileProvider).value?.displayName?.trim();
     return name == null || name.isEmpty ? null : name;
@@ -63,9 +55,7 @@ class _CreateGroupSheetState extends ConsumerState<_CreateGroupSheet> {
       _error = null;
     });
     try {
-      // The group first, and the account second. Both orderings write the same
-      // two things, but only this one cannot lose the group: creating it is
-      // what the user asked for, and naming the account is a consequence.
+      // The group first, and the account second.
       final created = await ref
           .read(groupRepositoryProvider)
           .createGroup(
@@ -129,8 +119,7 @@ class _CreateGroupSheetState extends ConsumerState<_CreateGroupSheet> {
               decoration: const InputDecoration(
                 labelText: 'Your name',
                 // Said out loud, because it is true: this is not a field about
-                // this group. Everyone in every group you join will see it,
-                // and it is changed afterwards on the Account screen.
+                // this group.
                 helperText: 'How everyone in your groups will see you.',
               ),
               onChanged: (_) => setState(() {}),

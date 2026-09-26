@@ -6,22 +6,7 @@ import { type MonthBlob, monthKey } from "../src/fx/blob";
 import { reference, referenceEtag, supportedCurrencies } from "../src/reference";
 import type { FxPage, Reference } from "../src/schemas/reference";
 
-/**
- * Rates, and the object that is their only writer.
- *
- * The waterfall runs against a stubbed `fetch` rather than the real providers,
- * which is not a compromise: what is under test is the *ordering* — that a
- * second provider fills what the first could not, that a latest-only source is
- * never asked for a past date, that nothing already stored is overwritten — and
- * none of that is a property of Frankfurter or ExchangeRate-API. Reaching the
- * live services would make the suite depend on somebody else's uptime to answer
- * a question about our own code.
- *
- * The one thing the stub cannot check is whether the adapters parse what those
- * services really send. That is a real gap, and the honest place for it is a
- * manual run against the live API, not a test that fails on a Tuesday because
- * ECB had an outage.
- */
+/** Rates, and the object that is their only writer. */
 
 const ORIGIN = "https://opensplit.test";
 
@@ -57,14 +42,7 @@ function fx() {
   return env.FX.getByName(`fx-${crypto.randomUUID()}`);
 }
 
-/**
- * Both providers available, which is the configured deployment.
- *
- * `.dev.vars` leaves the key empty, because an empty key is what a fork or a
- * local run has — and the adapter skipping itself on one is a behaviour with
- * its own test below. Everything about the *ordering* needs two live sources,
- * so this file configures them.
- */
+/** Both providers available, which is the configured deployment. */
 beforeAll(() => {
   env.EXCHANGERATE_API_KEY = "test-key";
 });
@@ -75,9 +53,9 @@ afterEach(() => {
 
 describe("the waterfall", () => {
   it("lets a second provider fill what the first could not", async () => {
-    // ECB publishes EUR and GBP and not AED, which is the whole reason there
-    // is more than one provider: stopping at a perfectly successful response
-    // would leave a fifth of the supported currencies permanently absent.
+    // ECB publishes EUR and GBP and not AED, which is the whole reason there is
+    // more than one provider: stopping at a perfectly successful response would
+    // leave a fifth of the supported currencies permanently absent.
     const calls = stubFetch((url) => {
       if (url.includes("frankfurter")) return frankfurterBody("2026-09-24", { EUR: 0.92, GBP: 0.78 });
       if (url.includes("exchangerate-api")) return exchangerateBody(Date.parse("2026-09-24T00:00:00Z") / 1000, Object.fromEntries(supportedCurrencies.map((code) => [code, 7])));
@@ -142,9 +120,8 @@ describe("the waterfall", () => {
     stubFetch((url) => (url.includes("frankfurter") ? frankfurterBody("2026-09-24", { EUR: 9.99 }) : null));
     await object.refresh("2026-09-24");
 
-    // A rate for a past date does not change, and its `source` has been
-    // stamped onto expenses converted with it. A second answer for the same
-    // day must not make that stamp quietly wrong.
+    // A rate for a past date does not change, and its `source` has been stamped
+    // onto expenses converted with it.
     const stored = await object.since("2026-09-24", 100);
     expect(stored.find((rate) => rate.currency === "EUR")?.rate).toBe(0.92);
   });
@@ -209,8 +186,7 @@ describe("a backfill", () => {
     expect(await object.backfill("2026-08-01", "INR", at + 2 * 60 * 60 * 1000)).toBe(true);
 
     // Some dates are unanswerable — before a provider's history begins, or a
-    // currency none of them carry. Without a ceiling every device retries them
-    // forever, against a quota.
+    // currency none of them carry.
     let clock = at + 4 * 60 * 60 * 1000;
     for (let attempt = 0; attempt < 3; attempt++) {
       await object.backfill("2026-08-01", "INR", clock);
@@ -239,9 +215,7 @@ describe("the month blobs", () => {
     expect(blob?.rates.map((rate) => rate.currency).sort()).toEqual(["EUR", "GBP", "USD"]);
 
     // Whole rather than merged, because the object holds every row it ever
-    // stored and can rebuild the month from the truth. Read-modify-write
-    // against KV is the exact pattern its last-write-wins semantics cannot
-    // support, which is why this object is a singleton.
+    // stored and can rebuild the month from the truth.
     vi.unstubAllGlobals();
     stubFetch((url) => (url.includes("frankfurter") ? frankfurterBody("2026-09-25", { EUR: 0.93, SGD: 1.29 }) : null));
     await object.refresh();
@@ -289,9 +263,7 @@ describe("the reference route", () => {
   });
 
   it("needs no session, because it is the same for everybody", async () => {
-    // `using (true)` in SQL said the same thing at more length. A session read
-    // here would buy nothing and cost a D1 round trip on the response most
-    // worth caching.
+    // `using (true)` in SQL said the same thing at more length.
     expect((await workerExports.default.fetch(`${ORIGIN}/api/reference`)).status).toBe(200);
   });
 
@@ -310,9 +282,7 @@ describe("the reference route", () => {
 describe("the fx route", () => {
   beforeEach(async () => {
     stubFetch((url) => (url.includes("frankfurter") ? frankfurterBody("2026-09-24", { EUR: 0.92 }) : null));
-    // The route reads KV, so something has to have published into it. The
-    // singleton is shared by the whole test file, which is what production
-    // does too.
+    // The route reads KV, so something has to have published into it.
     await env.FX.getByName("global").refresh();
     vi.unstubAllGlobals();
   });
@@ -344,7 +314,7 @@ describe("the fx route", () => {
   it("serves the recent end of a window too wide to fit, not the old end", async () => {
     // A device asking from six years ago must not get 2020 and an empty page:
     // its high-water mark would stay six years behind and every sync would
-    // fetch the same nothing. The tail is the half it can use.
+    // fetch the same nothing.
     const response = await workerExports.default.fetch(`${ORIGIN}/api/fx?since=2020-01-01`);
     const page = (await response.json()) as FxPage;
 

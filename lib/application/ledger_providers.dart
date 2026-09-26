@@ -31,20 +31,12 @@ Stream<Map<String, Profile>> profilesById(Ref ref) =>
     ref.watch(profileRepositoryProvider).watchAll();
 
 /// The stored profile for a member, when they have an account.
-///
-/// Placeholders have none, which is why this is nullable everywhere it is used
-/// rather than something callers may assume exists.
 @riverpod
 Stream<Profile?> profile(Ref ref, String? profileId) => profileId == null
     ? Stream.value(null)
     : ref.watch(profileRepositoryProvider).watch(profileId);
 
 /// This account's own name and payment handle.
-///
-/// The `profiles` row is the source of truth, not a preference on this device.
-/// That is what makes a rename propagate: co-members can already read each
-/// other's profiles, so the name travels with the next sync instead of being
-/// a copy frozen into whichever group happened to be open when it was typed.
 @riverpod
 Stream<Profile?> myProfile(Ref ref) {
   final accountId = ref.watch(currentAccountIdProvider);
@@ -59,10 +51,6 @@ class MyProfileController extends _$MyProfileController {
   void build() {}
 
   /// Saves both fields together, because the screen edits them together.
-  ///
-  /// Values are built explicitly rather than with `copyWith`, which cannot set
-  /// a nullable field back to null — passing null there means "leave it alone",
-  /// so clearing a payment handle would silently do nothing.
   Future<void> save({required String displayName, String? upiVpa}) async {
     final accountId = ref.read(currentAccountIdProvider);
     if (accountId == null) return;
@@ -81,9 +69,6 @@ class MyProfileController extends _$MyProfileController {
 }
 
 /// Currencies, keyed by code.
-///
-/// Exposed as a map so that no widget is ever more than a lookup away from the
-/// exponent it needs to format an amount correctly.
 @Riverpod(keepAlive: true)
 Stream<Map<String, Currency>> currencies(Ref ref) => ref
     .watch(currencyRepositoryProvider)
@@ -100,12 +85,6 @@ Stream<Group?> group(Ref ref, String groupId) =>
     ref.watch(groupRepositoryProvider).watchGroup(groupId);
 
 /// Everybody who has ever been in the group, departed members included.
-///
-/// [GroupLedger] splits them: rosters and pickers get the active ones, and name
-/// resolution gets all of them. Fetching only the active ones is what made a
-/// departed member's outstanding balance render as "—" — the balances panel
-/// iterates balances, not members, and a member it could not find had no name
-/// to show.
 @riverpod
 Stream<List<Member>> members(Ref ref, String groupId) =>
     ref.watch(groupRepositoryProvider).watchMembers(groupId, includeLeft: true);
@@ -115,11 +94,6 @@ Stream<List<Entry>> entries(Ref ref, String groupId) =>
     ref.watch(entryRepositoryProvider).watchEntries(groupId);
 
 /// Everything a group screen needs, folded once.
-///
-/// Balances and the settlement plan are derived here rather than stored, and
-/// recomputed from the journal on every change. A stored balance has to be kept
-/// in step with every edit, soft delete and late-arriving sync, and when it
-/// drifts there is no way to tell that it has.
 class GroupLedger {
   const GroupLedger({
     required this.group,
@@ -160,27 +134,12 @@ class GroupLedger {
   final Map<String, Profile> profiles;
 
   /// Entries whose payers and shares do not add up to their own total.
-  ///
-  /// Empty in every ordinary case — nothing in this app can write one. It is
-  /// carried on the ledger rather than checked where it is displayed because
-  /// the consequence is otherwise invisible: [balances] would still render, and
-  /// [transfers] would quietly come back short or empty, so the group would
-  /// show what everyone owes and offer no way to settle it.
   final List<Entry> brokenEntries;
 
   /// Whether the balances on this ledger can be trusted to add up.
   bool get isCoherent => brokenEntries.isEmpty;
 
   /// What to call [member], and where to pay them.
-  ///
-  /// A member's own name and payment handle are placeholder storage, used only
-  /// while nobody has claimed the place. Once somebody has, their account
-  /// answers both — one name, one payment identity, edited once on the Account
-  /// screen and true everywhere, including in other people's copies of the
-  /// group.
-  ///
-  /// Falls back to the member row when the profile has not synced yet, which is
-  /// the ordinary state for a few seconds after somebody accepts an invite.
   String nameOfMember(Member member) =>
       memberDisplayName(member, profiles[member.profileId]);
 
@@ -200,10 +159,6 @@ class GroupLedger {
   }
 
   /// Whether [memberId] is square with the group in every currency.
-  ///
-  /// [balances] holds only non-zero positions, so absence is the definition of
-  /// settled — the same one `v_member_balances` uses, and the same one the
-  /// server checks before letting anybody remove somebody else.
   bool isSettledUp(String memberId) =>
       !balances.any((balance) => balance.memberId == memberId);
 
@@ -213,18 +168,10 @@ class GroupLedger {
   }
 
   /// What to print against a change in the activity feed.
-  ///
-  /// [memberId] is null when the change reached the server from something with
-  /// no member row at all. That is recorded rather than dropped -- a change
-  /// nobody can be attributed to still belongs on the record -- so it needs a
-  /// word here, and "someone" is the honest one.
   String nameOfActor(String? memberId) =>
       memberId == null ? 'Someone' : nameOf(memberId);
 
   /// Every member's name, for rendering the per-member lines of a diff.
-  ///
-  /// Past members included: an edit that changed what somebody owed is worth
-  /// reading long after they have left the group.
   Map<String, String> get memberNames => {
     for (final member in [...members, ...pastMembers])
       member.id: nameOfMember(member),
@@ -250,9 +197,6 @@ class GroupLedger {
 }
 
 /// The folded view of a group.
-///
-/// Null until the local group, members, and entries have loaded. Opening a
-/// browser database can take multiple frames; this does not wait for sync.
 @riverpod
 GroupLedger? groupLedger(Ref ref, String groupId) {
   final group = ref.watch(groupProvider(groupId)).value;
@@ -287,14 +231,6 @@ GroupLedger? groupLedger(Ref ref, String groupId) {
 }
 
 /// This device's own balance across every currency, as one estimated figure.
-///
-/// Null whenever an estimate would be meaningless or misleading — no member,
-/// only one currency in play (where the exact per-currency figure is already
-/// the whole answer), or no rate for anything. Callers render nothing in that
-/// case rather than a zero, because "we could not convert this" and "you are
-/// settled" are very different statements to make about someone's money.
-///
-/// Synchronous: every rate it needs is stamped on the entry that used it.
 @riverpod
 EstimatedTotal? groupEstimate(Ref ref, String groupId) {
   final ledger = ref.watch(groupLedgerProvider(groupId));
@@ -320,25 +256,11 @@ EstimatedTotal? groupEstimate(Ref ref, String groupId) {
 }
 
 /// How many entries this device has recorded, across every group.
-///
-/// Drives the prompt to attach an account. Anonymous means one device and no
-/// recovery — on the web, clearing site data destroys it outright — so the ask
-/// has to arrive once there is something worth losing, and never before.
-///
-/// Watched, not counted once. The prompt sits on the group list, which is
-/// mounted for as long as the app is open, so a one-shot count was taken on
-/// the first frame and never taken again: the third expense of a session
-/// arrived and nothing said anything until the next cold start.
 @riverpod
 Stream<int> totalEntryCount(Ref ref) =>
     ref.watch(entryRepositoryProvider).watchTotalCount();
 
 /// What deleting this account would take with it, for the dialog that asks.
-///
-/// "You will lose your data" is ignorable. "The 2 groups only you have an
-/// account in will be deleted" is not, and it is the half people get wrong —
-/// the assumption is that leaving a shared group erases your side of it, when
-/// in fact that side is your co-members' record too and stays exactly as it is.
 @riverpod
 Future<({int solo, int shared})> deletionImpact(Ref ref) async {
   final accountId = ref.watch(currentAccountIdProvider);

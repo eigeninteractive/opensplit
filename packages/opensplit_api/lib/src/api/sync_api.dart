@@ -9,11 +9,12 @@ import 'dart:convert';
 import 'package:opensplit_api/src/deserialize.dart';
 import 'package:dio/dio.dart';
 
-import 'package:opensplit_api/src/model/bootstrap.dart';
 import 'package:opensplit_api/src/model/change_page.dart';
 import 'package:opensplit_api/src/model/error.dart';
+import 'package:opensplit_api/src/model/group_ids.dart';
 import 'package:opensplit_api/src/model/profile.dart';
 import 'package:opensplit_api/src/model/profile_list.dart';
+import 'package:opensplit_api/src/model/profile_lookup.dart';
 import 'package:opensplit_api/src/model/profile_page.dart';
 import 'package:opensplit_api/src/model/profile_update.dart';
 
@@ -22,78 +23,8 @@ class SyncApi {
 
   const SyncApi(this._dio);
 
-  /// Who I am, and which groups to ask
-  ///
-  ///
-  /// Parameters:
-  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
-  /// * [headers] - Can be used to add additional headers to the request
-  /// * [extras] - Can be used to add flags to the request
-  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
-  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
-  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
-  ///
-  /// Returns a [Future] containing a [Response] with a [Bootstrap] as data
-  /// Throws [DioException] if API call or serialization fails
-  Future<Response<Bootstrap>> bootstrap({
-    CancelToken? cancelToken,
-    Map<String, dynamic>? headers,
-    Map<String, dynamic>? extra,
-    ValidateStatus? validateStatus,
-    ProgressCallback? onSendProgress,
-    ProgressCallback? onReceiveProgress,
-  }) async {
-    final _path = r'/api/bootstrap';
-    final _options = Options(
-      method: r'GET',
-      headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
-      validateStatus: validateStatus,
-    );
-
-    final _response = await _dio.request<Object>(
-      _path,
-      options: _options,
-      cancelToken: cancelToken,
-      onSendProgress: onSendProgress,
-      onReceiveProgress: onReceiveProgress,
-    );
-
-    Bootstrap? _responseData;
-
-    try {
-      final rawData = _response.data;
-      _responseData = rawData == null
-          ? null
-          : deserialize<Bootstrap, Bootstrap>(
-              rawData,
-              'Bootstrap',
-              growable: true,
-            );
-    } catch (error, stackTrace) {
-      throw DioException(
-        requestOptions: _response.requestOptions,
-        response: _response,
-        type: DioExceptionType.unknown,
-        error: error,
-        stackTrace: stackTrace,
-      );
-    }
-
-    return Response<Bootstrap>(
-      data: _responseData,
-      headers: _response.headers,
-      isRedirect: _response.isRedirect,
-      requestOptions: _response.requestOptions,
-      redirects: _response.redirects,
-      statusCode: _response.statusCode,
-      statusMessage: _response.statusMessage,
-      extra: _response.extra,
-    );
-  }
-
   /// Everything that changed in one group since a cursor
-  /// &#x60;limit&#x60; counts changes, not rows. Every row written by one call shares a sequence number and a page is only ever cut between numbers, so a device sees a whole write or none of it — it can never observe an expense whose shares have not arrived. Send &#x60;seq&#x60; back as &#x60;since&#x60; next time.
+  /// &#x60;limit&#x60; counts changes, not rows, and a page is cut only between sequence numbers, so a device sees a whole write or none of it. Send &#x60;seq&#x60; back as &#x60;since&#x60; next time.
   ///
   /// Parameters:
   /// * [groupId]
@@ -128,7 +59,18 @@ class SyncApi {
     final _options = Options(
       method: r'GET',
       headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookie',
+            'keyName': 'better-auth.session_token',
+            'where': '',
+          },
+          {'type': 'http', 'scheme': 'bearer', 'name': 'bearer'},
+        ],
+        ...?extra,
+      },
       validateStatus: validateStatus,
     );
 
@@ -180,11 +122,10 @@ class SyncApi {
   }
 
   /// Everybody you share a group with, plus yourself
-  /// The one feed still cursored on a timestamp rather than a sequence number, and honestly so: profiles live in a database that several requests write concurrently, so there is nothing there that can hand out a monotonic integer the way a group&#39;s Durable Object can. Send &#x60;cursor&#x60; and &#x60;cursorId&#x60; back next time.
+  /// Cursored on time, since profiles have no single writer to number them. Send &#x60;cursor&#x60; back as &#x60;after&#x60;.
   ///
   /// Parameters:
-  /// * [since]
-  /// * [sinceId]
+  /// * [after]
   /// * [limit]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
@@ -196,8 +137,7 @@ class SyncApi {
   /// Returns a [Future] containing a [Response] with a [ProfilePage] as data
   /// Throws [DioException] if API call or serialization fails
   Future<Response<ProfilePage>> getProfiles({
-    DateTime? since,
-    String? sinceId,
+    String? after,
     int? limit,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -210,13 +150,23 @@ class SyncApi {
     final _options = Options(
       method: r'GET',
       headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookie',
+            'keyName': 'better-auth.session_token',
+            'where': '',
+          },
+          {'type': 'http', 'scheme': 'bearer', 'name': 'bearer'},
+        ],
+        ...?extra,
+      },
       validateStatus: validateStatus,
     );
 
     final _queryParameters = <String, dynamic>{
-      if (since != null) r'since': since,
-      if (sinceId != null) r'sinceId': sinceId,
+      if (after != null) r'after': after,
       if (limit != null) r'limit': limit,
     };
 
@@ -262,11 +212,92 @@ class SyncApi {
     );
   }
 
-  /// Exactly these profiles, cursor or no cursor
-  /// The one thing the feed structurally cannot do. A cursor orders changes within what you can already see; it cannot surface a row that only just became visible to you. When somebody claims a placeholder, their account may have been named years ago — the row is old, the cursor is past it, and no incremental pull will ever mention it again. Same visibility rule as the feed: ids you cannot see are simply absent.
+  /// The groups this account is still in
+  ///
   ///
   /// Parameters:
-  /// * [ids] - Comma-separated profile ids, at most 200.
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [GroupIds] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<GroupIds>> listGroups({
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/api/groups';
+    final _options = Options(
+      method: r'GET',
+      headers: <String, dynamic>{...?headers},
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookie',
+            'keyName': 'better-auth.session_token',
+            'where': '',
+          },
+          {'type': 'http', 'scheme': 'bearer', 'name': 'bearer'},
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    GroupIds? _responseData;
+
+    try {
+      final rawData = _response.data;
+      _responseData = rawData == null
+          ? null
+          : deserialize<GroupIds, GroupIds>(
+              rawData,
+              'GroupIds',
+              growable: true,
+            );
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<GroupIds>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Exactly these profiles
+  /// For a profile that just became visible (a placeholder was claimed) but is older than the feed&#39;s cursor. Ids you cannot see are absent.
+  ///
+  /// Parameters:
+  /// * [profileLookup]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -276,8 +307,8 @@ class SyncApi {
   ///
   /// Returns a [Future] containing a [Response] with a [ProfileList] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<ProfileList>> getProfilesByIds({
-    required String ids,
+  Future<Response<ProfileList>> lookupProfiles({
+    required ProfileLookup profileLookup,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -285,20 +316,43 @@ class SyncApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/profiles/by-ids';
+    final _path = r'/api/profiles/lookup';
     final _options = Options(
-      method: r'GET',
+      method: r'POST',
       headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookie',
+            'keyName': 'better-auth.session_token',
+            'where': '',
+          },
+          {'type': 'http', 'scheme': 'bearer', 'name': 'bearer'},
+        ],
+        ...?extra,
+      },
+      contentType: 'application/json',
       validateStatus: validateStatus,
     );
 
-    final _queryParameters = <String, dynamic>{r'ids': ids};
+    dynamic _bodyData;
+
+    try {
+      _bodyData = jsonEncode(profileLookup);
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _options.compose(_dio.options, _path),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
 
     final _response = await _dio.request<Object>(
       _path,
+      data: _bodyData,
       options: _options,
-      queryParameters: _queryParameters,
       cancelToken: cancelToken,
       onSendProgress: onSendProgress,
       onReceiveProgress: onReceiveProgress,
@@ -338,7 +392,7 @@ class SyncApi {
   }
 
   /// Your own name and payment handle
-  /// Singular, and with no id in it: the row written is the one the session names. An endpoint that took an id would be an endpoint somebody could point at a stranger&#39;s payment handle. Both fields are required — null clears one — because an optional field that means &#39;leave it alone&#39; cannot be told from a null on the wire, and clearing a payment handle has to be expressible.
+  ///
   ///
   /// Parameters:
   /// * [profileUpdate]
@@ -364,7 +418,18 @@ class SyncApi {
     final _options = Options(
       method: r'PUT',
       headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookie',
+            'keyName': 'better-auth.session_token',
+            'where': '',
+          },
+          {'type': 'http', 'scheme': 'bearer', 'name': 'bearer'},
+        ],
+        ...?extra,
+      },
       contentType: 'application/json',
       validateStatus: validateStatus,
     );

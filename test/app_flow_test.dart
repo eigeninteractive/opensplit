@@ -21,10 +21,6 @@ Future<void> _pumpApp(WidgetTester tester, AppDatabase db) async {
 }
 
 /// Advances the clock in fixed steps instead of using `pumpAndSettle`.
-///
-/// Drift keeps a cleanup timer alive for its query streams, so the tree is
-/// never "settled" by pumpAndSettle's definition and it spins until it times
-/// out. Fixed pumps let animations and stream deliveries land without that.
 Future<void> _settle(WidgetTester tester) async {
   for (var i = 0; i < 25; i++) {
     await tester.pump(const Duration(milliseconds: 40));
@@ -147,10 +143,6 @@ void main() {
     await _settle(tester);
 
     // ---- A settlement is described as a payment, not as a debt -----------
-    //
-    // Ravi was the one owed, so being paid moves his position down — the same
-    // arithmetic an expense would produce, and the reason this row used to read
-    // "you owe ₹1,200.00" about money that had just arrived in his hand.
     await tester.tap(find.text('Expenses'));
     await _settle(tester);
 
@@ -171,15 +163,6 @@ void main() {
     expect(find.text('Nobody owes anybody anything.'), findsOneWidget);
 
     // ---- The record of all of it, with no server anywhere ---------------
-    //
-    // The point of the whole exercise. The authoritative record is the
-    // server's — written by a trigger from the expense it commits, which is
-    // what makes it something a reader can trust rather than something the
-    // editing device said about itself. But it arrives only after a round
-    // trip, and this screen must not be the one screen in a local-first app
-    // that needs a network. So the device also records what it just did, and
-    // that provisional line is what this test sees: no backend exists here at
-    // all, and the feed is still complete.
     await tester.tap(find.byIcon(Icons.history));
     await _settle(tester);
 

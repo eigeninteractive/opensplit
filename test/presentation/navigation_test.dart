@@ -28,9 +28,6 @@ Future<void> _unmount(WidgetTester tester) async {
 }
 
 /// Opens the drawer and picks a destination by name.
-///
-/// Two taps rather than one, which is the trade a drawer makes: the
-/// destinations are out of the way until asked for.
 Future<void> _chooseDestination(WidgetTester tester, String label) async {
   await tester.tap(find.byTooltip('Open navigation menu'));
   await tester.pumpAndSettle();
@@ -73,12 +70,6 @@ void main() {
   // The rule the whole route table is built around: a screen either shows the
   // navigation bar, in which case it is a destination and there is nothing to
   // go back to, or it does not, in which case it was pushed and pops.
-  //
-  // What this replaces: Settings used to be an icon in the app bar that pushed
-  // a route which then had to suppress its own page transition so it would not
-  // look like a drill-down — a screen that was pushed but was not on top of
-  // anything, with a back arrow that behaved differently from every other back
-  // arrow in the app.
   group('destinations are not pushes', () {
     testWidgets(
       'the phone layout has one menu, not a settings button beside it',
@@ -106,10 +97,10 @@ void main() {
 
       await _chooseDestination(tester, 'Settings');
 
-      // At least one, not exactly one: Settings is under a Material 3 large
-      // top app bar, and SliverAppBar.large puts its headline in both the
-      // collapsed title slot and the expanded FlexibleSpaceBar, so the word
-      // legitimately appears twice while the bar is open.
+      // At least one, not exactly one: Settings is under a Material 3 large top
+      // app bar, and SliverAppBar.large puts its headline in both the collapsed
+      // title slot and the expanded FlexibleSpaceBar, so the word legitimately
+      // appears twice while the bar is open.
       expect(find.widgetWithText(AppBar, 'Settings'), findsAtLeastNWidgets(1));
       expect(find.byTooltip('Open navigation menu'), findsOneWidget);
       expect(

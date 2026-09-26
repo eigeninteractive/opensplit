@@ -23,7 +23,7 @@ class GroupsApi {
   const GroupsApi(this._dio);
 
   /// Add somebody who has never opened the app
-  /// A placeholder is a full member: they can pay, hold a balance and be settled with. Claiming an invite later sets one column and moves no money.
+  ///
   ///
   /// Parameters:
   /// * [groupId]
@@ -56,7 +56,18 @@ class GroupsApi {
     final _options = Options(
       method: r'POST',
       headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookie',
+            'keyName': 'better-auth.session_token',
+            'where': '',
+          },
+          {'type': 'http', 'scheme': 'bearer', 'name': 'bearer'},
+        ],
+        ...?extra,
+      },
       contentType: 'application/json',
       validateStatus: validateStatus,
     );
@@ -113,7 +124,7 @@ class GroupsApi {
   }
 
   /// Make a group, and its creator&#39;s place in it
-  /// Idempotent for the account that made it, so a retry whose response was lost returns the same group rather than refusing.
+  /// Idempotent for its creator, so a retry whose response was lost returns the same group.
   ///
   /// Parameters:
   /// * [groupCreate]
@@ -139,7 +150,18 @@ class GroupsApi {
     final _options = Options(
       method: r'POST',
       headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookie',
+            'keyName': 'better-auth.session_token',
+            'where': '',
+          },
+          {'type': 'http', 'scheme': 'bearer', 'name': 'bearer'},
+        ],
+        ...?extra,
+      },
       contentType: 'application/json',
       validateStatus: validateStatus,
     );
@@ -196,7 +218,7 @@ class GroupsApi {
   }
 
   /// Rename, archive or change a setting
-  /// Every editable field, every time. There are no fields for &#x60;id&#x60;, &#x60;createdAt&#x60; or &#x60;createdBy&#x60;, which is why nothing needs to forbid rewriting them.
+  ///
   ///
   /// Parameters:
   /// * [groupId]
@@ -229,7 +251,18 @@ class GroupsApi {
     final _options = Options(
       method: r'PUT',
       headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookie',
+            'keyName': 'better-auth.session_token',
+            'where': '',
+          },
+          {'type': 'http', 'scheme': 'bearer', 'name': 'bearer'},
+        ],
+        ...?extra,
+      },
       contentType: 'application/json',
       validateStatus: validateStatus,
     );
@@ -286,7 +319,7 @@ class GroupsApi {
   }
 
   /// Change a name, a payment handle, or whether somebody is still here
-  /// Your own row and any placeholder are editable; another account holder&#39;s are not — including by whoever made the group. Leaving is always yours to do; removing somebody else requires them to be settled in every currency.
+  /// Your own row and any placeholder are editable; another account holder&#39;s are not. Leaving is always yours to do; removing somebody else requires them to be settled in every currency.
   ///
   /// Parameters:
   /// * [groupId]
@@ -328,7 +361,18 @@ class GroupsApi {
     final _options = Options(
       method: r'PUT',
       headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookie',
+            'keyName': 'better-auth.session_token',
+            'where': '',
+          },
+          {'type': 'http', 'scheme': 'bearer', 'name': 'bearer'},
+        ],
+        ...?extra,
+      },
       contentType: 'application/json',
       validateStatus: validateStatus,
     );

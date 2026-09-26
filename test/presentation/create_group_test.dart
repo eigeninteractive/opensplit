@@ -27,8 +27,7 @@ Future<void> _pump(WidgetTester tester, AppDatabase db) async {
 /// still pending" assertion during teardown.
 Future<void> _unmount(WidgetTester tester) async {
   // Long enough for anything the app scheduled on a delay to have fired while
-  // there is still a tree to run it in. Drift keeps a cleanup timer per query
-  // stream, and the binding treats one still outstanding at teardown as a leak.
+  // there is still a tree to run it in.
   await tester.pump(const Duration(seconds: 30));
   await tester.pumpWidget(const SizedBox.shrink());
   await tester.pump(Duration.zero);
@@ -82,8 +81,8 @@ void main() {
 
       // The second group is where this used to go wrong: the field came back
       // pre-filled from the account, and a name that differed from it was
-      // written back before the group was created — so a failure there lost
-      // the group while still having changed the name.
+      // written back before the group was created — so a failure there lost the
+      // group while still having changed the name.
       await tester.tap(find.byIcon(Icons.arrow_back));
       await _settle(tester);
       await tester.tap(find.byType(FloatingActionButton));

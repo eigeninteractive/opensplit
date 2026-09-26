@@ -253,9 +253,7 @@ void main() {
   });
 
   // What this guards: every one of these used to be a one-shot query, so the
-  // Insights screen answered as of the moment it was opened. An expense added
-  // in the pane beside it — or arriving on a sync while it sat open — left
-  // totals that quietly disagreed with the ledger they came from.
+  // Insights screen answered as of the moment it was opened.
   group('is live, not a snapshot', () {
     test('a new expense reaches an open query', () async {
       final totals = analytics

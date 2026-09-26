@@ -29,12 +29,6 @@ class FailedWrite {
 }
 
 /// Pending local writes waiting to reach the server.
-///
-/// Each mutation and its queue item are committed in one local transaction.
-/// The UI is answered from local state immediately and never waits on a
-/// network round trip, which is what makes the app usable with no connection
-/// at all — and what keeps "add expense" under the ten seconds it has before
-/// people stop bothering.
 class OutboxQueue {
   OutboxQueue(this._db, {DateTime Function()? clock})
     : _clock = clock ?? DateTime.now;
@@ -45,14 +39,6 @@ class OutboxQueue {
   final _queued = StreamController<void>.broadcast();
 
   /// Fires whenever a local write joins the queue.
-  ///
-  /// The one wire that makes "save" mean "and tell everybody". Every mutation
-  /// in the app funnels through [enqueue], so listening here covers expenses,
-  /// settlements, group and member edits and your own profile — and covers
-  /// whatever is added next without anybody remembering to.
-  ///
-  /// Carries no payload. A listener's job is to drain the queue, and the queue
-  /// already knows what is in it.
   Stream<void> get queued => _queued.stream;
 
   Future<void> dispose() => _queued.close();
@@ -62,16 +48,6 @@ class OutboxQueue {
 
   /// Marks [targetId] as dirty, coalescing with any item already waiting for
   /// the same row.
-  ///
-  /// Coalescing rather than appending is what makes repeated offline edits
-  /// cheap and keeps the queue bounded by the number of rows touched, not the
-  /// number of times they were touched. It is also why this queue is a set of
-  /// dirty rows rather than a log of operations — see [due].
-  ///
-  /// [Outbox.createdAt] is deliberately left alone when the row is already
-  /// queued: it records when the row first went dirty, and re-dirtying a row is
-  /// not the row becoming new. Rewriting it would let a second edit reorder a
-  /// row ahead of something it depends on.
   Future<void> enqueue(OutboxTarget target, String targetId) async {
     if (!(await readSyncSession(_db)).enabled) {
       throw StateError('This account session has ended.');
@@ -87,9 +63,9 @@ class OutboxQueue {
             createdAt: _clock(),
           ),
           onConflict: DoUpdate(
-            // A fresh change deserves an immediate attempt even if a previous one
-            // had been backed off, or set aside as a dead letter: whatever the
-            // server refused may be exactly what this edit changed.
+            // A fresh change deserves an immediate attempt even if a previous
+            // one had been backed off, or set aside as a dead letter: whatever
+            // the server refused may be exactly what this edit changed.
             (_) => OutboxCompanion(
               revision: Value(revision),
               attempts: Value(0),
@@ -104,12 +80,6 @@ class OutboxQueue {
   }
 
   /// Items ready to be attempted now, in an order the server can accept.
-  ///
-  /// Sorted by the kind of row first ([OutboxTarget]'s order: a group before
-  /// its members, members before the entries that name them), then by age.
-  /// The queue holds dirty rows rather than a log of changes, so the only
-  /// ordering that matters is the reference one. Age first would let a second
-  /// edit to a new group move it behind its own creator.
   Future<List<OutboxRow>> due({int limit = 100}) async {
     final now = _clock();
     final rows = await _pendingInPushOrder();
@@ -143,9 +113,6 @@ class OutboxQueue {
   }
 
   /// The next eligible write's retry time, or `null` if none remain.
-  ///
-  /// A newly queued write is due now. Reading the persisted deadline also
-  /// restores retry scheduling after the app is restarted during backoff.
   Future<DateTime?> nextAttemptAt() async {
     final row = (await _pendingInPushOrder()).firstOrNull;
     return row == null ? null : row.nextAttemptAt ?? _clock();
@@ -164,12 +131,6 @@ class OutboxQueue {
   )..where((t) => t.deadLetteredAt.isNotNull())).get();
 
   /// The same, described, and as they happen.
-  ///
-  /// A stream rather than a one-shot read because this is the only path by
-  /// which anyone ever learns that something they recorded is not going to
-  /// reach the rest of the group. Until it reaches a screen, the row sits on
-  /// this device looking exactly like a saved expense, and the first symptom is
-  /// two people reading different balances weeks later.
   Stream<List<FailedWrite>> watchDeadLetters() {
     final query = _db.select(_db.outbox)
       ..where((t) => t.deadLetteredAt.isNotNull())
@@ -213,12 +174,6 @@ class OutboxQueue {
   }
 
   /// Puts refused writes back in the queue.
-  ///
-  /// "Permanent" only ever meant permanent against the server as it stood: a
-  /// membership row that had not been pushed yet, a group the person was
-  /// removed from and added back to, a guard since corrected. Those change,
-  /// and when they do this is the only thing standing between the write and
-  /// the server.
   Future<int> retryDeadLetters() async {
     return (_db.update(
       _db.outbox,
@@ -251,16 +206,6 @@ class OutboxQueue {
       (_db.delete(_db.outbox)..where((t) => _sameEdit(t, item))).go();
 
   /// Records a failed attempt and schedules the next one.
-  ///
-  /// A [permanent] failure — a violated invariant, a permission denial — is
-  /// set aside rather than retried: retrying cannot change the answer, and a
-  /// poisoned item left in the queue would block everything behind it forever.
-  /// It is kept, not deleted, so that a write which never reached the server
-  /// can still be accounted for.
-  ///
-  /// A stale write is neither retried nor kept here — see [EntryConflicts]. It
-  /// leaves the queue entirely, because what is left to do about it is not a
-  /// send.
   Future<void> fail(OutboxRow item, String error, {bool permanent = false}) {
     final update = _db.update(_db.outbox)..where((t) => _sameEdit(t, item));
     if (permanent) {

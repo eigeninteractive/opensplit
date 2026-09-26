@@ -202,9 +202,7 @@ void main() {
       expect(edited.id, original.id);
       expect(edited.createdAt, original.createdAt);
       expect(edited.clientKey, original.clientKey);
-      // A local edit moves no version. `seq` is only ever issued by the
-      // server, so it still says what the server last confirmed — which is
-      // exactly the base this edit will be judged against when it is pushed.
+      // A local edit moves no version.
       expect(edited.seq, original.seq);
       expect(edited.splitKind, SplitKind.shares);
 
@@ -239,8 +237,8 @@ void main() {
       expect(withDeleted, hasLength(1));
       expect(withDeleted.single.isDeleted, isTrue);
       // Likewise for a soft delete: the base has to survive it, because
-      // deleting always moves money and the server refuses one composed
-      // against a version it no longer holds.
+      // deleting always moves money and the server refuses one composed against
+      // a version it no longer holds.
       expect(withDeleted.single.seq, entry.seq);
       expect(foldBalances(withDeleted), isEmpty);
     });

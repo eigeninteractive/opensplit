@@ -13,7 +13,7 @@
     // would turn a regeneration into a drift failure. `worker-configuration.d.ts` is
     // wrangler's. `package.json` is npm's — it rewrites it with two-space indent on every
     // install, which is a fight with no winner.
-    "includes": ["**", "!**/worker-configuration.d.ts", "!migrations/meta", "!src/do/migrations", "!src/auth-schema.ts", "!package.json", "!package-lock.json"]
+    "includes": ["**", "!**/worker-configuration.d.ts", "!migrations/meta", "!src/do/*/migrations", "!src/auth-schema.ts", "!package.json", "!package-lock.json"]
   },
   "formatter": {
     "enabled": true,

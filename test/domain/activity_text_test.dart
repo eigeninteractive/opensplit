@@ -14,9 +14,7 @@ void main() {
         currency: rupee,
       );
 
-      // The whole reason this function exists. The column holds minor units,
-      // so an unrendered diff says "from 40000 to 30000" for what everybody
-      // involved remembers as ₹400 and ₹300.
+      // The whole reason this function exists.
       expect(line, 'the amount, from ₹400.00 to ₹300.00');
     });
 
@@ -74,9 +72,7 @@ void main() {
       expect(line, 'the amount, from 40000 to 30000');
     });
 
-    // The lines the whole redesign exists to make possible. A bill re-split
-    // without its total moving changes no number a reader would think to
-    // check, so this sentence is the only place the money shows up.
+    // The lines the whole redesign exists to make possible.
     test('names whose share moved, and by how much', () {
       final line = describeChange(
         const FieldChange(field: 'share:m1', from: '20000', to: '30000'),

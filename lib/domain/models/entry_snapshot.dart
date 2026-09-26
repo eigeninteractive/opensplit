@@ -4,11 +4,6 @@ import '../calendar_date.dart';
 import 'entry.dart';
 
 /// The after-image the server records for [entry], computed on the device.
-///
-/// Used for the provisional feed line this device writes before its change
-/// has reached the server; the server's own replaces it on the next pull.
-/// Payers and shares are sorted by member, as the server sorts them, so the
-/// two diff identically.
 api.EntrySnapshot snapshotOf(Entry entry) => api.EntrySnapshot(
   kind: entry.kind,
   description: entry.description,

@@ -17,10 +17,6 @@ class StaleEntryException implements Exception {
 }
 
 /// Money actually put down by one member for an entry.
-///
-/// This is a list rather than a `paid_by` column because "I got the food, you
-/// got the drinks" is an ordinary bill, and it is where simpler models fall
-/// over.
 @freezed
 abstract class EntryPayer with _$EntryPayer {
   const factory EntryPayer({
@@ -30,9 +26,6 @@ abstract class EntryPayer with _$EntryPayer {
 }
 
 /// What one member owes for an entry.
-///
-/// Carries both the resolved [amountMinor] and the [weightMicros] rule that
-/// produced it. See [ResolvedShare] for why both are kept.
 @freezed
 abstract class EntryShare with _$EntryShare {
   const factory EntryShare({
@@ -46,9 +39,6 @@ abstract class EntryShare with _$EntryShare {
 
 /// A single financial fact: an expense someone paid, or a settlement between
 /// two members, with its payers and shares.
-///
-/// A settlement is one payer and one share and folds through the same balance
-/// path; it is excluded from spend analytics.
 @freezed
 abstract class Entry with _$Entry {
   const factory Entry({
@@ -75,10 +65,6 @@ abstract class Entry with _$Entry {
 
     /// Rate from [currency] to the group's default currency, snapshotted when
     /// the entry was created.
-    ///
-    /// Display only. It never enters the balance fold, which is why a double is
-    /// acceptable here and nowhere else in this file. Never re-fetched for a
-    /// historical entry — the rate on the day is a fact about the transaction.
     double? fxRate,
     String? fxSource,
     DateTime? fxAt,
@@ -108,10 +94,6 @@ abstract class Entry with _$Entry {
   bool get isSpend => kind == EntryKind.expense && !isDeleted;
 
   /// The invariant, checked locally: payers and shares each sum to the total.
-  ///
-  /// The server enforces this too, in the group's Durable Object. Checking it
-  /// here as well is not redundant — it fails at the point the bug happened,
-  /// with the entry in hand, instead of as a refusal one sync later.
   bool get isBalanced {
     final paid = payers.fold(0, (sum, p) => sum + p.amountMinor);
     final owed = shares.fold(0, (sum, s) => sum + s.amountMinor);

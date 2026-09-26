@@ -27,20 +27,13 @@ class GroupListScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Archived groups are pulled in here rather than queried separately, so
-    // the list and the "archived" row at the bottom of it are two readings of
-    // one stream and cannot disagree about which group is where.
+    // Archived groups are pulled in here rather than queried separately, so the
+    // list and the "archived" row at the bottom of it are two readings of one
+    // stream and cannot disagree about which group is where.
     final source = groupsProvider(includeArchived: true);
 
     // Leaves a note for the next cold start, so the web loader knows whether to
-    // draw group cards or just the chrome. See [recordHasGroups] — it does
-    // nothing on Android.
-    //
-    // A listener rather than a line in the body, because it writes to browser
-    // storage and a build has to be free of side effects. `ref.listen` fires on
-    // change, which is every occasion that matters here: the provider is
-    // created when this screen mounts and goes from loading to loaded while it
-    // is watching.
+    // draw group cards or just the chrome.
     ref.listen(source, (_, next) {
       final loaded = next.value;
       if (loaded != null) {
@@ -59,12 +52,9 @@ class GroupListScreen extends ConsumerWidget {
     return DestinationScaffold(
       titleWidget: const BrandLockup(),
       actions: [if (kIsWeb) const SyncRefreshButton.everything()],
-      // Disabled until the device has learned what a currency is, which is
-      // only ever true during a brand-new install's first sweep or on a
-      // rebuilt device with no connection. A group has to name a currency and
-      // `groups.default_currency` references the table, so offering this
-      // earlier would not create a group -- it would fail a foreign key
-      // underneath somebody who had done nothing wrong.
+      // Disabled until the device has learned what a currency is, which is only
+      // ever true during a brand-new install's first sweep or on a rebuilt
+      // device with no connection.
       floatingActionButton: FloatingActionButton.extended(
         onPressed: ref.watch(referenceDataProvider).value ?? false
             ? () => showCreateGroupSheet(context)
@@ -100,10 +90,7 @@ abstract final class _GroupList {
     required int archivedCount,
   }) {
     // Four leading slots, each of which renders as nothing until it has
-    // something to say. The refused-write banner comes first: it is the one
-    // that means data is already wrong somewhere. The overtaken-edit banner
-    // follows, because it means the group is right and this device's last
-    // change to it was not.
+    // something to say.
     const leading = 4;
     final empty = groups.isEmpty;
     final rows = empty ? 1 : groups.length;
@@ -113,8 +100,8 @@ abstract final class _GroupList {
       SliverPadding(
         padding: const EdgeInsets.fromLTRB(0, 8, 0, 96),
         // Built lazily rather than assembled into a list, because every tile
-        // subscribes to its own group's ledger: off-screen groups should not
-        // be folding balances.
+        // subscribes to its own group's ledger: off-screen groups should not be
+        // folding balances.
         sliver: SliverList.separated(
           itemCount: leading + rows + trailing,
           separatorBuilder: (_, _) => const SizedBox(height: 8),
@@ -143,10 +130,6 @@ abstract final class _GroupList {
 }
 
 /// The way to the groups that are no longer in this list.
-///
-/// At the bottom, and only when there is something behind it. An archived
-/// group is by definition one nobody is thinking about, so it earns a row
-/// rather than a permanent control in the app bar.
 class _ArchivedRow extends StatelessWidget {
   const _ArchivedRow({required this.count});
 
@@ -255,13 +238,6 @@ class _Summary extends StatelessWidget {
     final words = '$lead $figures';
 
     // The words in the app's own face and the figures in its tabular one.
-    //
-    // This line is the most-read number in the app and was the one place not
-    // set in that face, so a column of group cards had its amounts wandering
-    // by a digit's width while every other screen held them still. Setting the
-    // whole string in JetBrains Mono would fix the figures by putting the
-    // sentence around them in a monospace too, which is why it is a span
-    // rather than a style on the Text.
     final base = (style ?? const TextStyle()).copyWith(
       color: balanceColor(scheme, net),
       fontWeight: FontWeight.w600,

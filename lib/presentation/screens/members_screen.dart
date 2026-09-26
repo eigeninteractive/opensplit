@@ -39,10 +39,7 @@ class MembersScreen extends ConsumerWidget {
                 padding: const EdgeInsets.only(bottom: 96),
                 children: [
                   // Above the list rather than in a menu, because it is what
-                  // somebody who has just made a group came here to do. The
-                  // per-member "Send invite link" below is still the right
-                  // thing when you know exactly who one place belongs to; this
-                  // is the one you paste into a chat.
+                  // somebody who has just made a group came here to do.
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                     child: FilledButton.tonalIcon(
@@ -96,29 +93,16 @@ class MembersScreen extends ConsumerWidget {
                         },
                         // Only placeholders can be renamed or given a payment
                         // handle here, and that is not a permission rule — it
-                        // is what the fields are. A name and a UPI ID belong to
-                        // an account, edited once on the Account screen and
-                        // true in every group at once. The member row holds
-                        // them only for somebody who has no account to hold
-                        // them yet, which is exactly a placeholder.
-                        //
-                        // Removing and renaming still mirror the group's
-                        // Durable Object: your own row and any placeholder,
-                        // and removing somebody else only once they are
-                        // settled in every currency. Offering more than that
-                        // would produce a menu whose items fail.
+                        // is what the fields are.
                         itemBuilder: (context) {
                           final mine = member.id == ledger.me?.id;
 
-                          // Your own row, or a placeholder's. A claimed
-                          // member's name and handle are theirs — the server
-                          // refuses anybody else, including whoever made the
-                          // group.
+                          // Your own row, or a placeholder's.
                           final editable = member.isPlaceholder || mine;
 
                           // Removing somebody also cuts off their access to the
                           // group, so it is offered only once nothing is owed
-                          // either way. Leaving is separate, and always yours.
+                          // either way.
                           final removable =
                               !mine && ledger.isSettledUp(member.id);
 
@@ -195,10 +179,6 @@ class MembersScreen extends ConsumerWidget {
   }
 
   /// Records a UPI handle for a member of this group.
-  ///
-  /// Available for everyone, not just placeholders: the person who set up the
-  /// group often knows a flatmate's UPI ID long before that flatmate gets round
-  /// to filling in their own profile.
   Future<void> _setUpi(
     BuildContext context,
     WidgetRef ref,
@@ -278,18 +258,6 @@ class MembersScreen extends ConsumerWidget {
 }
 
 /// Asks for a person's name, in a sheet rather than a dialog.
-///
-/// A bottom sheet because that is what every other piece of text entry in this
-/// app opens — creating a group is one — and because of what the dialog kept
-/// doing to the sentence underneath the field. `helperText` is one line by
-/// default and ellipsises in silence, so "They do not need the app" was being
-/// cut off mid-clause: the one line explaining that a placeholder is a real
-/// member, truncated inside the dialog that creates one. It was capped at three
-/// lines, which fixed that instance and left the shape that caused it.
-///
-/// A sheet is also the right surface on a phone for something with a keyboard
-/// attached. It rises with the keyboard instead of being squeezed by it, which
-/// is what `viewInsets` below is doing.
 Future<String?> _promptForName(
   BuildContext context, {
   required String title,
@@ -376,11 +344,6 @@ class _NameSheetState extends State<_NameSheet> {
 }
 
 /// Collects a UPI ID, validating it before it is stored.
-///
-/// Validated here as well as in the repository and again by a check constraint
-/// on the server. A handle that is wrong is worse than one that is missing:
-/// the payment app opens, looks entirely normal, and the money goes nowhere or
-/// to a stranger.
 class _UpiDialog extends StatefulWidget {
   const _UpiDialog({required this.controller, required this.displayName});
 

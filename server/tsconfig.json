@@ -1,39 +1,23 @@
 {
-  // The Worker itself. Nothing in here runs in Node, so Node's types are
-  // deliberately absent: `@types/node` declares its own `crypto`, `console`,
-  // `Blob` and `AbortController`, which are not quite workerd's, and letting
-  // both into one program means code is checked against whichever won.
-  //
-  // Build-time files (vitest.config.ts, drizzle.*.config.ts, scripts/) do run
-  // in Node and live in tsconfig.node.json. Tests run in workerd and live in
-  // test/tsconfig.json.
+  // The Worker, checked against workerd types only (no @types/node). Node-run files use
+  // tsconfig.node.json; tests use test/tsconfig.json.
   "compilerOptions": {
     "target": "es2024",
     "lib": ["es2024"],
     "module": "es2022",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
-    // drizzle-kit emits `src/do/migrations/migrations.js` — the journal plus
-    // one import per migration — and regenerates it whenever a migration is
-    // added. Hand-writing a typed equivalent would be a second list to keep in
-    // step, which is exactly the drift the generator exists to remove, so the
-    // generated file is imported as it is. `checkJs` stays off: it is not ours
-    // to fix, and `src/sql.d.ts` is what gives its `.sql` imports a type.
+    // For drizzle-kit's generated migrations.js; `src/sql.d.ts` types its `.sql` imports.
     "allowJs": true,
     "noEmit": true,
     "isolatedModules": true,
-    // Forces `import type` for type-only imports, so what is erased at build
-    // time is stated rather than inferred.
     "verbatimModuleSyntax": true,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
-    // `@better-auth/core` references `bun:sqlite`, a module that does not exist
-    // outside Bun. Nothing here can fix that, and our own code is still checked
-    // against library types either way: this skips checking declaration files
-    // against themselves, not our use of them.
+    // Better Auth's declarations reference `bun:sqlite`.
     "skipLibCheck": true,
     "types": ["./worker-configuration.d.ts"]
   },

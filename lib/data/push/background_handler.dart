@@ -2,9 +2,9 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:opensplit_api/opensplit_api.dart' show PushData;
 
 import '../../application/entry_notification.dart';
-import '../../domain/models/kinds.dart';
 import '../../config.dart';
 import '../auth/session_store.dart';
 import '../local/database.dart';
@@ -14,45 +14,20 @@ import '../repositories/drift_entry_repository.dart';
 import '../repositories/drift_group_repository.dart';
 import '../repositories/drift_profile_repository.dart';
 import '../sync/api_client.dart';
-import '../sync/remote_ledger_api.dart';
 import '../sync/outbox_queue.dart';
 import '../sync/sync_engine.dart';
 import '../sync/sync_session.dart';
 import 'notification_channel.dart';
+import 'push_data.dart';
 
 /// Handles a wake-up that arrives while the app is backgrounded or not running.
-///
-/// Android only. Everything below has to be rebuilt from nothing because this
-/// runs in a background isolate with its own memory: no Riverpod container, no
-/// open database, no Firebase, no session. The alternative — doing
-/// nothing here, which is what a stub background handler amounts to — means the
-/// only notifications anyone ever sees are the ones that arrive while they are
-/// already looking at the app, which is the one case a notification is not for.
-///
-/// The message itself carries nothing but ids. The device pulls the delta and
-/// then says what happened, using the same Dart the screens use, so a banner
-/// and the app can never disagree about an amount. That is the whole reason
-/// this is worth the cost of a second database connection.
-///
-/// On the web there is no equivalent: a service worker cannot run Dart, so
-/// `web/firebase-messaging-sw.js` stays silent and web push only wakes the tab.
-///
-/// Failures are swallowed. A notification that cannot be built is not worth
-/// crashing a background isolate over, and there is nobody to show an error to.
-/// Whether this isolate has already stood the SDKs up.
-///
-/// An isolate is reused across messages, and `Firebase.initializeApp` throws
-/// when called a second time. Without this the first expense of a burst
-/// notifies and the rest fail silently, which is a hard thing to notice and a
-/// harder one to reproduce.
 bool _firebaseReady = false;
 
 @pragma('vm:entry-point')
 Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
-  final groupId = message.data['group_id'];
-  final subjectId = message.data['subject_id'];
-  final kind = fromWire(EventKind.values, message.data['kind'] as String?);
-  if (groupId is! String || subjectId is! String || kind == null) return;
+  final push = readPushData(message.data);
+  if (push == null) return;
+  final PushData(:groupId, :subjectId, :kind) = push;
   if (!hasPush || !hasBackend) return;
 
   // Platform channels are available in this isolate, but only once the binding
@@ -79,18 +54,13 @@ Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
     // isolate may have woken with no connectivity at all, and asking the server
     // who it is before it can open a database would make a notification depend
     // on a round trip the sync below is about to make anyway.
-    //
-    // It never refreshes or rotates anything. The foreground owns the session,
-    // and a second writer could otherwise restore one after a sign-out.
     final session = await readBackgroundSession();
     if (session == null) return;
     final profileId = session.account.id;
 
     // A second connection to the same file — the same file, because the ledger
     // is named after the account and this isolate resolved the same account
-    // from the same stored session. SQLite is built for this: the database is
-    // in WAL mode with a busy timeout, set in AppDatabase, and the app is by
-    // definition idle while this runs.
+    // from the same stored session.
     db = AppDatabase.forAccount(profileId, resumeSession: false);
     final syncing = await readSyncSession(db);
     if (!syncing.enabled) return;
@@ -98,13 +68,9 @@ Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
     outbox = OutboxQueue(db);
     final engine = SyncEngine(
       db: db,
-      // The background isolate builds its own client: it has no Riverpod
-      // container, and the foreground's is not reachable from here. The token
-      // is the one just read — this is Android, where there is no cookie jar an
-      // isolate could borrow.
-      remote: CloudflareLedgerApi(
-        buildApiClient(baseUrl: apiBaseUrl, token: () async => session.token),
-      ),
+      // Its own client with the stored token: no Riverpod container here, and
+      // no cookie jar on Android.
+      client: buildApiClient(baseUrl: apiBaseUrl, token: session.token),
       outbox: outbox,
     );
 

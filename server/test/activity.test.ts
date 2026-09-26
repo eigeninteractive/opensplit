@@ -1,17 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { isEntryEvent, isGroupEvent, isMemberEvent } from "../src/schemas/ledger";
-import { evenly, expense, freshId, makeGroup, makeGroupOfTwo, ok, PRIYA, RAVI, stub } from "./group";
+import { BY_INVITE, editGroup, editMember, evenly, expense, freshId, makeGroup, makeGroupOfTwo, ok, PRIYA, RAVI, stub } from "./group";
 
-/**
- * Activity events: that one save produces one event, that nothing produces
- * none, and that the actor on it is the person who made the change.
- *
- * The record exists because editing an expense in place is the right model and
- * is silently destructive on its own: somebody who agreed a bill was ₹400 and
- * settled on it would watch their balance move with nothing anywhere to say
- * why, or who did it. That is a trust problem rather than a data one.
- */
+/** Activity events: that one save produces one event, that nothing produces none, and that the actor on it is the person who made the change. */
 
 async function eventsOf(groupId: string, profileId: string) {
   return ok(await stub(groupId).changes(profileId, 0, 500)).events;
@@ -24,9 +15,9 @@ describe("recording an expense", () => {
 
     /**
      * The old version fired a deferred trigger once per affected row across
-     * three tables — an entry plus four shares was five firings — and needed
-     * a payload comparison to collapse them back into one. A single call
-     * inside a single transaction writes one.
+     * three tables — an entry plus four shares was five firings — and needed a
+     * payload comparison to collapse them back into one. A single call inside a
+     * single transaction writes one.
      */
     const entryEvents = (await eventsOf(groupId, RAVI)).filter((event) => event.kind === "entry");
     expect(entryEvents).toHaveLength(1);
@@ -83,22 +74,22 @@ describe("recording an expense", () => {
   });
 
   /**
-   * The newest snapshot is, by construction, identical to the expense's
-   * current row. That redundancy is deliberate: it makes a mismatch a tamper
-   * alarm rather than a merge problem, and it lets the history be read without
+   * The newest snapshot is, by construction, identical to the expense's current
+   * row. That redundancy is deliberate: it makes a mismatch a tamper alarm
+   * rather than a merge problem, and it lets the history be read without
    * joining against the mutable table it exists to audit.
    */
   it("leaves the newest snapshot identical to the live expense", async () => {
     const { groupId, ravi, priya } = await makeGroup();
     const entry = ok(await stub(groupId).upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 777), RAVI));
 
-    const line = (await eventsOf(groupId, RAVI)).filter(isEntryEvent).findLast((event) => event.subjectId === entry.id);
+    const line = (await eventsOf(groupId, RAVI)).filter((event) => event.entry !== null).findLast((event) => event.subjectId === entry.id);
     if (!line) expect.unreachable("The expense left no snapshot.");
 
-    expect(line.payload.amountMinor).toBe(entry.amountMinor);
-    expect(line.payload.description).toBe(entry.description);
-    expect(line.payload.deletedAt).toBe(entry.deletedAt);
-    expect(line.payload.payers).toEqual(entry.payers);
+    expect(line.entry?.amountMinor).toBe(entry.amountMinor);
+    expect(line.entry?.description).toBe(entry.description);
+    expect(line.entry?.deletedAt).toBe(entry.deletedAt);
+    expect(line.entry?.payers).toEqual(entry.payers);
   });
 
   it("records a deletion, and the undo after it", async () => {
@@ -111,9 +102,9 @@ describe("recording an expense", () => {
     ok(await object.restoreEntry(id, deleted.seq, RAVI));
 
     const snapshots = (await eventsOf(groupId, RAVI))
-      .filter(isEntryEvent)
+      .filter((event) => event.entry !== null)
       .filter((event) => event.subjectId === id)
-      .map((event) => event.payload.deletedAt);
+      .map((event) => event.entry?.deletedAt);
 
     expect(snapshots).toHaveLength(3);
     expect(snapshots[0]).toBeNull();
@@ -133,17 +124,17 @@ describe("member and group life", () => {
 
   it("names both sides of a rename, because that is where the whole meaning is", async () => {
     const { groupId, priya } = await makeGroup();
-    ok(await stub(groupId).updateMember(priya.id, { displayName: "Priya S" }, RAVI));
+    ok(await editMember(groupId, priya.id, RAVI, { displayName: "Priya S" }));
 
-    const line = (await eventsOf(groupId, RAVI)).filter(isMemberEvent).findLast((event) => event.kind === "member_renamed");
-    expect(line?.payload.displayName).toBe("Priya S");
-    expect(line?.payload.previousName).toBe("Priya");
+    const line = (await eventsOf(groupId, RAVI)).filter((event) => event.member !== null).findLast((event) => event.kind === "member_renamed");
+    expect(line?.member?.displayName).toBe("Priya S");
+    expect(line?.member?.previousName).toBe("Priya");
   });
 
   it("attributes a join to nobody, which is correct rather than a gap", async () => {
     const { groupId, priya } = await makeGroup();
     const invite = ok(await stub(groupId).createInvite(priya.id, RAVI));
-    ok(await stub(groupId).join(invite.token, PRIYA));
+    ok(await stub(groupId).join(invite.token, PRIYA, BY_INVITE));
 
     const line = (await eventsOf(groupId, RAVI)).findLast((event) => event.kind === "member_joined");
     expect(line?.actorId).toBeNull();
@@ -152,15 +143,15 @@ describe("member and group life", () => {
 
   it("records a rename and an archive from one patch as two things, not one", async () => {
     const { groupId } = await makeGroup();
-    ok(await stub(groupId).update({ name: "Goa, closed", archivedAt: new Date().toISOString() }, RAVI));
+    ok(await editGroup(groupId, RAVI, { name: "Goa, closed", archivedAt: new Date().toISOString() }));
 
     const events = await eventsOf(groupId, RAVI);
     const kinds = events.map((event) => event.kind);
     expect(kinds).toContain("group_renamed");
     expect(kinds).toContain("group_archived");
 
-    const renamed = events.filter(isGroupEvent).findLast((event) => event.kind === "group_renamed");
-    expect(renamed?.payload.previousName).toBe("Goa trip");
+    const renamed = events.filter((event) => event.group !== null).findLast((event) => event.kind === "group_renamed");
+    expect(renamed?.group?.previousName).toBe("Goa trip");
 
     /**
      * Both lines share a sequence number and a timestamp, because both are
@@ -177,7 +168,7 @@ describe("member and group life", () => {
     const { groupId, priya } = await makeGroup();
     const before = (await eventsOf(groupId, RAVI)).length;
 
-    ok(await stub(groupId).updateMember(priya.id, { upiVpa: "priya@okaxis" }, RAVI));
+    ok(await editMember(groupId, priya.id, RAVI, { upiVpa: "priya@okaxis" }));
     expect((await eventsOf(groupId, RAVI)).length).toBe(before);
   });
 });
@@ -187,7 +178,7 @@ describe("an archived group that comes back", () => {
     const { groupId, ravi, priya } = await makeGroup();
     const object = stub(groupId);
 
-    ok(await object.update({ archivedAt: new Date().toISOString() }, RAVI));
+    ok(await editGroup(groupId, RAVI, { archivedAt: new Date().toISOString() }));
     ok(await object.upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 300), RAVI));
 
     const kinds = (await eventsOf(groupId, RAVI)).map((event) => event.kind);
@@ -201,10 +192,9 @@ describe("an archived group that comes back", () => {
 
   it("but records somebody un-archiving it on purpose", async () => {
     const { groupId } = await makeGroup();
-    const object = stub(groupId);
 
-    ok(await object.update({ archivedAt: new Date().toISOString() }, RAVI));
-    ok(await object.update({ archivedAt: null }, RAVI));
+    ok(await editGroup(groupId, RAVI, { archivedAt: new Date().toISOString() }));
+    ok(await editGroup(groupId, RAVI, { archivedAt: null }));
 
     expect((await eventsOf(groupId, RAVI)).map((event) => event.kind)).toContain("group_restored");
   });

@@ -4,11 +4,6 @@ import '../../domain/models/entry.dart';
 import 'database.dart';
 
 /// Writes an entry and its children inside the caller's transaction.
-///
-/// The one place an entry is persisted, used by local edits and by rows
-/// arriving from the server alike. Payers and shares are replaced wholesale,
-/// as the server replaces them. The caller writes the outbox item or the sync
-/// cursor in the same transaction.
 Future<void> writeEntryInTransaction(AppDatabase db, Entry entry) async {
   // A real check, not an assert, which a release build strips. Refusing leaves
   // the previous good row in place rather than a balance nothing can explain.

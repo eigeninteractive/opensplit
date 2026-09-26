@@ -21,8 +21,6 @@ class ProfilePage {
 
     required this.cursor,
 
-    required this.cursorId,
-
     required this.hasMore,
   });
 
@@ -30,10 +28,7 @@ class ProfilePage {
   final List<Profile> profiles;
 
   @JsonKey(name: r'cursor', required: true, includeIfNull: true)
-  final DateTime? cursor;
-
-  @JsonKey(name: r'cursorId', required: true, includeIfNull: true)
-  final String? cursorId;
+  final String? cursor;
 
   @JsonKey(name: r'hasMore', required: true, includeIfNull: false)
   final bool hasMore;
@@ -44,14 +39,12 @@ class ProfilePage {
       other is ProfilePage &&
           other.profiles == profiles &&
           other.cursor == cursor &&
-          other.cursorId == cursorId &&
           other.hasMore == hasMore;
 
   @override
   int get hashCode =>
       profiles.hashCode +
       (cursor == null ? 0 : cursor.hashCode) +
-      (cursorId == null ? 0 : cursorId.hashCode) +
       hasMore.hashCode;
 
   factory ProfilePage.fromJson(Map<String, dynamic> json) =>

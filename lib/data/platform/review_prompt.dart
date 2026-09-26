@@ -5,23 +5,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// Asks for a Play review, at most rarely, and never as a condition of
 /// anything.
-///
-/// Three rules are worth stating because breaking any of them is a policy
-/// violation rather than a matter of taste:
-///
-///  * No pre-filtering. Asking "are you enjoying OpenSplit?" and showing the
-///    sheet only to the people who say yes is expressly forbidden, and it is
-///    the pattern most apps use. So this asks everyone or nobody.
-///  * No incentive, and nothing gated behind it.
-///  * Nothing may depend on the outcome. Play's own quota means the sheet
-///    usually does not appear at all, `requestReview` resolves either way, and
-///    there is no way to learn whether anything was shown — so this returns
-///    nothing and the caller carries on regardless.
-///
-/// Called from one place: a settle-up that just succeeded. That is the moment
-/// the app has finished doing the thing it exists for, which is the only moment
-/// an unprompted question is not an interruption. Never on launch, never after
-/// an error.
 class ReviewPrompt {
   /// [isAvailable] and [request] are injected rather than the [InAppReview]
   /// object itself, which has a private constructor and so cannot be faked.
@@ -62,9 +45,6 @@ class ReviewPrompt {
   }
 
   /// Asks, and records that we did — whether or not anything was shown.
-  ///
-  /// Recorded first, on purpose. If the request throws, the failure is not the
-  /// user's problem and re-asking on their next settle-up would be.
   Future<void> ask() async {
     await _prefs.setString(_key, _clock().toIso8601String());
     try {

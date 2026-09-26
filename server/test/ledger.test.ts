@@ -1,15 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { evenly, expense, freshId, makeGroup, ok, PRIYA, refusal, stub, sumOf } from "./group";
+import { editGroup, editMember, evenly, expense, freshId, makeGroup, ok, PRIYA, RAVI, refusal, stub, sumOf } from "./group";
 
-/**
- * The invariant and the write path: an expense that does not add up, a hard
- * delete, an idempotent retry, and the stale-base predicate.
- *
- * The invariant it is named for — `sum(payers) = sum(shares) = amount` — was a
- * deferred constraint trigger hung off three tables. It is one function call
- * now, and these are the same cases, asked of the thing that replaced it.
- */
+/** The invariant and the write path: an expense that does not add up, a hard delete, an idempotent retry, and the stale-base predicate. */
 describe("an expense has to add up", () => {
   it("accepts one that does", async () => {
     const { groupId, ravi, priya } = await makeGroup();
@@ -312,7 +305,7 @@ describe("the sequence number", () => {
     const profile = ravi.profileId ?? "";
 
     const first = ok(await object.upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 400), profile));
-    const renamed = ok(await object.update({ name: "Goa, again" }, profile));
+    const renamed = ok(await editGroup(groupId, profile, { name: "Goa, again" }));
     const second = ok(await object.upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 500), profile));
 
     expect(renamed.seq).toBeGreaterThan(first.seq);
@@ -367,5 +360,32 @@ describe("a stranger", () => {
 
   it("is told an unused group id is unused, not forbidden", async () => {
     expect(refusal(await stub(freshId("empty")).changes(PRIYA, 0, 100)).code).toBe("no_group");
+  });
+});
+
+describe("a page of changes", () => {
+  it("carries the rows its entries name, even ones changed after them", async () => {
+    const { groupId, ravi, priya } = await makeGroup();
+    ok(await stub(groupId).upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 1000), RAVI));
+    // Renaming Priya moves her row past the expense naming her.
+    ok(await editMember(groupId, priya.id, RAVI, { displayName: "Priya S" }));
+    ok(await editGroup(groupId, RAVI, { name: "Goa, renamed" }));
+
+    const first = ok(await stub(groupId).changes(RAVI, 0, 1));
+    expect(first.hasMore).toBe(true);
+    expect(first.group?.name).toBe("Goa, renamed");
+    expect(first.members.map((member) => member.id)).toEqual(expect.arrayContaining([ravi.id, priya.id]));
+  });
+});
+
+describe("a large page", () => {
+  it("reads more expenses than SQLite binds in one statement", async () => {
+    const { groupId, ravi, priya } = await makeGroup();
+    for (let index = 0; index < 120; index++) {
+      ok(await stub(groupId).upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 1000 + index), RAVI));
+    }
+    const page = ok(await stub(groupId).changes(RAVI, 0, 500));
+    expect(page.entries).toHaveLength(120);
+    expect(page.entries.every((entry) => entry.payers.length === 1 && entry.shares.length === 2)).toBe(true);
   });
 });

@@ -8,20 +8,6 @@ import '../widgets/brand_mark.dart';
 import '../widgets/page_body.dart';
 
 /// What this app is, who can change it, and where to say something is wrong.
-///
-/// An open-source app that never links to its own source is asking to be taken
-/// on trust, which is the one thing this project's whole argument refuses to
-/// ask for. PRINCIPLES.md is published so it can be held against us; the repo
-/// is where somebody does the holding.
-///
-/// It is also, more plainly, a licence obligation. AGPL-3.0 entitles a user
-/// running a modified OpenSplit to that modification's source, and a fork that
-/// ships this screen unchanged points at the fork's own repository — see
-/// [repositoryUrl], which is a build-time define for exactly that reason.
-///
-/// A screen rather than a block of rows in Settings, because most of it is
-/// read once and none of it is a setting. Settings keeps the privacy policy and
-/// the terms, which are the two Play expects to find there.
 class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
 
@@ -69,11 +55,7 @@ class AboutScreen extends StatelessWidget {
               url: licenseUrl,
             ),
 
-            // Flutter's own, rather than a page listing them by hand. It is
-            // generated from what actually shipped, so it cannot fall out of
-            // step with pubspec.lock the way a written list would. The bundled
-            // typefaces are the one thing it cannot find on its own — they are
-            // assets rather than a package — so main.dart registers them.
+            // Flutter's own, rather than a page listing them by hand.
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.inventory_outlined),
@@ -108,11 +90,6 @@ class AboutScreen extends StatelessWidget {
 }
 
 /// The running version, read from the bundle rather than from a constant.
-///
-/// `pubspec.yaml` is one source, the Android build another, and a constant
-/// written in Dart a third that is wrong the first time somebody bumps only the
-/// first two. [PackageInfo] reports what is actually installed, which is the
-/// only version worth quoting in a bug report.
 class _Version extends StatelessWidget {
   const _Version();
 
@@ -148,10 +125,6 @@ class _Version extends StatelessWidget {
 }
 
 /// A row that leaves the app.
-///
-/// Opens the real page rather than rendering it here, for the same reason the
-/// policy links in Settings do: there is one copy, it is the one the repository
-/// serves, and it can be corrected without shipping a build.
 class _Link extends StatelessWidget {
   const _Link({
     required this.icon,

@@ -11,24 +11,6 @@ import '../widgets/empty_state.dart';
 import '../widgets/page_body.dart';
 
 /// What has happened to this group's expenses, and who did it.
-///
-/// The reason editing in place is safe. Without this, correcting ₹400 to ₹300
-/// two days later silently moves somebody else's balance with nothing anywhere
-/// to say why or who — which is a trust problem rather than a data one, and the
-/// kind that surfaces as an argument rather than a bug report.
-///
-/// Rendered from the local database like every other screen, from snapshots the
-/// server wrote: each records what an expense looked like after a change, and
-/// the lines below are the difference between consecutive ones.
-///
-/// Two properties matter here and they pull in opposite directions. The record
-/// has to be trustworthy, so no client writes it — the table has no insert,
-/// update or delete grant, and a trigger is its only writer. And the feed has
-/// to work with no network, because the one screen whose job is to say what
-/// happened must not be the one screen that needs a server to do it. So the
-/// device also writes a provisional snapshot as it saves, marked as such on
-/// screen and discarded the moment the server's account of the same expense
-/// arrives.
 class ActivityScreen extends ConsumerWidget {
   const ActivityScreen({super.key, required this.groupId});
 
@@ -39,10 +21,7 @@ class ActivityScreen extends ConsumerWidget {
     final events = ref.watch(groupActivityProvider(groupId)).value;
     final ledger = ref.watch(groupLedgerProvider(groupId));
 
-    // Only worth saying when there is somewhere for a line to be going. A
-    // build with no backend at all -- a guest, a local-only install -- never
-    // syncs anything, so marking every line "not synced yet" would be noise
-    // that never resolves rather than information.
+    // Only worth saying when there is somewhere for a line to be going.
     final syncs = ref.watch(syncEngineProvider) != null;
 
     return Scaffold(
@@ -86,12 +65,6 @@ class ActivityScreen extends ConsumerWidget {
 }
 
 /// One line of the record.
-///
-/// The switch over [GroupEvent] is exhaustive, which is the point of the type
-/// being sealed: a new kind cannot be added to the feed without this file
-/// failing to compile until somebody has written the sentence for it. The old
-/// version of this widget could only ever say something about an expense, and
-/// there was nowhere for "Priya joined" to go.
 class _Line extends StatelessWidget {
   const _Line({
     required this.event,
@@ -124,10 +97,7 @@ class _Line extends StatelessWidget {
         '$actor ${describeKind(kind)} ${_what()}',
       ),
 
-      // The actor is left out of a join on purpose. Nobody does it to you --
-      // you arrive -- and naming whoever happened to hold the session would
-      // often name the person who sent the link rather than the person who
-      // walked through it.
+      // The actor is left out of a join on purpose.
       MemberChanged(kind: EventKind.memberJoined, :final displayName) => (
         Icons.person_add_alt,
         '$displayName joined',

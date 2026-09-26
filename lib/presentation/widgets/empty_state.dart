@@ -2,22 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/widget_previews.dart';
 
 /// What a screen says when there is genuinely nothing to show.
-///
-/// One widget for all of them, because an empty screen is the one a new user
-/// sees most and the app had four different answers to it: a brand mark, a
-/// tinted icon at 48, a bare centred sentence, and in one place nothing at all.
-///
-/// The icon is drawn behind the words rather than above them, at a size no
-/// foreground icon would ever be and an opacity that keeps it under the text it
-/// sits behind. That is the whole idea: an empty state should read as a surface
-/// waiting for content, not as an error with an exclamation mark on it. It is
-/// in a [Stack] so it takes part in no layout — the column measures as though
-/// the icon were not there, and the icon cannot push the message off a short
-/// screen or overflow a narrow one.
-///
-/// [ExcludeSemantics] around it, always. It restates the title in pictures, and
-/// a screen reader announcing "receipt icon" before "no expenses yet" is the
-/// same sentence twice.
 class EmptyState extends StatelessWidget {
   const EmptyState({
     super.key,

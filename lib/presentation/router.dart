@@ -21,9 +21,6 @@ import 'screens/welcome_screen.dart';
 
 /// The app's three top-level destinations, in the order the branches below
 /// declare them.
-///
-/// One list, read by the drawer and the rail alike, so the two presentations of
-/// the same three destinations cannot drift apart.
 const _destinations = <_Destination>[
   _Destination(
     kind: _DestinationKind.groups,
@@ -63,28 +60,6 @@ class _Destination {
 enum _DestinationKind { groups, account, settings }
 
 /// One route table serving both Android and the web.
-///
-/// The URL is the state. Every meaningful screen is deep-linkable and browser
-/// back works, because these same paths have to function as Android App Links
-/// later — a route that only exists as an in-memory navigation push cannot be
-/// opened from a shared link.
-///
-/// The shape is deliberate, and it is what makes navigation behave the same
-/// way everywhere:
-///
-///  * The three destinations are branches of a [StatefulShellRoute]. Switching
-///    between them swaps an [IndexedStack] child, so it is instant, keeps each
-///    branch's scroll position, and is never a push — there is no back arrow
-///    to Groups from Settings, because Settings is not on top of anything.
-///    Arriving at them is instant too: the shell is a [NoTransitionPage], for
-///    the reason given where it is built.
-///  * Everything else — a group, an expense, an invite — is an ordinary route
-///    above the shell. Those are pushed, so they animate with the platform's
-///    own page transition (predictive back on Android), and grow a back button
-///    rather than a menu button.
-///
-/// Which is the whole rule: a screen whose app bar opens the navigation menu is
-/// a destination, and one whose app bar goes back was pushed.
 GoRouter buildRouter({
   required bool Function() isSignedIn,
 
@@ -98,42 +73,20 @@ GoRouter buildRouter({
       NotFoundScreen(location: state.uri.toString()),
 
   /// Nothing above the welcome screen works without a session.
-  ///
-  /// Not a policy decision so much as a structural one: the local database is
-  /// named after the account, so with nobody signed in there is no ledger to
-  /// open and every repository below it would be built against nothing.
-  ///
-  /// `/join/:token` is the deliberate exception. It has to work for somebody
-  /// who has never opened the app, and it shows what the link is for *before*
-  /// asking who they are — which is the ordering that stops an invite being
-  /// spent by an account the arrival did not want.
   redirect: (context, state) =>
       redirectAppRoute(state.uri, signedIn: isSignedIn()),
   routes: [
     // One shell around everything, for one reason: SelectionArea.
-    //
-    // It cannot go in MaterialApp.builder, which runs above the Navigator,
-    // because SelectableRegion needs an Overlay ancestor and only a route has
-    // one. Putting it on the destinations alone would leave every pushed
-    // screen — which is most of the app — unselectable.
     ShellRoute(
       builder: (context, state, child) => SelectionArea(child: child),
       routes: [
-        // No transition, in both directions. Signing in is not a journey
-        // through the app, it is the app finding out who you are, and the
-        // platform's page transition says the opposite: on the web that is
-        // Cupertino's horizontal slide, so the welcome screen left by sliding
-        // off to the left like a screen you had just backed out of.
+        // No transition, in both directions.
         GoRoute(
           path: '/welcome',
           pageBuilder: (context, state) =>
               const NoTransitionPage(child: WelcomeScreen()),
         ),
-        // The link a friend sends. Deliberately free of any guard: this route
-        // has to work for someone who has never opened the app before, and
-        // deliberately outside the destinations, because an arrival has one
-        // decision to make and a navigation bar is an invitation to wander off
-        // before making it.
+        // The link a friend sends.
         GoRoute(
           path: '/join/:token',
           builder: (context, state) =>
@@ -204,13 +157,8 @@ GoRouter buildRouter({
         ),
         // The other half of that, and the half that actually does the work: an
         // outgoing page is only removed once the *incoming* one has finished
-        // arriving, so silencing the welcome screen alone changed nothing
-        // while the destinations still animated in over it.
-        //
-        // Correct on its own terms as well. A destination is never pushed onto
-        // anything — it is where the app already is — so there is nothing for
-        // it to animate in from. Routes above the shell keep the platform's
-        // transition, which is where it belongs.
+        // arriving, so silencing the welcome screen alone changed nothing while
+        // the destinations still animated in over it.
         StatefulShellRoute.indexedStack(
           pageBuilder: (context, state, shell) =>
               NoTransitionPage(child: AdaptiveNavigation(shell: shell)),
@@ -223,10 +171,7 @@ GoRouter buildRouter({
                 ),
               ],
             ),
-            // A top-level destination, not a detail reached from Settings. It
-            // holds the name everybody in your groups sees, the payment handle
-            // they settle against, and whether the account survives this
-            // device — none of which is a setting.
+            // A top-level destination, not a detail reached from Settings.
             StatefulShellBranch(
               routes: [
                 GoRoute(
@@ -252,21 +197,10 @@ GoRouter buildRouter({
 
 /// The app's only navigation surface, in whichever form the window has room
 /// for.
-///
-/// Material 3 gives the same set of destinations several presentations and this
-/// picks between them by width: a modal navigation drawer on a phone, a rail
-/// down the side once there is room. Both are driven by the same
-/// [StatefulNavigationShell], so "which destination am I on" has exactly one
-/// answer and neither can disagree with the URL.
 class AdaptiveNavigation extends StatelessWidget {
   const AdaptiveNavigation({super.key, required this.shell});
 
   /// Below this the destinations live in a drawer instead.
-  ///
-  /// 840 is Material 3's own boundary between the medium and expanded window
-  /// classes. The spec allows a rail from 600 up; this app stays with the
-  /// drawer to 840, because a phone-sized window is held in a hand however many
-  /// pixels it reports and a rail eats width a ledger wants.
   static const double _railBreakpoint = 840;
 
   /// Material 3's own default destination width, and the rail's width outright:
@@ -279,35 +213,18 @@ class AdaptiveNavigation extends StatelessWidget {
 
   /// The drawer a destination screen should hang off its own Scaffold, or null
   /// when the window is wide enough that the rail is already showing.
-  ///
-  /// Returned to the screens rather than placed on a Scaffold here, and that is
-  /// forced rather than chosen: every destination builds its own Scaffold with
-  /// its own AppBar, and an AppBar grows its menu button from the *nearest*
-  /// Scaffold. A drawer on an outer one would exist with nothing to open it.
-  ///
-  /// Keeping the breakpoint in this class is the point of the method — the
-  /// alternative is three screens each deciding for themselves what counts as
-  /// narrow, and eventually disagreeing.
   static Widget? drawerFor(BuildContext context) =>
       MediaQuery.sizeOf(context).width < _railBreakpoint
       ? const _NavigationDrawer()
       : null;
 
   /// Switches destination, or returns to the top of the one already open.
-  ///
-  /// `initialLocation: true` when the destination is already selected is
-  /// go_router's own idiom for the second half, and it is what people expect:
-  /// choosing the destination you are already on goes back to its root rather
-  /// than doing nothing.
   void _select(int index) =>
       shell.goBranch(index, initialLocation: index == shell.currentIndex);
 
   @override
   Widget build(BuildContext context) {
-    // Narrow: nothing here at all. The destinations live in a drawer each
-    // screen opens for itself — see [drawerFor] — so this adds no chrome and,
-    // deliberately, no Scaffold: a second one between the shell and the screen
-    // would be the thing an AppBar found when it looked for a drawer.
+    // Narrow: nothing here at all.
     if (MediaQuery.sizeOf(context).width < _railBreakpoint) return shell;
 
     final l10n = AppLocalizations.of(context);
@@ -317,10 +234,10 @@ class AdaptiveNavigation extends StatelessWidget {
           NavigationRail(
             selectedIndex: shell.currentIndex,
             labelType: NavigationRailLabelType.all,
-            // Material's own default, stated rather than inherited because
-            // the web loading skeleton draws a rail of exactly this width
-            // before Flutter starts — see the 840px block in web/index.html,
-            // and the test that holds the two numbers together.
+            // Material's own default, stated rather than inherited because the
+            // web loading skeleton draws a rail of exactly this width before
+            // Flutter starts — see the 840px block in web/index.html, and the
+            // test that holds the two numbers together.
             minWidth: _railWidth,
             onDestinationSelected: _select,
             destinations: [
@@ -341,15 +258,6 @@ class AdaptiveNavigation extends StatelessWidget {
 }
 
 /// The three destinations, as a Material 3 navigation drawer.
-///
-/// Reached through [AdaptiveNavigation.drawerFor] rather than constructed
-/// directly, so no screen has to know when a drawer is the right surface and
-/// when the rail has already taken over.
-///
-/// The shell comes from the tree rather than from a constructor argument.
-/// go_router puts a [StatefulNavigationShell] above every branch, and this is
-/// only ever built inside one, so asking for it is both correct and shorter
-/// than threading it through three screens.
 class _NavigationDrawer extends StatelessWidget {
   const _NavigationDrawer();
 

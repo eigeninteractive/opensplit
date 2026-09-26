@@ -4,10 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/sync_providers.dart';
 
-/// Refreshes through the same coordinator as pull-to-refresh and automatic sync.
-///
-/// Progress reflects account-wide synchronization, not just this button's last
-/// click. Local query providers stay mounted so saved data remains visible.
+/// Refreshes through the same coordinator as pull-to-refresh and automatic
+/// sync.
 class SyncRefreshButton extends ConsumerWidget {
   /// Refreshes all groups, including ones not yet saved on this device.
   const SyncRefreshButton.everything({super.key}) : groupId = null;

@@ -4,6 +4,7 @@
 
 // ignore_for_file: unused_element
 import 'package:opensplit_api/src/model/account.dart';
+import 'package:opensplit_api/src/model/identity_outcome_kind.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 part 'identity_outcome.g.dart';
@@ -26,14 +27,13 @@ class IdentityOutcome {
     required this.strandedUserId,
   });
 
-  /// kept: the account id did not change, so nothing on the device has to move. replaced: a different account holds the session now, and `strandedUserId` names the one this device's ledger stays with.
   @JsonKey(
     name: r'outcome',
     required: true,
     includeIfNull: false,
-    unknownEnumValue: IdentityOutcomeOutcomeEnum.unknownDefaultOpenApi,
+    unknownEnumValue: IdentityOutcomeKind.unknownDefaultOpenApi,
   )
-  final IdentityOutcomeOutcomeEnum outcome;
+  final IdentityOutcomeKind outcome;
 
   @JsonKey(name: r'account', required: true, includeIfNull: false)
   final Account account;
@@ -69,21 +69,4 @@ class IdentityOutcome {
   String toString() {
     return toJson().toString();
   }
-}
-
-/// kept: the account id did not change, so nothing on the device has to move. replaced: a different account holds the session now, and `strandedUserId` names the one this device's ledger stays with.
-enum IdentityOutcomeOutcomeEnum {
-  @JsonValue(r'kept')
-  kept(r'kept'),
-  @JsonValue(r'replaced')
-  replaced(r'replaced'),
-  @JsonValue(r'unknown_default_open_api')
-  unknownDefaultOpenApi(r'unknown_default_open_api');
-
-  const IdentityOutcomeOutcomeEnum(this.value);
-
-  final String value;
-
-  @override
-  String toString() => value;
 }

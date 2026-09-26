@@ -1,7 +1,4 @@
 /// The shape of an analytics question, and the shape of an answer.
-///
-/// Value types only. The queries themselves are SQL over data already on the
-/// device — see `DriftAnalyticsRepository`.
 library;
 
 /// Narrows what an analytics question is asked about.

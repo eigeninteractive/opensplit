@@ -3,11 +3,6 @@ import 'package:drift/drift.dart';
 import '../local/database.dart';
 
 /// Currency reference data, read from the local table seeded at first run.
-///
-/// Exists so that no caller is ever tempted to hardcode an exponent. Every
-/// conversion between a typed amount and stored minor units goes through a
-/// [Currency] fetched here — JPY has no minor unit and KWD has three, so an
-/// assumed 2 is a shipped bug in two directions.
 final class DriftCurrencyRepository {
   DriftCurrencyRepository(this._db);
 

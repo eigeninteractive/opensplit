@@ -118,19 +118,12 @@ class GroupDetailScreen extends ConsumerWidget {
             const UnsyncedChangesBanner(
               padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
             ),
-            // Beside it rather than folded into it. Both are about a write
-            // that did not land, and they mean opposite things: one says
-            // nobody else can see this, the other says everybody can see
-            // something else. Merging them would have to pick one wording.
+            // Beside it rather than folded into it.
             const ConflictingEditBanner(
               padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
             ),
             const SyncStatusBanner(padding: EdgeInsets.fromLTRB(16, 8, 16, 0)),
-            // Also here, not only on the group list. Someone who arrived on an
-            // invite link lands inside a group and stays there — they have the
-            // most to lose, since the group is shared and their share of it is
-            // real, and they are the least likely ever to see the list screen
-            // the other copy of this sits on.
+            // Also here, not only on the group list.
             const LinkAccountPrompt(padding: EdgeInsets.fromLTRB(16, 8, 16, 0)),
             Expanded(
               child: wide
@@ -233,12 +226,6 @@ class _EntryTile extends StatelessWidget {
     }
 
     // The same arithmetic, described in the two different things it can mean.
-    //
-    // A settlement moves your position exactly as an expense does, which is
-    // why it folds through the identical path — but "you owe ₹500" is a lie
-    // about money that has already changed hands. Being paid *reduces* what
-    // you are owed, so it is a negative delta, and reading that back as a debt
-    // is precisely backwards.
     final myDeltaWords = isSettlement
         ? (myDelta > 0
               ? 'you paid ${formatMoneyAbs(currency, myDelta)}'

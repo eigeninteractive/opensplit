@@ -4,21 +4,13 @@ import '../models/entry_event.dart';
 import '../models/group_event.dart';
 
 /// Turns two consecutive `entry` events into the feed line between them.
-///
-/// The server records only what an expense looked like after each change; the
-/// difference is worked out here. That is the security property: no client
-/// can describe its own edit, so a Rs.400 to Rs.4,000 rewrite cannot be filed
-/// as a small correction, and a re-split that moves money between members
-/// cannot go unrecorded.
-///
-/// [previous] is null for the first snapshot an expense ever had, which is what
-/// makes it a creation.
 EntryChanged describeSnapshot({
   GroupEventRow? previous,
   required GroupEventRow current,
 }) {
-  final before = previous?.snapshot;
-  final after = current.snapshot;
+  final before = previous?.entry;
+  final after =
+      current.entry ?? (throw StateError('${current.id} is not an expense.'));
   final wasDeleted = before?.deletedAt != null;
   final isDeleted = after.deletedAt != null;
 
@@ -59,10 +51,8 @@ List<FieldChange> diffSnapshots(
     ..._changed('entry_date', before.entryDate, after.entryDate),
     ..._changed('category_id', before.categoryId, after.categoryId),
     ..._changed('split_kind', before.splitKind.value, after.splitKind.value),
-    // A bill becoming a repayment changes what the money means, not just how
-    // it reads. Left out, the server still records the change -- it dedupes on
-    // the payload, which differs -- and the feed renders an edit listing
-    // nothing, which is the "somebody edited nothing" line in a worse disguise.
+    // A bill becoming a repayment changes what the money means, not just how it
+    // reads.
     ..._changed('kind', before.kind.value, after.kind.value),
     ..._changed('notes', before.notes, after.notes),
     ..._diffMembers('share', before.shares, after.shares),
@@ -79,12 +69,6 @@ const shareFieldPrefix = 'share';
 const paidFieldPrefix = 'paid';
 
 /// Who owes what, and who put money down, member by member.
-///
-/// The half that matters most. An edit that rewrites the split while leaving the total alone moves real
-/// money between people, satisfies the balance invariant, and changes no number
-/// a casual reader would think to check. Reported per member rather than as
-/// "the split changed", because the useful sentence names who gained and who
-/// lost.
 Iterable<FieldChange> _diffMembers(
   String prefix,
   List<api.MoneyRow> before,
@@ -105,10 +89,6 @@ Iterable<FieldChange> _diffMembers(
 }
 
 /// One change, or nothing at all.
-///
-/// Empty and null are treated as the same absence. The editor writes '' for a
-/// description nobody typed and the server holds null, so comparing them
-/// literally would report an edit every time a row made the round trip.
 Iterable<FieldChange> _changed(String field, String? from, String? to) {
   final a = (from ?? '').trim();
   final b = (to ?? '').trim();
@@ -123,11 +103,5 @@ Iterable<FieldChange> _changed(String field, String? from, String? to) {
 }
 
 /// Whether two snapshots record the same state of an expense.
-///
-/// The local half of the server's dedup rule. A re-saved editor and a retried
-/// write both produce a snapshot identical to the one before it, and without
-/// this the feed would carry a line for each -- lines that would then vanish
-/// when the server's account arrived, having deduped them. "Priya edited
-/// nothing" is worse than no line at all.
 bool recordsSameShape(api.EntrySnapshot a, api.EntrySnapshot b) =>
     a.deletedAt == b.deletedAt && diffSnapshots(a, b).isEmpty;

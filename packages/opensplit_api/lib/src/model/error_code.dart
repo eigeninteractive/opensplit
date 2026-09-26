@@ -46,6 +46,8 @@ enum ErrorCode {
   internal(r'internal'),
   @JsonValue(r'identity_already_in_use')
   identityAlreadyInUse(r'identity_already_in_use'),
+  @JsonValue(r'auth_failed')
+  authFailed(r'auth_failed'),
   @JsonValue(r'unknown_default_open_api')
   unknownDefaultOpenApi(r'unknown_default_open_api');
 

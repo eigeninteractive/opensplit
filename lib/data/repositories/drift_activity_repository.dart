@@ -5,10 +5,6 @@ import '../../domain/models/group_event.dart';
 import '../local/database.dart';
 
 /// The activity feed, read from the local mirror of the server's record.
-///
-/// An expense line is the difference between two consecutive snapshots of that
-/// expense; every other line is one row. Lines are ordered by the server's
-/// `(seq, ordinal)`, with this device's unconfirmed lines first.
 final class DriftActivityRepository {
   DriftActivityRepository(this._db);
 
@@ -99,8 +95,8 @@ final class DriftActivityRepository {
       isProvisional: row.isProvisional,
       memberId: row.subjectId ?? '',
       kind: row.kind,
-      displayName: row.name ?? 'Someone',
-      previousName: row.previousName,
+      displayName: row.member?.displayName ?? 'Someone',
+      previousName: row.member?.previousName,
     ),
     EventKind.groupRenamed ||
     EventKind.groupArchived ||
@@ -111,8 +107,8 @@ final class DriftActivityRepository {
       createdAt: row.createdAt,
       isProvisional: row.isProvisional,
       kind: row.kind,
-      name: row.name ?? '',
-      previousName: row.previousName,
+      name: row.group?.name ?? '',
+      previousName: row.group?.previousName,
     ),
     EventKind.linkCreated || EventKind.linkRevoked => LinkChanged(
       id: row.id,

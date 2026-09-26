@@ -115,7 +115,9 @@ void main() {
             // One change: every line shares its instant.
             createdAt: DateTime.utc(2026, 9, 23),
             kind: kind,
-            payload: const {'name': 'Goa', 'previousName': null},
+            group: Value(
+              api.GroupEventPayload(name: 'Goa', previousName: null),
+            ),
             seq: Value(seq),
             ordinal: Value(ordinal),
             isProvisional: Value(provisional),

@@ -1,22 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { evenly, freshId, makeGroup, makeGroupOfTwo, ok, PRIYA, RAVI, refusal, stub, ZARA } from "./group";
+import { editGroup, editMember, evenly, freshId, makeGroup, makeGroupOfTwo, ok, PRIYA, RAVI, refusal, stub, ZARA } from "./group";
 
-/**
- * What one member of a group can do to another, which is a different question
- * from what a stranger can do and has a much less obvious answer.
- *
- * There is nothing here about reaching the rows directly, because there is no
- * way to: the only door is a method on this object, and the methods that would
- * be dangerous do not exist. What is left is the part that is about people,
- * and it is the part with teeth — an unguarded update over a group's member
- * rows grants every one of these.
- */
+/** What one member of a group can do to another, which is a different question from what a stranger can do and has a much less obvious answer. */
 
 describe("what a member may change about somebody else", () => {
   it("never their payment handle — the one field here that can redirect real money", async () => {
     const { groupId, priya } = await makeGroupOfTwo();
-    const refused = refusal(await stub(groupId).updateMember(priya.id, { upiVpa: "ravi@okhdfcbank" }, RAVI));
+    const refused = refusal(await editMember(groupId, priya.id, RAVI, { upiVpa: "ravi@okhdfcbank" }));
 
     expect(refused.code).toBe("forbidden");
     expect(refused.message).toContain("Priya");
@@ -24,7 +15,7 @@ describe("what a member may change about somebody else", () => {
 
   it("never their name, once they have an account of their own", async () => {
     const { groupId, priya } = await makeGroupOfTwo();
-    expect(refusal(await stub(groupId).updateMember(priya.id, { displayName: "Someone else" }, RAVI)).code).toBe("forbidden");
+    expect(refusal(await editMember(groupId, priya.id, RAVI, { displayName: "Someone else" })).code).toBe("forbidden");
   });
 
   /**
@@ -34,7 +25,7 @@ describe("what a member may change about somebody else", () => {
    */
   it("but a placeholder stays editable by anybody in the group", async () => {
     const { groupId, priya } = await makeGroup();
-    const renamed = ok(await stub(groupId).updateMember(priya.id, { displayName: "Priya S", upiVpa: "priya@okaxis" }, RAVI));
+    const renamed = ok(await editMember(groupId, priya.id, RAVI, { displayName: "Priya S", upiVpa: "priya@okaxis" }));
 
     expect(renamed.displayName).toBe("Priya S");
     expect(renamed.upiVpa).toBe("priya@okaxis");
@@ -42,7 +33,7 @@ describe("what a member may change about somebody else", () => {
 
   it("and your own name and handle stay yours to set", async () => {
     const { groupId, ravi } = await makeGroupOfTwo();
-    const updated = ok(await stub(groupId).updateMember(ravi.id, { displayName: "Ravi K", upiVpa: "ravi@okicici" }, RAVI));
+    const updated = ok(await editMember(groupId, ravi.id, RAVI, { displayName: "Ravi K", upiVpa: "ravi@okicici" }));
 
     expect(updated.displayName).toBe("Ravi K");
     expect(updated.upiVpa).toBe("ravi@okicici");
@@ -55,7 +46,7 @@ describe("what a member may change about somebody else", () => {
    */
   it("and nothing they can send blanks somebody's account out from under them", async () => {
     const { groupId, priya } = await makeGroupOfTwo();
-    const patched = ok(await stub(groupId).updateMember(priya.id, { profileId: null } as never, RAVI));
+    const patched = ok(await editMember(groupId, priya.id, RAVI, { profileId: null } as never));
 
     expect(patched.profileId).toBe(PRIYA);
   });
@@ -68,7 +59,7 @@ describe("leaving, and being removed", () => {
 
     ok(await object.upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 1000), RAVI));
 
-    const left = ok(await object.updateMember(ravi.id, { leftAt: new Date().toISOString() }, RAVI));
+    const left = ok(await editMember(groupId, ravi.id, RAVI, { leftAt: new Date().toISOString() }));
     expect(left.leftAt).not.toBeNull();
   });
 
@@ -83,7 +74,7 @@ describe("leaving, and being removed", () => {
 
     ok(await object.upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 1000), RAVI));
 
-    const refused = refusal(await object.updateMember(priya.id, { leftAt: new Date().toISOString() }, RAVI));
+    const refused = refusal(await editMember(groupId, priya.id, RAVI, { leftAt: new Date().toISOString() }));
     expect(refused.code).toBe("not_settled");
     expect(refused.message).toContain("Priya");
   });
@@ -96,7 +87,7 @@ describe("leaving, and being removed", () => {
     const entry = ok(await object.upsertEntry(evenly(id, ravi.id, [ravi.id, priya.id], 1000), RAVI));
     ok(await object.deleteEntry(id, entry.seq, RAVI));
 
-    expect(ok(await object.updateMember(priya.id, { leftAt: new Date().toISOString() }, RAVI)).leftAt).not.toBeNull();
+    expect(ok(await editMember(groupId, priya.id, RAVI, { leftAt: new Date().toISOString() })).leftAt).not.toBeNull();
   });
 
   /**
@@ -107,7 +98,7 @@ describe("leaving, and being removed", () => {
     const { groupId, ravi, priya } = await makeGroupOfTwo();
     const object = stub(groupId);
 
-    const removed = ok(await object.updateMember(priya.id, { leftAt: new Date().toISOString() }, RAVI));
+    const removed = ok(await editMember(groupId, priya.id, RAVI, { leftAt: new Date().toISOString() }));
 
     const hers = ok(await object.changes(PRIYA, 0, 500));
     expect(hers.seq).toBe(removed.seq);
@@ -124,7 +115,7 @@ describe("leaving, and being removed", () => {
     const { groupId, ravi, priya } = await makeGroupOfTwo();
     const object = stub(groupId);
 
-    ok(await object.updateMember(priya.id, { leftAt: new Date().toISOString() }, RAVI));
+    ok(await editMember(groupId, priya.id, RAVI, { leftAt: new Date().toISOString() }));
     expect(refusal(await object.upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id], 300), PRIYA)).code).toBe("not_member");
   });
 });
@@ -132,7 +123,7 @@ describe("leaving, and being removed", () => {
 describe("the group itself", () => {
   it("can be renamed by any member, including one who did not create it", async () => {
     const { groupId } = await makeGroupOfTwo();
-    expect(ok(await stub(groupId).update({ name: "Goa, take two" }, PRIYA)).name).toBe("Goa, take two");
+    expect(ok(await editGroup(groupId, PRIYA, { name: "Goa, take two" })).name).toBe("Goa, take two");
   });
 
   /**
@@ -143,7 +134,7 @@ describe("the group itself", () => {
    */
   it("cannot be re-identified, back-dated, or have its authorship reassigned", async () => {
     const { groupId, group } = await makeGroupOfTwo();
-    const patched = ok(await stub(groupId).update({ id: freshId("x"), createdAt: "2000-01-01T00:00:00.000Z", createdBy: "someone-else" } as never, PRIYA));
+    const patched = ok(await editGroup(groupId, PRIYA, { id: freshId("x"), createdAt: "2000-01-01T00:00:00.000Z", createdBy: "someone-else" } as never));
 
     expect(patched.id).toBe(group.id);
     expect(patched.createdAt).toBe(group.createdAt);
@@ -179,9 +170,7 @@ describe("an expense", () => {
     const id = freshId("e");
     const original = ok(await stub(victim.groupId).upsertEntry(evenly(id, victim.ravi.id, [victim.ravi.id, victim.priya.id], 5000), RAVI));
 
-    // Zara writes to *her* group's object using the same id. It lands there,
-    // which is correct, and has no bearing on the expense that already exists
-    // somewhere else under the same name.
+    // Zara writes to *her* group's object using the same id.
     ok(await stub(attacker.groupId).upsertEntry(evenly(id, attacker.ravi.id, [attacker.ravi.id], 1), ZARA));
 
     const page = ok(await stub(victim.groupId).changes(RAVI, 0, 500));
@@ -203,13 +192,7 @@ describe("an expense", () => {
 
     const entry = ok(await stub(groupId).upsertEntry({ ...evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 800), createdAt: "2001-01-01T00:00:00.000Z", updatedAt: "3000-01-01T00:00:00.000Z" } as never, RAVI));
 
-    /**
-     * The year-3000 timestamp is the one that used to matter. `updated_at` was
-     * the sync cursor, so a client that could write it could pin every other
-     * device's cursor in the far future and stop the group syncing for good.
-     * It is descriptive now — `seq` is the cursor — but it is still not the
-     * client's to write.
-     */
+    /** The year-3000 timestamp is the one that used to matter. */
     expect(Date.parse(entry.createdAt)).toBeGreaterThan(Date.parse("2020-01-01T00:00:00.000Z"));
     expect(Date.parse(entry.updatedAt)).toBeLessThan(Date.parse("2100-01-01T00:00:00.000Z"));
   });

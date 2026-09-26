@@ -68,12 +68,6 @@ void main() {
 }
 
 /// What [_EmailController] was asked to do, kept off the notifier itself.
-///
-/// A notifier's public surface is supposed to be `state` and nothing else, and
-/// a spy's recorded calls are the one thing that cannot go there — they are
-/// what the test asserts on, not what the app renders. Holding them in a plain
-/// object beside it satisfies both: the notifier exposes one final field, and
-/// the recording stays readable.
 class _Recorded {
   String? email;
   String? code;

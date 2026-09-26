@@ -1,27 +1,14 @@
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
+import 'package:opensplit_api/opensplit_api.dart' as api;
 
 import '../../domain/calendar_date.dart';
 import '../../domain/models/kinds.dart';
 
 /// The local mirror of the server's ledger, plus the client-only sync state.
-///
-/// These row classes are the app's read models: `Group`, `Member`, `Profile`,
-/// `Currency` and `Category` are what screens and domain code receive. Behaviour
-/// that belongs to them lives in extensions (`domain/models/*.dart`). `Entry`
-/// is the one aggregate with its own type, because an expense is a row plus
-/// its payers and shares.
-///
-/// A mirrored row's `seq` is the group sequence number the server last issued
-/// for it. Null means this device created the row and the server has not
-/// confirmed it yet, so it cannot be stale against anything.
 
 /// Stores a generated wire enum by its wire value.
-///
-/// A value this build does not know reads back as the generator's
-/// `unknownDefaultOpenApi` sentinel instead of failing the query, so a newer
-/// server's new kind costs one unreadable row, not a broken sync.
 class WireEnumConverter<T extends Enum> extends TypeConverter<T, String> {
   const WireEnumConverter(this._values, this._unknown);
 
@@ -35,16 +22,18 @@ class WireEnumConverter<T extends Enum> extends TypeConverter<T, String> {
   String toSql(T value) => '$value';
 }
 
-/// A JSON object column.
-class JsonMapConverter extends TypeConverter<Map<String, Object?>, String> {
-  const JsonMapConverter();
+/// A generated wire type stored as its JSON.
+class WireJsonConverter<T> extends TypeConverter<T, String> {
+  const WireJsonConverter(this._fromJson);
+
+  final T Function(Map<String, dynamic> json) _fromJson;
 
   @override
-  Map<String, Object?> fromSql(String fromDb) =>
-      (jsonDecode(fromDb) as Map).cast<String, Object?>();
+  T fromSql(String fromDb) =>
+      _fromJson(jsonDecode(fromDb) as Map<String, dynamic>);
 
   @override
-  String toSql(Map<String, Object?> value) => jsonEncode(value);
+  String toSql(T value) => jsonEncode(value);
 }
 
 /// A calendar date, stored as the `yyyy-MM-dd` text it is on the wire, so it
@@ -96,13 +85,6 @@ class Profiles extends Table {
 
 /// The server's record of what happened, plus provisional lines this device
 /// wrote for changes it has not pushed yet.
-///
-/// The server's lines replace the provisional ones for the same subject as soon
-/// as they arrive. Nothing is rebuilt from these rows: balances read entries
-/// only, so a bug here can make the feed wrong but never a balance.
-///
-/// References cascade (unlike the server) so clearing the ledger on sign-out
-/// can delete members that events name.
 @DataClassName('GroupEventRow')
 class GroupEvents extends Table {
   TextColumn get id => text()();
@@ -122,10 +104,19 @@ class GroupEvents extends Table {
   /// Not a foreign key: the record outlives what it describes.
   TextColumn get subjectId => text().nullable()();
 
-  /// The after-image, shaped by [kind]: `api.EntrySnapshot`,
-  /// `api.MemberEventPayload`, `api.GroupEventPayload` or
-  /// `api.LinkEventPayload`.
-  TextColumn get payload => text().map(const JsonMapConverter())();
+  /// What happened, as on the wire: exactly one is set, chosen by [kind].
+  TextColumn get entry => text().nullable().map(
+    const WireJsonConverter(api.EntrySnapshot.fromJson),
+  )();
+  TextColumn get member => text().nullable().map(
+    const WireJsonConverter(api.MemberEventPayload.fromJson),
+  )();
+  TextColumn get group => text().nullable().map(
+    const WireJsonConverter(api.GroupEventPayload.fromJson),
+  )();
+  TextColumn get link => text().nullable().map(
+    const WireJsonConverter(api.LinkEventPayload.fromJson),
+  )();
 
   /// `(seq, ordinal)` is the feed's total order: one change can record more
   /// than one line, and those share a `seq` and a `createdAt`. Both are null on
@@ -165,12 +156,9 @@ class Groups extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-/// A person's place in one group. Every financial row references a member,
-/// and a member with no [profileId] is a placeholder — a full member who has
-/// no account yet. Claiming an invite sets that one column.
-///
-/// Members are never deleted, only [leftAt] set, so past entries still
-/// resolve.
+/// A person's place in one group. Every financial row references a member, and
+/// a member with no [profileId] is a placeholder — a full member who has no
+/// account yet. Claiming an invite sets that one column.
 @DataClassName('Member')
 class Members extends Table {
   TextColumn get id => text()();
@@ -255,11 +243,6 @@ class Entries extends Table {
 }
 
 /// An edit the server refused because the expense had moved underneath it.
-///
-/// The ledger takes the server's version; what this device meant is parked
-/// here for a person to read. One row per expense. There is deliberately no
-/// "apply mine": redoing an edit happens on the ordinary edit screen, against
-/// what the expense says now.
 @DataClassName('EntryConflictRow')
 class EntryConflicts extends Table {
   TextColumn get entryId =>
@@ -267,9 +250,9 @@ class EntryConflicts extends Table {
   TextColumn get groupId =>
       text().references(Groups, #id, onDelete: KeyAction.cascade)();
 
-  /// What this device meant the expense to look like, as `api.EntrySnapshot`
-  /// JSON.
-  TextColumn get attempted => text()();
+  /// What this device meant the expense to look like.
+  TextColumn get attempted =>
+      text().map(const WireJsonConverter(api.EntrySnapshot.fromJson))();
 
   /// The version the refused edit was composed against.
   IntColumn get baseSeq => integer().nullable()();
@@ -329,9 +312,6 @@ class FxRates extends Table {
 enum OutboxTarget { group, member, entry, profile }
 
 /// Rows this device changed and has not pushed. Client-only.
-///
-/// A set of dirty rows, not a log: re-queuing a row replaces its item, and the
-/// pusher reads the row's current state at send time.
 @DataClassName('OutboxRow')
 class Outbox extends Table {
   TextColumn get target => textEnum<OutboxTarget>()();
@@ -368,15 +348,12 @@ class GroupCursors extends Table {
   Set<Column> get primaryKey => {groupId};
 }
 
-/// Keyset cursors for feeds with no single writer (profiles live in D1, which
-/// cannot issue a sequence number). Also holds the FX backfill floor.
+/// Where a feed without a sequence number stands: the profile feed's opaque
+/// server cursor, and the FX window's floor date.
 @DataClassName('FeedCursorRow')
 class FeedCursors extends Table {
   TextColumn get feed => text()();
-  DateTimeColumn get cursor => dateTime().nullable()();
-
-  /// Id of the last row consumed at exactly [cursor].
-  TextColumn get cursorId => text().nullable()();
+  TextColumn get cursor => text().nullable()();
 
   DateTimeColumn get lastSyncedAt => dateTime().nullable()();
 

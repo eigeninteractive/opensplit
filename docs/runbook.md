@@ -274,11 +274,10 @@ bound correctly, because it touches no database. The cheapest request that does
 is a guest sign-in, which writes a user and a session:
 
 ```sh
-curl -s -X POST $base/api/auth/sign-in/anonymous -H 'content-type: application/json'
+curl -s -X POST $base/api/identity/guest
 ```
 
-A body carrying `"isAnonymous":true` and a `set-auth-token` response header
-means D1 is real and `BETTER_AUTH_SECRET` is set. `D1_ERROR: no such database`
+A body carrying `"isAnonymous":true` and a non-null `token` means D1 is real and `BETTER_AUTH_SECRET` is set. `D1_ERROR: no such database`
 means step 1's id did not make it into the config.
 
 That leaves one guest account behind. It is collected by the weekly sweep after

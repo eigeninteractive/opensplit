@@ -147,11 +147,7 @@ void main() {
     });
 
     test('rounds per entry, which is what makes the sum reconcile', () {
-      // 0.01 USD at 87.5 is 0.875 INR, which rounds up to 88 paise. Two of
-      // them shown on screen read 88 + 88 = 176. Converting the 0.02 USD
-      // total instead gives 1.75 INR -> 175. The old behaviour produced 175
-      // and printed 176, and this is the one paisa that told the user the
-      // screen did not add up.
+      // 0.01 USD at 87.5 is 0.875 INR, which rounds up to 88 paise.
       final total = estimateBalance(
         entries: [
           entry(currency: 'USD', paid: 1, share: 0, fxRate: 87.5),

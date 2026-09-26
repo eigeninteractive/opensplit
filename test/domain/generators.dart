@@ -5,12 +5,6 @@ import 'package:opensplit/domain/split/allocation.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 
 /// Deterministic random generators for property-based tests.
-///
-/// Every generator draws from a seeded [Random], so a failure is reproducible
-/// from the seed printed in the test name rather than being a one-off that
-/// vanishes on re-run. The domain is pure functions over immutable data, which
-/// is what makes generating thousands of cases cheap: no database, no network,
-/// milliseconds per thousand.
 class EntryGen {
   EntryGen(this.seed) : random = Random(seed);
 
@@ -28,10 +22,6 @@ class EntryGen {
   static String _pad(int n) => n.toString().padLeft(10, '0');
 
   /// A random non-negative integer in `[0, maxInclusive]`.
-  ///
-  /// `Random.nextInt` caps at 2^32, so larger bounds are composed from two
-  /// draws — needed to exercise amounts big enough to overflow a JavaScript
-  /// double when multiplied by a 10^6-scaled weight.
   int nextIntUpTo(int maxInclusive) {
     if (maxInclusive <= 0) return 0;
     if (maxInclusive < 0xFFFFFFFF) return random.nextInt(maxInclusive + 1);
@@ -42,9 +32,6 @@ class EntryGen {
 
   /// Splits [total] into exactly [parts] non-negative integers summing to
   /// [total], by picking cut points on the interval.
-  ///
-  /// With [allowZero] false every part is at least 1, which requires
-  /// `total >= parts`.
   List<int> partition(int total, int parts, {bool allowZero = true}) {
     if (parts <= 1) return [total];
 
@@ -122,10 +109,6 @@ class EntryGen {
   }
 
   /// A random expense over [members], guaranteed to satisfy the invariant.
-  ///
-  /// Amounts reach 10^12 minor units so that the allocation's [BigInt]
-  /// intermediates are genuinely exercised rather than staying comfortably
-  /// inside double precision.
   Entry expense(List<String> members, {required int index}) {
     final currency = currencies[random.nextInt(currencies.length)];
     final total = 1 + nextIntUpTo(1000000000000);

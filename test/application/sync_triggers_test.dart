@@ -1,23 +1,26 @@
 import 'dart:async';
 
-import 'package:opensplit/application/sync_scheduler.dart';
+import 'package:opensplit/application/sync_coordinator.dart';
+import 'package:opensplit/data/sync/sync_engine.dart';
 import 'package:test/test.dart';
 
 /// What makes a sync happen, and what deliberately does not.
-///
-/// Every one of these is a case where nothing visibly breaks when it is wrong,
-/// which is why they are worth pinning: a missing trigger looks exactly like a
-/// group where nobody has added anything, and a duplicated one looks exactly
-/// like a working app that quietly costs battery and requests.
+const _clean = SyncReport(pushed: 0, pulled: 0, failed: 0);
+
+/// When the coordinator decides a sync is worth running.
 void main() {
   late List<DateTime> runs;
   late StreamController<bool> online;
   late StreamController<void> writes;
   late DateTime now;
-  late SyncScheduler scheduler;
+  late SyncCoordinator scheduler;
 
   /// Lets a queued microtask -- the sync callback -- actually run.
-  Future<void> settle() => Future<void>.delayed(Duration.zero);
+  Future<void> settle() async {
+    for (var i = 0; i < 3; i++) {
+      await Future<void>.delayed(Duration.zero);
+    }
+  }
 
   /// Two turns, because a write takes two: the stream delivers on one, and the
   /// timer that collects a burst of writes fires on the next.
@@ -31,21 +34,25 @@ void main() {
     online = StreamController<bool>.broadcast();
     writes = StreamController<void>.broadcast();
     now = DateTime.utc(2026, 8, 27, 9);
-    scheduler = SyncScheduler(
-      sync: () async => runs.add(now),
+    scheduler = SyncCoordinator(
+      syncAll: () async {
+        runs.add(now);
+        return _clean;
+      },
+      syncGroup: (_) async => _clean,
       online: online.stream,
       writes: writes.stream,
       clock: () => now,
       minimumGap: const Duration(minutes: 2),
-      // Zero rather than a second: the delay's job is collecting a burst, and
-      // a test that waited it out in real time would be a slow test proving
-      // that Timer works.
+      // Zero rather than a second: the delay's job is collecting a burst, and a
+      // test that waited it out in real time would be a slow test proving that
+      // Timer works.
       writeDelay: Duration.zero,
     );
   });
 
   tearDown(() async {
-    await scheduler.dispose();
+    scheduler.dispose();
     await online.close();
     await writes.close();
   });
@@ -54,9 +61,7 @@ void main() {
     scheduler.start();
     await settle();
 
-    // The trigger that did not exist. Opening a group screen was the only
-    // automatic sync, so a cold start showed whatever the device last knew --
-    // and on a second device or after a reinstall, nothing at all.
+    // The trigger that did not exist.
     expect(runs, hasLength(1));
   });
 
@@ -143,11 +148,8 @@ void main() {
     scheduler.start();
     await settle();
 
-    // Well inside minimumGap, and it must run anyway: a person pressing Save
-    // is not background chatter. This is the trigger that did not exist --
-    // saving an expense returned to an already-mounted group screen, so the
-    // only automatic sync there was never re-ran and the expense reached
-    // nobody until the app was next resumed.
+    // Well inside minimumGap, and it must run anyway: a person pressing Save is
+    // not background chatter.
     now = now.add(const Duration(seconds: 3));
     writes.add(null);
     await settleWrite();
@@ -176,11 +178,13 @@ void main() {
   test('a write during a sync is not lost', () async {
     final started = <int>[];
     var gate = Completer<void>();
-    final slow = SyncScheduler(
-      sync: () async {
+    final slow = SyncCoordinator(
+      syncAll: () async {
         started.add(started.length);
         await gate.future;
+        return _clean;
       },
+      syncGroup: (_) async => _clean,
       online: online.stream,
       writes: writes.stream,
       clock: () => now,
@@ -193,10 +197,8 @@ void main() {
     await settle();
     expect(started, hasLength(1), reason: 'the launch sync is in flight');
 
-    // The row joins the outbox *after* the running sync drained it, so that
-    // run will not carry it. Dropping this the way a duplicate resume is
-    // dropped would leave the expense saved here and invisible everywhere
-    // else -- with nothing on screen to say so.
+    // The row joins the outbox *after* the running sync drained it, so that run
+    // will not carry it.
     writes.add(null);
     await settle();
     expect(started, hasLength(1), reason: 'still one: no overlapping runs');
@@ -218,11 +220,13 @@ void main() {
   test('never runs two at once', () async {
     final started = <int>[];
     final gate = Completer<void>();
-    final slow = SyncScheduler(
-      sync: () async {
+    final slow = SyncCoordinator(
+      syncAll: () async {
         started.add(started.length);
         await gate.future;
+        return _clean;
       },
+      syncGroup: (_) async => _clean,
       online: online.stream,
       writes: writes.stream,
       clock: () => now,
@@ -246,11 +250,12 @@ void main() {
 
   test('a failing sync does not stop the next one', () async {
     var attempts = 0;
-    final failing = SyncScheduler(
-      sync: () async {
+    final failing = SyncCoordinator(
+      syncAll: () async {
         attempts++;
         throw StateError('offline');
       },
+      syncGroup: (_) async => _clean,
       online: online.stream,
       writes: writes.stream,
       clock: () => now,
@@ -270,9 +275,18 @@ void main() {
   });
 
   test('stops listening once disposed', () async {
-    scheduler.start();
+    final own = SyncCoordinator(
+      syncAll: () async {
+        runs.add(now);
+        return _clean;
+      },
+      syncGroup: (_) async => _clean,
+      online: online.stream,
+      clock: () => now,
+    );
+    own.start();
     await settle();
-    await scheduler.dispose();
+    own.dispose();
 
     now = now.add(const Duration(hours: 1));
     online.add(true);

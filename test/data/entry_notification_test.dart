@@ -14,12 +14,6 @@ import 'package:test/test.dart';
 import '../harness.dart';
 
 /// The composer both push paths use.
-///
-/// It exists as its own function so that the app and the background isolate —
-/// which share no memory, no provider container and no open database — cannot
-/// end up with two answers to "what does this expense say". These tests are
-/// what makes that claim checkable: the background isolate itself cannot be
-/// exercised from a test, but everything in it that decides wording is here.
 void main() {
   late AppDatabase db;
   late DriftGroupRepository groups;

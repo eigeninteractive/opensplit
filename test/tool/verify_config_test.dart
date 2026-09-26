@@ -24,13 +24,4 @@ void main() {
   });
 
   /// There used to be a second test here, and its absence is the point.
-  ///
-  /// It checked that a publishable key was one, and above all that it was not a
-  /// service-role key somebody had pasted in by mistake — which would have put
-  /// full database access inside a web bundle anybody can read.
-  ///
-  /// The backend is now one origin serving the site, the app bundle and the
-  /// API, and a request carries a session or it carries nothing. There is no
-  /// anonymous public identifier to configure, so there is nothing here that
-  /// could be the wrong one.
 }

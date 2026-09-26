@@ -7,11 +7,6 @@ import 'package:opensplit_api/opensplit_api.dart' as api;
 import 'package:test/test.dart';
 
 /// What a feed line says, worked out from two snapshots of the same expense.
-///
-/// The rules used to live on the writing device, which composed the diff and
-/// pushed it. They live here instead, on the reading device, over records the
-/// server wrote -- so a line can no longer be anything its author preferred it
-/// to be.
 void main() {
   final at = DateTime.utc(2026, 8, 27, 9);
   var seq = 0;
@@ -36,7 +31,7 @@ void main() {
     createdAt: at,
     kind: EventKind.entry,
     isProvisional: false,
-    payload: api.EntrySnapshot(
+    entry: api.EntrySnapshot(
       kind: kind,
       description: description,
       currency: currency,
@@ -54,7 +49,7 @@ void main() {
         for (final row in shares.entries)
           api.MoneyRow(memberId: row.key, amountMinor: row.value),
       ]..sort((a, b) => a.memberId.compareTo(b.memberId)),
-    ).toJson(),
+    ),
   );
 
   test('the first snapshot of an expense is its creation', () {
@@ -101,9 +96,9 @@ void main() {
   });
 
   test('saving something unchanged is not an edit', () {
-    expect(diffSnapshots(snap().snapshot, snap().snapshot), isEmpty);
+    expect(diffSnapshots(snap().entry!, snap().entry!), isEmpty);
     expect(
-      recordsSameShape(snap().snapshot, snap().snapshot),
+      recordsSameShape(snap().entry!, snap().entry!),
       isTrue,
       reason: 'a re-saved editor must not add a line to anybody\'s feed',
     );
@@ -111,7 +106,7 @@ void main() {
 
   test('an empty string and a null are the same absence', () {
     expect(
-      diffSnapshots(snap(notes: null).snapshot, snap(notes: '').snapshot),
+      diffSnapshots(snap(notes: null).entry!, snap(notes: '').entry!),
       isEmpty,
     );
   });
@@ -213,8 +208,8 @@ void main() {
   test('a re-split is not mistaken for an unchanged expense', () {
     expect(
       recordsSameShape(
-        snap(shares: {'m1': 20000, 'm2': 20000}).snapshot,
-        snap(shares: {'m1': 30000, 'm2': 10000}).snapshot,
+        snap(shares: {'m1': 20000, 'm2': 20000}).entry!,
+        snap(shares: {'m1': 30000, 'm2': 10000}).entry!,
       ),
       isFalse,
       reason:

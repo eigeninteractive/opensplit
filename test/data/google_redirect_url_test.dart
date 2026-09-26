@@ -32,8 +32,8 @@ void main() {
 
     test('preserves the invite it was opened from', () {
       // The whole reason the destination travels rather than being rebuilt:
-      // somebody with no session tapped a friend's link, and the sign-in has
-      // to end on the invite rather than on the home screen.
+      // somebody with no session tapped a friend's link, and the sign-in has to
+      // end on the invite rather than on the home screen.
       expect(
         googleRedirectUrl(
           Uri.parse(

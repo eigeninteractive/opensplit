@@ -10,10 +10,6 @@ import 'sync_gate_contract.dart';
 SyncGate createPlatformSyncGate(AppDatabase _) => BrowserSyncGate();
 
 /// Serializes browser tabs through the Web Locks API.
-///
-/// Ownership belongs to the browser rather than to a database row. Navigating,
-/// reloading, closing, or crashing a tab releases its lock as part of document
-/// cleanup, so a replacement tab never waits for a stale wall-clock lease.
 class BrowserSyncGate implements SyncGate {
   BrowserSyncGate({this.name = 'opensplit-ledger-sync'});
 

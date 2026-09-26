@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:opensplit_api/opensplit_api.dart' as api;
 
 import '../../application/providers.dart';
 import '../../domain/activity/activity_text.dart';
@@ -25,11 +24,6 @@ import '../widgets/currency_picker.dart';
 import '../widgets/page_body.dart';
 
 /// Creates or edits an expense.
-///
-/// The default path is deliberately the shortest one: type what it was, type
-/// how much, save. Everything else — several payers, unequal splits, another
-/// currency, another date — is available but never in the way, because the
-/// thing that kills an expense app is the expense you did not bother to log.
 class EntryEditorScreen extends ConsumerStatefulWidget {
   const EntryEditorScreen({super.key, required this.groupId, this.entryId});
 
@@ -56,10 +50,6 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
 
   /// The day it happened, and when on that day if known, with the zone it
   /// happened in. Times are shown and picked on this device's clock.
-  ///
-  /// A new expense happened now, here: [_zone] is filled in with this
-  /// device's zone at save. Picking another day clears the time, which is no
-  /// longer known; the time row can add one back.
   late DateTime _date;
   DateTime? _occurredAt;
   String? _zone;
@@ -85,13 +75,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
     _date = now;
     _occurredAt = now.toUtc();
     // Seeding the form is initialisation from asynchronous data, so it listens
-    // instead of running inside build. Writing to a TextEditingController
-    // notifies the field bound to it, and a build is the wrong place to do
-    // that.
-    //
-    // Two subscriptions because the seed needs both the ledger and the currency
-    // list, and either can arrive second. Only the first fires immediately;
-    // whichever lands later brings the other with it.
+    // instead of running inside build.
     ref.listenManual(
       groupLedgerProvider(widget.groupId),
       (_, _) => _seedWhenReady(),
@@ -122,10 +106,6 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
   ) => map.putIfAbsent(id, TextEditingController.new);
 
   /// Seeds the form as soon as everything it needs has arrived.
-  ///
-  /// No setState: the only things this changes on screen are the controllers,
-  /// which notify their own fields, and state that the build watching these
-  /// same providers is about to read anyway.
   void _seedWhenReady() {
     if (_loaded) return;
 
@@ -304,9 +284,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
       entryDate: calendarDay(_date),
       occurredAt: moment?.at,
       timeZone: moment?.zone,
-      // A fact about the transaction, captured once. Never re-fetched for a
-      // historical entry: what a rupee was worth on the night of the dinner
-      // does not change because the market moved afterwards.
+      // A fact about the transaction, captured once.
       fxRate: fx?.rate,
       fxSource: fx == null ? null : '${fx.source}@${calendarDate(fx.date)}',
     );
@@ -388,22 +366,17 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
   }
 
   /// Dates already asked for, so a rebuild does not re-ask.
-  ///
-  /// The server deduplicates too, but a widget that fires a request on every
-  /// keystroke is wrong regardless of who absorbs it.
   final _requestedRates = <String>{};
 
   void _requestRate(DateTime asOf, String currency) {
     final day = calendarDate(asOf);
     if (!_requestedRates.add('$day|$currency')) return;
 
-    // Not awaited, and failures ignored: this must not delay a frame or a
-    // save, and a missing rate costs an estimate and nothing more.
+    // Not awaited: this must not delay a frame or a save.
     ref
-        .read(remoteLedgerApiProvider)
-        ?.requestFxBackfill(
-          api.FxBackfillRequest(asOf: day, currency: currency),
-        )
+        .read(syncEngineProvider)
+        ?.shared
+        .requestBackfill(asOf, currency)
         .ignore();
   }
 
@@ -461,15 +434,6 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
     final totalMinor = currency?.parseToMinor(_amount.text);
 
     // The rate as it stood on the ENTRY's date, not today's.
-    //
-    // A dinner backdated to last Tuesday was worth what it was worth last
-    // Tuesday. Stamping it with today's rate would restate history every time
-    // someone recorded an old expense, and would quietly disagree with the same
-    // expense entered on the day.
-    //
-    // Resolved here rather than in _save so saving never waits on a lookup, and
-    // re-resolved when the date picker changes because the date is part of the
-    // question.
     final target = ledger.group.defaultCurrency;
     FxQuote? fx;
     if (currency != null && currency.code != target) {
@@ -480,12 +444,6 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
       // Nothing local can price this date, so ask the server: the rate lands on
       // a later sync and the entry saves without a snapshot in the meantime,
       // which the schema allows.
-      //
-      // A listener, not a line in the body — this is a network call, and a
-      // build must not make one. It still fires exactly when it should: a
-      // FutureProvider always goes loading, then data, and changing the date or
-      // the currency asks a different provider instance which makes that
-      // transition of its own.
       final code = currency.code;
       ref.listen(quote, (_, next) {
         if (next.isLoading || next.value != null) return;
@@ -804,9 +762,6 @@ class _SplitSection extends StatelessWidget {
   final VoidCallback onAmountEdited;
 
   /// The weight for [memberId], nudged by [by] and never below zero.
-  ///
-  /// Zero is legitimate — somebody present who owes nothing for this bill — so
-  /// the floor is zero rather than one.
   Map<String, int> _nudge(String memberId, int by) {
     final next = {...shares};
     next[memberId] = ((next[memberId] ?? 1) + by).clamp(0, 1 << 30);
@@ -814,9 +769,6 @@ class _SplitSection extends StatelessWidget {
   }
 
   /// A live preview of what each person ends up owing.
-  ///
-  /// Runs the real allocator, not an approximation, so the rounding shown here
-  /// is the rounding that gets stored.
   Map<String, int>? _preview() {
     if (currency == null || totalMinor == null || totalMinor! <= 0) return null;
     if (participants.isEmpty) return null;
@@ -946,10 +898,6 @@ class _SplitSection extends StatelessWidget {
 }
 
 /// Picks a category from the fixed global list.
-///
-/// Optional on purpose: forcing a choice before an expense can be saved would
-/// put a decision in front of the one action that has to stay instant. There is
-/// no "add your own" — see [Category].
 class _CategoryPicker extends ConsumerWidget {
   const _CategoryPicker({required this.value, required this.onChanged});
 
@@ -996,11 +944,6 @@ class _CategoryPicker extends ConsumerWidget {
 }
 
 /// What has already happened to this expense.
-///
-/// Shown beside the fields rather than only in the group feed, because this is
-/// where somebody stands when they wonder why a number is not what they
-/// remember. Editing in place keeps the balance arithmetic simple; this is what
-/// keeps it honest.
 class _History extends ConsumerWidget {
   const _History({required this.entryId, required this.ledger});
 

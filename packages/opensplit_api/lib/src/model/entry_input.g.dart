@@ -12,6 +12,7 @@ EntryInput _$EntryInputFromJson(Map<String, dynamic> json) =>
         json,
         requiredKeys: const [
           'id',
+          'clientKey',
           'kind',
           'description',
           'categoryId',
@@ -24,7 +25,6 @@ EntryInput _$EntryInputFromJson(Map<String, dynamic> json) =>
           'fxRate',
           'fxSource',
           'notes',
-          'clientKey',
           'payers',
           'shares',
           'baseSeq',
@@ -32,6 +32,7 @@ EntryInput _$EntryInputFromJson(Map<String, dynamic> json) =>
       );
       final val = EntryInput(
         id: $checkedConvert('id', (v) => v as String),
+        clientKey: $checkedConvert('clientKey', (v) => v as String?),
         kind: $checkedConvert(
           'kind',
           (v) => $enumDecode(
@@ -61,7 +62,6 @@ EntryInput _$EntryInputFromJson(Map<String, dynamic> json) =>
         fxRate: $checkedConvert('fxRate', (v) => v as num?),
         fxSource: $checkedConvert('fxSource', (v) => v as String?),
         notes: $checkedConvert('notes', (v) => v as String?),
-        clientKey: $checkedConvert('clientKey', (v) => v as String?),
         payers: $checkedConvert(
           'payers',
           (v) => (v as List<dynamic>)
@@ -82,6 +82,7 @@ EntryInput _$EntryInputFromJson(Map<String, dynamic> json) =>
 Map<String, dynamic> _$EntryInputToJson(EntryInput instance) =>
     <String, dynamic>{
       'id': instance.id,
+      'clientKey': instance.clientKey,
       'kind': _$EntryKindEnumMap[instance.kind]!,
       'description': instance.description,
       'categoryId': instance.categoryId,
@@ -94,7 +95,6 @@ Map<String, dynamic> _$EntryInputToJson(EntryInput instance) =>
       'fxRate': instance.fxRate,
       'fxSource': instance.fxSource,
       'notes': instance.notes,
-      'clientKey': instance.clientKey,
       'payers': instance.payers.map((e) => e.toJson()).toList(),
       'shares': instance.shares.map((e) => e.toJson()).toList(),
       'baseSeq': instance.baseSeq,

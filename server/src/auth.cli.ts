@@ -1,25 +1,10 @@
 import { build } from "./auth";
 
 /**
- * The instance `@better-auth/cli generate` reads to work out the schema.
- *
- * It exists because the real one is a function of a live `Env` — there is no
- * D1 binding in Node, and there should not be. Schema generation only inspects
- * the options and the plugin list, so a stub that satisfies the type is enough,
- * and nothing here ever executes a query.
- *
- * The important property is that this calls the *same* builder the Worker does.
- * A second copy of the options would drift, and the first sign that it had
- * would be a missing column in production.
+ * What `auth generate` reads to emit `auth-schema.ts`: the Worker's own builder
+ * over a stub D1, since generation only inspects options and plugins.
  */
-/**
- * Enough of a D1 to be recognised as one.
- *
- * The Kysely adapter identifies D1 by the presence of `batch`, `exec` and
- * `prepare`, and then builds an index introspector that reads the existing
- * schema. Against an empty result set that introspection simply finds nothing,
- * which is exactly right: this generates the schema from scratch.
- */
+/** Enough of a D1 for the adapter to recognise one; introspection finds nothing. */
 const emptyStatement = {
   bind: () => emptyStatement,
   first: async () => null,
