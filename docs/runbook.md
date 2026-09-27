@@ -68,7 +68,9 @@ database that only an authenticated account holder can reach. Commit it.
 from the config file, not from the account, so a deploy with the placeholder
 still binds — to nothing that exists. The first query fails at runtime with
 `D1_ERROR: no such database`. That is the loud failure, and it is at request
-time rather than deploy time, so check step 6's verification.
+time rather than deploy time, so check step 6's verification. The release
+workflow refuses to deploy at all while either id is still the placeholder
+(`npm run check:deploy-config`), so this can only happen to a deploy run by hand.
 
 ---
 
@@ -98,6 +100,12 @@ npx wrangler d1 migrations apply opensplit --remote
 `--remote` is the whole point of the command; without it you have migrated the
 local file again. It prints the migrations it is about to run and asks for
 confirmation.
+
+This step is for the first setup, or for applying a migration by hand. Every
+release applies whatever is pending itself, just before it deploys the Worker.
+The previous Worker is still serving while it does, so a migration must work
+for both versions: additive only, with anything the old code reads removed in
+a later release.
 
 The Durable Objects are **not** migrated here and there is no command that does
 it. Each object carries its own schema and applies whatever it has not yet run
