@@ -22,11 +22,10 @@ import 'package:opensplit_api/src/model/google_identity_request.dart';
 import 'package:opensplit_api/src/model/google_redirect.dart';
 import 'package:opensplit_api/src/model/google_redirect_request.dart';
 import 'package:opensplit_api/src/model/group.dart';
-import 'package:opensplit_api/src/model/group_create.dart';
 import 'package:opensplit_api/src/model/group_event_payload.dart';
 import 'package:opensplit_api/src/model/group_ids.dart';
+import 'package:opensplit_api/src/model/group_input.dart';
 import 'package:opensplit_api/src/model/group_link.dart';
-import 'package:opensplit_api/src/model/group_update.dart';
 import 'package:opensplit_api/src/model/health.dart';
 import 'package:opensplit_api/src/model/identity_outcome.dart';
 import 'package:opensplit_api/src/model/invite.dart';
@@ -37,16 +36,13 @@ import 'package:opensplit_api/src/model/link_preview.dart';
 import 'package:opensplit_api/src/model/link_revocation.dart';
 import 'package:opensplit_api/src/model/live_link.dart';
 import 'package:opensplit_api/src/model/member.dart';
-import 'package:opensplit_api/src/model/member_create.dart';
 import 'package:opensplit_api/src/model/member_event_payload.dart';
-import 'package:opensplit_api/src/model/member_update.dart';
+import 'package:opensplit_api/src/model/member_input.dart';
 import 'package:opensplit_api/src/model/money_row.dart';
 import 'package:opensplit_api/src/model/payer.dart';
 import 'package:opensplit_api/src/model/placeholder.dart';
 import 'package:opensplit_api/src/model/placeholder_list.dart';
 import 'package:opensplit_api/src/model/profile.dart';
-import 'package:opensplit_api/src/model/profile_list.dart';
-import 'package:opensplit_api/src/model/profile_lookup.dart';
 import 'package:opensplit_api/src/model/profile_page.dart';
 import 'package:opensplit_api/src/model/profile_update.dart';
 import 'package:opensplit_api/src/model/push_data.dart';
@@ -139,17 +135,15 @@ ReturnType deserialize<ReturnType, BaseType>(
           as ReturnType;
     case 'Group':
       return Group.fromJson(value as Map<String, dynamic>) as ReturnType;
-    case 'GroupCreate':
-      return GroupCreate.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'GroupEventPayload':
       return GroupEventPayload.fromJson(value as Map<String, dynamic>)
           as ReturnType;
     case 'GroupIds':
       return GroupIds.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'GroupInput':
+      return GroupInput.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'GroupLink':
       return GroupLink.fromJson(value as Map<String, dynamic>) as ReturnType;
-    case 'GroupUpdate':
-      return GroupUpdate.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'Health':
       return Health.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'IdentityOutcome':
@@ -175,13 +169,11 @@ ReturnType deserialize<ReturnType, BaseType>(
       return LiveLink.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'Member':
       return Member.fromJson(value as Map<String, dynamic>) as ReturnType;
-    case 'MemberCreate':
-      return MemberCreate.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'MemberEventPayload':
       return MemberEventPayload.fromJson(value as Map<String, dynamic>)
           as ReturnType;
-    case 'MemberUpdate':
-      return MemberUpdate.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'MemberInput':
+      return MemberInput.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'MoneyRow':
       return MoneyRow.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'Payer':
@@ -194,11 +186,6 @@ ReturnType deserialize<ReturnType, BaseType>(
     case 'Platform':
     case 'Profile':
       return Profile.fromJson(value as Map<String, dynamic>) as ReturnType;
-    case 'ProfileList':
-      return ProfileList.fromJson(value as Map<String, dynamic>) as ReturnType;
-    case 'ProfileLookup':
-      return ProfileLookup.fromJson(value as Map<String, dynamic>)
-          as ReturnType;
     case 'ProfilePage':
       return ProfilePage.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'ProfileUpdate':

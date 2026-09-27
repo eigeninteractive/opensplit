@@ -1,6 +1,9 @@
 import 'package:opensplit_api/opensplit_api.dart' as api;
 
-/// Where the server wakes this account: FCM registration tokens.
+import '../sync/api_client.dart';
+
+/// Where the server wakes this account: FCM registration tokens. Throws
+/// [ApiFailure], like every other call to the server.
 final class DeviceTokens {
   const DeviceTokens(this._client);
 
@@ -9,10 +12,12 @@ final class DeviceTokens {
   Future<void> register({
     required String token,
     required api.Platform platform,
-  }) => _client.getDevicesApi().registerDevice(
-    device: api.Device(token: token, platform: platform),
+  }) => send(
+    _client.getDevicesApi().registerDevice(
+      device: api.Device(token: token, platform: platform),
+    ),
   );
 
   Future<void> unregister(String token) =>
-      _client.getDevicesApi().forgetDevice(token: token);
+      send(_client.getDevicesApi().forgetDevice(token: token));
 }

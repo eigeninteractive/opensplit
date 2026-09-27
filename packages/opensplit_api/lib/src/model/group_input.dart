@@ -5,7 +5,7 @@
 // ignore_for_file: unused_element
 import 'package:json_annotation/json_annotation.dart';
 
-part 'group_create.g.dart';
+part 'group_input.g.dart';
 
 @JsonSerializable(
   checked: true,
@@ -13,11 +13,9 @@ part 'group_create.g.dart';
   disallowUnrecognizedKeys: false,
   explicitToJson: true,
 )
-class GroupCreate {
-  /// Returns a new [GroupCreate] instance.
-  GroupCreate({
-    required this.id,
-
+class GroupInput {
+  /// Returns a new [GroupInput] instance.
+  GroupInput({
     required this.name,
 
     required this.defaultCurrency,
@@ -26,13 +24,12 @@ class GroupCreate {
 
     required this.simplifyDebts,
 
-    required this.memberId,
+    required this.archivedAt,
 
-    required this.displayName,
+    required this.creatorId,
+
+    required this.creatorName,
   });
-
-  @JsonKey(name: r'id', required: true, includeIfNull: false)
-  final String id;
 
   @JsonKey(name: r'name', required: true, includeIfNull: false)
   final String name;
@@ -46,38 +43,41 @@ class GroupCreate {
   @JsonKey(name: r'simplifyDebts', required: true, includeIfNull: false)
   final bool simplifyDebts;
 
-  @JsonKey(name: r'memberId', required: true, includeIfNull: false)
-  final String memberId;
+  @JsonKey(name: r'archivedAt', required: true, includeIfNull: true)
+  final DateTime? archivedAt;
 
-  @JsonKey(name: r'displayName', required: true, includeIfNull: false)
-  final String displayName;
+  @JsonKey(name: r'creatorId', required: true, includeIfNull: false)
+  final String creatorId;
+
+  @JsonKey(name: r'creatorName', required: true, includeIfNull: false)
+  final String creatorName;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is GroupCreate &&
-          other.id == id &&
+      other is GroupInput &&
           other.name == name &&
           other.defaultCurrency == defaultCurrency &&
           other.isDirect == isDirect &&
           other.simplifyDebts == simplifyDebts &&
-          other.memberId == memberId &&
-          other.displayName == displayName;
+          other.archivedAt == archivedAt &&
+          other.creatorId == creatorId &&
+          other.creatorName == creatorName;
 
   @override
   int get hashCode =>
-      id.hashCode +
       name.hashCode +
       defaultCurrency.hashCode +
       isDirect.hashCode +
       simplifyDebts.hashCode +
-      memberId.hashCode +
-      displayName.hashCode;
+      (archivedAt == null ? 0 : archivedAt.hashCode) +
+      creatorId.hashCode +
+      creatorName.hashCode;
 
-  factory GroupCreate.fromJson(Map<String, dynamic> json) =>
-      _$GroupCreateFromJson(json);
+  factory GroupInput.fromJson(Map<String, dynamic> json) =>
+      _$GroupInputFromJson(json);
 
-  Map<String, dynamic> toJson() => _$GroupCreateToJson(this);
+  Map<String, dynamic> toJson() => _$GroupInputToJson(this);
 
   @override
   String toString() {

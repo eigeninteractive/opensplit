@@ -46,28 +46,28 @@ String groupToJson({
       for (final entry in entries)
         {
           'id': entry.id,
-          'kind': entry.kind.name,
-          'description': entry.description,
-          'category': categoryNames[entry.categoryId],
-          'category_id': entry.categoryId,
-          'currency': entry.currency,
+          'kind': entry.row.kind.name,
+          'description': entry.row.description,
+          'category': categoryNames[entry.row.categoryId],
+          'category_id': entry.row.categoryId,
+          'currency': entry.row.currency,
           // Minor units, deliberately.
-          'amount_minor': entry.amountMinor,
-          'date': calendarDate(entry.entryDate),
+          'amount_minor': entry.row.amountMinor,
+          'date': calendarDate(entry.row.entryDate),
           // When and where it happened, when known: an instant in UTC and
           // the IANA zone to read it in.
-          'occurred_at': entry.occurredAt?.toIso8601String(),
-          'time_zone': entry.timeZone,
-          'split_kind': entry.splitKind.name,
-          'notes': entry.notes,
+          'occurred_at': entry.row.occurredAt?.toIso8601String(),
+          'time_zone': entry.row.timeZone,
+          'split_kind': entry.row.splitKind.name,
+          'notes': entry.row.notes,
           // What a unit of this currency was worth on the day, as recorded then
           // and never re-fetched.
-          'fx': entry.fxRate == null
+          'fx': entry.row.fxRate == null
               ? null
               : {
-                  'rate': entry.fxRate.toString(),
-                  'source': entry.fxSource,
-                  'at': entry.fxAt?.toIso8601String(),
+                  'rate': entry.row.fxRate.toString(),
+                  'source': entry.row.fxSource,
+                  'at': entry.row.fxAt?.toIso8601String(),
                 },
           'payers': [
             for (final payer in entry.payers)
@@ -85,9 +85,9 @@ String groupToJson({
                 'weight_micros': share.weightMicros,
               },
           ],
-          'created_by': entry.createdBy,
-          'created_at': entry.createdAt.toIso8601String(),
-          'deleted_at': entry.deletedAt?.toIso8601String(),
+          'created_by': entry.row.createdBy,
+          'created_at': entry.row.createdAt.toIso8601String(),
+          'deleted_at': entry.row.deletedAt?.toIso8601String(),
         },
     ],
     // The whole record: who joined and when, not only the expenses.

@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { expect } from "vitest";
 import type { Result } from "../src/do/group/refusal";
-import type { Entry, EntryInput, Group, GroupUpdate, JoinRequest, Member, MemberUpdate } from "../src/schemas/ledger";
+import type { Entry, EntryInput, Group, GroupInput, JoinRequest, Member, MemberInput } from "../src/schemas/ledger";
 
 /** A group with people in it. */
 
@@ -47,21 +47,22 @@ export async function makeGroup(options: { groupId?: string; name?: string; curr
   const object = stub(groupId);
 
   const group = ok(
-    await object.create(
+    await object.putGroup(
+      groupId,
       {
-        id: groupId,
         name: options.name ?? "Goa trip",
         defaultCurrency: options.currency ?? "INR",
         isDirect: false,
         simplifyDebts: true,
-        memberId: `${groupId}-ravi`,
-        displayName: "Ravi",
+        archivedAt: null,
+        creatorId: `${groupId}-ravi`,
+        creatorName: "Ravi",
       },
       options.owner ?? RAVI,
     ),
   );
 
-  const priya = ok(await object.addMember({ id: `${groupId}-priya`, displayName: "Priya", upiVpa: null }, options.owner ?? RAVI));
+  const priya = ok(await object.putMember(`${groupId}-priya`, { displayName: "Priya", upiVpa: null, leftAt: null }, options.owner ?? RAVI));
 
   const changes = ok(await object.changes(options.owner ?? RAVI, 0, 500));
   const ravi = changes.members.find((member) => member.profileId === (options.owner ?? RAVI));
@@ -70,8 +71,11 @@ export async function makeGroup(options: { groupId?: string; name?: string; curr
   return { groupId, group, ravi, priya };
 }
 
+/** An expense and the id it is written at, as a device holds it. */
+export type EntryDraft = EntryInput & { id: string };
+
 /** An expense, balanced, with sensible defaults. */
-export function expense(overrides: Partial<EntryInput> & Pick<EntryInput, "id" | "amountMinor" | "payers" | "shares">): EntryInput {
+export function expense(overrides: Partial<EntryDraft> & Pick<EntryDraft, "id" | "amountMinor" | "payers" | "shares">): EntryDraft {
   return {
     kind: "expense",
     description: "Dinner",
@@ -84,14 +88,14 @@ export function expense(overrides: Partial<EntryInput> & Pick<EntryInput, "id" |
     fxRate: null,
     fxSource: null,
     notes: null,
-    clientKey: null,
+    deletedAt: null,
     baseSeq: null,
     ...overrides,
   };
 }
 
 /** One member pays, two split it evenly. The shape most tests need. */
-export function evenly(id: string, payer: string, between: string[], amountMinor: number): EntryInput {
+export function evenly(id: string, payer: string, between: string[], amountMinor: number): EntryDraft {
   const each = Math.floor(amountMinor / between.length);
   const shares = between.map((memberId, index) => ({
     memberId,
@@ -100,6 +104,29 @@ export function evenly(id: string, payer: string, between: string[], amountMinor
   }));
 
   return expense({ id, amountMinor, payers: [{ memberId: payer, amountMinor }], shares });
+}
+
+type GroupStub = ReturnType<typeof stub>;
+
+/** Writes an expense at its own id, the way the app pushes one. */
+export function saveEntry(object: GroupStub, { id, ...input }: EntryDraft, profileId: string) {
+  return object.putEntry(id, input, profileId);
+}
+
+/** A stored expense as the device would send it back, composed against the version it holds. */
+export function draftOf(entry: Entry, changes: Partial<EntryDraft> = {}): EntryDraft {
+  const { id, kind, description, categoryId, currency, amountMinor, entryDate, occurredAt, timeZone, splitKind, fxRate, fxSource, notes, deletedAt, payers, shares, seq } = entry;
+  return { id, kind, description, categoryId, currency, amountMinor, entryDate, occurredAt, timeZone, splitKind, fxRate, fxSource, notes, deletedAt, payers, shares, baseSeq: seq, ...changes };
+}
+
+/** Deletes an expense the way the app does: the whole row with `deletedAt` set, against `baseSeq`. */
+export function deleteEntry(object: GroupStub, entry: Entry, profileId: string, baseSeq: number = entry.seq) {
+  return saveEntry(object, draftOf(entry, { deletedAt: new Date().toISOString(), baseSeq }), profileId);
+}
+
+/** Puts a deleted expense back. */
+export function restoreEntry(object: GroupStub, entry: Entry, profileId: string) {
+  return saveEntry(object, draftOf(entry, { deletedAt: null }), profileId);
 }
 
 /** The same group, with Priya's place claimed by a real account. */
@@ -117,20 +144,20 @@ export async function makeGroupOfTwo(): Promise<Fixture & { priyaProfile: string
 export const BY_INVITE: JoinRequest = { memberId: null, displayName: null };
 
 /** Changes some of a group's fields the way the app does: read the row, send all of it. */
-export async function editGroup(groupId: string, profileId: string, changes: Partial<GroupUpdate>) {
+export async function editGroup(groupId: string, profileId: string, changes: Partial<GroupInput>) {
   const object = stub(groupId);
   const group = ok(await object.changes(profileId, 0, 500)).group;
   if (!group) expect.unreachable("No group row to edit.");
-  const { name, simplifyDebts, archivedAt } = group;
-  return object.update({ name, simplifyDebts, archivedAt, ...changes }, profileId);
+  const { name, defaultCurrency, isDirect, simplifyDebts, archivedAt, createdBy } = group;
+  return object.putGroup(groupId, { name, defaultCurrency, isDirect, simplifyDebts, archivedAt, creatorId: createdBy, creatorName: "Ravi", ...changes }, profileId);
 }
 
 /** The same for a member row. */
-export async function editMember(groupId: string, memberId: string, profileId: string, changes: Partial<MemberUpdate>) {
+export async function editMember(groupId: string, memberId: string, profileId: string, changes: Partial<MemberInput>) {
   const object = stub(groupId);
   const member = await memberRow(groupId, memberId, profileId);
   const { displayName, upiVpa, leftAt } = member;
-  return object.updateMember(memberId, { displayName, upiVpa, leftAt, ...changes }, profileId);
+  return object.putMember(memberId, { displayName, upiVpa, leftAt, ...changes }, profileId);
 }
 
 /** A member row as the group object currently holds it. Read as `RAVI`, who is in every fixture. */

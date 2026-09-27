@@ -2,6 +2,7 @@ import { z } from "@hono/zod-openapi";
 
 import { linkKinds } from "../db/d1/schema";
 import * as tables from "../db/group/schema";
+import { ProfileSchema } from "./account";
 import { CurrencyCodeSchema, createSelectSchema, DateSchema, IdSchema, NameSchema, SeqSchema, TimestampSchema, TimeZoneSchema, UpiVpaSchema } from "./common";
 
 /**
@@ -39,7 +40,6 @@ const entryRow = createSelectSchema(tables.entries, {
   fxAt: () => TimestampSchema,
   notes: () => z.string().max(2000),
   createdBy: () => IdSchema,
-  clientKey: () => IdSchema,
   createdAt: () => TimestampSchema,
   updatedAt: () => TimestampSchema,
   deletedAt: () => TimestampSchema,
@@ -53,12 +53,17 @@ export const editableEntryColumns = ["kind", "description", "categoryId", "curre
 
 const pickAll = <K extends string>(keys: readonly K[]) => Object.fromEntries(keys.map((key) => [key, true])) as { [P in K]: true };
 
-/** Record or edit an expense, whole. */
+/**
+ * An expense, whole, at the id the device minted: recording, editing,
+ * deleting and restoring are all this one write. `deletedAt` set deletes and
+ * null keeps or restores; the server stores its own time for it.
+ */
 export const EntryInputSchema = entryRow
-  .pick(pickAll(["id", "clientKey", ...editableEntryColumns]))
+  .pick(pickAll([...editableEntryColumns, "deletedAt"]))
   .extend({
-    payers: z.array(PayerSchema).min(1),
-    shares: z.array(ShareSchema).min(1),
+    // Far past any real group: the bound is stated rather than left to the transport.
+    payers: z.array(PayerSchema).min(1).max(1000),
+    shares: z.array(ShareSchema).min(1).max(1000),
     /** The version this edit was composed against; null for a new row. */
     baseSeq: SeqSchema.nullable(),
   })
@@ -89,9 +94,8 @@ const memberRow = createSelectSchema(tables.members, {
 });
 
 export const MemberSchema = memberRow.openapi("Member");
-export const MemberCreateSchema = memberRow.pick({ id: true, displayName: true, upiVpa: true }).openapi("MemberCreate");
-/** No `profileId`: only an invite hands a place to an account. */
-export const MemberUpdateSchema = memberRow.pick({ displayName: true, upiVpa: true, leftAt: true }).openapi("MemberUpdate");
+/** A member row at the id the device minted; a new one is a placeholder. No `profileId`: only an invite hands a place to an account. */
+export const MemberInputSchema = memberRow.pick({ displayName: true, upiVpa: true, leftAt: true }).openapi("MemberInput");
 
 const groupRow = createSelectSchema(tables.meta, {
   id: () => IdSchema,
@@ -106,10 +110,12 @@ const groupRow = createSelectSchema(tables.meta, {
 
 export const GroupSchema = groupRow.openapi("Group");
 
-/** The group and its creator's member row, in one change. */
-export const GroupCreateSchema = groupRow.pick({ id: true, name: true, defaultCurrency: true, isDirect: true, simplifyDebts: true }).extend({ memberId: memberRow.shape.id, displayName: memberRow.shape.displayName }).openapi("GroupCreate");
-
-export const GroupUpdateSchema = groupRow.pick({ name: true, simplifyDebts: true, archivedAt: true }).openapi("GroupUpdate");
+/**
+ * The group row at the id the device minted. Creating it also makes the
+ * creator's member row, in one change. `defaultCurrency`, `isDirect` and the
+ * creator are read only then: afterwards they describe how the group began.
+ */
+export const GroupInputSchema = groupRow.pick({ name: true, defaultCurrency: true, isDirect: true, simplifyDebts: true, archivedAt: true }).extend({ creatorId: memberRow.shape.id, creatorName: memberRow.shape.displayName }).openapi("GroupInput");
 
 export const InviteSchema = createSelectSchema(tables.invites, {
   token: () => IdSchema,
@@ -194,12 +200,21 @@ export const ChangePageSchema = z
     /** Null when the group row has not changed since the cursor. */
     group: GroupSchema.nullable(),
     members: z.array(MemberSchema),
+    /**
+     * The accounts behind this page's current members, so a place claimed by
+     * somebody named long ago arrives with their name. Renames after that
+     * travel on the profile feed.
+     */
+    profiles: z.array(ProfileSchema),
     entries: z.array(EntrySchema),
     events: z.array(EventSchema),
     /** Set once, on the page that says the group was collected. */
     purgedAt: TimestampSchema.nullable(),
   })
   .openapi("ChangePage");
+
+/** A page as the group's object answers it; the Worker adds the profiles, which live in D1. */
+export type GroupChanges = Omit<ChangePage, "profiles">;
 
 /** The kinds that wake a device: an expense, somebody arriving, somebody leaving. */
 export const notifiableKinds = ["entry", "member_joined", "member_left"] as const satisfies readonly (typeof tables.eventKinds)[number][];
@@ -221,11 +236,9 @@ export type Entry = z.infer<typeof EntrySchema>;
 export type EntryInput = z.infer<typeof EntryInputSchema>;
 export type EntrySnapshot = z.infer<typeof EntrySnapshotSchema>;
 export type Member = z.infer<typeof MemberSchema>;
-export type MemberCreate = z.infer<typeof MemberCreateSchema>;
-export type MemberUpdate = z.infer<typeof MemberUpdateSchema>;
+export type MemberInput = z.infer<typeof MemberInputSchema>;
 export type Group = z.infer<typeof GroupSchema>;
-export type GroupCreate = z.infer<typeof GroupCreateSchema>;
-export type GroupUpdate = z.infer<typeof GroupUpdateSchema>;
+export type GroupInput = z.infer<typeof GroupInputSchema>;
 export type Invite = z.infer<typeof InviteSchema>;
 export type GroupLink = z.infer<typeof GroupLinkSchema>;
 export type LiveLink = z.infer<typeof LiveLinkSchema>;

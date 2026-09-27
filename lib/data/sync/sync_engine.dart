@@ -244,13 +244,13 @@ class SyncEngine {
           .insertOnConflictUpdate(
             EntryConflictsCompanion.insert(
               entryId: entry.id,
-              groupId: entry.groupId,
+              groupId: entry.row.groupId,
               attempted: snapshotOf(entry),
-              baseSeq: Value(entry.seq),
+              baseSeq: Value(entry.row.seq),
               rejectedAt: _clock(),
             ),
           );
-      await _rewindCursor(entry.groupId, to: entry.seq ?? 0);
+      await _rewindCursor(entry.row.groupId, to: entry.row.seq ?? 0);
       await outbox.complete(item);
     });
   }
@@ -354,21 +354,14 @@ class SyncEngine {
         final entry = await _snapshot(item, () => _loadEntry(item.targetId));
         if (entry == null) return;
         // Created and deleted before its first push: nothing remote to delete.
-        final base = entry.seq;
-        if (entry.isDeleted && base == null) return;
+        if (entry.isDeleted && entry.row.seq == null) return;
 
-        final entries = client.getEntriesApi();
         final stored = await _call(
-          entry.isDeleted && base != null
-              ? entries.deleteEntry(
-                  groupId: entry.groupId,
-                  entryId: entry.id,
-                  baseSeq: base,
-                )
-              : entries.upsertEntry(
-                  groupId: entry.groupId,
-                  entryInput: entry.toInput(),
-                ),
+          client.getEntriesApi().putEntry(
+            groupId: entry.row.groupId,
+            entryId: entry.id,
+            entryInput: entry.toInput(),
+          ),
         );
         await db.transaction(() async {
           await _assertActive();
@@ -385,23 +378,20 @@ class SyncEngine {
         );
         if (group == null) return;
 
-        // A group the server has never seen is a create, carrying its creator.
-        final creator = group.seq == null ? await _creatorOf(group) : null;
-        final groups = client.getGroupsApi();
+        // A group the server has never seen is created with its creator.
+        final creator = await _creatorOf(group);
         final stored = await _call(
-          creator == null
-              ? groups.updateGroup(
-                  groupId: group.id,
-                  groupUpdate: group.toUpdate(),
-                )
-              : groups.createGroup(groupCreate: group.toCreate(creator)),
+          client.getGroupsApi().putGroup(
+            groupId: group.id,
+            groupInput: group.toInput(creator),
+          ),
         );
         await db.transaction(() async {
           if (!await outbox.isCurrent(item)) return;
           await (db.update(db.groups)..where((t) => t.id.equals(group.id)))
               .write(GroupsCompanion(seq: Value(stored.seq)));
           // The creator landed in the same change; this stops a second push.
-          if (creator != null) {
+          if (group.seq == null) {
             await (db.update(db.members)..where((t) => t.id.equals(creator.id)))
                 .write(MembersCompanion(seq: Value(stored.seq)));
           }
@@ -416,18 +406,12 @@ class SyncEngine {
         );
         if (member == null) return;
 
-        final groups = client.getGroupsApi();
         final stored = await _call(
-          member.seq == null
-              ? groups.addMember(
-                  groupId: member.groupId,
-                  memberCreate: member.toCreate(),
-                )
-              : groups.updateMember(
-                  groupId: member.groupId,
-                  memberId: member.id,
-                  memberUpdate: member.toUpdate(),
-                ),
+          client.getGroupsApi().putMember(
+            groupId: member.groupId,
+            memberId: member.id,
+            memberInput: member.toInput(),
+          ),
         );
         await db.transaction(() async {
           if (!await outbox.isCurrent(item)) return;
@@ -475,7 +459,6 @@ class SyncEngine {
   Future<int> pull(String groupId) async {
     var cursor = await _readGroupCursor(groupId);
     var applied = 0;
-    final claimed = <String>{};
 
     while (true) {
       await _assertActive();
@@ -488,15 +471,12 @@ class SyncEngine {
       );
 
       applied += await applyGroupChanges(db, page, now: _clock());
-      claimed.addAll(page.members.map((member) => member.profileId).nonNulls);
 
       if (page.purgedAt != null) return applied;
       if (page.seq == cursor) break;
       cursor = page.seq;
       if (!page.hasMore) break;
     }
-
-    await shared.hydrateProfiles(claimed);
     return applied;
   }
 

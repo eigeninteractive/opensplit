@@ -805,7 +805,7 @@ docs/               the design (architecture.md: stores, sync, and how
                     types flow from the tables to the app), procedures that
                     have to be followed exactly (standing the backend up,
                     rebuilding it), what to know before changing the local
-                    database, and the audit's open items.
+                    database, and the latest audit.
 ```
 
 Migrations are never edited in place, on either side. `drizzle-kit generate`

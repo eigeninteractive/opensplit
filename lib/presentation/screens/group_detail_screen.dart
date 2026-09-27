@@ -192,7 +192,7 @@ class _EntriesList extends ConsumerWidget {
           return _EntryTile(
             entry: entry,
             ledger: ledger,
-            currency: currencies[entry.currency],
+            currency: currencies[entry.row.currency],
           );
         },
       ),
@@ -215,7 +215,7 @@ class _EntryTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final me = ledger.me;
-    final isSettlement = entry.kind == EntryKind.settlement;
+    final isSettlement = entry.row.kind == EntryKind.settlement;
 
     // What this entry did to your position: what you paid, less what you owe.
     var myDelta = 0;
@@ -266,11 +266,11 @@ class _EntryTile extends StatelessWidget {
         ),
       ),
       title: Text(
-        isSettlement && entry.description.isEmpty
+        isSettlement && entry.row.description.isEmpty
             ? 'Settlement'
-            : entry.description.isEmpty
+            : entry.row.description.isEmpty
             ? 'Expense'
-            : entry.description,
+            : entry.row.description,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
@@ -281,7 +281,7 @@ class _EntryTile extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Text(
-            formatMoney(currency, entry.amountMinor),
+            formatMoney(currency, entry.row.amountMinor),
             style: moneyStyle(Theme.of(context).textTheme.titleSmall!),
           ),
           if (me != null && myDelta != 0)

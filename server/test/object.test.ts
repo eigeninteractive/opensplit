@@ -5,8 +5,9 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import type { Group } from "../src/do/group";
 import type { append } from "../src/do/group/events";
 import migrations from "../src/do/group/migrations/migrations.js";
-import { kindOf, refusalCodes, statusFor } from "../src/do/group/refusal";
-import { evenly, freshId, makeGroup, ok, RAVI, stub } from "./group";
+import { kindOf, statusFor } from "../src/do/group/refusal";
+import { refusalCodes } from "../src/schemas/common";
+import { evenly, freshId, makeGroup, ok, RAVI, saveEntry, stub } from "./group";
 
 const DAYS = 24 * 60 * 60 * 1000;
 
@@ -16,7 +17,7 @@ describe("the schema this object migrates itself to", () => {
   /** Migrations here are lazy and per object — a group nobody has touched for six months migrates on its next open — which is the property that makes re-application worth testing at all. */
   it("is applied exactly once, however many times the object is opened", async () => {
     const { groupId, ravi, priya } = await makeGroup();
-    ok(await stub(groupId).upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 450), RAVI));
+    ok(await saveEntry(stub(groupId), evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 450), RAVI));
 
     // Several more opens, each of which re-enters the constructor's
     // blockConcurrencyWhile.
@@ -64,7 +65,7 @@ describe("the one alarm", () => {
 
     const before = await runInDurableObject(stub(groupId), async (_instance: Group, state) => state.storage.getAlarm());
     await new Promise((resolve) => setTimeout(resolve, 5));
-    ok(await stub(groupId).upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 300), RAVI));
+    ok(await saveEntry(stub(groupId), evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 300), RAVI));
 
     const after = await runInDurableObject(stub(groupId), async (_instance: Group, state) => state.storage.getAlarm());
     expect(after ?? 0).toBeGreaterThan(before ?? 0);
@@ -93,7 +94,7 @@ describe("the derived index in D1, when D1 is not answering", () => {
     const groupId = freshId("outbox");
     await env.DB.prepare("drop table memberships").run();
 
-    const created = await stub(groupId).create({ id: groupId, name: "Offline", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, memberId: `${groupId}-m`, displayName: "Ravi" }, RAVI);
+    const created = await stub(groupId).putGroup(groupId, { name: "Offline", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, creatorId: `${groupId}-m`, creatorName: "Ravi" }, RAVI);
 
     // The group itself is fine. The index simply does not know about it yet.
     expect(created.ok).toBe(true);
@@ -119,9 +120,9 @@ describe("what the RPC boundary actually carries", () => {
     type Success<T> = Extract<Awaited<T>, { ok: true }>;
 
     expectTypeOf<Success<ReturnType<typeof object.changes>>>().not.toBeNever();
-    expectTypeOf<Success<ReturnType<typeof object.upsertEntry>>>().not.toBeNever();
-    expectTypeOf<Success<ReturnType<typeof object.create>>>().not.toBeNever();
-    expectTypeOf<Success<ReturnType<typeof object.updateMember>>>().not.toBeNever();
+    expectTypeOf<Success<ReturnType<typeof object.putEntry>>>().not.toBeNever();
+    expectTypeOf<Success<ReturnType<typeof object.putGroup>>>().not.toBeNever();
+    expectTypeOf<Success<ReturnType<typeof object.putMember>>>().not.toBeNever();
     expectTypeOf<Success<ReturnType<typeof object.createInvite>>>().not.toBeNever();
     expectTypeOf<Success<ReturnType<typeof object.peekLink>>>().not.toBeNever();
     expectTypeOf<Success<ReturnType<typeof object.placeholders>>>().not.toBeNever();

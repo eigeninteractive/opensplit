@@ -50,7 +50,8 @@ class ActivityScreen extends ConsumerWidget {
                     ? ledger?.entries
                           .where((e) => e.id == event.entryId)
                           .firstOrNull
-                          ?.description
+                          ?.row
+                          .description
                     : null,
                 currency: ledger == null
                     ? null

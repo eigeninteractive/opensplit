@@ -45,20 +45,17 @@ function requireEntry(tx: Tx, id: string): Entry {
   return entry;
 }
 
-/** Records or edits an expense, whole: an amount, its payers and its shares are one fact. */
-export function upsertEntry(tx: Tx, input: EntryInput, { now, actor }: WriteContext): Entry {
+/**
+ * Records, edits, deletes or restores an expense, whole: an amount, its payers,
+ * its shares and whether it counts are one fact.
+ */
+export function putEntry(tx: Tx, id: string, input: EntryInput, { now, actor }: WriteContext): Entry {
   const meta = requireMeta(tx);
   assertBalanced(input);
   assertMembersExist(tx, input);
 
-  const stored = readEntry(tx, input.id);
-
-  // The client key already names an expense under another id: a lost response, re-minted.
-  if (!stored && input.clientKey !== null) {
-    const byKey = tx.select({ id: schema.entries.id }).from(schema.entries).where(eq(schema.entries.clientKey, input.clientKey)).get();
-    if (byKey) return requireEntry(tx, byKey.id);
-  }
-
+  // The id is client-minted, so a retry after a lost response finds its own row here.
+  const stored = readEntry(tx, id);
   if (stored) {
     assertBaseIsCurrent(stored, input);
     if (JSON.stringify(comparable(stored)) === JSON.stringify(comparable(input))) return stored;
@@ -66,65 +63,38 @@ export function upsertEntry(tx: Tx, input: EntryInput, { now, actor }: WriteCont
 
   const seq = nextSeq(tx);
 
-  // Adding an expense brings an archived group back, silently: the expense is the record.
-  if (meta.archivedAt !== null) {
+  // A live expense brings an archived group back, silently: the expense is the record.
+  if (meta.archivedAt !== null && input.deletedAt === null) {
     tx.update(schema.meta).set({ archivedAt: null, updatedAt: now, seq }).where(eq(schema.meta.id, meta.id)).run();
   }
 
   // A rate keeps its timestamp unless the rate or its source changed.
   const fxAt = stored && stored.fxRate === input.fxRate && stored.fxSource === input.fxSource ? stored.fxAt : input.fxRate !== null ? now : null;
+  // The device says whether; the server's clock says when, once.
+  const deletedAt = input.deletedAt === null ? null : (stored?.deletedAt ?? now);
 
   // Only the editable columns, by name: the object is called over RPC, not through the Zod schema.
-  const { id, clientKey, payers, shares } = input;
   const fields = Object.fromEntries(editableEntryColumns.map((column) => [column, input[column]])) as Pick<EntryInput, (typeof editableEntryColumns)[number]>;
-  const columns = { ...fields, fxAt, updatedAt: now, seq };
+  const columns = { ...fields, fxAt, deletedAt, updatedAt: now, seq };
 
-  // Authorship, creation time, client key and deletion are never rewritten by an edit.
+  // Authorship and creation time are never rewritten by an edit.
   tx.insert(schema.entries)
-    .values({ id, clientKey, createdBy: actor.id, createdAt: now, ...columns })
+    .values({ id, createdBy: actor.id, createdAt: now, ...columns })
     .onConflictDoUpdate({ target: schema.entries.id, set: columns })
     .run();
 
   tx.delete(schema.entryPayers).where(eq(schema.entryPayers.entryId, id)).run();
   tx.delete(schema.entryShares).where(eq(schema.entryShares.entryId, id)).run();
   tx.insert(schema.entryPayers)
-    .values(payers.map(({ memberId, amountMinor }) => ({ entryId: id, memberId, amountMinor })))
+    .values(input.payers.map(({ memberId, amountMinor }) => ({ entryId: id, memberId, amountMinor })))
     .run();
   tx.insert(schema.entryShares)
-    .values(shares.map(({ memberId, amountMinor, weightMicros }) => ({ entryId: id, memberId, amountMinor, weightMicros })))
+    .values(input.shares.map(({ memberId, amountMinor, weightMicros }) => ({ entryId: id, memberId, amountMinor, weightMicros })))
     .run();
 
   const entry = requireEntry(tx, id);
   appendSnapshot(tx, entry, entry.payers, entry.shares, { seq, now, actorId: actor.id });
   touchDormancy(tx, now);
-  return entry;
-}
-
-export function deleteEntry(tx: Tx, entryId: string, baseSeq: number, context: WriteContext): Entry {
-  return setDeleted(tx, entryId, baseSeq, context, true);
-}
-
-export function restoreEntry(tx: Tx, entryId: string, baseSeq: number, context: WriteContext): Entry {
-  return setDeleted(tx, entryId, baseSeq, context, false);
-}
-
-/** Deleting always moves money, so it must carry the exact version the device saw. */
-function setDeleted(tx: Tx, entryId: string, baseSeq: number, { now, actor }: WriteContext, deleted: boolean): Entry {
-  requireMeta(tx);
-  const stored = requireEntry(tx, entryId);
-
-  // Already in the requested state: a retry after a lost response.
-  if ((stored.deletedAt !== null) === deleted) return stored;
-  if (stored.seq !== baseSeq) refuse("stale_base", "This expense changed since you opened it.");
-
-  const seq = nextSeq(tx);
-  tx.update(schema.entries)
-    .set({ deletedAt: deleted ? now : null, updatedAt: now, seq })
-    .where(eq(schema.entries.id, entryId))
-    .run();
-
-  const entry = requireEntry(tx, entryId);
-  appendSnapshot(tx, entry, entry.payers, entry.shares, { seq, now, actorId: actor.id });
   return entry;
 }
 
@@ -161,10 +131,11 @@ function assertBaseIsCurrent(stored: Entry, input: EntryInput): void {
   }
 }
 
-type Comparable = Omit<EntryInput, "id" | "clientKey" | "baseSeq">;
+type Comparable = Omit<EntryInput, "baseSeq">;
 
+/** What moves a balance. Deleting or restoring moves every payer and share at once. */
 function money(entry: Comparable) {
-  return { amountMinor: entry.amountMinor, payers: moneyRows(entry.payers), shares: moneyRows(entry.shares) };
+  return { counts: entry.deletedAt === null, amountMinor: entry.amountMinor, payers: moneyRows(entry.payers), shares: moneyRows(entry.shares) };
 }
 
 /** Everything a save can change; an unchanged push spends no sequence number. */

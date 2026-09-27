@@ -34,8 +34,6 @@ export const ProfilePageSchema = z
   })
   .openapi("ProfilePage");
 
-export const ProfileListSchema = z.object({ profiles: z.array(ProfileSchema) }).openapi("ProfileList");
-
 /** The groups this account is still in. */
 export const GroupIdsSchema = z.object({ groupIds: z.array(IdSchema) }).openapi("GroupIds");
 
@@ -58,7 +56,6 @@ export const AccountDeletionSchema = z
 export type Profile = z.infer<typeof ProfileSchema>;
 export type ProfileUpdate = z.infer<typeof ProfileUpdateSchema>;
 export type ProfilePage = z.infer<typeof ProfilePageSchema>;
-export type ProfileList = z.infer<typeof ProfileListSchema>;
 export type GroupIds = z.infer<typeof GroupIdsSchema>;
 export type Device = z.infer<typeof DeviceSchema>;
 export type AccountDeletion = z.infer<typeof AccountDeletionSchema>;

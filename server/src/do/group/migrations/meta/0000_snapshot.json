@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "3cac61e4-ae05-4046-a90d-bd363debe37a",
+  "id": "3354f4fe-2375-4912-ac2c-f54770866a1f",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "counter": {
@@ -139,13 +139,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "client_key": {
-          "name": "client_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "text",
@@ -182,13 +175,6 @@
             "seq"
           ],
           "isUnique": false
-        },
-        "entries_client_key": {
-          "name": "entries_client_key",
-          "columns": [
-            "client_key"
-          ],
-          "isUnique": true
         }
       },
       "foreignKeys": {

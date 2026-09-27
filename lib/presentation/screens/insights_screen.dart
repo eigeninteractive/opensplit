@@ -326,11 +326,16 @@ class _Results extends ConsumerWidget {
               contentPadding: EdgeInsets.zero,
               onTap: () => context.push('/g/$groupId/e/${entry.id}'),
               title: Text(
-                entry.description.isEmpty ? 'Expense' : entry.description,
+                entry.row.description.isEmpty
+                    ? 'Expense'
+                    : entry.row.description,
               ),
-              subtitle: Text(DateFormat.yMMMd().format(entry.entryDate)),
+              subtitle: Text(DateFormat.yMMMd().format(entry.row.entryDate)),
               trailing: Text(
-                formatMoney(currencies[entry.currency], entry.amountMinor),
+                formatMoney(
+                  currencies[entry.row.currency],
+                  entry.row.amountMinor,
+                ),
                 style: moneyStyle(Theme.of(context).textTheme.bodyMedium!),
               ),
             );

@@ -163,9 +163,9 @@ class _IncoherentLedgerCard extends StatelessWidget {
                       onPressed: () =>
                           context.push('/g/${ledger.group.id}/e/${entry.id}'),
                       child: Text(
-                        entry.description.isEmpty
+                        entry.row.description.isEmpty
                             ? 'Untitled expense'
-                            : entry.description,
+                            : entry.row.description,
                       ),
                     ),
                 ],
@@ -357,7 +357,7 @@ class _TransferExplanation extends StatelessWidget {
     // amount it moved it by.
     final contributions = <({Entry entry, int delta})>[];
     for (final entry in ledger.entries) {
-      if (entry.currency != transfer.currency) continue;
+      if (entry.row.currency != transfer.currency) continue;
       var delta = 0;
       for (final payer in entry.payers) {
         if (payer.memberId == debtor) delta += payer.amountMinor;
@@ -431,14 +431,14 @@ class _TransferExplanation extends StatelessWidget {
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: Text(
-                        item.entry.description.isEmpty
-                            ? (item.entry.kind == EntryKind.settlement
+                        item.entry.row.description.isEmpty
+                            ? (item.entry.row.kind == EntryKind.settlement
                                   ? 'Settlement'
                                   : 'Expense')
-                            : item.entry.description,
+                            : item.entry.row.description,
                       ),
                       subtitle: Text(
-                        DateFormat.yMMMd().format(item.entry.entryDate),
+                        DateFormat.yMMMd().format(item.entry.row.entryDate),
                       ),
                       trailing: BalanceAmount(
                         balanceMinor: item.delta,

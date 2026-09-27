@@ -36,38 +36,29 @@ extension MemberFromWire on api.Member {
 
 extension EntryFromWire on api.Entry {
   Entry toEntry(String groupId) => Entry(
-    id: id,
-    groupId: groupId,
-    kind: kind,
-    description: description,
-    categoryId: categoryId,
-    currency: currency,
-    amountMinor: amountMinor,
-    entryDate: parseCalendarDate(entryDate),
-    occurredAt: occurredAt,
-    timeZone: timeZone,
-    splitKind: splitKind,
-    payers: [
-      for (final payer in payers)
-        EntryPayer(memberId: payer.memberId, amountMinor: payer.amountMinor),
-    ],
-    shares: [
-      for (final share in shares)
-        EntryShare(
-          memberId: share.memberId,
-          amountMinor: share.amountMinor,
-          weightMicros: share.weightMicros,
-        ),
-    ],
-    fxRate: fxRate?.toDouble(),
-    fxSource: fxSource,
-    fxAt: fxAt,
-    notes: notes,
-    createdBy: createdBy,
-    createdAt: createdAt,
-    seq: seq,
-    deletedAt: deletedAt,
-    clientKey: clientKey,
+    EntryRow(
+      id: id,
+      groupId: groupId,
+      kind: kind,
+      description: description,
+      categoryId: categoryId,
+      currency: currency,
+      amountMinor: amountMinor,
+      entryDate: parseCalendarDate(entryDate),
+      occurredAt: occurredAt,
+      timeZone: timeZone,
+      splitKind: splitKind,
+      fxRate: fxRate?.toDouble(),
+      fxSource: fxSource,
+      fxAt: fxAt,
+      notes: notes,
+      createdBy: createdBy,
+      createdAt: createdAt,
+      seq: seq,
+      deletedAt: deletedAt,
+    ),
+    payers: payers,
+    shares: shares,
   );
 }
 
@@ -110,62 +101,43 @@ extension CategoryFromWire on api.Category {
 }
 
 extension EntryToWire on Entry {
-  /// [Entry.seq] goes as `baseSeq`: the version this edit was composed
+  /// [EntryRow.seq] goes as `baseSeq`: the version this edit was composed
   /// against, null for a row the server has never seen.
   api.EntryInput toInput() => api.EntryInput(
-    id: id,
-    clientKey: clientKey,
-    kind: kind,
-    description: description,
-    categoryId: categoryId,
-    currency: currency,
-    amountMinor: amountMinor,
-    entryDate: calendarDate(entryDate),
-    occurredAt: occurredAt?.toUtc(),
-    timeZone: timeZone,
-    splitKind: splitKind,
-    fxRate: fxRate,
-    fxSource: fxSource,
-    notes: notes,
-    baseSeq: seq,
-    payers: [
-      for (final payer in payers)
-        api.Payer(memberId: payer.memberId, amountMinor: payer.amountMinor),
-    ],
-    shares: [
-      for (final share in shares)
-        api.Share(
-          memberId: share.memberId,
-          amountMinor: share.amountMinor,
-          weightMicros: share.weightMicros,
-        ),
-    ],
+    kind: row.kind,
+    description: row.description,
+    categoryId: row.categoryId,
+    currency: row.currency,
+    amountMinor: row.amountMinor,
+    entryDate: calendarDate(row.entryDate),
+    occurredAt: row.occurredAt?.toUtc(),
+    timeZone: row.timeZone,
+    splitKind: row.splitKind,
+    fxRate: row.fxRate,
+    fxSource: row.fxSource,
+    notes: row.notes,
+    deletedAt: row.deletedAt?.toUtc(),
+    baseSeq: row.seq,
+    payers: payers,
+    shares: shares,
   );
 }
 
 extension GroupToWire on Group {
-  api.GroupCreate toCreate(Member creator) => api.GroupCreate(
-    id: id,
+  /// The server reads [creator] only when this creates the group.
+  api.GroupInput toInput(Member creator) => api.GroupInput(
     name: name,
     defaultCurrency: defaultCurrency,
     isDirect: isDirect,
     simplifyDebts: simplifyDebts,
-    memberId: creator.id,
-    displayName: creator.displayName,
-  );
-
-  api.GroupUpdate toUpdate() => api.GroupUpdate(
-    name: name,
-    simplifyDebts: simplifyDebts,
     archivedAt: archivedAt?.toUtc(),
+    creatorId: creator.id,
+    creatorName: creator.displayName,
   );
 }
 
 extension MemberToWire on Member {
-  api.MemberCreate toCreate() =>
-      api.MemberCreate(id: id, displayName: displayName, upiVpa: upiVpa);
-
-  api.MemberUpdate toUpdate() => api.MemberUpdate(
+  api.MemberInput toInput() => api.MemberInput(
     displayName: displayName,
     upiVpa: upiVpa,
     leftAt: leftAt?.toUtc(),

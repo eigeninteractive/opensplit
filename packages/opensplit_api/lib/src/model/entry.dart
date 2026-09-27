@@ -50,8 +50,6 @@ class Entry {
 
     required this.createdBy,
 
-    required this.clientKey,
-
     required this.createdAt,
 
     required this.updatedAt,
@@ -122,9 +120,6 @@ class Entry {
   @JsonKey(name: r'createdBy', required: true, includeIfNull: false)
   final String createdBy;
 
-  @JsonKey(name: r'clientKey', required: true, includeIfNull: true)
-  final String? clientKey;
-
   @JsonKey(name: r'createdAt', required: true, includeIfNull: false)
   final DateTime createdAt;
 
@@ -163,7 +158,6 @@ class Entry {
           other.fxAt == fxAt &&
           other.notes == notes &&
           other.createdBy == createdBy &&
-          other.clientKey == clientKey &&
           other.createdAt == createdAt &&
           other.updatedAt == updatedAt &&
           other.deletedAt == deletedAt &&
@@ -188,7 +182,6 @@ class Entry {
       (fxAt == null ? 0 : fxAt.hashCode) +
       (notes == null ? 0 : notes.hashCode) +
       createdBy.hashCode +
-      (clientKey == null ? 0 : clientKey.hashCode) +
       createdAt.hashCode +
       updatedAt.hashCode +
       (deletedAt == null ? 0 : deletedAt.hashCode) +

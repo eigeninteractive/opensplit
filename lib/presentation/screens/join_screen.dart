@@ -282,6 +282,7 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
     }
 
     final account = ref.watch(accountProvider).value;
+    final myName = ref.watch(myProfileProvider).value?.displayName?.trim();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -318,8 +319,9 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
             loading: _loadingPlaces,
             chosen: _chosenMemberId,
             joining: _joining,
-            // Asked for only when there is nowhere to take it from.
-            name: account.displayName == null ? _name : null,
+            // Asked for only when there is nowhere to take it from; left
+            // empty, the server uses the name on the account's profile.
+            name: myName == null || myName.isEmpty ? _name : null,
             onChoose: (memberId) => setState(() => _chosenMemberId = memberId),
             onJoin: _join,
             onSwitchAccount: _switchAccount,

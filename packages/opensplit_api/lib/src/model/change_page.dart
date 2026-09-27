@@ -4,6 +4,7 @@
 
 // ignore_for_file: unused_element
 import 'package:opensplit_api/src/model/event.dart';
+import 'package:opensplit_api/src/model/profile.dart';
 import 'package:opensplit_api/src/model/group.dart';
 import 'package:opensplit_api/src/model/entry.dart';
 import 'package:opensplit_api/src/model/member.dart';
@@ -30,6 +31,8 @@ class ChangePage {
 
     required this.members,
 
+    required this.profiles,
+
     required this.entries,
 
     required this.events,
@@ -53,6 +56,9 @@ class ChangePage {
   @JsonKey(name: r'members', required: true, includeIfNull: false)
   final List<Member> members;
 
+  @JsonKey(name: r'profiles', required: true, includeIfNull: false)
+  final List<Profile> profiles;
+
   @JsonKey(name: r'entries', required: true, includeIfNull: false)
   final List<Entry> entries;
 
@@ -71,6 +77,7 @@ class ChangePage {
           other.hasMore == hasMore &&
           other.group == group &&
           other.members == members &&
+          other.profiles == profiles &&
           other.entries == entries &&
           other.events == events &&
           other.purgedAt == purgedAt;
@@ -82,6 +89,7 @@ class ChangePage {
       hasMore.hashCode +
       (group == null ? 0 : group.hashCode) +
       members.hashCode +
+      profiles.hashCode +
       entries.hashCode +
       events.hashCode +
       (purgedAt == null ? 0 : purgedAt.hashCode);

@@ -8,9 +8,8 @@ export const AccountSchema = z
     id: IdSchema,
     /** A guest: one device, no recovery. */
     isAnonymous: z.boolean(),
-    /** Null for a guest. */
+    /** Null for a guest. The person's name is their profile's, not the account's. */
     email: z.email().nullable(),
-    displayName: z.string().nullable(),
   })
   .openapi("Account");
 

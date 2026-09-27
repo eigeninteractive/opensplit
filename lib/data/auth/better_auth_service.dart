@@ -230,12 +230,16 @@ final class BetterAuthService implements AuthService {
 
   Future<IdentityOutcome> _settle(api.IdentityOutcome body) async {
     await _adopt(body.account, token: body.token);
-    return body.outcome == api.IdentityOutcomeKind.replaced
-        ? SessionReplaced(
-            account: body.account,
-            strandedUserId: body.strandedUserId ?? body.account.id,
-          )
-        : SessionKept(account: body.account);
+    if (body.outcome != api.IdentityOutcomeKind.replaced) {
+      return SessionKept(account: body.account);
+    }
+    final stranded = body.strandedUserId;
+    // The contract sets it exactly when the session was replaced; guessing
+    // would name the new account as the one left behind.
+    if (stranded == null) {
+      throw StateError('A replaced session arrived without its stranded id.');
+    }
+    return SessionReplaced(account: body.account, strandedUserId: stranded);
   }
 
   IdentityAlreadyInUse? _refusalInCallbackUrl() {

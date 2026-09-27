@@ -48,7 +48,7 @@ final class DriftEntryRepository {
           .insert(
             GroupEventsCompanion.insert(
               id: _uuid.v4(),
-              groupId: after.groupId,
+              groupId: after.row.groupId,
               actorId: Value(actorId),
               createdAt: at,
               kind: api.EventKind.entry,
@@ -210,7 +210,7 @@ final class DriftEntryRepository {
     );
 
     await _db.transaction(() async {
-      await _unarchive(entry.groupId);
+      await _unarchive(entry.row.groupId);
       await _writeWithSnapshot(after: entry, actorId: createdBy, at: at);
     });
     return entry;
@@ -241,13 +241,20 @@ final class DriftEntryRepository {
     final at = now ?? _clock();
     // Recomposed rather than patched, so an edit goes through exactly the same
     // validation as a creation.
-    final recomposed = composeEntry(
+    final composed = composeEntry(
       draft,
       id: entryId,
-      createdBy: existing.createdBy,
+      createdBy: existing.row.createdBy,
       now: at,
-      clientKey: existing.clientKey,
-    ).copyWith(createdAt: existing.createdAt, seq: existing.seq);
+    );
+    final recomposed = composed.copyWith(
+      row: composed.row.copyWith(
+        createdAt: existing.row.createdAt,
+        seq: Value(existing.row.seq),
+        // An edit is not an undelete.
+        deletedAt: Value(existing.row.deletedAt),
+      ),
+    );
 
     await _writeWithSnapshot(after: recomposed, actorId: actorId, at: at);
     return recomposed;
@@ -268,7 +275,9 @@ final class DriftEntryRepository {
     final at = now ?? _clock();
     // Soft delete.
     await _writeWithSnapshot(
-      after: existing.copyWith(deletedAt: at),
+      after: existing.copyWith(
+        row: existing.row.copyWith(deletedAt: Value(at)),
+      ),
       actorId: actorId,
       at: at,
     );
@@ -277,7 +286,11 @@ final class DriftEntryRepository {
   void _checkExpected(Entry current, Entry? expected) {
     // An acknowledgement only moves `seq`. It must not invalidate an open
     // form, but an actual local or remote edit must not be overwritten.
-    if (expected != null && expected.copyWith(seq: current.seq) != current) {
+    if (expected != null &&
+        expected.copyWith(
+              row: expected.row.copyWith(seq: Value(current.row.seq)),
+            ) !=
+            current) {
       throw const StaleEntryException();
     }
   }

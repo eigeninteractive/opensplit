@@ -1,44 +1,47 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'group_create.dart';
+part of 'group_input.dart';
 
 // **************************************************************************
 // JsonSerializableGenerator
 // **************************************************************************
 
-GroupCreate _$GroupCreateFromJson(Map<String, dynamic> json) =>
-    $checkedCreate('GroupCreate', json, ($checkedConvert) {
+GroupInput _$GroupInputFromJson(Map<String, dynamic> json) =>
+    $checkedCreate('GroupInput', json, ($checkedConvert) {
       $checkKeys(
         json,
         requiredKeys: const [
-          'id',
           'name',
           'defaultCurrency',
           'isDirect',
           'simplifyDebts',
-          'memberId',
-          'displayName',
+          'archivedAt',
+          'creatorId',
+          'creatorName',
         ],
       );
-      final val = GroupCreate(
-        id: $checkedConvert('id', (v) => v as String),
+      final val = GroupInput(
         name: $checkedConvert('name', (v) => v as String),
         defaultCurrency: $checkedConvert('defaultCurrency', (v) => v as String),
         isDirect: $checkedConvert('isDirect', (v) => v as bool),
         simplifyDebts: $checkedConvert('simplifyDebts', (v) => v as bool),
-        memberId: $checkedConvert('memberId', (v) => v as String),
-        displayName: $checkedConvert('displayName', (v) => v as String),
+        archivedAt: $checkedConvert(
+          'archivedAt',
+          (v) => v == null ? null : DateTime.parse(v as String),
+        ),
+        creatorId: $checkedConvert('creatorId', (v) => v as String),
+        creatorName: $checkedConvert('creatorName', (v) => v as String),
       );
       return val;
     });
 
-Map<String, dynamic> _$GroupCreateToJson(GroupCreate instance) =>
+Map<String, dynamic> _$GroupInputToJson(GroupInput instance) =>
     <String, dynamic>{
-      'id': instance.id,
       'name': instance.name,
       'defaultCurrency': instance.defaultCurrency,
       'isDirect': instance.isDirect,
       'simplifyDebts': instance.simplifyDebts,
-      'memberId': instance.memberId,
-      'displayName': instance.displayName,
+      'archivedAt': instance.archivedAt?.toIso8601String(),
+      'creatorId': instance.creatorId,
+      'creatorName': instance.creatorName,
     };

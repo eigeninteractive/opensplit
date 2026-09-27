@@ -1,8 +1,6 @@
 import { z } from "@hono/zod-openapi";
 import { createSchemaFactory } from "drizzle-zod";
 
-import { refusalCodes } from "../do/group/refusal";
-
 /**
  * Wire primitives shared by every schema.
  *
@@ -53,6 +51,33 @@ export const NameSchema = z.string().trim().min(1).max(100);
 
 /** A group's sequence number: its sync cursor and the version an edit is judged against. */
 export const SeqSchema = z.int().nonnegative().openapi({ example: 412 });
+
+/** How the group object says no. Each code is a value the device can act on, never an exception. */
+export const refusalCodes = [
+  "not_member",
+  "no_group",
+  /** Archived, a year silent and settled, then collected. */
+  "group_purged",
+  "no_such_entry",
+  "no_such_member",
+  /** `sum(payers) = sum(shares) = amount` does not hold. */
+  "unbalanced",
+  /** Composed against a version that has since moved money. */
+  "stale_base",
+  /** A column rule: whose name, whose payment handle. */
+  "forbidden",
+  /** Somebody else cannot remove a member who still owes or is owed. */
+  "not_settled",
+  "invite_invalid",
+  "invite_spent",
+  "invite_expired",
+  "already_member",
+  /** The placeholder was claimed between the peek and the join. */
+  "slot_taken",
+  "malformed",
+] as const;
+
+export type RefusalCode = (typeof refusalCodes)[number];
 
 export const RetrySchema = z.enum(["stale", "permanent", "transient"]).openapi("Retry", {
   description: "stale: re-read, re-compose and send again. permanent: this will be refused identically forever; do not retry. transient: back off and try the same request again.",

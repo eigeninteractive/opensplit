@@ -133,9 +133,10 @@ DioException refused(
   ),
 );
 
-/// Matches a request to one group's expense endpoint.
-bool isUpsert(RequestOptions r) =>
-    r.method == 'POST' && RegExp(r'/groups/[^/]+/entries$').hasMatch(r.path);
+/// Matches a write of one expense.
+bool isEntryWrite(RequestOptions r) =>
+    r.method == 'PUT' &&
+    RegExp(r'/groups/[^/]+/entries/[^/]+$').hasMatch(r.path);
 
 /// Matches the "which groups am I in" request.
 bool isGroupList(RequestOptions r) =>

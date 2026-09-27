@@ -76,7 +76,7 @@ Future<({String title, String body})?> composeEventNotification({
           .firstOrNull ??
       0;
 
-  final currency = known.where((c) => c.code == entry.currency).firstOrNull;
+  final currency = known.where((c) => c.code == entry.row.currency).firstOrNull;
 
   return describeEntry(
     entry: entry,

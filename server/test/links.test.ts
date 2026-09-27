@@ -2,7 +2,7 @@ import { exports as workerExports } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import type { ApiError } from "../src/schemas/common";
-import type { GroupLink, Invite, Joined, LinkPreview, LinkRevocation, LiveLink, PlaceholderList, ProfileList } from "./api-types";
+import type { ChangePage, GroupLink, Invite, Joined, LinkPreview, LinkRevocation, LiveLink, PlaceholderList } from "./api-types";
 import { freshId } from "./group";
 import { type Guest, signInAsGuest } from "./session";
 
@@ -27,16 +27,16 @@ async function makeGroup(host: Guest, placeholder = "Priya") {
   const id = freshId("link");
   const memberId = `${id}-host`;
 
-  const created = await call("/api/groups", host, {
-    method: "POST",
-    body: JSON.stringify({ id, name: "Goa trip", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, memberId, displayName: "Ravi" }),
+  const created = await call(`/api/groups/${id}`, host, {
+    method: "PUT",
+    body: JSON.stringify({ name: "Goa trip", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, creatorId: memberId, creatorName: "Ravi" }),
   });
   expect(created.status).toBe(200);
 
   const slotId = `${id}-slot`;
-  const slot = await call(`/api/groups/${id}/members`, host, {
-    method: "POST",
-    body: JSON.stringify({ id: slotId, displayName: placeholder, upiVpa: null }),
+  const slot = await call(`/api/groups/${id}/members/${slotId}`, host, {
+    method: "PUT",
+    body: JSON.stringify({ displayName: placeholder, upiVpa: null, leftAt: null }),
   });
   expect(slot.status).toBe(200);
 
@@ -215,8 +215,8 @@ describe("the name, travelling the other way", () => {
     // Somebody arriving on an invite signed in as a guest a moment earlier and
     // has no name at all, while the group already knows them as whatever was
     // typed on the placeholder.
-    const { profiles } = await json<ProfileList>(await call("/api/profiles/lookup", ravi, { method: "POST", body: JSON.stringify({ ids: [arriving.id] }) }));
-    expect(profiles).toEqual([expect.objectContaining({ id: arriving.id, displayName: "Priya" })]);
+    const { profiles } = await json<ChangePage>(await call(`/api/groups/${id}/changes?since=0`, ravi));
+    expect(profiles).toContainEqual(expect.objectContaining({ id: arriving.id, displayName: "Priya" }));
   });
 
   it("never overwrites a name somebody chose with a friend's guess", async () => {
@@ -230,8 +230,8 @@ describe("the name, travelling the other way", () => {
     // The slot keeps the name the group knows, and the account keeps its own.
     expect(claimed.member.displayName).toBe("P");
 
-    const { profiles } = await json<ProfileList>(await call("/api/profiles/lookup", ravi, { method: "POST", body: JSON.stringify({ ids: [arriving.id] }) }));
-    expect(profiles[0]?.displayName).toBe("Priya Sharma");
+    const { profiles } = await json<ChangePage>(await call(`/api/groups/${id}/changes?since=0`, ravi));
+    expect(profiles.find((row) => row.id === arriving.id)?.displayName).toBe("Priya Sharma");
   });
 
   it("tells somebody already inside that they are, rather than offering to let them in", async () => {

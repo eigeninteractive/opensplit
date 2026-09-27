@@ -43,14 +43,18 @@ Future<int> applyGroupChanges(
     final group = page.group;
     if (group != null &&
         !(await _dirtyIds(db, OutboxTarget.group)).contains(group.id)) {
-      await db.into(db.groups).insertOnConflictUpdate(group.toRow());
+      // Companions with their nulls stated: a data class upserts a null as
+      // "leave it", and restoring, rejoining and clearing are all nulls.
+      await db
+          .into(db.groups)
+          .insertOnConflictUpdate(group.toRow().toCompanion(false));
     }
 
     final dirtyMembers = await _dirtyIds(db, OutboxTarget.member);
     await db.batch((batch) {
       for (final member in page.members) {
         if (dirtyMembers.contains(member.id)) continue;
-        final row = member.toRow(groupId);
+        final row = member.toRow(groupId).toCompanion(false);
         // DO UPDATE, never REPLACE: SQLite's REPLACE deletes first, and
         // payers and shares reference members without a cascade.
         batch.insert(db.members, row, onConflict: DoUpdate((_) => row));
@@ -66,6 +70,9 @@ Future<int> applyGroupChanges(
     }
 
     await _applyEvents(db, page, dirtyEntries);
+    // The accounts behind the page's places, including one claimed by
+    // somebody the profile feed passed long ago.
+    await applyProfiles(db, page.profiles);
 
     await db
         .into(db.groupCursors)
@@ -146,7 +153,7 @@ Future<int> applyProfiles(AppDatabase db, List<api.Profile> rows) async {
     for (final profile in rows)
       if (!dirty.contains(profile.id) &&
           _remoteWins(heldAt[profile.id], profile.updatedAt))
-        profile.toRow(),
+        profile.toRow().toCompanion(false),
   ];
 
   await db.batch((batch) {

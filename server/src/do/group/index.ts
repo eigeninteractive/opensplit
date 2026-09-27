@@ -7,15 +7,15 @@ import { migrate } from "drizzle-orm/durable-sqlite/migrator";
 import * as d1 from "../../db/d1/schema";
 import * as schema from "../../db/group/schema";
 import { wakeDevices } from "../../push/fcm";
-import type { ChangePage, EntryInput, GroupCreate, GroupUpdate, JoinRequest, MemberCreate, MemberUpdate } from "../../schemas/ledger";
+import type { EntryInput, GroupChanges, GroupInput, JoinRequest, MemberInput } from "../../schemas/ledger";
 import { changesSince } from "./changes";
 import { createGroupLink, createInvite, join, liveLink, peek, placeholders, revokeGroupLink } from "./invites";
-import { deleteEntry, restoreEntry, upsertEntry } from "./ledger";
+import { putEntry } from "./ledger";
 import migrations from "./migrations/migrations";
 import { pendingNotices } from "./notices";
 import { attempt, type Result } from "./refusal";
-import { addMember, createGroup, forgetProfile, updateGroup, updateMember } from "./roster";
-import { currentSeq, type GroupDb, nowIso, requireActiveMember, requireMeta, type Tx, type WriteContext } from "./store";
+import { createGroup, forgetProfile, putMember, updateGroup } from "./roster";
+import { currentSeq, findMeta, findTombstone, type GroupDb, nowIso, requireActiveMember, requireMeta, type Tx, type WriteContext } from "./store";
 import { backoffOutbox, clearOutbox, nextDue, type OutboxRow, pendingOutbox, restageIndex, runDormancy, type UpkeepOutcome } from "./upkeep";
 
 /**
@@ -40,36 +40,21 @@ export class Group extends DurableObject<Env> {
     return "group";
   }
 
-  async changes(profileId: string, since: number, limit: number): Promise<Result<ChangePage>> {
+  async changes(profileId: string, since: number, limit: number): Promise<Result<GroupChanges>> {
     return this.read((tx) => changesSince(tx, profileId, since, limit));
   }
 
-  async create(input: GroupCreate, profileId: string) {
-    return this.write(profileId, (tx, now) => createGroup(tx, input, profileId, now));
+  /** Creates the group at this object's id, or edits it. Creating needs no membership; editing does. */
+  async putGroup(groupId: string, input: GroupInput, profileId: string) {
+    return this.write(profileId, (tx, now) => (findMeta(tx) === undefined && findTombstone(tx) === undefined ? createGroup(tx, groupId, input, profileId, now) : updateGroup(tx, input, as(tx, profileId, now))));
   }
 
-  async update(input: GroupUpdate, profileId: string) {
-    return this.write(profileId, (tx, now) => updateGroup(tx, input, as(tx, profileId, now)));
+  async putMember(memberId: string, input: MemberInput, profileId: string) {
+    return this.write(profileId, (tx, now) => putMember(tx, memberId, input, as(tx, profileId, now)));
   }
 
-  async addMember(input: MemberCreate, profileId: string) {
-    return this.write(profileId, (tx, now) => addMember(tx, input, as(tx, profileId, now)));
-  }
-
-  async updateMember(memberId: string, input: MemberUpdate, profileId: string) {
-    return this.write(profileId, (tx, now) => updateMember(tx, memberId, input, as(tx, profileId, now)));
-  }
-
-  async upsertEntry(input: EntryInput, profileId: string) {
-    return this.write(profileId, (tx, now) => upsertEntry(tx, input, as(tx, profileId, now)));
-  }
-
-  async deleteEntry(entryId: string, baseSeq: number, profileId: string) {
-    return this.write(profileId, (tx, now) => deleteEntry(tx, entryId, baseSeq, as(tx, profileId, now)));
-  }
-
-  async restoreEntry(entryId: string, baseSeq: number, profileId: string) {
-    return this.write(profileId, (tx, now) => restoreEntry(tx, entryId, baseSeq, as(tx, profileId, now)));
+  async putEntry(entryId: string, input: EntryInput, profileId: string) {
+    return this.write(profileId, (tx, now) => putEntry(tx, entryId, input, as(tx, profileId, now)));
   }
 
   async createInvite(memberId: string, profileId: string) {
@@ -110,8 +95,8 @@ export class Group extends DurableObject<Env> {
   }
 
   /** An account is being deleted. Not a `Result`: a profile that is not here is an answer. */
-  async forgetProfile(profileId: string): Promise<{ forgotten: boolean; purged: boolean }> {
-    const outcome = this.db.transaction((tx) => forgetProfile(tx, profileId, nowIso()));
+  async forgetProfile(profileId: string, displayName: string | null): Promise<{ forgotten: boolean; purged: boolean }> {
+    const outcome = this.db.transaction((tx) => forgetProfile(tx, profileId, displayName, nowIso()));
     await this.settle();
     return outcome;
   }
@@ -165,9 +150,9 @@ export class Group extends DurableObject<Env> {
 
   /** Push runs after the commit, inside `waitUntil`, and can never fail the write. */
   private announce(seq: number, actorProfileId: string): void {
-    const notices = this.db.transaction((tx) => pendingNotices(tx, seq, actorProfileId));
-    if (notices.length === 0) return;
-    this.ctx.waitUntil(wakeDevices(this.env, notices).catch((error) => console.error("[group] push failed", error)));
+    const { groupId, messages } = this.db.transaction((tx) => ({ groupId: requireMeta(tx).id, messages: pendingNotices(tx, seq) }));
+    if (messages.length === 0) return;
+    this.ctx.waitUntil(wakeDevices(this.env, groupId, actorProfileId, messages).catch((error) => console.error("[group] push failed", error)));
   }
 
   private async settle(): Promise<void> {

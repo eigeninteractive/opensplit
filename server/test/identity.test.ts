@@ -225,7 +225,7 @@ describe("the session", () => {
   it("names a guest as a guest, with no invented name or address", async () => {
     const guest = await signInAsGuest();
     const body = (await (await session(guest.token)).json()) as { account: unknown };
-    expect(body.account).toEqual({ id: guest.id, isAnonymous: true, email: null, displayName: null });
+    expect(body.account).toEqual({ id: guest.id, isAnonymous: true, email: null });
   });
 
   it("ends on sign-out", async () => {

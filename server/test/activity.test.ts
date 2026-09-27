@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { BY_INVITE, editGroup, editMember, evenly, expense, freshId, makeGroup, makeGroupOfTwo, ok, PRIYA, RAVI, stub } from "./group";
+import { BY_INVITE, deleteEntry, editGroup, editMember, evenly, expense, freshId, makeGroup, makeGroupOfTwo, ok, PRIYA, RAVI, restoreEntry, saveEntry, stub } from "./group";
 
 /** Activity events: that one save produces one event, that nothing produces none, and that the actor on it is the person who made the change. */
 
@@ -11,7 +11,7 @@ async function eventsOf(groupId: string, profileId: string) {
 describe("recording an expense", () => {
   it("appends one line, not one per row it touched", async () => {
     const { groupId, ravi, priya } = await makeGroup();
-    ok(await stub(groupId).upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 1200), RAVI));
+    ok(await saveEntry(stub(groupId), evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 1200), RAVI));
 
     /**
      * The old version fired a deferred trigger once per affected row across
@@ -25,7 +25,7 @@ describe("recording an expense", () => {
 
   it("attributes it to whoever actually made it, which is not something they can supply", async () => {
     const { groupId, ravi, priya } = await makeGroupOfTwo();
-    ok(await stub(groupId).upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 600), PRIYA));
+    ok(await saveEntry(stub(groupId), evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 600), PRIYA));
 
     const line = (await eventsOf(groupId, RAVI)).findLast((event) => event.kind === "entry");
     expect(line?.actorId).toBe(priya.id);
@@ -35,9 +35,9 @@ describe("recording an expense", () => {
     const { groupId, ravi, priya } = await makeGroup();
     const input = evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 900);
 
-    ok(await stub(groupId).upsertEntry(input, RAVI));
+    ok(await saveEntry(stub(groupId), input, RAVI));
     const before = (await eventsOf(groupId, RAVI)).length;
-    ok(await stub(groupId).upsertEntry(input, RAVI));
+    ok(await saveEntry(stub(groupId), input, RAVI));
 
     // "Ravi edited nothing" is worse than no feed.
     expect((await eventsOf(groupId, RAVI)).length).toBe(before);
@@ -52,11 +52,12 @@ describe("recording an expense", () => {
     const { groupId, ravi, priya } = await makeGroup();
     const id = freshId("e");
 
-    ok(await stub(groupId).upsertEntry(evenly(id, ravi.id, [ravi.id, priya.id], 1000), RAVI));
+    ok(await saveEntry(stub(groupId), evenly(id, ravi.id, [ravi.id, priya.id], 1000), RAVI));
     const before = (await eventsOf(groupId, RAVI)).filter((event) => event.kind === "entry").length;
 
     ok(
-      await stub(groupId).upsertEntry(
+      await saveEntry(
+        stub(groupId),
         expense({
           id,
           amountMinor: 1000,
@@ -81,7 +82,7 @@ describe("recording an expense", () => {
    */
   it("leaves the newest snapshot identical to the live expense", async () => {
     const { groupId, ravi, priya } = await makeGroup();
-    const entry = ok(await stub(groupId).upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 777), RAVI));
+    const entry = ok(await saveEntry(stub(groupId), evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 777), RAVI));
 
     const line = (await eventsOf(groupId, RAVI)).filter((event) => event.entry !== null).findLast((event) => event.subjectId === entry.id);
     if (!line) expect.unreachable("The expense left no snapshot.");
@@ -97,9 +98,9 @@ describe("recording an expense", () => {
     const object = stub(groupId);
     const id = freshId("e");
 
-    const entry = ok(await object.upsertEntry(evenly(id, ravi.id, [ravi.id, priya.id], 400), RAVI));
-    const deleted = ok(await object.deleteEntry(id, entry.seq, RAVI));
-    ok(await object.restoreEntry(id, deleted.seq, RAVI));
+    const entry = ok(await saveEntry(object, evenly(id, ravi.id, [ravi.id, priya.id], 400), RAVI));
+    const deleted = ok(await deleteEntry(object, entry, RAVI));
+    ok(await restoreEntry(object, deleted, RAVI));
 
     const snapshots = (await eventsOf(groupId, RAVI))
       .filter((event) => event.entry !== null)
@@ -179,7 +180,7 @@ describe("an archived group that comes back", () => {
     const object = stub(groupId);
 
     ok(await editGroup(groupId, RAVI, { archivedAt: new Date().toISOString() }));
-    ok(await object.upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 300), RAVI));
+    ok(await saveEntry(object, evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 300), RAVI));
 
     const kinds = (await eventsOf(groupId, RAVI)).map((event) => event.kind);
     expect(kinds).toContain("group_archived");

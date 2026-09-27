@@ -20,17 +20,11 @@ import 'package:opensplit/presentation/app.dart';
 import 'package:opensplit_api/opensplit_api.dart' show Account, EmailFlow;
 import 'package:shared_preferences/shared_preferences.dart';
 
-final _account = Account(
-  id: 'account',
-  isAnonymous: false,
-  email: null,
-  displayName: null,
-);
+final _account = Account(id: 'account', isAnonymous: false, email: null);
 final _otherAccount = Account(
   id: 'other-account',
   isAnonymous: false,
   email: null,
-  displayName: null,
 );
 
 void main() {
@@ -136,7 +130,6 @@ void main() {
     auth.currentUser = Account(
       id: 'other-account',
       isAnonymous: false,
-      displayName: 'Updated name',
       email: null,
     );
     auth.events.add(auth.currentUser);

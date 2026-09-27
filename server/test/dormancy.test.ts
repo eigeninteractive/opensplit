@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
-import { editMember, evenly, freshId, makeGroup, makeGroupOfTwo, ok, PRIYA, RAVI, refusal, stub } from "./group";
+import { deleteEntry, editMember, evenly, freshId, makeGroup, makeGroupOfTwo, ok, PRIYA, RAVI, refusal, saveEntry, stub } from "./group";
 
 /** Dormancy and account deletion: what an idle group does to itself, and what survives somebody deleting the account that made it. */
 
@@ -37,7 +37,7 @@ describe("a group that goes quiet", () => {
     const object = stub(groupId);
 
     await object.runUpkeep(Date.now() + 100 * DAYS);
-    ok(await object.upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 400), RAVI));
+    ok(await saveEntry(object, evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 400), RAVI));
 
     expect(ok(await object.changes(RAVI, 0, 500)).group?.archivedAt).toBeNull();
   });
@@ -62,7 +62,7 @@ describe("a group long dead", () => {
     const { groupId, ravi, priya } = await makeGroup();
     const object = stub(groupId);
 
-    ok(await object.upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 1000), RAVI));
+    ok(await saveEntry(object, evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 1000), RAVI));
 
     const outcome = await object.runUpkeep(Date.now() + 800 * DAYS);
     expect(outcome.purged).toBe(false);
@@ -74,8 +74,8 @@ describe("a group long dead", () => {
     const object = stub(groupId);
 
     const id = freshId("e");
-    const entry = ok(await object.upsertEntry(evenly(id, ravi.id, [ravi.id, priya.id], 1000), RAVI));
-    ok(await object.deleteEntry(id, entry.seq, RAVI));
+    const entry = ok(await saveEntry(object, evenly(id, ravi.id, [ravi.id, priya.id], 1000), RAVI));
+    ok(await deleteEntry(object, entry, RAVI));
 
     const outcome = await object.runUpkeep(Date.now() + 800 * DAYS);
     expect(outcome.purged).toBe(true);
@@ -97,11 +97,11 @@ describe("a group long dead", () => {
     const object = stub(groupId);
 
     const id = freshId("e");
-    const entry = ok(await object.upsertEntry(evenly(id, ravi.id, [ravi.id, priya.id], 500), RAVI));
-    ok(await object.deleteEntry(id, entry.seq, RAVI));
+    const entry = ok(await saveEntry(object, evenly(id, ravi.id, [ravi.id, priya.id], 500), RAVI));
+    ok(await deleteEntry(object, entry, RAVI));
     await object.runUpkeep(Date.now() + 800 * DAYS);
 
-    expect(refusal(await object.upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id], 100), RAVI)).code).toBe("group_purged");
+    expect(refusal(await saveEntry(object, evenly(freshId("e"), ravi.id, [ravi.id], 100), RAVI)).code).toBe("group_purged");
   });
 
   it("takes its rows out of the membership index with it", async () => {
@@ -111,8 +111,8 @@ describe("a group long dead", () => {
     expect(await membershipsIn(groupId)).toHaveLength(1);
 
     const id = freshId("e");
-    const entry = ok(await object.upsertEntry(evenly(id, ravi.id, [ravi.id, priya.id], 500), RAVI));
-    ok(await object.deleteEntry(id, entry.seq, RAVI));
+    const entry = ok(await saveEntry(object, evenly(id, ravi.id, [ravi.id, priya.id], 500), RAVI));
+    ok(await deleteEntry(object, entry, RAVI));
     await object.runUpkeep(Date.now() + 800 * DAYS);
 
     expect(await membershipsIn(groupId)).toHaveLength(0);
@@ -160,10 +160,10 @@ describe("deleting an account", () => {
     const { groupId, ravi, priya } = await makeGroupOfTwo();
     const object = stub(groupId);
 
-    ok(await object.upsertEntry(evenly(freshId("e"), priya.id, [ravi.id, priya.id], 1000), PRIYA));
+    ok(await saveEntry(object, evenly(freshId("e"), priya.id, [ravi.id, priya.id], 1000), PRIYA));
     const before = ok(await object.changes(RAVI, 0, 500));
 
-    expect(await object.forgetProfile(PRIYA)).toEqual({ forgotten: true, purged: false });
+    expect(await object.forgetProfile(PRIYA, null)).toEqual({ forgotten: true, purged: false });
 
     const after = ok(await object.changes(RAVI, 0, 500));
     const demoted = after.members.find((member) => member.id === priya.id);
@@ -188,8 +188,8 @@ describe("deleting an account", () => {
     const { groupId, ravi, priya } = await makeGroup();
     const object = stub(groupId);
 
-    ok(await object.upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 600), RAVI));
-    expect(await object.forgetProfile(RAVI)).toEqual({ forgotten: true, purged: true });
+    ok(await saveEntry(object, evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 600), RAVI));
+    expect(await object.forgetProfile(RAVI, null)).toEqual({ forgotten: true, purged: true });
 
     const page = ok(await object.changes(RAVI, 0, 500));
     expect(page.purgedAt).not.toBeNull();
@@ -198,6 +198,6 @@ describe("deleting an account", () => {
 
   it("is quietly true of a group the account was never in", async () => {
     const { groupId } = await makeGroup();
-    expect(await stub(groupId).forgetProfile("00000000-0000-4000-8000-000000000000")).toEqual({ forgotten: false, purged: false });
+    expect(await stub(groupId).forgetProfile("00000000-0000-4000-8000-000000000000", null)).toEqual({ forgotten: false, purged: false });
   });
 });

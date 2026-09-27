@@ -132,7 +132,6 @@ void main() {
 
       expect(entry.isBalanced, isTrue);
       expect(entry.shares.map((s) => s.amountMinor), [80000, 80000, 80000]);
-      expect(entry.clientKey, entry.id, reason: 'retries must be idempotent');
     });
 
     test('multiple payers on one bill round-trip through storage', () async {
@@ -175,6 +174,26 @@ void main() {
       expect(await entries.getEntries(groupId), isEmpty);
     });
 
+    test('editing a deleted entry does not undelete it', () async {
+      EntryDraft draft(int amount) => EntryDraft(
+        groupId: groupId,
+        currency: 'INR',
+        amountMinor: amount,
+        split: EqualSplit([ravi, priya]),
+        payerAmounts: {ravi: amount},
+      );
+      final original = await entries.create(draft(1000), createdBy: ravi);
+      await entries.delete(original.id, actorId: ravi);
+
+      final edited = await entries.update(
+        original.id,
+        draft(1000),
+        actorId: ravi,
+      );
+
+      expect(edited.isDeleted, isTrue);
+    });
+
     test('editing replaces shares and keeps creation metadata', () async {
       final original = await entries.create(
         EntryDraft(
@@ -200,11 +219,10 @@ void main() {
       );
 
       expect(edited.id, original.id);
-      expect(edited.createdAt, original.createdAt);
-      expect(edited.clientKey, original.clientKey);
+      expect(edited.row.createdAt, original.row.createdAt);
       // A local edit moves no version.
-      expect(edited.seq, original.seq);
-      expect(edited.splitKind, SplitKind.shares);
+      expect(edited.row.seq, original.row.seq);
+      expect(edited.row.splitKind, SplitKind.shares);
 
       final loaded = (await entries.getEntries(groupId)).single;
       expect(loaded.shares, hasLength(3));
@@ -239,7 +257,7 @@ void main() {
       // Likewise for a soft delete: the base has to survive it, because
       // deleting always moves money and the server refuses one composed against
       // a version it no longer holds.
-      expect(withDeleted.single.seq, entry.seq);
+      expect(withDeleted.single.row.seq, entry.row.seq);
       expect(foldBalances(withDeleted), isEmpty);
     });
 

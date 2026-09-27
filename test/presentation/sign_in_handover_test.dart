@@ -118,12 +118,7 @@ void main() {
 
 /// Signed out until somebody asks to be a guest.
 class _BecomesGuest implements AuthService {
-  static final _guest = Account(
-    id: 'guest-1',
-    isAnonymous: true,
-    email: null,
-    displayName: null,
-  );
+  static final _guest = Account(id: 'guest-1', isAnonymous: true, email: null);
 
   final events = StreamController<Account?>.broadcast();
 

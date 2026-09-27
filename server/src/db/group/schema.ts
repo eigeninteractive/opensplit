@@ -111,8 +111,6 @@ export const entries = sqliteTable(
     createdBy: text("created_by")
       .notNull()
       .references(() => members.id),
-    /** Client-minted, so a retried push is idempotent. */
-    clientKey: text("client_key"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
     /** Soft delete, so the deletion travels through the feed. */
@@ -121,7 +119,6 @@ export const entries = sqliteTable(
   },
   (table) => [
     index("entries_seq").on(table.seq),
-    uniqueIndex("entries_client_key").on(table.clientKey),
     check("entries_amount_positive", sql`${table.amountMinor} > 0`),
     check("entries_fx_rate_positive", sql`${table.fxRate} is null or ${table.fxRate} > 0`),
     check("entries_moment_complete", sql`(${table.occurredAt} is null) = (${table.timeZone} is null)`),

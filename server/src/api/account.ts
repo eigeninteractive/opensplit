@@ -3,11 +3,10 @@ import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 
 import { user } from "../auth-schema";
-import { chunked } from "../chunked";
 import type { AppEnv } from "../context";
 import { deviceTokens, memberships, profiles } from "../db/d1/schema";
-import { AccountDeletionSchema, DeviceForgottenSchema, DeviceSchema, ProfileListSchema, ProfilePageSchema, ProfileSchema, ProfileUpdateSchema } from "../schemas/account";
-import { apiError, IdSchema, jsonBody, jsonResponse } from "../schemas/common";
+import { AccountDeletionSchema, DeviceForgottenSchema, DeviceSchema, ProfilePageSchema, ProfileSchema, ProfileUpdateSchema } from "../schemas/account";
+import { apiError, jsonBody, jsonResponse } from "../schemas/common";
 import { refusals, signedIn } from "./routing";
 
 /** The person, their devices, and ending the account. */
@@ -32,18 +31,6 @@ const profileFeedRoute = createRoute({
     }),
   },
   responses: { 200: jsonResponse(ProfilePageSchema, "The page, and where the feed stands"), 400: refusals[400], 401: refusals[401] },
-});
-
-const profileLookupRoute = createRoute({
-  ...signedIn,
-  method: "post",
-  operationId: "lookupProfiles",
-  path: "/profiles/lookup",
-  tags: ["sync"],
-  summary: "Exactly these profiles",
-  description: "For a profile that just became visible (a placeholder was claimed) but is older than the feed's cursor. Ids you cannot see are absent.",
-  request: { body: jsonBody(z.object({ ids: z.array(IdSchema).min(1).max(PAGE_MAX) }).openapi("ProfileLookup")) },
-  responses: { 200: jsonResponse(ProfileListSchema, "Those of them you can see"), 400: refusals[400], 401: refusals[401] },
 });
 
 const updateProfileRoute = createRoute({
@@ -111,21 +98,6 @@ export function accountRoutes(routes: OpenAPIHono<AppEnv>) {
     return c.json({ profiles: page, cursor: last ? encodeCursor(last) : null, hasMore: rows.length > limit }, 200);
   });
 
-  routes.openapi(profileLookupRoute, async (c) => {
-    const visible = visibleTo(c.var.db, c.var.session.userId);
-    const ids = chunked([...new Set(c.req.valid("json").ids)]);
-    const pages = await Promise.all(
-      ids.map((chunk) =>
-        c.var.db
-          .select()
-          .from(profiles)
-          .where(and(inArray(profiles.id, chunk), visible))
-          .all(),
-      ),
-    );
-    return c.json({ profiles: pages.flat() }, 200);
-  });
-
   routes.openapi(updateProfileRoute, async (c) => {
     const { displayName, upiVpa } = c.req.valid("json");
     const [row] = await c.var.db.update(profiles).set({ displayName, upiVpa, updatedAt: new Date().toISOString() }).where(eq(profiles.id, c.var.session.userId)).returning();
@@ -159,21 +131,20 @@ export function accountRoutes(routes: OpenAPIHono<AppEnv>) {
 
     // Every group, including ones left: a left group still holds the member row.
     const groups = await db.select({ groupId: memberships.groupId }).from(memberships).where(eq(memberships.profileId, self)).all();
+    // Read before it is blanked below: the placeholders left behind keep the name the account last had.
+    const name = (await db.select({ displayName: profiles.displayName }).from(profiles).where(eq(profiles.id, self)).get())?.displayName ?? null;
 
     let forgotten = 0;
     let purged = 0;
     for (const { groupId } of groups) {
-      const outcome = await c.env.GROUP.getByName(groupId).forgetProfile(self);
+      const outcome = await c.env.GROUP.getByName(groupId).forgetProfile(self, name);
       if (outcome.forgotten) forgotten += 1;
       if (outcome.purged) purged += 1;
     }
 
-    // The profile stays, emptied, so co-members' history still resolves.
-    await db.update(profiles).set({ displayName: null, upiVpa: null, deletedAt: now, updatedAt: now }).where(eq(profiles.id, self));
-    await db.delete(deviceTokens).where(eq(deviceTokens.profileId, self));
-    await db.delete(memberships).where(eq(memberships.profileId, self));
-    // Last, since everything above ran on this account's session; sessions cascade.
-    await db.delete(user).where(eq(user.id, self));
+    // One batch, so a failure cannot leave half an account. The profile stays,
+    // emptied, so co-members' history still resolves; sessions cascade from the user.
+    await db.batch([db.update(profiles).set({ displayName: null, upiVpa: null, deletedAt: now, updatedAt: now }).where(eq(profiles.id, self)), db.delete(deviceTokens).where(eq(deviceTokens.profileId, self)), db.delete(memberships).where(eq(memberships.profileId, self)), db.delete(user).where(eq(user.id, self))]);
 
     return c.json({ forgotten, purged }, 200);
   });

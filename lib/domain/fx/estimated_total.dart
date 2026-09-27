@@ -54,16 +54,16 @@ EstimatedTotal? estimateBalance({
     }
     if (delta == 0) continue;
 
-    if (entry.currency == target) {
+    if (entry.row.currency == target) {
       total += delta;
       convertedAny = true;
       continue;
     }
 
-    final from = currencies[entry.currency];
-    final rate = entry.fxRate;
+    final from = currencies[entry.row.currency];
+    final rate = entry.row.fxRate;
     if (from == null || rate == null || rate <= 0) {
-      unconverted.add(entry.currency);
+      unconverted.add(entry.row.currency);
       continue;
     }
 

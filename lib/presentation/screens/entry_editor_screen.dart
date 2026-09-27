@@ -127,7 +127,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
     _loaded = true;
     _editingSnapshot = existing;
 
-    _currencyCode = existing?.currency ?? ledger.group.defaultCurrency;
+    _currencyCode = existing?.row.currency ?? ledger.group.defaultCurrency;
 
     if (existing == null) {
       // Everyone splits, the person adding it paid. The overwhelmingly common
@@ -138,15 +138,15 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
       return;
     }
 
-    _description.text = existing.description;
-    _categoryId = existing.categoryId;
-    _date = existing.entryDate;
-    _occurredAt = existing.occurredAt;
-    _zone = existing.timeZone;
-    _splitKind = existing.splitKind;
-    final currency = cx[existing.currency];
+    _description.text = existing.row.description;
+    _categoryId = existing.row.categoryId;
+    _date = existing.row.entryDate;
+    _occurredAt = existing.row.occurredAt;
+    _zone = existing.row.timeZone;
+    _splitKind = existing.row.splitKind;
+    final currency = cx[existing.row.currency];
     if (currency != null) {
-      _amount.text = currency.formatPlain(existing.amountMinor);
+      _amount.text = currency.formatPlain(existing.row.amountMinor);
     }
 
     _participants = {for (final share in existing.shares) share.memberId};

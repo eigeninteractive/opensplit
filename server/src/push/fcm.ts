@@ -1,9 +1,10 @@
-import { inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { importPKCS8, SignJWT } from "jose";
 
-import { deviceTokens } from "../db/d1/schema";
-import type { Notice } from "../do/group/notices";
+import { chunked } from "../chunked";
+import { deviceTokens, memberships } from "../db/d1/schema";
+import type { PushData } from "../schemas/ledger";
 
 /**
  * Wakes other members' devices after a group's write commits.
@@ -20,12 +21,17 @@ const HTTP_TIMEOUT = 10_000;
 /** One cached access token, so a burst of groups does not mint one each. */
 const TOKEN_KEY = "fcm:access-token";
 
-export async function wakeDevices(env: Env, notices: Notice[]): Promise<void> {
-  if (notices.length === 0 || !env.FCM_PROJECT_ID || !env.FCM_SERVICE_ACCOUNT) return;
+/** Wakes every device of the group's current members except the actor's, once per message. */
+export async function wakeDevices(env: Env, groupId: string, actorProfileId: string, messages: PushData[]): Promise<void> {
+  if (messages.length === 0 || !env.FCM_PROJECT_ID || !env.FCM_SERVICE_ACCOUNT) return;
 
   const db = drizzle(env.DB);
-  const profileIds = [...new Set(notices.flatMap((notice) => notice.profileIds))];
-  const devices = await db.select({ token: deviceTokens.token, profileId: deviceTokens.profileId }).from(deviceTokens).where(inArray(deviceTokens.profileId, profileIds)).all();
+  const devices = await db
+    .select({ token: deviceTokens.token })
+    .from(deviceTokens)
+    .innerJoin(memberships, eq(memberships.profileId, deviceTokens.profileId))
+    .where(and(eq(memberships.groupId, groupId), isNull(memberships.leftAt), ne(deviceTokens.profileId, actorProfileId)))
+    .all();
   if (devices.length === 0) return;
 
   let accessToken: string;
@@ -37,13 +43,12 @@ export async function wakeDevices(env: Env, notices: Notice[]): Promise<void> {
   }
 
   const dead = new Set<string>();
-  const sends = notices.flatMap((notice) => devices.filter((device) => notice.profileIds.includes(device.profileId)).map((device) => send(env, accessToken, device.token, notice, dead)));
-  await Promise.allSettled(sends);
+  await Promise.allSettled(messages.flatMap((data) => devices.map((device) => send(env, accessToken, device.token, data, dead))));
 
-  if (dead.size > 0) await db.delete(deviceTokens).where(inArray(deviceTokens.token, [...dead]));
+  for (const tokens of chunked([...dead])) await db.delete(deviceTokens).where(inArray(deviceTokens.token, tokens));
 }
 
-async function send(env: Env, accessToken: string, registration: string, notice: Notice, dead: Set<string>): Promise<void> {
+async function send(env: Env, accessToken: string, registration: string, data: PushData, dead: Set<string>): Promise<void> {
   const response = await fetch(`https://fcm.googleapis.com/v1/projects/${env.FCM_PROJECT_ID}/messages:send`, {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
@@ -51,7 +56,7 @@ async function send(env: Env, accessToken: string, registration: string, notice:
     body: JSON.stringify({
       message: {
         token: registration,
-        data: notice.data,
+        data,
         android: { priority: "high" },
         webpush: { headers: { Urgency: "high" } },
       },

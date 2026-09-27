@@ -6,6 +6,8 @@ import 'package:opensplit_api/opensplit_api.dart' show EntryKind, SplitKind;
 import 'package:test/test.dart';
 
 import 'generators.dart';
+import 'package:opensplit_api/opensplit_api.dart' show Payer, Share;
+import 'package:opensplit/data/local/database.dart' show EntryRow;
 
 Entry _entry({
   required String id,
@@ -18,25 +20,27 @@ Entry _entry({
 }) {
   final at = DateTime.utc(2026, 1, 1);
   return Entry(
-    id: id,
-    groupId: 'g1',
-    kind: kind,
-    description: id,
-    currency: currency,
-    amountMinor: amountMinor,
-    entryDate: at,
-    splitKind: SplitKind.exact,
+    EntryRow(
+      id: id,
+      groupId: 'g1',
+      kind: kind,
+      description: id,
+      currency: currency,
+      amountMinor: amountMinor,
+      entryDate: at,
+      splitKind: SplitKind.exact,
+      createdBy: payers.keys.first,
+      createdAt: at,
+      deletedAt: deletedAt,
+    ),
     payers: [
       for (final e in payers.entries)
-        EntryPayer(memberId: e.key, amountMinor: e.value),
+        Payer(memberId: e.key, amountMinor: e.value),
     ],
     shares: [
       for (final e in shares.entries)
-        EntryShare(memberId: e.key, amountMinor: e.value),
+        Share(memberId: e.key, amountMinor: e.value, weightMicros: null),
     ],
-    createdBy: payers.keys.first,
-    createdAt: at,
-    deletedAt: deletedAt,
   );
 }
 

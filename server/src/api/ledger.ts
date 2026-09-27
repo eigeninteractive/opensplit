@@ -1,12 +1,14 @@
 import { createRoute, type OpenAPIHono, z } from "@hono/zod-openapi";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
+import type { DrizzleD1Database } from "drizzle-orm/d1";
 
+import { chunked } from "../chunked";
 import type { AppEnv } from "../context";
-import { memberships } from "../db/d1/schema";
+import { memberships, profiles } from "../db/d1/schema";
 import { GroupIdsSchema } from "../schemas/account";
 import { jsonBody, jsonResponse } from "../schemas/common";
-import { ChangePageSchema, EntryInputSchema, EntrySchema, GroupCreateSchema, GroupSchema, GroupUpdateSchema, MemberCreateSchema, MemberSchema, MemberUpdateSchema } from "../schemas/ledger";
-import { EntryPathSchema, GroupPathSchema, group, MemberPathSchema, RequiredSeqQuerySchema, refusals, respond, SeqQuerySchema, signedIn } from "./routing";
+import { ChangePageSchema, EntryInputSchema, EntrySchema, GroupInputSchema, GroupSchema, type Member, MemberInputSchema, MemberSchema } from "../schemas/ledger";
+import { EntryPathSchema, GroupPathSchema, group, MemberPathSchema, refusals, refused, respond, SeqQuerySchema, signedIn } from "./routing";
 
 /**
  * The sync surface. Handlers only route: rules about shape are the Zod
@@ -43,85 +45,40 @@ const changesRoute = createRoute({
   responses: { 200: jsonResponse(ChangePageSchema, "The page, and the cursor to send next time"), ...refusals },
 });
 
-const createGroupRoute = createRoute({
-  ...signedIn,
-  method: "post",
-  operationId: "createGroup",
-  path: "/groups",
-  tags: ["groups"],
-  summary: "Make a group, and its creator's place in it",
-  description: "Idempotent for its creator, so a retry whose response was lost returns the same group.",
-  request: { body: jsonBody(GroupCreateSchema) },
-  responses: { 200: jsonResponse(GroupSchema, "The group"), ...refusals },
-});
-
-const updateGroupRoute = createRoute({
+const putGroupRoute = createRoute({
   ...signedIn,
   method: "put",
-  operationId: "updateGroup",
+  operationId: "putGroup",
   path: "/groups/{groupId}",
   tags: ["groups"],
-  summary: "Rename, archive or change a setting",
-  request: { params: GroupPathSchema, body: jsonBody(GroupUpdateSchema) },
+  summary: "Make a group and its creator's place in it, or rename, archive or change a setting",
+  description: "Idempotent, so a retry whose response was lost returns the same group. Editing needs membership; creating does not.",
+  request: { params: GroupPathSchema, body: jsonBody(GroupInputSchema) },
   responses: { 200: jsonResponse(GroupSchema, "The group"), ...refusals },
 });
 
-const addMemberRoute = createRoute({
-  ...signedIn,
-  method: "post",
-  operationId: "addMember",
-  path: "/groups/{groupId}/members",
-  tags: ["groups"],
-  summary: "Add somebody who has never opened the app",
-  request: { params: GroupPathSchema, body: jsonBody(MemberCreateSchema) },
-  responses: { 200: jsonResponse(MemberSchema, "The member"), ...refusals },
-});
-
-const updateMemberRoute = createRoute({
+const putMemberRoute = createRoute({
   ...signedIn,
   method: "put",
-  operationId: "updateMember",
+  operationId: "putMember",
   path: "/groups/{groupId}/members/{memberId}",
   tags: ["groups"],
-  summary: "Change a name, a payment handle, or whether somebody is still here",
+  summary: "Add somebody who has never opened the app, or change a name, a payment handle, or whether somebody is still here",
   description: "Your own row and any placeholder are editable; another account holder's are not. Leaving is always yours to do; removing somebody else requires them to be settled in every currency.",
-  request: { params: MemberPathSchema, body: jsonBody(MemberUpdateSchema) },
+  request: { params: MemberPathSchema, body: jsonBody(MemberInputSchema) },
   responses: { 200: jsonResponse(MemberSchema, "The member"), ...refusals },
 });
 
-const upsertEntryRoute = createRoute({
+const putEntryRoute = createRoute({
   ...signedIn,
-  method: "post",
-  operationId: "upsertEntry",
-  path: "/groups/{groupId}/entries",
-  tags: ["entries"],
-  summary: "Record or edit an expense, whole",
-  description: "A stale `baseSeq` is refused only when the write would move money, so two people fixing a typo never arbitrate.",
-  request: { params: GroupPathSchema, body: jsonBody(EntryInputSchema) },
-  responses: { 200: jsonResponse(EntrySchema, "The expense as stored"), ...refusals },
-});
-
-const deleteEntryRoute = createRoute({
-  ...signedIn,
-  method: "delete",
-  operationId: "deleteEntry",
+  method: "put",
+  operationId: "putEntry",
   path: "/groups/{groupId}/entries/{entryId}",
   tags: ["entries"],
-  summary: "Soft-delete an expense",
-  description: "Deleting always moves money, so it must carry the exact version the device last saw.",
-  request: { params: EntryPathSchema, query: z.object({ baseSeq: RequiredSeqQuerySchema }) },
-  responses: { 200: jsonResponse(EntrySchema, "The expense, now deleted"), ...refusals },
-});
-
-const restoreEntryRoute = createRoute({
-  ...signedIn,
-  method: "post",
-  operationId: "restoreEntry",
-  path: "/groups/{groupId}/entries/{entryId}/restore",
-  tags: ["entries"],
-  summary: "Put a deleted expense back",
-  request: { params: EntryPathSchema, query: z.object({ baseSeq: RequiredSeqQuerySchema }) },
-  responses: { 200: jsonResponse(EntrySchema, "The expense, restored"), ...refusals },
+  summary: "Record, edit, delete or restore an expense, whole",
+  description: "A stale `baseSeq` is refused only when the write would move money, so two people fixing a typo never arbitrate. Deleting and restoring always move money.",
+  request: { params: EntryPathSchema, body: jsonBody(EntryInputSchema) },
+  responses: { 200: jsonResponse(EntrySchema, "The expense as stored"), ...refusals },
 });
 
 export function ledgerRoutes(routes: OpenAPIHono<AppEnv>) {
@@ -137,41 +94,30 @@ export function ledgerRoutes(routes: OpenAPIHono<AppEnv>) {
   routes.openapi(changesRoute, async (c) => {
     const { groupId } = c.req.valid("param");
     const { since, limit } = c.req.valid("query");
-    return respond(c, await group(c, groupId).changes(c.var.session.userId, since, limit));
+    const result = await group(c, groupId).changes(c.var.session.userId, since, limit);
+    if (!result.ok) return refused(c, result.error);
+    return c.json({ ...result.value, profiles: await profilesOf(c.var.db, result.value.members) }, 200);
   });
 
-  routes.openapi(createGroupRoute, async (c) => {
-    const input = c.req.valid("json");
-    return respond(c, await group(c, input.id).create(input, c.var.session.userId));
-  });
-
-  routes.openapi(updateGroupRoute, async (c) => {
+  routes.openapi(putGroupRoute, async (c) => {
     const { groupId } = c.req.valid("param");
-    return respond(c, await group(c, groupId).update(c.req.valid("json"), c.var.session.userId));
+    return respond(c, await group(c, groupId).putGroup(groupId, c.req.valid("json"), c.var.session.userId));
   });
 
-  routes.openapi(addMemberRoute, async (c) => {
-    const { groupId } = c.req.valid("param");
-    return respond(c, await group(c, groupId).addMember(c.req.valid("json"), c.var.session.userId));
-  });
-
-  routes.openapi(updateMemberRoute, async (c) => {
+  routes.openapi(putMemberRoute, async (c) => {
     const { groupId, memberId } = c.req.valid("param");
-    return respond(c, await group(c, groupId).updateMember(memberId, c.req.valid("json"), c.var.session.userId));
+    return respond(c, await group(c, groupId).putMember(memberId, c.req.valid("json"), c.var.session.userId));
   });
 
-  routes.openapi(upsertEntryRoute, async (c) => {
-    const { groupId } = c.req.valid("param");
-    return respond(c, await group(c, groupId).upsertEntry(c.req.valid("json"), c.var.session.userId));
-  });
-
-  routes.openapi(deleteEntryRoute, async (c) => {
+  routes.openapi(putEntryRoute, async (c) => {
     const { groupId, entryId } = c.req.valid("param");
-    return respond(c, await group(c, groupId).deleteEntry(entryId, c.req.valid("query").baseSeq, c.var.session.userId));
+    return respond(c, await group(c, groupId).putEntry(entryId, c.req.valid("json"), c.var.session.userId));
   });
+}
 
-  routes.openapi(restoreEntryRoute, async (c) => {
-    const { groupId, entryId } = c.req.valid("param");
-    return respond(c, await group(c, groupId).restoreEntry(entryId, c.req.valid("query").baseSeq, c.var.session.userId));
-  });
+/** The accounts holding the page's current places: ids the group named, never ones a client asked for. */
+async function profilesOf(db: DrizzleD1Database, members: Member[]) {
+  const ids = [...new Set(members.flatMap((member) => (member.profileId !== null && member.leftAt === null ? [member.profileId] : [])))];
+  const pages = await Promise.all(chunked(ids).map((chunk) => db.select().from(profiles).where(inArray(profiles.id, chunk)).all()));
+  return pages.flat();
 }

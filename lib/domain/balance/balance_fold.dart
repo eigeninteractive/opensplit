@@ -18,10 +18,10 @@ List<MemberBalance> foldBalances(Iterable<Entry> entries) {
 
     // Paying puts you in credit; owing a share puts you in debit.
     for (final payer in entry.payers) {
-      add(entry.currency, payer.memberId, payer.amountMinor);
+      add(entry.row.currency, payer.memberId, payer.amountMinor);
     }
     for (final share in entry.shares) {
-      add(entry.currency, share.memberId, -share.amountMinor);
+      add(entry.row.currency, share.memberId, -share.amountMinor);
     }
   }
 

@@ -133,7 +133,7 @@ void main() {
         entries.delete(opened.id, actorId: group.creator.id, expected: opened),
         throwsA(isA<StaleEntryException>()),
       );
-      expect((await entries.getEntry(opened.id))!.amountMinor, 200);
+      expect((await entries.getEntry(opened.id))!.row.amountMinor, 200);
       expect((await entries.getEntry(opened.id))!.isDeleted, isFalse);
     },
   );

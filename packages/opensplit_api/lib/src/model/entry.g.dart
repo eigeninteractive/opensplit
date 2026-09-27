@@ -27,7 +27,6 @@ Entry _$EntryFromJson(
       'fxAt',
       'notes',
       'createdBy',
-      'clientKey',
       'createdAt',
       'updatedAt',
       'deletedAt',
@@ -72,7 +71,6 @@ Entry _$EntryFromJson(
     ),
     notes: $checkedConvert('notes', (v) => v as String?),
     createdBy: $checkedConvert('createdBy', (v) => v as String),
-    clientKey: $checkedConvert('clientKey', (v) => v as String?),
     createdAt: $checkedConvert('createdAt', (v) => DateTime.parse(v as String)),
     updatedAt: $checkedConvert('updatedAt', (v) => DateTime.parse(v as String)),
     deletedAt: $checkedConvert(
@@ -112,7 +110,6 @@ Map<String, dynamic> _$EntryToJson(Entry instance) => <String, dynamic>{
   'fxAt': instance.fxAt?.toIso8601String(),
   'notes': instance.notes,
   'createdBy': instance.createdBy,
-  'clientKey': instance.clientKey,
   'createdAt': instance.createdAt.toIso8601String(),
   'updatedAt': instance.updatedAt.toIso8601String(),
   'deletedAt': instance.deletedAt?.toIso8601String(),

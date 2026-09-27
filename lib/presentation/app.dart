@@ -76,7 +76,7 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
     try {
       await ref.read(accountControllerProvider.notifier).resumeGoogleRedirect();
     } on IdentityAlreadyInUse catch (refusal) {
-      ref.read(googleRefusalProvider).value = refusal;
+      ref.read(googleRefusalProvider.notifier).park(refusal);
     } catch (error, stackTrace) {
       // A failed return must not take the launch down with it: the session is
       // simply unchanged, and every other route into the app still works.

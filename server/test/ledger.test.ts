@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { editGroup, editMember, evenly, expense, freshId, makeGroup, ok, PRIYA, RAVI, refusal, stub, sumOf } from "./group";
+import { deleteEntry, draftOf, editGroup, editMember, evenly, expense, freshId, makeGroup, ok, PRIYA, RAVI, refusal, restoreEntry, saveEntry, stub, sumOf } from "./group";
 
 /** The invariant and the write path: an expense that does not add up, a hard delete, an idempotent retry, and the stale-base predicate. */
 describe("an expense has to add up", () => {
   it("accepts one that does", async () => {
     const { groupId, ravi, priya } = await makeGroup();
-    const entry = ok(await stub(groupId).upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 1200), ravi.profileId ?? ""));
+    const entry = ok(await saveEntry(stub(groupId), evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 1200), ravi.profileId ?? ""));
 
     expect(entry.amountMinor).toBe(1200);
     expect(sumOf(entry.payers)).toBe(1200);
@@ -25,7 +25,7 @@ describe("an expense has to add up", () => {
       ],
     });
 
-    expect(refusal(await stub(groupId).upsertEntry(input, ravi.profileId ?? "")).code).toBe("unbalanced");
+    expect(refusal(await saveEntry(stub(groupId), input, ravi.profileId ?? "")).code).toBe("unbalanced");
   });
 
   it("refuses payers that fall a paisa short", async () => {
@@ -40,7 +40,7 @@ describe("an expense has to add up", () => {
       ],
     });
 
-    expect(refusal(await stub(groupId).upsertEntry(input, ravi.profileId ?? "")).code).toBe("unbalanced");
+    expect(refusal(await saveEntry(stub(groupId), input, ravi.profileId ?? "")).code).toBe("unbalanced");
   });
 
   it("refuses shares that overshoot", async () => {
@@ -55,14 +55,14 @@ describe("an expense has to add up", () => {
       ],
     });
 
-    expect(refusal(await stub(groupId).upsertEntry(input, ravi.profileId ?? "")).code).toBe("unbalanced");
+    expect(refusal(await saveEntry(stub(groupId), input, ravi.profileId ?? "")).code).toBe("unbalanced");
   });
 
   it("refuses an expense with nobody paying and nobody owing", async () => {
     const { groupId, ravi } = await makeGroup();
     const input = expense({ id: freshId("e"), amountMinor: 500, payers: [], shares: [] });
 
-    expect(refusal(await stub(groupId).upsertEntry(input, ravi.profileId ?? "")).code).toBe("unbalanced");
+    expect(refusal(await saveEntry(stub(groupId), input, ravi.profileId ?? "")).code).toBe("unbalanced");
   });
 
   /**
@@ -81,7 +81,7 @@ describe("an expense has to add up", () => {
       shares: [{ memberId: other.priya.id, amountMinor: 400, weightMicros: null }],
     });
 
-    expect(refusal(await stub(groupId).upsertEntry(input, ravi.profileId ?? "")).code).toBe("no_such_member");
+    expect(refusal(await saveEntry(stub(groupId), input, ravi.profileId ?? "")).code).toBe("no_such_member");
   });
 
   it("refuses the same person listed twice in one split", async () => {
@@ -96,7 +96,7 @@ describe("an expense has to add up", () => {
       ],
     });
 
-    expect(refusal(await stub(groupId).upsertEntry(input, ravi.profileId ?? "")).code).toBe("malformed");
+    expect(refusal(await saveEntry(stub(groupId), input, ravi.profileId ?? "")).code).toBe("malformed");
   });
 });
 
@@ -106,8 +106,8 @@ describe("writing an expense twice", () => {
     const object = stub(groupId);
     const id = freshId("e");
 
-    ok(await object.upsertEntry(evenly(id, ravi.id, [ravi.id, priya.id], 1200), ravi.profileId ?? ""));
-    const edited = ok(await object.upsertEntry(evenly(id, ravi.id, [ravi.id, priya.id], 1600), ravi.profileId ?? ""));
+    ok(await saveEntry(object, evenly(id, ravi.id, [ravi.id, priya.id], 1200), ravi.profileId ?? ""));
+    const edited = ok(await saveEntry(object, evenly(id, ravi.id, [ravi.id, priya.id], 1600), ravi.profileId ?? ""));
 
     expect(edited.amountMinor).toBe(1600);
     expect(edited.shares).toHaveLength(2);
@@ -122,24 +122,12 @@ describe("writing an expense twice", () => {
     const object = stub(groupId);
     const input = evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 900);
 
-    const first = ok(await object.upsertEntry(input, ravi.profileId ?? ""));
-    const again = ok(await object.upsertEntry(input, ravi.profileId ?? ""));
+    const first = ok(await saveEntry(object, input, ravi.profileId ?? ""));
+    const again = ok(await saveEntry(object, input, ravi.profileId ?? ""));
 
     // A retried push must not travel to every device in the group again.
     expect(again.seq).toBe(first.seq);
     expect(again.updatedAt).toBe(first.updatedAt);
-  });
-
-  it("answers a retry that re-minted the id with the expense it already recorded", async () => {
-    const { groupId, ravi, priya } = await makeGroup();
-    const object = stub(groupId);
-    const clientKey = freshId("k");
-
-    const first = ok(await object.upsertEntry({ ...evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 700), clientKey }, ravi.profileId ?? ""));
-    const retry = ok(await object.upsertEntry({ ...evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 700), clientKey }, ravi.profileId ?? ""));
-
-    expect(retry.id).toBe(first.id);
-    expect(retry.seq).toBe(first.seq);
   });
 
   it("never lets an edit rewrite who recorded it, or when", async () => {
@@ -147,11 +135,11 @@ describe("writing an expense twice", () => {
     const object = stub(groupId);
     const id = freshId("e");
 
-    const first = ok(await object.upsertEntry(evenly(id, ravi.id, [ravi.id, priya.id], 500), ravi.profileId ?? ""));
+    const first = ok(await saveEntry(object, evenly(id, ravi.id, [ravi.id, priya.id], 500), ravi.profileId ?? ""));
 
     // Priya is a placeholder with no account, so Ravi is the only possible
     // author. The point is that there is no parameter to say otherwise.
-    const edited = ok(await object.upsertEntry(evenly(id, priya.id, [ravi.id, priya.id], 800), ravi.profileId ?? ""));
+    const edited = ok(await saveEntry(object, evenly(id, priya.id, [ravi.id, priya.id], 800), ravi.profileId ?? ""));
 
     expect(edited.createdBy).toBe(first.createdBy);
     expect(edited.createdAt).toBe(first.createdAt);
@@ -164,8 +152,8 @@ describe("an edit composed against a version that has moved", () => {
     const object = stub(groupId);
     const id = freshId("e");
 
-    const first = ok(await object.upsertEntry(evenly(id, ravi.id, [ravi.id, priya.id], 1000), ravi.profileId ?? ""));
-    const edited = ok(await object.upsertEntry({ ...evenly(id, ravi.id, [ravi.id, priya.id], 1400), baseSeq: first.seq }, ravi.profileId ?? ""));
+    const first = ok(await saveEntry(object, evenly(id, ravi.id, [ravi.id, priya.id], 1000), ravi.profileId ?? ""));
+    const edited = ok(await saveEntry(object, { ...evenly(id, ravi.id, [ravi.id, priya.id], 1400), baseSeq: first.seq }, ravi.profileId ?? ""));
 
     expect(edited.amountMinor).toBe(1400);
   });
@@ -179,10 +167,10 @@ describe("an edit composed against a version that has moved", () => {
     const object = stub(groupId);
     const id = freshId("e");
 
-    const first = ok(await object.upsertEntry(evenly(id, ravi.id, [ravi.id, priya.id], 1000), ravi.profileId ?? ""));
-    ok(await object.upsertEntry({ ...evenly(id, ravi.id, [ravi.id, priya.id], 1000), description: "Dinner at Britto's" }, ravi.profileId ?? ""));
+    const first = ok(await saveEntry(object, evenly(id, ravi.id, [ravi.id, priya.id], 1000), ravi.profileId ?? ""));
+    ok(await saveEntry(object, { ...evenly(id, ravi.id, [ravi.id, priya.id], 1000), description: "Dinner at Britto's" }, ravi.profileId ?? ""));
 
-    const late = ok(await object.upsertEntry({ ...evenly(id, ravi.id, [ravi.id, priya.id], 1000), description: "Dinner, Britto's", baseSeq: first.seq }, ravi.profileId ?? ""));
+    const late = ok(await saveEntry(object, { ...evenly(id, ravi.id, [ravi.id, priya.id], 1000), description: "Dinner, Britto's", baseSeq: first.seq }, ravi.profileId ?? ""));
 
     expect(late.description).toBe("Dinner, Britto's");
   });
@@ -192,10 +180,10 @@ describe("an edit composed against a version that has moved", () => {
     const object = stub(groupId);
     const id = freshId("e");
 
-    const first = ok(await object.upsertEntry(evenly(id, ravi.id, [ravi.id, priya.id], 1000), ravi.profileId ?? ""));
-    ok(await object.upsertEntry(evenly(id, ravi.id, [ravi.id, priya.id], 2000), ravi.profileId ?? ""));
+    const first = ok(await saveEntry(object, evenly(id, ravi.id, [ravi.id, priya.id], 1000), ravi.profileId ?? ""));
+    ok(await saveEntry(object, evenly(id, ravi.id, [ravi.id, priya.id], 2000), ravi.profileId ?? ""));
 
-    const late = refusal(await object.upsertEntry({ ...evenly(id, ravi.id, [ravi.id, priya.id], 1000), baseSeq: first.seq }, ravi.profileId ?? ""));
+    const late = refusal(await saveEntry(object, { ...evenly(id, ravi.id, [ravi.id, priya.id], 1000), baseSeq: first.seq }, ravi.profileId ?? ""));
     expect(late.code).toBe("stale_base");
 
     // And the correction somebody else made is still standing.
@@ -208,10 +196,11 @@ describe("an edit composed against a version that has moved", () => {
     const object = stub(groupId);
     const id = freshId("e");
 
-    const first = ok(await object.upsertEntry(evenly(id, ravi.id, [ravi.id, priya.id], 1000), ravi.profileId ?? ""));
+    const first = ok(await saveEntry(object, evenly(id, ravi.id, [ravi.id, priya.id], 1000), ravi.profileId ?? ""));
 
     ok(
-      await object.upsertEntry(
+      await saveEntry(
+        object,
         expense({
           id,
           amountMinor: 1000,
@@ -225,7 +214,7 @@ describe("an edit composed against a version that has moved", () => {
       ),
     );
 
-    expect(refusal(await object.upsertEntry({ ...evenly(id, ravi.id, [ravi.id, priya.id], 1000), baseSeq: first.seq }, ravi.profileId ?? "")).code).toBe("stale_base");
+    expect(refusal(await saveEntry(object, { ...evenly(id, ravi.id, [ravi.id, priya.id], 1000), baseSeq: first.seq }, ravi.profileId ?? "")).code).toBe("stale_base");
   });
 });
 
@@ -235,8 +224,8 @@ describe("deleting an expense", () => {
     const object = stub(groupId);
     const id = freshId("e");
 
-    const entry = ok(await object.upsertEntry(evenly(id, ravi.id, [ravi.id, priya.id], 600), ravi.profileId ?? ""));
-    const deleted = ok(await object.deleteEntry(id, entry.seq, ravi.profileId ?? ""));
+    const entry = ok(await saveEntry(object, evenly(id, ravi.id, [ravi.id, priya.id], 600), ravi.profileId ?? ""));
+    const deleted = ok(await deleteEntry(object, entry, ravi.profileId ?? ""));
 
     expect(deleted.deletedAt).not.toBeNull();
 
@@ -254,10 +243,10 @@ describe("deleting an expense", () => {
     const object = stub(groupId);
     const id = freshId("e");
 
-    const entry = ok(await object.upsertEntry(evenly(id, ravi.id, [ravi.id, priya.id], 600), ravi.profileId ?? ""));
-    ok(await object.upsertEntry(evenly(id, ravi.id, [ravi.id, priya.id], 900), ravi.profileId ?? ""));
+    const entry = ok(await saveEntry(object, evenly(id, ravi.id, [ravi.id, priya.id], 600), ravi.profileId ?? ""));
+    ok(await saveEntry(object, evenly(id, ravi.id, [ravi.id, priya.id], 900), ravi.profileId ?? ""));
 
-    expect(refusal(await object.deleteEntry(id, entry.seq, ravi.profileId ?? "")).code).toBe("stale_base");
+    expect(refusal(await deleteEntry(object, entry, ravi.profileId ?? "")).code).toBe("stale_base");
   });
 
   it("is idempotent on a retry whose response was lost", async () => {
@@ -265,9 +254,9 @@ describe("deleting an expense", () => {
     const object = stub(groupId);
     const id = freshId("e");
 
-    const entry = ok(await object.upsertEntry(evenly(id, ravi.id, [ravi.id, priya.id], 600), ravi.profileId ?? ""));
-    const first = ok(await object.deleteEntry(id, entry.seq, ravi.profileId ?? ""));
-    const retry = ok(await object.deleteEntry(id, entry.seq, ravi.profileId ?? ""));
+    const entry = ok(await saveEntry(object, evenly(id, ravi.id, [ravi.id, priya.id], 600), ravi.profileId ?? ""));
+    const first = ok(await deleteEntry(object, entry, ravi.profileId ?? ""));
+    const retry = ok(await deleteEntry(object, entry, ravi.profileId ?? ""));
 
     expect(retry.seq).toBe(first.seq);
     expect(retry.deletedAt).toBe(first.deletedAt);
@@ -278,9 +267,9 @@ describe("deleting an expense", () => {
     const object = stub(groupId);
     const id = freshId("e");
 
-    const entry = ok(await object.upsertEntry(evenly(id, ravi.id, [ravi.id, priya.id], 600), ravi.profileId ?? ""));
-    const deleted = ok(await object.deleteEntry(id, entry.seq, ravi.profileId ?? ""));
-    const restored = ok(await object.restoreEntry(id, deleted.seq, ravi.profileId ?? ""));
+    const entry = ok(await saveEntry(object, evenly(id, ravi.id, [ravi.id, priya.id], 600), ravi.profileId ?? ""));
+    const deleted = ok(await deleteEntry(object, entry, ravi.profileId ?? ""));
+    const restored = ok(await restoreEntry(object, deleted, ravi.profileId ?? ""));
 
     expect(restored.deletedAt).toBeNull();
   });
@@ -290,11 +279,12 @@ describe("deleting an expense", () => {
     const object = stub(groupId);
     const id = freshId("e");
 
-    const entry = ok(await object.upsertEntry(evenly(id, ravi.id, [ravi.id, priya.id], 600), ravi.profileId ?? ""));
-    ok(await object.deleteEntry(id, entry.seq, ravi.profileId ?? ""));
+    const entry = ok(await saveEntry(object, evenly(id, ravi.id, [ravi.id, priya.id], 600), ravi.profileId ?? ""));
+    ok(await deleteEntry(object, entry, ravi.profileId ?? ""));
 
-    const edited = ok(await object.upsertEntry({ ...evenly(id, ravi.id, [ravi.id, priya.id], 600), description: "Late edit" }, ravi.profileId ?? ""));
-    expect(edited.deletedAt).not.toBeNull();
+    // Composed against the version before the deletion, it would put the money back: stale.
+    const late = await saveEntry(object, draftOf(entry, { description: "Late edit" }), ravi.profileId ?? "");
+    expect(refusal(late).code).toBe("stale_base");
   });
 });
 
@@ -304,9 +294,9 @@ describe("the sequence number", () => {
     const object = stub(groupId);
     const profile = ravi.profileId ?? "";
 
-    const first = ok(await object.upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 400), profile));
+    const first = ok(await saveEntry(object, evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 400), profile));
     const renamed = ok(await editGroup(groupId, profile, { name: "Goa, again" }));
-    const second = ok(await object.upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 500), profile));
+    const second = ok(await saveEntry(object, evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 500), profile));
 
     expect(renamed.seq).toBeGreaterThan(first.seq);
     expect(second.seq).toBeGreaterThan(renamed.seq);
@@ -318,7 +308,7 @@ describe("the sequence number", () => {
     const profile = ravi.profileId ?? "";
 
     for (let index = 0; index < 5; index += 1) {
-      ok(await object.upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 100 + index), profile));
+      ok(await saveEntry(object, evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 100 + index), profile));
     }
 
     const first = ok(await object.changes(profile, 0, 3));
@@ -337,7 +327,7 @@ describe("the sequence number", () => {
     const object = stub(groupId);
     const profile = ravi.profileId ?? "";
 
-    ok(await object.upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 999), profile));
+    ok(await saveEntry(object, evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 999), profile));
 
     const page = ok(await object.changes(profile, 0, 500));
     for (const entry of page.entries) {
@@ -355,7 +345,7 @@ describe("a stranger", () => {
 
   it("cannot write an expense into one", async () => {
     const { groupId, ravi, priya } = await makeGroup();
-    expect(refusal(await stub(groupId).upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 400), PRIYA)).code).toBe("not_member");
+    expect(refusal(await saveEntry(stub(groupId), evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 400), PRIYA)).code).toBe("not_member");
   });
 
   it("is told an unused group id is unused, not forbidden", async () => {
@@ -366,7 +356,7 @@ describe("a stranger", () => {
 describe("a page of changes", () => {
   it("carries the rows its entries name, even ones changed after them", async () => {
     const { groupId, ravi, priya } = await makeGroup();
-    ok(await stub(groupId).upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 1000), RAVI));
+    ok(await saveEntry(stub(groupId), evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 1000), RAVI));
     // Renaming Priya moves her row past the expense naming her.
     ok(await editMember(groupId, priya.id, RAVI, { displayName: "Priya S" }));
     ok(await editGroup(groupId, RAVI, { name: "Goa, renamed" }));
@@ -382,7 +372,7 @@ describe("a large page", () => {
   it("reads more expenses than SQLite binds in one statement", async () => {
     const { groupId, ravi, priya } = await makeGroup();
     for (let index = 0; index < 120; index++) {
-      ok(await stub(groupId).upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 1000 + index), RAVI));
+      ok(await saveEntry(stub(groupId), evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 1000 + index), RAVI));
     }
     const page = ok(await stub(groupId).changes(RAVI, 0, 500));
     expect(page.entries).toHaveLength(120);

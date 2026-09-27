@@ -19,7 +19,6 @@ CREATE TABLE `entries` (
 	`fx_at` text,
 	`notes` text,
 	`created_by` text NOT NULL,
-	`client_key` text,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
 	`deleted_at` text,
@@ -32,7 +31,6 @@ CREATE TABLE `entries` (
 );
 --> statement-breakpoint
 CREATE INDEX `entries_seq` ON `entries` (`seq`);--> statement-breakpoint
-CREATE UNIQUE INDEX `entries_client_key` ON `entries` (`client_key`);--> statement-breakpoint
 CREATE TABLE `entry_payers` (
 	`entry_id` text NOT NULL,
 	`member_id` text NOT NULL,

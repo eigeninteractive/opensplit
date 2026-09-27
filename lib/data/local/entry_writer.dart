@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+import 'package:opensplit_api/opensplit_api.dart' show Payer, Share;
 
 import '../../domain/models/entry.dart';
 import 'database.dart';
@@ -10,46 +11,23 @@ Future<void> writeEntryInTransaction(AppDatabase db, Entry entry) async {
   if (!entry.isBalanced) {
     throw StateError(
       'Refusing to store entry ${entry.id}: it does not balance. '
-      'amount=${entry.amountMinor}, '
+      'amount=${entry.row.amountMinor}, '
       'paid=${entry.payers.fold(0, (sum, p) => sum + p.amountMinor)}, '
       'owed=${entry.shares.fold(0, (sum, s) => sum + s.amountMinor)}.',
     );
   }
 
+  // As a companion with its nulls stated: a row's own upsert leaves a null
+  // column out, and a restore is exactly a column going back to null.
   await db
       .into(db.entries)
-      .insertOnConflictUpdate(
-        EntriesCompanion.insert(
-          id: entry.id,
-          groupId: entry.groupId,
-          kind: entry.kind,
-          description: Value(entry.description),
-          categoryId: Value(entry.categoryId),
-          currency: entry.currency,
-          amountMinor: entry.amountMinor,
-          entryDate: entry.entryDate,
-          occurredAt: Value(entry.occurredAt),
-          timeZone: Value(entry.timeZone),
-          splitKind: entry.splitKind,
-          fxRate: Value(entry.fxRate),
-          fxSource: Value(entry.fxSource),
-          fxAt: Value(entry.fxAt),
-          notes: Value(entry.notes),
-          createdBy: entry.createdBy,
-          createdAt: entry.createdAt,
-          seq: Value(entry.seq),
-          deletedAt: Value(entry.deletedAt),
-          clientKey: Value(entry.clientKey),
-        ),
-      );
-
+      .insertOnConflictUpdate(entry.row.toCompanion(false));
   await (db.delete(
     db.entryPayers,
   )..where((t) => t.entryId.equals(entry.id))).go();
   await (db.delete(
     db.entryShares,
   )..where((t) => t.entryId.equals(entry.id))).go();
-
   await db.batch((batch) {
     batch.insertAll(db.entryPayers, [
       for (final payer in entry.payers)
@@ -77,36 +55,17 @@ Entry entryFromRows(
   required List<EntryPayerRow> payers,
   required List<EntryShareRow> shares,
 }) => Entry(
-  id: row.id,
-  groupId: row.groupId,
-  kind: row.kind,
-  description: row.description,
-  categoryId: row.categoryId,
-  currency: row.currency,
-  amountMinor: row.amountMinor,
-  entryDate: row.entryDate,
-  occurredAt: row.occurredAt,
-  timeZone: row.timeZone,
-  splitKind: row.splitKind,
+  row,
   payers: [
     for (final payer in payers)
-      EntryPayer(memberId: payer.memberId, amountMinor: payer.amountMinor),
+      Payer(memberId: payer.memberId, amountMinor: payer.amountMinor),
   ],
   shares: [
     for (final share in shares)
-      EntryShare(
+      Share(
         memberId: share.memberId,
         amountMinor: share.amountMinor,
         weightMicros: share.weightMicros,
       ),
   ],
-  fxRate: row.fxRate,
-  fxSource: row.fxSource,
-  fxAt: row.fxAt,
-  notes: row.notes,
-  createdBy: row.createdBy,
-  createdAt: row.createdAt,
-  seq: row.seq,
-  deletedAt: row.deletedAt,
-  clientKey: row.clientKey,
 );

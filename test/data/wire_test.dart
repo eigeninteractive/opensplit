@@ -9,12 +9,19 @@ import 'package:opensplit_api/opensplit_api.dart' as api;
 import 'package:test/test.dart';
 
 import '../harness.dart';
+import 'package:opensplit_api/opensplit_api.dart' show Payer, Share;
 
 void main() {
   group('updates', () {
     // Null is a value in an update (restore, rejoin, clear), so it has to be
     // on the wire rather than dropped.
     test('restoring a group sends archivedAt: null', () {
+      final creator = Member(
+        id: 'm',
+        groupId: 'g',
+        displayName: 'Ravi',
+        joinedAt: DateTime.utc(2026),
+      );
       final group = Group(
         id: 'g',
         name: 'Goa',
@@ -23,7 +30,7 @@ void main() {
         simplifyDebts: true,
         createdAt: DateTime.utc(2026),
       );
-      expect(group.toUpdate().toJson(), containsPair('archivedAt', null));
+      expect(group.toInput(creator).toJson(), containsPair('archivedAt', null));
     });
 
     test('rejoining and clearing a handle send their nulls', () {
@@ -34,7 +41,7 @@ void main() {
         joinedAt: DateTime.utc(2026),
       );
       expect(
-        member.toUpdate().toJson(),
+        member.toInput().toJson(),
         allOf(containsPair('leftAt', null), containsPair('upiVpa', null)),
       );
     });
@@ -42,24 +49,29 @@ void main() {
 
   test('when and where an expense happened survive the wire', () {
     final input = Entry(
-      id: 'e',
-      groupId: 'g',
-      kind: api.EntryKind.expense,
-      description: 'Snack',
-      currency: 'INR',
-      amountMinor: 100,
-      entryDate: DateTime.utc(2026, 9, 24),
-      occurredAt: DateTime.utc(2026, 9, 23, 19, 30),
-      timeZone: 'Asia/Kolkata',
-      splitKind: api.SplitKind.equal,
-      payers: const [EntryPayer(memberId: 'm', amountMinor: 100)],
-      shares: const [EntryShare(memberId: 'm', amountMinor: 100)],
-      createdBy: 'm',
-      createdAt: DateTime.utc(2026, 9, 23, 19, 31),
+      EntryRow(
+        id: 'e',
+        groupId: 'g',
+        kind: api.EntryKind.expense,
+        description: 'Snack',
+        currency: 'INR',
+        amountMinor: 100,
+        entryDate: DateTime.utc(2026, 9, 24),
+        occurredAt: DateTime.utc(2026, 9, 23, 19, 30),
+        timeZone: 'Asia/Kolkata',
+        splitKind: api.SplitKind.equal,
+        createdBy: 'm',
+        createdAt: DateTime.utc(2026, 9, 23, 19, 31),
+      ),
+      payers: [Payer(memberId: 'm', amountMinor: 100)],
+      shares: [Share(memberId: 'm', amountMinor: 100, weightMicros: null)],
     ).toInput();
     final json = input.toJson();
     expect(json, containsPair('entryDate', '2026-09-24'));
     expect(json, containsPair('timeZone', 'Asia/Kolkata'));
+    // The write is the whole row: a live expense says so, which is how a
+    // restore reaches the server.
+    expect(json, containsPair('deletedAt', null));
     expect(
       api.EntryInput.fromJson(json).occurredAt,
       DateTime.utc(2026, 9, 23, 19, 30),

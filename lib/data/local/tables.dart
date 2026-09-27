@@ -247,9 +247,6 @@ class Entries extends Table {
   /// Soft delete; entries are never removed.
   DateTimeColumn get deletedAt => dateTime().nullable()();
 
-  /// Client-generated, so a retried push is not a second expense.
-  TextColumn get clientKey => text().nullable()();
-
   @override
   Set<Column> get primaryKey => {id};
 }

@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart' show ValueNotifier;
-import 'package:flutter_riverpod/flutter_riverpod.dart' show Provider;
 import 'package:opensplit_api/opensplit_api.dart' show Account, EmailFlow;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -12,9 +10,20 @@ import 'sync_providers.dart';
 part 'session_providers.g.dart';
 
 /// Where a refusal raised by a redirect waits until a screen can ask about it.
-final googleRefusalProvider = Provider<ValueNotifier<IdentityAlreadyInUse?>>(
-  (ref) => ValueNotifier<IdentityAlreadyInUse?>(null),
-);
+@Riverpod(keepAlive: true)
+class GoogleRefusal extends _$GoogleRefusal {
+  @override
+  IdentityAlreadyInUse? build() => null;
+
+  void park(IdentityAlreadyInUse refusal) => state = refusal;
+
+  /// The parked refusal, once: taking it clears it.
+  IdentityAlreadyInUse? take() {
+    final refusal = state;
+    state = null;
+    return refusal;
+  }
+}
 
 /// The current session, if any.
 @Riverpod(keepAlive: true)

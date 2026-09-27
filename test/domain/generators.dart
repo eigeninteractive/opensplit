@@ -1,9 +1,12 @@
+import 'package:drift/drift.dart' show Value;
 import 'dart:math';
 
 import 'package:opensplit/domain/models/entry.dart';
 import 'package:opensplit/domain/split/allocation.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:opensplit_api/opensplit_api.dart' show EntryKind, SplitKind;
+import 'package:opensplit_api/opensplit_api.dart' show Payer, Share;
+import 'package:opensplit/data/local/database.dart' show EntryRow;
 
 /// Deterministic random generators for property-based tests.
 class EntryGen {
@@ -130,36 +133,42 @@ class EntryGen {
 
     final createdAt = DateTime.utc(2026, 1, 1).add(Duration(minutes: index));
     return Entry(
-      id: 'e${_pad(index)}',
-      groupId: 'g1',
-      kind: EntryKind.expense,
-      description: 'expense $index',
-      currency: currency,
-      amountMinor: total,
-      entryDate: DateTime.utc(2026, 1, 1 + (index % 28)),
-      splitKind: spec.kind,
+      EntryRow(
+        id: 'e${_pad(index)}',
+        groupId: 'g1',
+        kind: EntryKind.expense,
+        description: 'expense $index',
+        currency: currency,
+        amountMinor: total,
+        entryDate: DateTime.utc(2026, 1, 1 + (index % 28)),
+        splitKind: spec.kind,
+        createdBy: members.first,
+        createdAt: createdAt,
+      ),
       payers: [
         for (final p in resolvedPayers)
-          EntryPayer(memberId: p.memberId, amountMinor: p.amountMinor),
+          Payer(memberId: p.memberId, amountMinor: p.amountMinor),
       ],
       shares: [
         for (final s in shares)
-          EntryShare(
+          Share(
             memberId: s.memberId,
             amountMinor: s.amountMinor,
             weightMicros: s.weightMicros,
           ),
       ],
-      createdBy: members.first,
-      createdAt: createdAt,
     );
   }
+
+  static Entry _deleted(Entry entry) => entry.copyWith(
+    row: entry.row.copyWith(deletedAt: Value(DateTime.utc(2026, 2, 1))),
+  );
 
   /// A group's worth of random expenses, some of them soft-deleted.
   List<Entry> entries(List<String> members, int count) => [
     for (var i = 0; i < count; i++)
       if (random.nextInt(10) == 0)
-        expense(members, index: i).copyWith(deletedAt: DateTime.utc(2026, 2, 1))
+        _deleted(expense(members, index: i))
       else
         expense(members, index: i),
   ];

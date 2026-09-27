@@ -8,6 +8,7 @@ import 'package:opensplit/domain/models/group_event.dart';
 import 'package:opensplit_api/opensplit_api.dart'
     show EntryKind, EventKind, SplitKind;
 import 'package:test/test.dart';
+import 'package:opensplit_api/opensplit_api.dart' show Payer, Share;
 
 void main() {
   final group = Group(
@@ -52,24 +53,22 @@ void main() {
   }
 
   final entry = Entry(
-    id: 'e1',
-    groupId: 'g1',
-    kind: EntryKind.expense,
-    description: 'Dinner',
-    currency: 'INR',
-    amountMinor: 30000,
-    entryDate: DateTime.utc(2026, 6, 4),
-    splitKind: SplitKind.shares,
-    createdBy: 'm-priya',
-    createdAt: DateTime.utc(2026, 6, 10),
-    payers: const [EntryPayer(memberId: 'm-priya', amountMinor: 30000)],
-    shares: const [
-      EntryShare(
-        memberId: 'm-priya',
-        amountMinor: 20000,
-        weightMicros: 2000000,
-      ),
-      EntryShare(memberId: 'm-ravi', amountMinor: 10000, weightMicros: 1000000),
+    EntryRow(
+      id: 'e1',
+      groupId: 'g1',
+      kind: EntryKind.expense,
+      description: 'Dinner',
+      currency: 'INR',
+      amountMinor: 30000,
+      entryDate: DateTime.utc(2026, 6, 4),
+      splitKind: SplitKind.shares,
+      createdBy: 'm-priya',
+      createdAt: DateTime.utc(2026, 6, 10),
+    ),
+    payers: [Payer(memberId: 'm-priya', amountMinor: 30000)],
+    shares: [
+      Share(memberId: 'm-priya', amountMinor: 20000, weightMicros: 2000000),
+      Share(memberId: 'm-ravi', amountMinor: 10000, weightMicros: 1000000),
     ],
   );
 

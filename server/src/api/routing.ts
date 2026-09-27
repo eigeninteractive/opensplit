@@ -2,7 +2,7 @@ import { z } from "@hono/zod-openapi";
 import type { Context } from "hono";
 
 import { requireSession, withSession } from "../context";
-import { kindOf, type Result, statusFor } from "../do/group/refusal";
+import { kindOf, type Refusal, type Result, statusFor } from "../do/group/refusal";
 import { apiError, errorResponse, IdSchema } from "../schemas/common";
 
 /** What every route module shares: session guards, addressing, and how a refusal becomes a response. */
@@ -20,9 +20,6 @@ export const maybeSignedIn = { middleware: withSession, security: [{}, ...sessio
 
 /** Coerced, because a query parameter is a string. */
 export const SeqQuerySchema = z.coerce.number().int().nonnegative().openapi({ type: "integer", example: 412 });
-
-/** Coercion turns null into 0, so the generator would call it optional; state it. */
-export const RequiredSeqQuerySchema = SeqQuerySchema.openapi({ param: { required: true } });
 
 export const GroupPathSchema = z.object({
   groupId: IdSchema.openapi({ param: { name: "groupId", in: "path" } }),
@@ -57,8 +54,10 @@ export const refusals = {
 type WorkerEnv = { Bindings: Env };
 
 export function respond<T extends object, E extends WorkerEnv>(c: Context<E>, result: Result<T>) {
-  if (result.ok) return c.json(result.value, 200);
-  const { code, message } = result.error;
+  return result.ok ? c.json(result.value, 200) : refused(c, result.error);
+}
+
+export function refused<E extends WorkerEnv>(c: Context<E>, { code, message }: Refusal) {
   return c.json(apiError(code, message, kindOf(code)), statusFor(code));
 }
 

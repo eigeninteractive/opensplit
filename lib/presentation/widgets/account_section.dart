@@ -34,10 +34,7 @@ class _AccountSectionState extends ConsumerState<AccountSection> {
     // A refusal that came back from a redirect has no caller left to catch it,
     // so it waits in a provider for whichever screen the user was returned to.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final parked = ref.read(googleRefusalProvider);
-      final refusal = parked.value;
-      if (refusal == null) return;
-      parked.value = null;
+      if (ref.read(googleRefusalProvider.notifier).take() == null) return;
       unawaited(_run(() => _signInAfterRefusal()));
     });
   }

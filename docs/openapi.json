@@ -122,17 +122,12 @@
             "type": "string",
             "nullable": true,
             "format": "email"
-          },
-          "displayName": {
-            "type": "string",
-            "nullable": true
           }
         },
         "required": [
           "id",
           "isAnonymous",
-          "email",
-          "displayName"
+          "email"
         ]
       },
       "EntrySnapshot": {
@@ -453,7 +448,6 @@
           "not_member",
           "no_group",
           "group_purged",
-          "group_exists",
           "no_such_entry",
           "no_such_member",
           "unbalanced",
@@ -634,6 +628,12 @@
               "$ref": "#/components/schemas/Member"
             }
           },
+          "profiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Profile"
+            }
+          },
           "entries": {
             "type": "array",
             "items": {
@@ -659,6 +659,7 @@
           "hasMore",
           "group",
           "members",
+          "profiles",
           "entries",
           "events",
           "purgedAt"
@@ -722,6 +723,47 @@
           "leftAt",
           "updatedAt",
           "seq"
+        ]
+      },
+      "Profile": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "upiVpa": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^[a-zA-Z0-9._-]{2,64}@[a-zA-Z]{2,64}$",
+            "example": "ravi@okhdfcbank"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "deletedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          }
+        },
+        "required": [
+          "id",
+          "displayName",
+          "upiVpa",
+          "updatedAt",
+          "deletedAt"
         ]
       },
       "Entry": {
@@ -805,13 +847,6 @@
             "maxLength": 64,
             "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
           },
-          "clientKey": {
-            "type": "string",
-            "nullable": true,
-            "minLength": 1,
-            "maxLength": 64,
-            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
-          },
           "createdAt": {
             "type": "string",
             "format": "date-time",
@@ -862,7 +897,6 @@
           "fxAt",
           "notes",
           "createdBy",
-          "clientKey",
           "createdAt",
           "updatedAt",
           "deletedAt",
@@ -1010,15 +1044,9 @@
           "ordinal"
         ]
       },
-      "GroupCreate": {
+      "GroupInput": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 64,
-            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
-          },
           "name": {
             "type": "string",
             "minLength": 1,
@@ -1035,80 +1063,35 @@
           "simplifyDebts": {
             "type": "boolean"
           },
-          "memberId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 64,
-            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
-          },
-          "displayName": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 100
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "defaultCurrency",
-          "isDirect",
-          "simplifyDebts",
-          "memberId",
-          "displayName"
-        ]
-      },
-      "GroupUpdate": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 100
-          },
-          "simplifyDebts": {
-            "type": "boolean"
-          },
           "archivedAt": {
             "type": "string",
             "nullable": true,
             "format": "date-time",
             "example": "2026-09-23T11:20:41.865Z"
-          }
-        },
-        "required": [
-          "name",
-          "simplifyDebts",
-          "archivedAt"
-        ]
-      },
-      "MemberCreate": {
-        "type": "object",
-        "properties": {
-          "id": {
+          },
+          "creatorId": {
             "type": "string",
             "minLength": 1,
             "maxLength": 64,
             "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
           },
-          "displayName": {
+          "creatorName": {
             "type": "string",
             "minLength": 1,
             "maxLength": 100
-          },
-          "upiVpa": {
-            "type": "string",
-            "nullable": true,
-            "pattern": "^[a-zA-Z0-9._-]{2,64}@[a-zA-Z]{2,64}$",
-            "example": "ravi@okhdfcbank"
           }
         },
         "required": [
-          "id",
-          "displayName",
-          "upiVpa"
+          "name",
+          "defaultCurrency",
+          "isDirect",
+          "simplifyDebts",
+          "archivedAt",
+          "creatorId",
+          "creatorName"
         ]
       },
-      "MemberUpdate": {
+      "MemberInput": {
         "type": "object",
         "properties": {
           "displayName": {
@@ -1138,19 +1121,6 @@
       "EntryInput": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 64,
-            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
-          },
-          "clientKey": {
-            "type": "string",
-            "nullable": true,
-            "minLength": 1,
-            "maxLength": 64,
-            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
-          },
           "kind": {
             "$ref": "#/components/schemas/EntryKind"
           },
@@ -1211,19 +1181,27 @@
             "nullable": true,
             "maxLength": 2000
           },
+          "deletedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
           "payers": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/Payer"
             },
-            "minItems": 1
+            "minItems": 1,
+            "maxItems": 1000
           },
           "shares": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/Share"
             },
-            "minItems": 1
+            "minItems": 1,
+            "maxItems": 1000
           },
           "baseSeq": {
             "type": "integer",
@@ -1233,8 +1211,6 @@
           }
         },
         "required": [
-          "id",
-          "clientKey",
           "kind",
           "description",
           "categoryId",
@@ -1247,6 +1223,7 @@
           "fxRate",
           "fxSource",
           "notes",
+          "deletedAt",
           "payers",
           "shares",
           "baseSeq"
@@ -1492,80 +1469,6 @@
           "profiles",
           "cursor",
           "hasMore"
-        ]
-      },
-      "Profile": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 64,
-            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
-          },
-          "displayName": {
-            "type": "string",
-            "nullable": true,
-            "minLength": 1,
-            "maxLength": 100
-          },
-          "upiVpa": {
-            "type": "string",
-            "nullable": true,
-            "pattern": "^[a-zA-Z0-9._-]{2,64}@[a-zA-Z]{2,64}$",
-            "example": "ravi@okhdfcbank"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time",
-            "example": "2026-09-23T11:20:41.865Z"
-          },
-          "deletedAt": {
-            "type": "string",
-            "nullable": true,
-            "format": "date-time",
-            "example": "2026-09-23T11:20:41.865Z"
-          }
-        },
-        "required": [
-          "id",
-          "displayName",
-          "upiVpa",
-          "updatedAt",
-          "deletedAt"
-        ]
-      },
-      "ProfileList": {
-        "type": "object",
-        "properties": {
-          "profiles": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Profile"
-            }
-          }
-        },
-        "required": [
-          "profiles"
-        ]
-      },
-      "ProfileLookup": {
-        "type": "object",
-        "properties": {
-          "ids": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 64,
-              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
-            },
-            "minItems": 1,
-            "maxItems": 200
-          }
-        },
-        "required": [
-          "ids"
         ]
       },
       "ProfileUpdate": {
@@ -2126,114 +2029,6 @@
             }
           }
         }
-      },
-      "post": {
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "cookie": []
-          }
-        ],
-        "operationId": "createGroup",
-        "tags": [
-          "groups"
-        ],
-        "summary": "Make a group, and its creator's place in it",
-        "description": "Idempotent for its creator, so a retry whose response was lost returns the same group.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/GroupCreate"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "The group",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Group"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "The request is malformed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No session.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "You are not a member of this group, or not allowed to change that.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No such group, entry, member or link.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "The request conflicts with the group's current state. Read `error.retry` before retrying.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "410": {
-            "description": "The group was collected, or the link has expired.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "The expense does not add up.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
       }
     },
     "/api/groups/{groupId}/changes": {
@@ -2377,11 +2172,12 @@
             "cookie": []
           }
         ],
-        "operationId": "updateGroup",
+        "operationId": "putGroup",
         "tags": [
           "groups"
         ],
-        "summary": "Rename, archive or change a setting",
+        "summary": "Make a group and its creator's place in it, or rename, archive or change a setting",
+        "description": "Idempotent, so a retry whose response was lost returns the same group. Editing needs membership; creating does not.",
         "parameters": [
           {
             "schema": {
@@ -2400,7 +2196,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/GroupUpdate"
+                "$ref": "#/components/schemas/GroupInput"
               }
             }
           }
@@ -2489,128 +2285,6 @@
         }
       }
     },
-    "/api/groups/{groupId}/members": {
-      "post": {
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "cookie": []
-          }
-        ],
-        "operationId": "addMember",
-        "tags": [
-          "groups"
-        ],
-        "summary": "Add somebody who has never opened the app",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 64,
-              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
-            },
-            "required": true,
-            "name": "groupId",
-            "in": "path"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MemberCreate"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "The member",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Member"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "The request is malformed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No session.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "You are not a member of this group, or not allowed to change that.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No such group, entry, member or link.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "The request conflicts with the group's current state. Read `error.retry` before retrying.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "410": {
-            "description": "The group was collected, or the link has expired.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "The expense does not add up.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/groups/{groupId}/members/{memberId}": {
       "put": {
         "security": [
@@ -2621,11 +2295,11 @@
             "cookie": []
           }
         ],
-        "operationId": "updateMember",
+        "operationId": "putMember",
         "tags": [
           "groups"
         ],
-        "summary": "Change a name, a payment handle, or whether somebody is still here",
+        "summary": "Add somebody who has never opened the app, or change a name, a payment handle, or whether somebody is still here",
         "description": "Your own row and any placeholder are editable; another account holder's are not. Leaving is always yours to do; removing somebody else requires them to be settled in every currency.",
         "parameters": [
           {
@@ -2656,7 +2330,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MemberUpdate"
+                "$ref": "#/components/schemas/MemberInput"
               }
             }
           }
@@ -2668,129 +2342,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Member"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "The request is malformed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No session.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "You are not a member of this group, or not allowed to change that.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No such group, entry, member or link.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "The request conflicts with the group's current state. Read `error.retry` before retrying.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "410": {
-            "description": "The group was collected, or the link has expired.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "The expense does not add up.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/groups/{groupId}/entries": {
-      "post": {
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "cookie": []
-          }
-        ],
-        "operationId": "upsertEntry",
-        "tags": [
-          "entries"
-        ],
-        "summary": "Record or edit an expense, whole",
-        "description": "A stale `baseSeq` is refused only when the write would move money, so two people fixing a typo never arbitrate.",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 64,
-              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
-            },
-            "required": true,
-            "name": "groupId",
-            "in": "path"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/EntryInput"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "The expense as stored",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Entry"
                 }
               }
             }
@@ -2869,7 +2420,7 @@
       }
     },
     "/api/groups/{groupId}/entries/{entryId}": {
-      "delete": {
+      "put": {
         "security": [
           {
             "bearer": []
@@ -2878,12 +2429,12 @@
             "cookie": []
           }
         ],
-        "operationId": "deleteEntry",
+        "operationId": "putEntry",
         "tags": [
           "entries"
         ],
-        "summary": "Soft-delete an expense",
-        "description": "Deleting always moves money, so it must carry the exact version the device last saw.",
+        "summary": "Record, edit, delete or restore an expense, whole",
+        "description": "A stale `baseSeq` is refused only when the write would move money, so two people fixing a typo never arbitrate. Deleting and restoring always move money.",
         "parameters": [
           {
             "schema": {
@@ -2906,152 +2457,21 @@
             "required": true,
             "name": "entryId",
             "in": "path"
-          },
-          {
-            "schema": {
-              "type": "integer",
-              "example": 412
-            },
-            "required": true,
-            "name": "baseSeq",
-            "in": "query"
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EntryInput"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
-            "description": "The expense, now deleted",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Entry"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "The request is malformed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No session.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "You are not a member of this group, or not allowed to change that.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No such group, entry, member or link.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "The request conflicts with the group's current state. Read `error.retry` before retrying.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "410": {
-            "description": "The group was collected, or the link has expired.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "The expense does not add up.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/groups/{groupId}/entries/{entryId}/restore": {
-      "post": {
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "cookie": []
-          }
-        ],
-        "operationId": "restoreEntry",
-        "tags": [
-          "entries"
-        ],
-        "summary": "Put a deleted expense back",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 64,
-              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
-            },
-            "required": true,
-            "name": "groupId",
-            "in": "path"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 64,
-              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
-            },
-            "required": true,
-            "name": "entryId",
-            "in": "path"
-          },
-          {
-            "schema": {
-              "type": "integer",
-              "example": 412
-            },
-            "required": true,
-            "name": "baseSeq",
-            "in": "query"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "The expense, restored",
+            "description": "The expense as stored",
             "content": {
               "application/json": {
                 "schema": {
@@ -3932,66 +3352,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProfilePage"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "The request is malformed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No session.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/profiles/lookup": {
-      "post": {
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "cookie": []
-          }
-        ],
-        "operationId": "lookupProfiles",
-        "tags": [
-          "sync"
-        ],
-        "summary": "Exactly these profiles",
-        "description": "For a profile that just became visible (a placeholder was claimed) but is older than the feed's cursor. Ids you cannot see are absent.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProfileLookup"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Those of them you can see",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProfileList"
                 }
               }
             }

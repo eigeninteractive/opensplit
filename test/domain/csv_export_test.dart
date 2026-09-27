@@ -3,6 +3,7 @@ import 'package:opensplit/domain/export/csv_export.dart';
 import 'package:opensplit/domain/models/entry.dart';
 import 'package:opensplit_api/opensplit_api.dart' show EntryKind, SplitKind;
 import 'package:test/test.dart';
+import 'package:opensplit_api/opensplit_api.dart' show Payer, Share;
 
 const inr = Currency(
   code: 'INR',
@@ -29,27 +30,29 @@ Entry _entry({
 }) {
   final at = DateTime.utc(2026, 8, 21);
   return Entry(
-    id: 'e1',
-    groupId: 'g1',
-    kind: EntryKind.expense,
-    description: description,
-    categoryId: categoryId,
-    currency: currency,
-    amountMinor: amountMinor,
-    entryDate: at,
-    splitKind: SplitKind.equal,
+    EntryRow(
+      id: 'e1',
+      groupId: 'g1',
+      kind: EntryKind.expense,
+      description: description,
+      categoryId: categoryId,
+      currency: currency,
+      amountMinor: amountMinor,
+      entryDate: at,
+      splitKind: SplitKind.equal,
+      notes: notes,
+      createdBy: 'ravi',
+      createdAt: at,
+      deletedAt: deletedAt,
+    ),
     payers: [
       for (final e in payers.entries)
-        EntryPayer(memberId: e.key, amountMinor: e.value),
+        Payer(memberId: e.key, amountMinor: e.value),
     ],
     shares: [
       for (final e in shares.entries)
-        EntryShare(memberId: e.key, amountMinor: e.value),
+        Share(memberId: e.key, amountMinor: e.value, weightMicros: null),
     ],
-    notes: notes,
-    createdBy: 'ravi',
-    createdAt: at,
-    deletedAt: deletedAt,
   );
 }
 

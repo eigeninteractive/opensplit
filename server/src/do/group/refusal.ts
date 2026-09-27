@@ -1,35 +1,11 @@
+import type { RefusalCode } from "../../schemas/common";
+
 /**
  * How the group object says no: a refusal is a value (`Result`), a bug is an
  * exception. Internals `refuse()` (which also rolls back the transaction) and
- * `attempt()` turns that into the `Result` the caller receives.
+ * `attempt()` turns that into the `Result` the caller receives. The codes
+ * themselves are the contract's, in `schemas/common.ts`.
  */
-export const refusalCodes = [
-  "not_member",
-  "no_group",
-  /** Archived, a year silent and settled, then collected. */
-  "group_purged",
-  /** A group already lives at this id, made by somebody else. */
-  "group_exists",
-  "no_such_entry",
-  "no_such_member",
-  /** `sum(payers) = sum(shares) = amount` does not hold. */
-  "unbalanced",
-  /** Composed against a version that has since moved money. */
-  "stale_base",
-  /** A column rule: whose name, whose payment handle. */
-  "forbidden",
-  /** Somebody else cannot remove a member who still owes or is owed. */
-  "not_settled",
-  "invite_invalid",
-  "invite_spent",
-  "invite_expired",
-  "already_member",
-  /** The placeholder was claimed between the peek and the join. */
-  "slot_taken",
-  "malformed",
-] as const;
-
-export type RefusalCode = (typeof refusalCodes)[number];
 
 export interface Refusal {
   code: RefusalCode;
@@ -84,7 +60,6 @@ export function statusFor(code: RefusalCode): 400 | 403 | 404 | 409 | 410 | 422 
     case "invite_expired":
       return 410;
     case "stale_base":
-    case "group_exists":
     case "not_settled":
     case "invite_spent":
     case "already_member":

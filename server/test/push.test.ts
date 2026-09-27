@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { deviceTokens } from "../src/db/d1/schema";
-import { BY_INVITE, editGroup, editMember, evenly, freshId, makeGroup, makeGroupOfTwo, ok, PRIYA, RAVI, stub, ZARA } from "./group";
+import { BY_INVITE, editGroup, editMember, evenly, freshId, makeGroup, makeGroupOfTwo, ok, PRIYA, RAVI, saveEntry, stub, ZARA } from "./group";
 
 /** Who gets woken, and who does not. */
 
@@ -77,7 +77,7 @@ describe("recording an expense", () => {
     await registerDevice(PRIYA, "device-priya");
 
     await arranged();
-    ok(await stub(fixture.groupId).upsertEntry(evenly(freshId("e"), fixture.ravi.id, [fixture.ravi.id, fixture.priya.id], 40000), RAVI));
+    ok(await saveEntry(stub(fixture.groupId), evenly(freshId("e"), fixture.ravi.id, [fixture.ravi.id, fixture.priya.id], 40000), RAVI));
     await settled();
 
     // The actor is excluded, not the author.
@@ -90,7 +90,7 @@ describe("recording an expense", () => {
 
     await arranged();
     const entryId = freshId("e");
-    ok(await stub(fixture.groupId).upsertEntry(evenly(entryId, fixture.ravi.id, [fixture.ravi.id, fixture.priya.id], 40000), RAVI));
+    ok(await saveEntry(stub(fixture.groupId), evenly(entryId, fixture.ravi.id, [fixture.ravi.id, fixture.priya.id], 40000), RAVI));
     await settled();
 
     // No amount, no description, no name.
@@ -108,10 +108,10 @@ describe("recording an expense", () => {
     await registerDevice(PRIYA, "device-priya");
 
     const entryId = freshId("e");
-    const entry = ok(await stub(fixture.groupId).upsertEntry(evenly(entryId, fixture.ravi.id, [fixture.ravi.id, fixture.priya.id], 40000), RAVI));
+    const entry = ok(await saveEntry(stub(fixture.groupId), evenly(entryId, fixture.ravi.id, [fixture.ravi.id, fixture.priya.id], 40000), RAVI));
 
     await arranged();
-    ok(await stub(fixture.groupId).upsertEntry({ ...evenly(entryId, fixture.ravi.id, [fixture.ravi.id, fixture.priya.id], 60000), baseSeq: entry.seq }, PRIYA));
+    ok(await saveEntry(stub(fixture.groupId), { ...evenly(entryId, fixture.ravi.id, [fixture.ravi.id, fixture.priya.id], 60000), baseSeq: entry.seq }, PRIYA));
     await settled();
 
     expect(sent.map((message) => message.token)).toEqual(["device-ravi"]);
@@ -142,7 +142,7 @@ describe("what does not wake a device", () => {
     await registerDevice(RAVI, "device-ravi-solo");
 
     await arranged();
-    ok(await stub(fixture.groupId).upsertEntry(evenly(freshId("e"), fixture.ravi.id, [fixture.ravi.id, fixture.priya.id], 40000), RAVI));
+    ok(await saveEntry(stub(fixture.groupId), evenly(freshId("e"), fixture.ravi.id, [fixture.ravi.id, fixture.priya.id], 40000), RAVI));
     await settled();
 
     // Priya is a placeholder: a real person with no account, and therefore no
@@ -154,11 +154,11 @@ describe("what does not wake a device", () => {
     const fixture = await makeGroupOfTwo();
     await registerDevice(PRIYA, "device-priya");
     const expense = evenly(freshId("e"), fixture.ravi.id, [fixture.ravi.id, fixture.priya.id], 40000);
-    ok(await stub(fixture.groupId).upsertEntry(expense, RAVI));
+    ok(await saveEntry(stub(fixture.groupId), expense, RAVI));
 
     // The response was lost and the outbox sends the same row again.
     await arranged();
-    ok(await stub(fixture.groupId).upsertEntry(expense, RAVI));
+    ok(await saveEntry(stub(fixture.groupId), expense, RAVI));
     await settled();
 
     expect(sent).toEqual([]);
@@ -171,7 +171,7 @@ describe("what does not wake a device", () => {
     ok(await editMember(fixture.groupId, fixture.priya.id, PRIYA, { leftAt: new Date().toISOString() }));
 
     await arranged();
-    ok(await stub(fixture.groupId).upsertEntry(evenly(freshId("e"), fixture.ravi.id, [fixture.ravi.id], 10000), RAVI));
+    ok(await saveEntry(stub(fixture.groupId), evenly(freshId("e"), fixture.ravi.id, [fixture.ravi.id], 10000), RAVI));
     await settled();
 
     // Somebody who has left has stopped reading this group. The feed cuts them
@@ -185,7 +185,7 @@ describe("what does not wake a device", () => {
 
     await arranged();
     // Does not add up, so nothing is committed and nothing happened.
-    const refused = await stub(fixture.groupId).upsertEntry({ ...evenly(freshId("e"), fixture.ravi.id, [fixture.ravi.id, fixture.priya.id], 40000), amountMinor: 99999 }, RAVI);
+    const refused = await saveEntry(stub(fixture.groupId), { ...evenly(freshId("e"), fixture.ravi.id, [fixture.ravi.id, fixture.priya.id], 40000), amountMinor: 99999 }, RAVI);
     await settled();
 
     expect(refused.ok).toBe(false);
@@ -220,7 +220,7 @@ describe("a dead registration", () => {
     failWith = (token) => (token === "device-uninstalled" ? new Response(JSON.stringify({ error: { status: "NOT_FOUND" } }), { status: 404 }) : undefined) as Response | undefined;
     await arranged();
 
-    ok(await stub(fixture.groupId).upsertEntry(evenly(freshId("e"), fixture.ravi.id, [fixture.ravi.id, fixture.priya.id], 40000), RAVI));
+    ok(await saveEntry(stub(fixture.groupId), evenly(freshId("e"), fixture.ravi.id, [fixture.ravi.id, fixture.priya.id], 40000), RAVI));
     await settled();
 
     const rows = await drizzle(env.DB).select().from(deviceTokens).all();
@@ -240,7 +240,7 @@ describe("a dead registration", () => {
       );
     await arranged();
 
-    ok(await stub(fixture.groupId).upsertEntry(evenly(freshId("e"), fixture.ravi.id, [fixture.ravi.id, fixture.priya.id], 40000), RAVI));
+    ok(await saveEntry(stub(fixture.groupId), evenly(freshId("e"), fixture.ravi.id, [fixture.ravi.id, fixture.priya.id], 40000), RAVI));
     await settled();
 
     const rows = await drizzle(env.DB).select().from(deviceTokens).all();
@@ -260,7 +260,7 @@ describe("with no Firebase configured", () => {
     // Push is the one feature this app is entirely usable without, and an
     // unconfigured deployment — a fork, a local run — is an ordinary state
     // rather than a failure.
-    const written = await stub(fixture.groupId).upsertEntry(evenly(freshId("e"), fixture.ravi.id, [fixture.ravi.id, fixture.priya.id], 40000), RAVI);
+    const written = await saveEntry(stub(fixture.groupId), evenly(freshId("e"), fixture.ravi.id, [fixture.ravi.id, fixture.priya.id], 40000), RAVI);
     await settled();
     env.FCM_PROJECT_ID = projectId;
 

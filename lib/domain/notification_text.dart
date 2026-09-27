@@ -18,9 +18,9 @@ import 'money_format.dart';
   String money(int minor) =>
       format != null ? format(minor) : formatMoney(currency, minor);
 
-  final total = money(entry.amountMinor);
+  final total = money(entry.row.amountMinor);
 
-  if (entry.kind == EntryKind.settlement) {
+  if (entry.row.kind == EntryKind.settlement) {
     return (
       title: groupName,
       body: switch (kind) {
@@ -36,9 +36,9 @@ import 'money_format.dart';
     );
   }
 
-  final what = entry.description.trim().isEmpty
+  final what = entry.row.description.trim().isEmpty
       ? 'an expense'
-      : entry.description.trim();
+      : entry.row.description.trim();
 
   // Being told about an expense you are not part of is still worth knowing,
   // but claiming a share of zero reads as a bug.

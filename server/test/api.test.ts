@@ -24,16 +24,16 @@ async function json<T>(response: Response): Promise<T> {
 
 async function makeGroup(guest: Guest, name = "Goa trip") {
   const id = freshId("api");
-  const response = await call("/api/groups", guest, {
-    method: "POST",
-    body: JSON.stringify({ id, name, defaultCurrency: "INR", isDirect: false, simplifyDebts: true, memberId: `${id}-me`, displayName: "Ravi" }),
+  const response = await call(`/api/groups/${id}`, guest, {
+    method: "PUT",
+    body: JSON.stringify({ name, defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, creatorId: `${id}-me`, creatorName: "Ravi" }),
   });
 
   expect(response.status).toBe(200);
   return { id, group: await json<Group>(response) };
 }
 
-function expense(overrides: Record<string, unknown> = {}) {
+function expense(overrides: Record<string, unknown> = {}): { id: string } & Record<string, unknown> {
   return {
     id: freshId("api-e"),
     kind: "expense",
@@ -48,7 +48,7 @@ function expense(overrides: Record<string, unknown> = {}) {
     fxRate: null,
     fxSource: null,
     notes: null,
-    clientKey: null,
+    deletedAt: null,
     baseSeq: null,
     payers: [],
     shares: [],
@@ -58,6 +58,11 @@ function expense(overrides: Record<string, unknown> = {}) {
 
 let ravi: Guest;
 let zara: Guest;
+
+/** Writes an expense at its own id, as Ravi. */
+function putEntry(groupId: string, { id, ...body }: { id: string } & Record<string, unknown>) {
+  return call(`/api/groups/${groupId}/entries/${id}`, ravi, { method: "PUT", body: JSON.stringify(body) });
+}
 
 beforeAll(async () => {
   ravi = await signInAsGuest();
@@ -74,7 +79,7 @@ describe("without a session", () => {
       expect((await json<ApiError>(response)).error.code).toBe("no_session");
     }
 
-    const write = await call("/api/groups", null, { method: "POST", body: JSON.stringify({}) });
+    const write = await call(`/api/groups/${freshId()}`, null, { method: "PUT", body: JSON.stringify({}) });
     expect(write.status).toBe(401);
   });
 });
@@ -134,10 +139,7 @@ describe("recording an expense over HTTP", () => {
     const me = page.members[0];
     if (!me) expect.unreachable("The group has no members.");
 
-    const response = await call(`/api/groups/${id}/entries`, ravi, {
-      method: "POST",
-      body: JSON.stringify(expense({ payers: [{ memberId: me.id, amountMinor: 1000 }], shares: [{ memberId: me.id, amountMinor: 1000, weightMicros: null }] })),
-    });
+    const response = await putEntry(id, expense({ payers: [{ memberId: me.id, amountMinor: 1000 }], shares: [{ memberId: me.id, amountMinor: 1000, weightMicros: null }] }));
 
     expect(response.status).toBe(200);
     const entry = await json<Entry>(response);
@@ -159,10 +161,7 @@ describe("recording an expense over HTTP", () => {
     const me = page.members[0];
     if (!me) expect.unreachable("The group has no members.");
 
-    const response = await call(`/api/groups/${id}/entries`, ravi, {
-      method: "POST",
-      body: JSON.stringify(expense({ payers: [{ memberId: me.id, amountMinor: 999 }], shares: [{ memberId: me.id, amountMinor: 1000, weightMicros: null }] })),
-    });
+    const response = await putEntry(id, expense({ payers: [{ memberId: me.id, amountMinor: 999 }], shares: [{ memberId: me.id, amountMinor: 1000, weightMicros: null }] }));
 
     expect(response.status).toBe(422);
     const body = await json<ApiError>(response);
@@ -183,10 +182,10 @@ describe("recording an expense over HTTP", () => {
     const body = (amount: number) => expense({ id: entryId, amountMinor: amount, payers: [{ memberId: me.id, amountMinor: amount }], shares: [{ memberId: me.id, amountMinor: amount, weightMicros: null }] });
     const entryId = freshId("api-e");
 
-    const first = await json<Entry>(await call(`/api/groups/${id}/entries`, ravi, { method: "POST", body: JSON.stringify(body(1000)) }));
-    await call(`/api/groups/${id}/entries`, ravi, { method: "POST", body: JSON.stringify(body(2000)) });
+    const first = await json<Entry>(await putEntry(id, body(1000)));
+    await putEntry(id, body(2000));
 
-    const stale = await call(`/api/groups/${id}/entries`, ravi, { method: "POST", body: JSON.stringify({ ...body(1500), baseSeq: first.seq }) });
+    const stale = await putEntry(id, { ...body(1500), baseSeq: first.seq });
 
     expect(stale.status).toBe(409);
     const refusal = await json<ApiError>(stale);
@@ -196,10 +195,7 @@ describe("recording an expense over HTTP", () => {
 
   it("is refused with 400 before a Durable Object is ever woken, when the shape is wrong", async () => {
     const { id } = await makeGroup(ravi);
-    const response = await call(`/api/groups/${id}/entries`, ravi, {
-      method: "POST",
-      body: JSON.stringify({ id: freshId("api-e"), currency: "rupees", amountMinor: -5, entryDate: "yesterday", payers: [], shares: [] }),
-    });
+    const response = await putEntry(id, { id: freshId("api-e"), currency: "rupees", amountMinor: -5, entryDate: "yesterday", payers: [], shares: [] });
 
     expect(response.status).toBe(400);
     expect((await json<ApiError>(response)).error.code).toBe("malformed");
@@ -210,11 +206,7 @@ describe("recording an expense over HTTP", () => {
     const page = await json<ChangePage>(await call(`/api/groups/${id}/changes`, ravi));
     const me = page.members[0];
     if (!me) expect.unreachable("The group has no members.");
-    const post = (moment: Record<string, unknown>) =>
-      call(`/api/groups/${id}/entries`, ravi, {
-        method: "POST",
-        body: JSON.stringify(expense({ payers: [{ memberId: me.id, amountMinor: 1000 }], shares: [{ memberId: me.id, amountMinor: 1000, weightMicros: null }], ...moment })),
-      });
+    const post = (moment: Record<string, unknown>) => putEntry(id, expense({ payers: [{ memberId: me.id, amountMinor: 1000 }], shares: [{ memberId: me.id, amountMinor: 1000, weightMicros: null }], ...moment }));
 
     const snack = { occurredAt: "2026-09-23T19:30:00.000Z", timeZone: "Asia/Kolkata", entryDate: "2026-09-24" };
     expect(await json<Entry>(await post(snack))).toMatchObject(snack);
@@ -223,27 +215,27 @@ describe("recording an expense over HTTP", () => {
     expect((await post({ ...snack, timeZone: "Goa/Beach" })).status).toBe(400);
   });
 
-  it("soft-deletes, and refuses a delete carrying no version at all", async () => {
+  it("soft-deletes and restores by writing the row, and stamps the server's own time", async () => {
     const { id } = await makeGroup(ravi);
     const page = await json<ChangePage>(await call(`/api/groups/${id}/changes`, ravi));
     const me = page.members[0];
     if (!me) expect.unreachable("The group has no members.");
 
-    const entry = await json<Entry>(
-      await call(`/api/groups/${id}/entries`, ravi, {
-        method: "POST",
-        body: JSON.stringify(expense({ payers: [{ memberId: me.id, amountMinor: 1000 }], shares: [{ memberId: me.id, amountMinor: 1000, weightMicros: null }] })),
-      }),
-    );
+    const draft = expense({ payers: [{ memberId: me.id, amountMinor: 1000 }], shares: [{ memberId: me.id, amountMinor: 1000, weightMicros: null }] });
+    const entry = await json<Entry>(await putEntry(id, draft));
 
-    // Deleting always moves money, so the version is required rather than
-    // optional — a missing one is a malformed request, not a licence.
-    const bare = await call(`/api/groups/${id}/entries/${entry.id}`, ravi, { method: "DELETE" });
-    expect(bare.status).toBe(400);
+    // The version is part of the body, and leaving it out is malformed rather than a licence.
+    const { baseSeq: _, ...unversioned } = { ...draft, deletedAt: "2000-01-01T00:00:00.000Z", baseSeq: entry.seq };
+    expect((await putEntry(id, unversioned)).status).toBe(400);
 
-    const deleted = await call(`/api/groups/${id}/entries/${entry.id}?baseSeq=${entry.seq}`, ravi, { method: "DELETE" });
+    const deleted = await putEntry(id, { ...draft, deletedAt: "2000-01-01T00:00:00.000Z", baseSeq: entry.seq });
     expect(deleted.status).toBe(200);
-    expect((await json<Entry>(deleted)).deletedAt).not.toBeNull();
+    const gone = await json<Entry>(deleted);
+    expect(gone.deletedAt).not.toBeNull();
+    expect(gone.deletedAt).not.toBe("2000-01-01T00:00:00.000Z");
+
+    const restored = await json<Entry>(await putEntry(id, { ...draft, deletedAt: null, baseSeq: gone.seq }));
+    expect(restored.deletedAt).toBeNull();
   });
 });
 
@@ -252,7 +244,7 @@ describe("the roster over HTTP", () => {
     const { id } = await makeGroup(ravi);
     const memberId = freshId("api-m");
 
-    const added = await call(`/api/groups/${id}/members`, ravi, { method: "POST", body: JSON.stringify({ id: memberId, displayName: "Priya", upiVpa: null }) });
+    const added = await call(`/api/groups/${id}/members/${memberId}`, ravi, { method: "PUT", body: JSON.stringify({ displayName: "Priya", upiVpa: null, leftAt: null }) });
     expect(added.status).toBe(200);
     expect((await json<Member>(added)).profileId).toBeNull();
 
@@ -264,7 +256,7 @@ describe("the roster over HTTP", () => {
   it("refuses a payment handle that is not one, before the object sees it", async () => {
     const { id } = await makeGroup(ravi);
     const memberId = freshId("api-m");
-    await call(`/api/groups/${id}/members`, ravi, { method: "POST", body: JSON.stringify({ id: memberId, displayName: "Priya", upiVpa: null }) });
+    await call(`/api/groups/${id}/members/${memberId}`, ravi, { method: "PUT", body: JSON.stringify({ displayName: "Priya", upiVpa: null, leftAt: null }) });
 
     const response = await call(`/api/groups/${id}/members/${memberId}`, ravi, { method: "PUT", body: JSON.stringify({ displayName: "Priya", upiVpa: "not a handle", leftAt: null }) });
     expect(response.status).toBe(400);
@@ -273,10 +265,10 @@ describe("the roster over HTTP", () => {
   it("renames a group, and refuses a blank name", async () => {
     const { id } = await makeGroup(ravi);
 
-    const renamed = await call(`/api/groups/${id}`, ravi, { method: "PUT", body: JSON.stringify({ name: "Goa, take two", simplifyDebts: true, archivedAt: null }) });
+    const renamed = await call(`/api/groups/${id}`, ravi, { method: "PUT", body: JSON.stringify({ name: "Goa, take two", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, creatorId: "unused", creatorName: "Ravi" }) });
     expect((await json<Group>(renamed)).name).toBe("Goa, take two");
 
-    const blank = await call(`/api/groups/${id}`, ravi, { method: "PUT", body: JSON.stringify({ name: "   ", simplifyDebts: true, archivedAt: null }) });
+    const blank = await call(`/api/groups/${id}`, ravi, { method: "PUT", body: JSON.stringify({ name: "   ", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, creatorId: "unused", creatorName: "Ravi" }) });
     expect(blank.status).toBe(400);
   });
 });

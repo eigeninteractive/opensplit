@@ -18,13 +18,13 @@ class EntriesApi {
 
   const EntriesApi(this._dio);
 
-  /// Soft-delete an expense
-  /// Deleting always moves money, so it must carry the exact version the device last saw.
+  /// Record, edit, delete or restore an expense, whole
+  /// A stale &#x60;baseSeq&#x60; is refused only when the write would move money, so two people fixing a typo never arbitrate. Deleting and restoring always move money.
   ///
   /// Parameters:
   /// * [groupId]
   /// * [entryId]
-  /// * [baseSeq]
+  /// * [entryInput]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -34,10 +34,10 @@ class EntriesApi {
   ///
   /// Returns a [Future] containing a [Response] with a [Entry] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<Entry>> deleteEntry({
+  Future<Response<Entry>> putEntry({
     required String groupId,
     required String entryId,
-    required int baseSeq,
+    required EntryInput entryInput,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -59,194 +59,7 @@ class EntriesApi {
           entryId.toString(),
         );
     final _options = Options(
-      method: r'DELETE',
-      headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{
-        'secure': <Map<String, String>>[
-          {
-            'type': 'apiKey',
-            'name': 'cookie',
-            'keyName': 'better-auth.session_token',
-            'where': '',
-          },
-          {'type': 'http', 'scheme': 'bearer', 'name': 'bearer'},
-        ],
-        ...?extra,
-      },
-      validateStatus: validateStatus,
-    );
-
-    final _queryParameters = <String, dynamic>{r'baseSeq': baseSeq};
-
-    final _response = await _dio.request<Object>(
-      _path,
-      options: _options,
-      queryParameters: _queryParameters,
-      cancelToken: cancelToken,
-      onSendProgress: onSendProgress,
-      onReceiveProgress: onReceiveProgress,
-    );
-
-    Entry? _responseData;
-
-    try {
-      final rawData = _response.data;
-      _responseData = rawData == null
-          ? null
-          : deserialize<Entry, Entry>(rawData, 'Entry', growable: true);
-    } catch (error, stackTrace) {
-      throw DioException(
-        requestOptions: _response.requestOptions,
-        response: _response,
-        type: DioExceptionType.unknown,
-        error: error,
-        stackTrace: stackTrace,
-      );
-    }
-
-    return Response<Entry>(
-      data: _responseData,
-      headers: _response.headers,
-      isRedirect: _response.isRedirect,
-      requestOptions: _response.requestOptions,
-      redirects: _response.redirects,
-      statusCode: _response.statusCode,
-      statusMessage: _response.statusMessage,
-      extra: _response.extra,
-    );
-  }
-
-  /// Put a deleted expense back
-  ///
-  ///
-  /// Parameters:
-  /// * [groupId]
-  /// * [entryId]
-  /// * [baseSeq]
-  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
-  /// * [headers] - Can be used to add additional headers to the request
-  /// * [extras] - Can be used to add flags to the request
-  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
-  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
-  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
-  ///
-  /// Returns a [Future] containing a [Response] with a [Entry] as data
-  /// Throws [DioException] if API call or serialization fails
-  Future<Response<Entry>> restoreEntry({
-    required String groupId,
-    required String entryId,
-    required int baseSeq,
-    CancelToken? cancelToken,
-    Map<String, dynamic>? headers,
-    Map<String, dynamic>? extra,
-    ValidateStatus? validateStatus,
-    ProgressCallback? onSendProgress,
-    ProgressCallback? onReceiveProgress,
-  }) async {
-    final _path = r'/api/groups/{groupId}/entries/{entryId}/restore'
-        .replaceAll(
-          '{'
-          r'groupId'
-          '}',
-          groupId.toString(),
-        )
-        .replaceAll(
-          '{'
-          r'entryId'
-          '}',
-          entryId.toString(),
-        );
-    final _options = Options(
-      method: r'POST',
-      headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{
-        'secure': <Map<String, String>>[
-          {
-            'type': 'apiKey',
-            'name': 'cookie',
-            'keyName': 'better-auth.session_token',
-            'where': '',
-          },
-          {'type': 'http', 'scheme': 'bearer', 'name': 'bearer'},
-        ],
-        ...?extra,
-      },
-      validateStatus: validateStatus,
-    );
-
-    final _queryParameters = <String, dynamic>{r'baseSeq': baseSeq};
-
-    final _response = await _dio.request<Object>(
-      _path,
-      options: _options,
-      queryParameters: _queryParameters,
-      cancelToken: cancelToken,
-      onSendProgress: onSendProgress,
-      onReceiveProgress: onReceiveProgress,
-    );
-
-    Entry? _responseData;
-
-    try {
-      final rawData = _response.data;
-      _responseData = rawData == null
-          ? null
-          : deserialize<Entry, Entry>(rawData, 'Entry', growable: true);
-    } catch (error, stackTrace) {
-      throw DioException(
-        requestOptions: _response.requestOptions,
-        response: _response,
-        type: DioExceptionType.unknown,
-        error: error,
-        stackTrace: stackTrace,
-      );
-    }
-
-    return Response<Entry>(
-      data: _responseData,
-      headers: _response.headers,
-      isRedirect: _response.isRedirect,
-      requestOptions: _response.requestOptions,
-      redirects: _response.redirects,
-      statusCode: _response.statusCode,
-      statusMessage: _response.statusMessage,
-      extra: _response.extra,
-    );
-  }
-
-  /// Record or edit an expense, whole
-  /// A stale &#x60;baseSeq&#x60; is refused only when the write would move money, so two people fixing a typo never arbitrate.
-  ///
-  /// Parameters:
-  /// * [groupId]
-  /// * [entryInput]
-  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
-  /// * [headers] - Can be used to add additional headers to the request
-  /// * [extras] - Can be used to add flags to the request
-  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
-  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
-  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
-  ///
-  /// Returns a [Future] containing a [Response] with a [Entry] as data
-  /// Throws [DioException] if API call or serialization fails
-  Future<Response<Entry>> upsertEntry({
-    required String groupId,
-    required EntryInput entryInput,
-    CancelToken? cancelToken,
-    Map<String, dynamic>? headers,
-    Map<String, dynamic>? extra,
-    ValidateStatus? validateStatus,
-    ProgressCallback? onSendProgress,
-    ProgressCallback? onReceiveProgress,
-  }) async {
-    final _path = r'/api/groups/{groupId}/entries'.replaceAll(
-      '{'
-      r'groupId'
-      '}',
-      groupId.toString(),
-    );
-    final _options = Options(
-      method: r'POST',
+      method: r'PUT',
       headers: <String, dynamic>{...?headers},
       extra: <String, dynamic>{
         'secure': <Map<String, String>>[

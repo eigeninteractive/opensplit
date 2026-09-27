@@ -43,7 +43,10 @@ arrived.
 
 One feed uses a timestamp cursor instead, and honestly: profiles live in D1, which
 several requests write concurrently, so there is nothing there that can issue a
-sequence number.
+sequence number. A time cursor cannot see a profile that becomes *visible*
+without changing — somebody named long ago claiming a place in your group — so
+each group page carries the profiles of its current members, read by the ids
+the page itself names. The profile feed then only has renames to deliver.
 
 ---
 
@@ -140,9 +143,12 @@ as nullable before any route uses them.
 **Every body field is required, and `null` is the only way to say "none".** A
 generated Dart client cannot send "absent" as distinct from null (it drops a
 null optional field), so an optional field would have three states on the
-server and two on the device. Updates are therefore `PUT`s of every editable
-field, like `ProfileUpdate`. Optional exists only for query parameters, where a
-server default is ordinary HTTP.
+server and two on the device. Every write is therefore a `PUT` of the whole
+row at the id the device minted — `PUT /groups/{g}`, `/members/{m}`,
+`/entries/{e}` — which creates it or replaces it, so a retry is the same
+request. Soft deletion is a field of that row (`deletedAt` set or null; the
+server stamps its own time), not a separate verb. Optional exists only for
+query parameters, where a server default is ordinary HTTP.
 
 ### Dates
 
@@ -231,6 +237,8 @@ pass; the object's is authoritative.
 The group's own object calls FCM directly, inside `ctx.waitUntil`, after its
 write has committed — and it reads the events it *actually appended*, so an edit
 that changed nothing notifies nobody without anyone having to arrange that.
+Who to wake is one D1 query by group id — device tokens joined to the
+membership index — rather than a list of recipients bound one by one.
 
 No queue in front of it. Notification volume is proportional to ledger writes,
 which is a small fraction of request volume, so a queue was never buying cost.

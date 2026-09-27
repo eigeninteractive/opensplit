@@ -129,7 +129,7 @@ void main() {
         await a.entries.create(draft(g, 100), createdBy: g.ravi);
         final release = Completer<void>();
         a.tap.before = (request) async {
-          if (isUpsert(request)) await release.future;
+          if (isEntryWrite(request)) await release.future;
         };
 
         final report = await a
@@ -175,7 +175,7 @@ void main() {
         final entry = await a.entries.create(draft(g, 1000), createdBy: g.ravi);
         var edited = false;
         a.tap.before = (request) async {
-          if (!isUpsert(request) || edited) return;
+          if (!isEntryWrite(request) || edited) return;
           edited = true;
           await a.entries.update(entry.id, draft(g, 2500), actorId: g.ravi);
         };
@@ -184,9 +184,9 @@ void main() {
         await b.sync.syncGroup(g.groupId);
 
         expect(report.isClean, isTrue, reason: '$report');
-        expect(a.tap.requests.where(isUpsert), hasLength(2));
-        expect((await a.entries.getEntry(entry.id))!.amountMinor, 2500);
-        expect((await b.entries.getEntry(entry.id))!.amountMinor, 2500);
+        expect(a.tap.requests.where(isEntryWrite), hasLength(2));
+        expect((await a.entries.getEntry(entry.id))!.row.amountMinor, 2500);
+        expect((await b.entries.getEntry(entry.id))!.row.amountMinor, 2500);
         expect(await a.outbox.pendingCount(), 0);
       },
     );
@@ -212,7 +212,7 @@ void main() {
         await a.db.delete(a.db.groupCursors).go();
         await a.sync.pull(g.groupId);
 
-        expect((await a.entries.getEntry(entry.id))!.amountMinor, 3500);
+        expect((await a.entries.getEntry(entry.id))!.row.amountMinor, 3500);
         expect(await a.outbox.pendingCount(), 1);
       },
     );
@@ -395,11 +395,11 @@ void main() {
 
         final current = (await b.ledger(g.groupId)).single;
         expect(current.isDeleted, isFalse);
-        expect(current.amountMinor, 200000);
+        expect(current.row.amountMinor, 200000);
 
         final conflicts = await DriftConflictRepository(b.db).watchAll().first;
         expect(conflicts.single.attempted.deletedAt, isNotNull);
-        expect(conflicts.single.current?.amountMinor, 200000);
+        expect(conflicts.single.current?.row.amountMinor, 200000);
       },
     );
 
@@ -427,8 +427,8 @@ void main() {
       await b.sync.syncGroup(g.groupId); // B pushes second, so B wins.
       await a.sync.syncGroup(g.groupId);
 
-      expect((await a.ledger(g.groupId)).single.description, 'Edited on B');
-      expect((await b.ledger(g.groupId)).single.description, 'Edited on B');
+      expect((await a.ledger(g.groupId)).single.row.description, 'Edited on B');
+      expect((await b.ledger(g.groupId)).single.row.description, 'Edited on B');
     });
   });
 
@@ -496,7 +496,7 @@ void main() {
           )..where((t) => t.subjectId.equals(entryId) & t.isProvisional)).get();
 
       void refuseUploads() => a.tap.before = (request) async {
-        if (isUpsert(request)) throw refused(request);
+        if (isEntryWrite(request)) throw refused(request);
       };
 
       liveTest('puts back the server\'s version of an edit', () async {
@@ -516,7 +516,7 @@ void main() {
         await a.sync.discardRefused();
         await a.sync.syncGroup(g.groupId);
 
-        expect((await a.entries.getEntry(entry.id))!.amountMinor, 60000);
+        expect((await a.entries.getEntry(entry.id))!.row.amountMinor, 60000);
         expect(await a.outbox.deadLetters(), isEmpty);
         expect(await a.outbox.pendingCount(), 0);
         expect(await provisionalLines(entry.id), isEmpty);
@@ -550,7 +550,7 @@ void main() {
       await a.sync.syncGroup(g.groupId);
       await b.sync.syncGroup(g.groupId);
 
-      expect(a.tap.requests.where(isUpsert), hasLength(2));
+      expect(a.tap.requests.where(isEntryWrite), hasLength(2));
       expect(await b.ledger(g.groupId), hasLength(1));
     });
   });
@@ -585,7 +585,7 @@ void main() {
       }
       await a.sync.push();
 
-      final stamps = [for (final e in await a.ledger(g.groupId)) e.seq!]
+      final stamps = [for (final e in await a.ledger(g.groupId)) e.row.seq!]
         ..sort();
       expect(
         stamps,
@@ -898,7 +898,7 @@ void main() {
         (await other.db.select(other.db.groups).get()).single.name,
         'Goa Trip',
       );
-      expect((await other.ledger(g.groupId)).single.amountMinor, 240000);
+      expect((await other.ledger(g.groupId)).single.row.amountMinor, 240000);
     });
 
     liveTest('a group left behind is not rediscovered', () async {
@@ -1168,7 +1168,7 @@ void main() {
         // (A's edit is still queued) and moves the cursor past it.
         var failOnce = true;
         a.tap.before = (request) async {
-          if (isUpsert(request) && failOnce) {
+          if (isEntryWrite(request) && failOnce) {
             failOnce = false;
             throw offline(request);
           }
@@ -1180,12 +1180,12 @@ void main() {
 
         await a.sync.syncGroup(g.groupId);
 
-        expect((await a.ledger(g.groupId)).single.amountMinor, 45000);
+        expect((await a.ledger(g.groupId)).single.row.amountMinor, 45000);
         final conflict = (await DriftConflictRepository(
           a.db,
         ).watchAll().first).single;
         expect(conflict.attempted.amountMinor, 60000);
-        expect(conflict.current?.amountMinor, 45000);
+        expect(conflict.current?.row.amountMinor, 45000);
       },
     );
 
@@ -1197,10 +1197,10 @@ void main() {
       );
       await a.sync.syncGroup(g.groupId);
 
-      expect((await a.ledger(g.groupId)).single.amountMinor, 45000);
+      expect((await a.ledger(g.groupId)).single.row.amountMinor, 45000);
       final conflicts = await DriftConflictRepository(a.db).watchAll().first;
       expect(conflicts.single.attempted.amountMinor, 60000);
-      expect(conflicts.single.current?.amountMinor, 45000);
+      expect(conflicts.single.current?.row.amountMinor, 45000);
       expect(await a.outbox.pendingCount(), 0, reason: 'not refused forever');
       expect(
         await a.outbox.deadLetters(),
@@ -1218,9 +1218,15 @@ void main() {
       await a.sync.syncGroup(g.groupId);
 
       expect(await DriftConflictRepository(a.db).watchAll().first, isEmpty);
-      expect((await a.ledger(g.groupId)).single.description, 'Dinner at Toit');
+      expect(
+        (await a.ledger(g.groupId)).single.row.description,
+        'Dinner at Toit',
+      );
       await b.sync.syncGroup(g.groupId);
-      expect((await b.ledger(g.groupId)).single.description, 'Dinner at Toit');
+      expect(
+        (await b.ledger(g.groupId)).single.row.description,
+        'Dinner at Toit',
+      );
     });
 
     liveTest('editing it again lands, and clears the notice', () async {
@@ -1242,9 +1248,9 @@ void main() {
       expect(await conflicts.byEntry(entryId), isNull);
 
       await a.sync.syncGroup(g.groupId);
-      expect((await a.ledger(g.groupId)).single.amountMinor, 60000);
+      expect((await a.ledger(g.groupId)).single.row.amountMinor, 60000);
       await b.sync.syncGroup(g.groupId);
-      expect((await b.ledger(g.groupId)).single.amountMinor, 60000);
+      expect((await b.ledger(g.groupId)).single.row.amountMinor, 60000);
     });
 
     liveTest('the feed records the edit A never saw', () async {

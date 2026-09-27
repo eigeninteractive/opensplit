@@ -160,8 +160,8 @@ void main() {
     await _beats(tester);
 
     final saved = (await DriftEntryRepository(db).getEntries('g1')).single;
-    expect(saved.description, 'Dinner');
-    expect(saved.amountMinor, 30000);
+    expect(saved.row.description, 'Dinner');
+    expect(saved.row.amountMinor, 30000);
     expect(
       {for (final share in saved.shares) share.memberId},
       {'m-ravi', 'm-priya'},
@@ -193,8 +193,8 @@ void main() {
     await _beats(tester);
 
     final chai = (await DriftEntryRepository(db).getEntries('g1')).single;
-    expect(chai.timeZone, testZone);
-    expect(chai.occurredAt!.isBefore(before), isFalse);
+    expect(chai.row.timeZone, testZone);
+    expect(chai.row.occurredAt!.isBefore(before), isFalse);
 
     await _openEditor(tester);
     await _type(tester, what: 'Snacks', amount: '60');
@@ -204,11 +204,11 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Add expense'));
     await _beats(tester);
 
-    final snacks = (await DriftEntryRepository(
-      db,
-    ).getEntries('g1')).firstWhere((entry) => entry.description == 'Snacks');
-    expect(snacks.occurredAt, isNull, reason: 'only the day is known');
-    expect(snacks.timeZone, isNull);
+    final snacks = (await DriftEntryRepository(db).getEntries(
+      'g1',
+    )).firstWhere((entry) => entry.row.description == 'Snacks');
+    expect(snacks.row.occurredAt, isNull, reason: 'only the day is known');
+    expect(snacks.row.timeZone, isNull);
     await _unmount(tester);
   });
 

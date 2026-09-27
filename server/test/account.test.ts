@@ -2,7 +2,7 @@ import { exports as workerExports } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import type { ApiError } from "../src/schemas/common";
-import type { AccountDeletion, ChangePage, GroupIds, GroupLink, Joined, LinkPreview, Profile, ProfileList, ProfilePage } from "./api-types";
+import type { AccountDeletion, ChangePage, GroupIds, GroupLink, Joined, LinkPreview, Profile, ProfilePage } from "./api-types";
 import { freshId } from "./group";
 import { type Guest, signInAsGuest } from "./session";
 
@@ -24,9 +24,9 @@ async function json<T>(response: Response): Promise<T> {
 
 async function makeGroup(host: Guest) {
   const id = freshId("acct");
-  const created = await call("/api/groups", host, {
-    method: "POST",
-    body: JSON.stringify({ id, name: "Goa trip", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, memberId: `${id}-host`, displayName: "Ravi" }),
+  const created = await call(`/api/groups/${id}`, host, {
+    method: "PUT",
+    body: JSON.stringify({ name: "Goa trip", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, creatorId: `${id}-host`, creatorName: "Ravi" }),
   });
   expect(created.status).toBe(200);
   return id;
@@ -153,26 +153,34 @@ describe("the profile feed", () => {
     // No row twice.
     expect(collected.length).toBe(new Set(collected).size);
   });
+});
 
-  it("does not surface a profile you were never meant to see, even by name", async () => {
+describe("a group's change page", () => {
+  it("carries the profiles of the group's members, and nobody else's", async () => {
+    const host = await signInAsGuest();
+    const friend = await signInAsGuest();
     const stranger = await signInAsGuest();
     await named(stranger, "Zara");
+    const { groupId } = await share(host, friend, "Priya");
 
-    const { profiles } = await json<ProfileList>(await call("/api/profiles/lookup", ravi, { method: "POST", body: JSON.stringify({ ids: [stranger.id, ravi.id] }) }));
-
-    // Present but empty rather than refused: the caller is asking about ids it
-    // holds for its own reasons, and "you cannot see that" and "that does not
-    // exist" are deliberately the same answer.
-    expect(profiles.map((row) => row.id)).toEqual([ravi.id]);
+    const page = await json<ChangePage>(await call(`/api/groups/${groupId}/changes?since=0`, host));
+    expect(page.profiles.map((row) => row.id).sort()).toEqual([host.id, friend.id].sort());
   });
 
-  it("looks up more ids than D1 binds in one query", async () => {
-    const unknown = Array.from({ length: 150 }, (_, index) => `missing-${index}`);
-    const { profiles } = await json<ProfileList>(await call("/api/profiles/lookup", ravi, { method: "POST", body: JSON.stringify({ ids: [...unknown, ravi.id] }) }));
-    expect(profiles.map((row) => row.id)).toEqual([ravi.id]);
+  it("carries more profiles than D1 binds in one query", async () => {
+    const host = await signInAsGuest();
+    const groupId = await makeGroup(host);
+    const link = await json<GroupLink>(await call(`/api/groups/${groupId}/link`, host, { method: "POST" }));
+    const arrivals = await Promise.all(Array.from({ length: 120 }, () => signInAsGuest()));
+    for (const [index, guest] of arrivals.entries()) {
+      await call(`/api/links/${link.token}/join`, guest, { method: "POST", body: JSON.stringify({ memberId: null, displayName: `Friend ${index}` }) });
+    }
+
+    const page = await json<ChangePage>(await call(`/api/groups/${groupId}/changes?since=0`, host));
+    expect(page.profiles).toHaveLength(121);
   });
 
-  it("answers for somebody who only just became visible", async () => {
+  it("carries somebody who only just became visible, though the profile feed has passed them", async () => {
     const host = await signInAsGuest();
     const friend = await signInAsGuest();
 
@@ -185,10 +193,10 @@ describe("the profile feed", () => {
     const swept = await json<ProfilePage>(await call("/api/profiles", host));
     expect(swept.profiles.map((row) => row.id)).not.toContain(friend.id);
 
-    await share(host, friend, "Priya");
+    const { groupId } = await share(host, friend, "Priya");
 
-    const { profiles } = await json<ProfileList>(await call("/api/profiles/lookup", host, { method: "POST", body: JSON.stringify({ ids: [friend.id] }) }));
-    expect(profiles).toEqual([expect.objectContaining({ id: friend.id, displayName: "Priya" })]);
+    const page = await json<ChangePage>(await call(`/api/groups/${groupId}/changes?since=0`, host));
+    expect(page.profiles).toContainEqual(expect.objectContaining({ id: friend.id, displayName: "Priya" }));
   });
 });
 
@@ -240,6 +248,18 @@ describe("deleting an account", () => {
     expect(row?.profileId).toBeNull();
   });
 
+  it("leaves the place under the name the account last had, not the one it joined with", async () => {
+    const leaving = await signInAsGuest();
+    const staying = await signInAsGuest();
+    const { groupId, member } = await share(staying, leaving, "Ravi");
+    await named(leaving, "Ravi Kumar");
+
+    await call("/api/account", leaving, { method: "DELETE" });
+
+    const page = await json<ChangePage>(await call(`/api/groups/${groupId}/changes?since=0`, staying));
+    expect(page.members.find((each) => each.id === member.id)?.displayName).toBe("Ravi Kumar");
+  });
+
   it("collects a group nobody left could ever read", async () => {
     const solo = await signInAsGuest();
     const groupId = await makeGroup(solo);
@@ -269,7 +289,7 @@ describe("deleting an account", () => {
     // for its own profile to be checked from the other side.
     const friend = await signInAsGuest();
     await named(friend, "Priya");
-    await share(friend, going, "Zara");
+    const { groupId } = await share(friend, going, "Zara");
 
     expect((await call("/api/account", going, { method: "DELETE" })).status).toBe(200);
 
@@ -277,10 +297,9 @@ describe("deleting an account", () => {
     // consequence rather than by a second call.
     expect((await call("/api/groups", going)).status).toBe(401);
 
-    // The row survives as a tombstone — the id must never be handed to a new
-    // account — but with nothing left in it.
-    const { profiles } = await json<ProfileList>(await call("/api/profiles/lookup", friend, { method: "POST", body: JSON.stringify({ ids: [going.id] }) }));
-    expect(profiles).toEqual([]);
+    // The place is a placeholder now, so the group no longer names the account at all.
+    const page = await json<ChangePage>(await call(`/api/groups/${groupId}/changes?since=0`, friend));
+    expect(page.profiles.map((row) => row.id)).not.toContain(going.id);
   });
 
   it("is refused without a session", async () => {

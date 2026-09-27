@@ -105,12 +105,7 @@ class _ChangingAuth implements AuthService {
       );
 
   @override
-  Account? currentUser = Account(
-    id: 'user-1',
-    isAnonymous: false,
-    email: null,
-    displayName: null,
-  );
+  Account? currentUser = Account(id: 'user-1', isAnonymous: false, email: null);
 
   @override
   Stream<Account?> authStateChanges() => events.stream;
@@ -139,7 +134,6 @@ class _SignedIn implements AuthService {
     id: 'user-1',
     isAnonymous: false,
     email: null,
-    displayName: null,
   );
 
   @override

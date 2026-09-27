@@ -3,7 +3,7 @@ library;
 
 import 'dart:io';
 
-import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:opensplit/data/auth/better_auth_service.dart';
@@ -24,6 +24,7 @@ import 'package:opensplit/domain/balance/balance_fold.dart';
 import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/models/entry.dart';
 import 'package:opensplit/domain/models/entry_event.dart';
+import 'package:opensplit/domain/models/entry_snapshot.dart';
 import 'package:opensplit/domain/models/group_event.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:opensplit_api/opensplit_api.dart' as api;
@@ -70,8 +71,9 @@ void main() {
     late api.OpensplitApi client;
 
     Future<api.Entry> push(Entry entry) => fetch(
-      client.getEntriesApi().upsertEntry(
-        groupId: entry.groupId,
+      client.getEntriesApi().putEntry(
+        groupId: entry.row.groupId,
+        entryId: entry.id,
         entryInput: entry.toInput(),
       ),
     );
@@ -197,11 +199,11 @@ void main() {
 
       final pulled = await DriftEntryRepository(other.db).getEntries(g.groupId);
       expect(pulled, hasLength(1));
-      expect(pulled.single.description, 'Dinner at Toit');
+      expect(pulled.single.row.description, 'Dinner at Toit');
       expect(pulled.single.isBalanced, isTrue);
-      expect(pulled.single.entryDate, DateTime.utc(2026, 9, 24));
-      expect(pulled.single.occurredAt, DateTime.utc(2026, 9, 23, 19, 30));
-      expect(pulled.single.timeZone, 'Asia/Kolkata');
+      expect(pulled.single.row.entryDate, DateTime.utc(2026, 9, 24));
+      expect(pulled.single.row.occurredAt, DateTime.utc(2026, 9, 23, 19, 30));
+      expect(pulled.single.row.timeZone, 'Asia/Kolkata');
       expect(pulled.single.shares, hasLength(2));
       expect(
         pulled.single.shares.first.weightMicros,
@@ -312,7 +314,15 @@ void main() {
       // Corrupted the way a client bug would, then pushed.
       await expectLater(
         push(
-          entry.copyWith(shares: [entry.shares.first.copyWith(amountMinor: 1)]),
+          entry.copyWith(
+            shares: [
+              api.Share(
+                memberId: entry.shares.first.memberId,
+                amountMinor: 1,
+                weightMicros: entry.shares.first.weightMicros,
+              ),
+            ],
+          ),
         ),
         throwsA(
           isA<ApiFailure>()
@@ -320,6 +330,36 @@ void main() {
               .having((e) => e.code?.value, 'code', 'unbalanced'),
         ),
       );
+    });
+
+    test("the device's snapshot of an expense is the server's own", () async {
+      if (!backendUp) return;
+
+      // Provisional activity lines and parked conflicts are drawn from the
+      // device's snapshot, and diffed against the server's: the two
+      // derivations must agree field for field.
+      final g = await seeded();
+      final entry = await entries.create(
+        EntryDraft(
+          groupId: g.groupId,
+          currency: 'INR',
+          amountMinor: 90001,
+          description: 'Dinner',
+          split: EqualSplit([g.priya, g.ravi]),
+          payerAmounts: {g.ravi: 90001},
+        ),
+        createdBy: g.ravi,
+      );
+      await sync.syncGroup(g.groupId);
+
+      final page = await fetch(
+        client.getSyncApi().getChanges(groupId: g.groupId),
+      );
+      final recorded = page.events
+          .lastWhere((event) => event.subjectId == entry.id)
+          .entry;
+      final local = (await entries.getEntry(entry.id))!;
+      expect(snapshotOf(local).toJson(), recorded?.toJson());
     });
 
     test('a stale edit is refused only when it moves money', () async {
@@ -340,18 +380,30 @@ void main() {
       await sync.syncGroup(g.groupId);
 
       final base = (await entries.getEntry(entry.id))!;
-      expect(base.seq, isNotNull, reason: 'the push adopted a sequence number');
+      expect(
+        base.row.seq,
+        isNotNull,
+        reason: 'the push adopted a sequence number',
+      );
 
-      Entry at(int amount) => base.copyWith(
-        amountMinor: amount,
-        payers: [base.payers.first.copyWith(amountMinor: amount)],
-        shares: [base.shares.first.copyWith(amountMinor: amount)],
+      Entry at(int amount) => Entry(
+        base.row.copyWith(amountMinor: amount),
+        payers: [
+          api.Payer(memberId: base.payers.first.memberId, amountMinor: amount),
+        ],
+        shares: [
+          api.Share(
+            memberId: base.shares.first.memberId,
+            amountMinor: amount,
+            weightMicros: base.shares.first.weightMicros,
+          ),
+        ],
       );
 
       // Somebody else's edit lands first, moving the amount and the share.
       final theirs = await push(at(150000));
       expect(theirs.amountMinor, 150000);
-      expect(theirs.seq, greaterThan(base.seq!));
+      expect(theirs.seq, greaterThan(base.row.seq!));
 
       // And now the edit composed against the version they replaced.
       await expectLater(
@@ -366,8 +418,14 @@ void main() {
       // The same stale base, leaving the money exactly where the server has it,
       // is not refused: arbitrating a typo would cost two people a decision for
       // nothing.
+      final moved = at(150000);
       final prose = await push(
-        at(150000).copyWith(description: 'Renamed', seq: base.seq),
+        moved.copyWith(
+          row: moved.row.copyWith(
+            description: 'Renamed',
+            seq: Value(base.row.seq),
+          ),
+        ),
       );
       expect(prose.description, 'Renamed');
       expect(prose.amountMinor, 150000);
@@ -394,12 +452,13 @@ void main() {
       // A deletion always moves money, so unlike a prose edit it must name the
       // version the device last saw, and a wrong one is a refusal rather than a
       // licence.
+      final gone = stored.copyWith(
+        row: stored.row.copyWith(deletedAt: Value(DateTime.now())),
+      );
       await expectLater(
-        fetch(
-          client.getEntriesApi().deleteEntry(
-            groupId: g.groupId,
-            entryId: entry.id,
-            baseSeq: stored.seq! - 1,
+        push(
+          gone.copyWith(
+            row: gone.row.copyWith(seq: Value(stored.row.seq! - 1)),
           ),
         ),
         throwsA(
@@ -407,13 +466,7 @@ void main() {
         ),
       );
 
-      final deleted = await fetch(
-        client.getEntriesApi().deleteEntry(
-          groupId: g.groupId,
-          entryId: entry.id,
-          baseSeq: stored.seq!,
-        ),
-      );
+      final deleted = await push(gone);
       expect(deleted.deletedAt, isNotNull);
 
       // A soft delete, which is why it can propagate at all: a hard one would
@@ -644,35 +697,28 @@ void main() {
     Future<({String groupId, String priya})> seededGroup(_Device host) async {
       final groupId = 'g${DateTime.now().microsecondsSinceEpoch}';
       await fetch(
-        host.client.getGroupsApi().createGroup(
-          groupCreate:
-              Group(
-                id: groupId,
-                name: 'Goa trip',
-                defaultCurrency: 'INR',
-                isDirect: false,
-                simplifyDebts: true,
-                createdBy: '$groupId-ravi',
-                createdAt: DateTime.now().toUtc(),
-              ).toCreate(
-                Member(
-                  id: '$groupId-ravi',
-                  groupId: groupId,
-                  profileId: host.profileId,
-                  displayName: 'Ravi',
-                  joinedAt: DateTime.now().toUtc(),
-                ),
-              ),
+        host.client.getGroupsApi().putGroup(
+          groupId: groupId,
+          groupInput: api.GroupInput(
+            name: 'Goa trip',
+            defaultCurrency: 'INR',
+            isDirect: false,
+            simplifyDebts: true,
+            archivedAt: null,
+            creatorId: '$groupId-ravi',
+            creatorName: 'Ravi',
+          ),
         ),
       );
 
       final priya = await fetch(
-        host.client.getGroupsApi().addMember(
+        host.client.getGroupsApi().putMember(
           groupId: groupId,
-          memberCreate: api.MemberCreate(
-            id: '$groupId-priya',
+          memberId: '$groupId-priya',
+          memberInput: api.MemberInput(
             displayName: 'Priya',
             upiVpa: null,
+            leftAt: null,
           ),
         ),
       );
@@ -704,13 +750,15 @@ void main() {
       expect(claimed.member.displayName, 'Priya');
 
       // And the name travelled the other way: a guest has none of its own, so
-      // it adopts the one a friend typed on the placeholder.
-      final mine = (await fetch(
-        priya.client.getSyncApi().lookupProfiles(
-          profileLookup: api.ProfileLookup(ids: [priya.profileId]),
-        ),
-      )).profiles;
-      expect(mine.single.displayName, 'Priya');
+      // it adopts the one a friend typed on the placeholder. The group's own
+      // page carries it, since the place is what made it visible.
+      final page = await fetch(
+        ravi.client.getSyncApi().getChanges(groupId: g.groupId),
+      );
+      expect(
+        page.profiles.singleWhere((p) => p.id == priya.profileId).displayName,
+        'Priya',
+      );
     });
 
     test('a spent link says so rather than saying nothing', () async {
@@ -837,11 +885,9 @@ void main() {
       final stranger = await _Device.guest();
       expect(
         (await fetch(
-          stranger.client.getSyncApi().lookupProfiles(
-            profileLookup: api.ProfileLookup(ids: [ravi.profileId]),
-          ),
-        )).profiles,
-        isEmpty,
+          stranger.client.getSyncApi().getProfiles(limit: 50),
+        )).profiles.map((row) => row.id),
+        isNot(contains(ravi.profileId)),
         reason: 'a payment handle is not public',
       );
 
@@ -851,11 +897,12 @@ void main() {
       // Sharing a group is the whole of the rule, and it is symmetric: a
       // settle-up needs Ravi's handle exactly as much as it needs Priya's.
       final seen = (await fetch(
-        stranger.client.getSyncApi().lookupProfiles(
-          profileLookup: api.ProfileLookup(ids: [ravi.profileId]),
-        ),
+        stranger.client.getSyncApi().getChanges(groupId: g.groupId),
       )).profiles;
-      expect(seen.single.upiVpa, 'ravi@okhdfcbank');
+      expect(
+        seen.singleWhere((p) => p.id == ravi.profileId).upiVpa,
+        'ravi@okhdfcbank',
+      );
 
       final feed = await fetch(
         stranger.client.getSyncApi().getProfiles(limit: 50),
@@ -872,32 +919,40 @@ void main() {
       // Null is a value in both updates: restore, rejoin, clear.
       final g = await seededGroup(ravi);
       await fetch(
-        ravi.client.getGroupsApi().updateGroup(
+        ravi.client.getGroupsApi().putGroup(
           groupId: g.groupId,
-          groupUpdate: api.GroupUpdate(
+          groupInput: api.GroupInput(
             name: 'Goa',
+            defaultCurrency: 'INR',
+            isDirect: false,
             simplifyDebts: true,
             archivedAt: DateTime.now().toUtc(),
+            creatorId: '${g.groupId}-ravi',
+            creatorName: 'Ravi',
           ),
         ),
       );
       final restored = await fetch(
-        ravi.client.getGroupsApi().updateGroup(
+        ravi.client.getGroupsApi().putGroup(
           groupId: g.groupId,
-          groupUpdate: api.GroupUpdate(
+          groupInput: api.GroupInput(
             name: 'Goa',
+            defaultCurrency: 'INR',
+            isDirect: false,
             simplifyDebts: true,
             archivedAt: null,
+            creatorId: '${g.groupId}-ravi',
+            creatorName: 'Ravi',
           ),
         ),
       );
       expect(restored.archivedAt, isNull);
 
       await fetch(
-        ravi.client.getGroupsApi().updateMember(
+        ravi.client.getGroupsApi().putMember(
           groupId: g.groupId,
           memberId: g.priya,
-          memberUpdate: api.MemberUpdate(
+          memberInput: api.MemberInput(
             displayName: 'Priya',
             upiVpa: 'priya@okaxis',
             leftAt: null,
@@ -905,10 +960,10 @@ void main() {
         ),
       );
       final cleared = await fetch(
-        ravi.client.getGroupsApi().updateMember(
+        ravi.client.getGroupsApi().putMember(
           groupId: g.groupId,
           memberId: g.priya,
-          memberUpdate: api.MemberUpdate(
+          memberInput: api.MemberInput(
             displayName: 'Priya',
             upiVpa: null,
             leftAt: null,

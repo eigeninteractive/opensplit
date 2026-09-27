@@ -3,6 +3,8 @@ import 'package:opensplit_api/opensplit_api.dart' show EntryKind;
 import 'calendar_date.dart';
 import 'models/entry.dart';
 import 'split/splitter.dart';
+import 'package:opensplit_api/opensplit_api.dart' show Payer, Share;
+import '../data/local/database.dart' show EntryRow;
 
 /// A user's intent to record an entry, before it has been resolved into
 /// balanced payers and shares.
@@ -83,7 +85,6 @@ Entry composeEntry(
   required String id,
   required String createdBy,
   required DateTime now,
-  String? clientKey,
 }) {
   if (draft.amountMinor <= 0) {
     throw const SplitException('An amount is needed.');
@@ -99,35 +100,36 @@ Entry composeEntry(
   );
 
   return Entry(
-    id: id,
-    groupId: draft.groupId,
-    kind: draft.kind,
-    description: draft.description,
-    categoryId: draft.categoryId,
-    currency: draft.currency,
-    amountMinor: draft.amountMinor,
-    entryDate: draft.entryDate ?? calendarDay(now),
-    occurredAt: draft.occurredAt,
-    timeZone: draft.timeZone,
-    splitKind: draft.split.kind,
+    EntryRow(
+      id: id,
+      groupId: draft.groupId,
+      kind: draft.kind,
+      description: draft.description,
+      categoryId: draft.categoryId,
+      currency: draft.currency,
+      amountMinor: draft.amountMinor,
+      entryDate: draft.entryDate ?? calendarDay(now),
+      occurredAt: draft.occurredAt,
+      timeZone: draft.timeZone,
+      splitKind: draft.split.kind,
+      fxRate: draft.fxRate,
+      fxSource: draft.fxSource,
+      fxAt: draft.fxRate == null ? null : now,
+      notes: draft.notes,
+      createdBy: createdBy,
+      createdAt: now,
+    ),
     payers: [
       for (final p in payers)
-        EntryPayer(memberId: p.memberId, amountMinor: p.amountMinor),
+        Payer(memberId: p.memberId, amountMinor: p.amountMinor),
     ],
     shares: [
       for (final s in shares)
-        EntryShare(
+        Share(
           memberId: s.memberId,
           amountMinor: s.amountMinor,
           weightMicros: s.weightMicros,
         ),
     ],
-    fxRate: draft.fxRate,
-    fxSource: draft.fxSource,
-    fxAt: draft.fxRate == null ? null : now,
-    notes: draft.notes,
-    createdBy: createdBy,
-    createdAt: now,
-    clientKey: clientKey ?? id,
   );
 }

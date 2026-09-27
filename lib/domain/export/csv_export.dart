@@ -37,23 +37,25 @@ String entriesToCsv(
 
     buffer.writeln(
       _row([
-        calendarDate(entry.entryDate),
-        entry.kind.name,
-        entry.description,
-        entry.categoryId == null ? '' : categoryNames[entry.categoryId] ?? '',
-        entry.currency,
-        money(entry.currency, entry.amountMinor),
+        calendarDate(entry.row.entryDate),
+        entry.row.kind.name,
+        entry.row.description,
+        entry.row.categoryId == null
+            ? ''
+            : categoryNames[entry.row.categoryId] ?? '',
+        entry.row.currency,
+        money(entry.row.currency, entry.row.amountMinor),
         [
           for (final payer in entry.payers)
             '${name(payer.memberId)}: '
-                '${money(entry.currency, payer.amountMinor)}',
+                '${money(entry.row.currency, payer.amountMinor)}',
         ].join('; '),
         [
           for (final share in entry.shares)
             '${name(share.memberId)}: '
-                '${money(entry.currency, share.amountMinor)}',
+                '${money(entry.row.currency, share.amountMinor)}',
         ].join('; '),
-        entry.notes ?? '',
+        entry.row.notes ?? '',
       ]),
     );
   }

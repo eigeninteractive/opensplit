@@ -7,6 +7,7 @@ import 'package:opensplit_api/opensplit_api.dart' show EntryKind, SplitKind;
 import 'package:test/test.dart';
 
 import '../harness.dart';
+import 'package:opensplit_api/opensplit_api.dart' show Payer, Share;
 
 void main() {
   late AppDatabase db;
@@ -43,20 +44,22 @@ void main() {
     () => writeEntryInTransaction(
       db,
       Entry(
-        id: description,
-        groupId: 'g',
-        kind: EntryKind.expense,
-        description: description,
-        currency: 'INR',
-        amountMinor: 100,
-        entryDate: day,
-        occurredAt: at,
-        timeZone: at == null ? null : 'Asia/Kolkata',
-        splitKind: SplitKind.equal,
-        payers: const [EntryPayer(memberId: 'm', amountMinor: 100)],
-        shares: const [EntryShare(memberId: 'm', amountMinor: 100)],
-        createdBy: 'm',
-        createdAt: entered,
+        EntryRow(
+          id: description,
+          groupId: 'g',
+          kind: EntryKind.expense,
+          description: description,
+          currency: 'INR',
+          amountMinor: 100,
+          entryDate: day,
+          occurredAt: at,
+          timeZone: at == null ? null : 'Asia/Kolkata',
+          splitKind: SplitKind.equal,
+          createdBy: 'm',
+          createdAt: entered,
+        ),
+        payers: [Payer(memberId: 'm', amountMinor: 100)],
+        shares: [Share(memberId: 'm', amountMinor: 100, weightMicros: null)],
       ),
     ),
   );
@@ -87,7 +90,7 @@ void main() {
 
     final entries = await DriftEntryRepository(db).getEntries('g');
     expect(
-      [for (final entry in entries) entry.description],
+      [for (final entry in entries) entry.row.description],
       ['Dinner', 'Lunch', 'Snacks', 'Yesterday'],
       reason: 'an expense with no time comes after that day\'s timed ones',
     );

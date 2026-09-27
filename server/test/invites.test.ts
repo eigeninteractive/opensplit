@@ -1,20 +1,20 @@
 import { describe, expect, it } from "vitest";
 
-import { BY_INVITE, evenly, freshId, makeGroup, ok, PRIYA, refusal, stub, sumOf, ZARA } from "./group";
+import { BY_INVITE, evenly, freshId, makeGroup, ok, PRIYA, refusal, saveEntry, stub, sumOf, ZARA } from "./group";
 
 /** Invites, links, and what a stranger can reach: a token spent exactly once, an expired one, a revoked one, and a group nobody outside it can read. */
 
 describe("a stranger holding no token", () => {
   it("sees nothing of a group they are not in, whatever they ask for", async () => {
     const { groupId, ravi, priya } = await makeGroup();
-    ok(await stub(groupId).upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 1200), ravi.profileId ?? ""));
+    ok(await saveEntry(stub(groupId), evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 1200), ravi.profileId ?? ""));
 
     // One refusal, four ways in. Nothing here can answer a stranger with an
     // empty result that reads as "nothing to see" rather than "not for you".
     expect(refusal(await stub(groupId).changes(ZARA, 0, 100)).code).toBe("not_member");
     expect(refusal(await stub(groupId).createInvite(priya.id, ZARA)).code).toBe("not_member");
     expect(refusal(await stub(groupId).createLink(ZARA)).code).toBe("not_member");
-    expect(refusal(await stub(groupId).update({ name: "Zara's now", simplifyDebts: true, archivedAt: null }, ZARA)).code).toBe("not_member");
+    expect(refusal(await stub(groupId).putGroup(groupId, { name: "Zara's now", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, creatorId: freshId("m"), creatorName: "Zara" }, ZARA)).code).toBe("not_member");
   });
 });
 
@@ -48,7 +48,7 @@ describe("an invite to one named place", () => {
     const object = stub(groupId);
     const profile = ravi.profileId ?? "";
 
-    ok(await object.upsertEntry(evenly(freshId("e"), priya.id, [ravi.id, priya.id], 1000), profile));
+    ok(await saveEntry(object, evenly(freshId("e"), priya.id, [ravi.id, priya.id], 1000), profile));
     const before = ok(await object.changes(profile, 0, 500));
     const entriesBefore = before.entries.map((entry) => ({ id: entry.id, payers: entry.payers, shares: entry.shares }));
 
@@ -222,7 +222,7 @@ describe("what joining does to the ledger", () => {
     const object = stub(groupId);
     const profile = ravi.profileId ?? "";
 
-    const entry = ok(await object.upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 1500), profile));
+    const entry = ok(await saveEntry(object, evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 1500), profile));
     const invite = ok(await object.createInvite(priya.id, profile));
     ok(await object.join(invite.token, PRIYA, BY_INVITE));
 

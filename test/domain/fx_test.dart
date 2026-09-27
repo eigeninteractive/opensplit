@@ -5,6 +5,7 @@ import 'package:opensplit/domain/fx/estimated_total.dart';
 import 'package:opensplit/domain/fx/fx_quote.dart';
 import 'package:opensplit/domain/models/entry.dart';
 import 'package:opensplit_api/opensplit_api.dart' show EntryKind, SplitKind;
+import 'package:opensplit_api/opensplit_api.dart' show Payer, Share;
 
 const inr = Currency(code: 'INR', exponent: 2, symbol: '₹', name: 'Rupee');
 const usd = Currency(code: 'USD', exponent: 2, symbol: r'$', name: 'Dollar');
@@ -30,20 +31,25 @@ Entry entry({
 }) {
   final date = DateTime.utc(2026, 8, 20);
   return Entry(
-    id: 'e-$currency-$paid-$share-$member',
-    groupId: 'g',
-    kind: EntryKind.expense,
-    description: 'test',
-    currency: currency,
-    amountMinor: paid,
-    entryDate: date,
-    splitKind: SplitKind.equal,
-    payers: [if (paid != 0) EntryPayer(memberId: member, amountMinor: paid)],
-    shares: [if (share != 0) EntryShare(memberId: member, amountMinor: share)],
-    fxRate: fxRate,
-    createdBy: member,
-    createdAt: date,
-    deletedAt: deleted ? date : null,
+    EntryRow(
+      id: 'e-$currency-$paid-$share-$member',
+      groupId: 'g',
+      kind: EntryKind.expense,
+      description: 'test',
+      currency: currency,
+      amountMinor: paid,
+      entryDate: date,
+      splitKind: SplitKind.equal,
+      fxRate: fxRate,
+      createdBy: member,
+      createdAt: date,
+      deletedAt: deleted ? date : null,
+    ),
+    payers: [if (paid != 0) Payer(memberId: member, amountMinor: paid)],
+    shares: [
+      if (share != 0)
+        Share(memberId: member, amountMinor: share, weightMicros: null),
+    ],
   );
 }
 

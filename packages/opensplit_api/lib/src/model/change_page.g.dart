@@ -16,6 +16,7 @@ ChangePage _$ChangePageFromJson(Map<String, dynamic> json) =>
           'hasMore',
           'group',
           'members',
+          'profiles',
           'entries',
           'events',
           'purgedAt',
@@ -33,6 +34,12 @@ ChangePage _$ChangePageFromJson(Map<String, dynamic> json) =>
           'members',
           (v) => (v as List<dynamic>)
               .map((e) => Member.fromJson(e as Map<String, dynamic>))
+              .toList(),
+        ),
+        profiles: $checkedConvert(
+          'profiles',
+          (v) => (v as List<dynamic>)
+              .map((e) => Profile.fromJson(e as Map<String, dynamic>))
               .toList(),
         ),
         entries: $checkedConvert(
@@ -62,6 +69,7 @@ Map<String, dynamic> _$ChangePageToJson(ChangePage instance) =>
       'hasMore': instance.hasMore,
       'group': instance.group?.toJson(),
       'members': instance.members.map((e) => e.toJson()).toList(),
+      'profiles': instance.profiles.map((e) => e.toJson()).toList(),
       'entries': instance.entries.map((e) => e.toJson()).toList(),
       'events': instance.events.map((e) => e.toJson()).toList(),
       'purgedAt': instance.purgedAt?.toIso8601String(),

@@ -1,7 +1,7 @@
 import { and, eq, isNotNull, ne } from "drizzle-orm";
 
 import * as schema from "../../db/group/schema";
-import type { Group, GroupCreate, GroupUpdate, Member, MemberCreate, MemberUpdate } from "../../schemas/ledger";
+import type { Group, GroupInput, Member, MemberInput } from "../../schemas/ledger";
 import { isSettled } from "./balances";
 import { append } from "./events";
 import { refuse } from "./refusal";
@@ -14,25 +14,17 @@ import { stageMembership, stagePurge, touchDormancy } from "./upkeep";
  */
 
 /** The group and its creator's member row in one change, so no bootstrap window exists. */
-export function createGroup(tx: Tx, input: GroupCreate, profileId: string, now: string): Group {
-  const existing = findMeta(tx);
-  if (existing) {
-    // A lost response being retried is idempotent for its creator only.
-    const creator = requireMember(tx, existing.createdBy);
-    if (creator.profileId === profileId) return existing;
-    refuse("group_exists", "A group already exists here.");
-  }
-
+export function createGroup(tx: Tx, groupId: string, input: GroupInput, profileId: string, now: string): Group {
   const seq = nextSeq(tx);
-  tx.insert(schema.members).values({ id: input.memberId, profileId, displayName: input.displayName, joinedAt: now, updatedAt: now, seq }).run();
+  tx.insert(schema.members).values({ id: input.creatorId, profileId, displayName: input.creatorName, joinedAt: now, updatedAt: now, seq }).run();
   tx.insert(schema.meta)
     .values({
-      id: input.id,
+      id: groupId,
       name: input.name,
       defaultCurrency: input.defaultCurrency,
       isDirect: input.isDirect,
       simplifyDebts: input.simplifyDebts,
-      createdBy: input.memberId,
+      createdBy: input.creatorId,
       createdAt: now,
       updatedAt: now,
       seq,
@@ -45,7 +37,7 @@ export function createGroup(tx: Tx, input: GroupCreate, profileId: string, now: 
 }
 
 /** Rename, archive or restore, and settings. Any member; all of it is visible and reversible. */
-export function updateGroup(tx: Tx, input: GroupUpdate, { now, actor }: WriteContext): Group {
+export function updateGroup(tx: Tx, input: GroupInput, { now, actor }: WriteContext): Group {
   const meta = requireMeta(tx);
   const { name, simplifyDebts, archivedAt } = input;
   if (name === meta.name && simplifyDebts === meta.simplifyDebts && archivedAt === meta.archivedAt) return meta;
@@ -61,17 +53,21 @@ export function updateGroup(tx: Tx, input: GroupUpdate, { now, actor }: WriteCon
   return requireMeta(tx);
 }
 
+/** A member row at the id the device minted: a new placeholder, or an edit to one that exists. */
+export function putMember(tx: Tx, memberId: string, input: MemberInput, context: WriteContext): Member {
+  const existing = tx.select({ id: schema.members.id }).from(schema.members).where(eq(schema.members.id, memberId)).get();
+  return existing ? updateMember(tx, memberId, input, context) : addMember(tx, memberId, input, context);
+}
+
 /** A placeholder: a full member who has never opened the app. */
-export function addMember(tx: Tx, input: MemberCreate, { now, actor }: WriteContext): Member {
-  requireMeta(tx);
-  const existing = tx.select().from(schema.members).where(eq(schema.members.id, input.id)).get();
-  if (existing) return existing;
+function addMember(tx: Tx, memberId: string, input: MemberInput, { now, actor }: WriteContext): Member {
+  if (input.leftAt !== null) refuse("malformed", "A new member cannot have left already.");
 
   const seq = nextSeq(tx);
-  tx.insert(schema.members).values({ id: input.id, profileId: null, displayName: input.displayName, upiVpa: input.upiVpa, joinedAt: now, updatedAt: now, seq }).run();
-  append(tx, { seq, now, actorId: actor.id, kind: "member_added", subjectId: input.id, member: { displayName: input.displayName, previousName: null } });
+  tx.insert(schema.members).values({ id: memberId, profileId: null, displayName: input.displayName, upiVpa: input.upiVpa, joinedAt: now, updatedAt: now, seq }).run();
+  append(tx, { seq, now, actorId: actor.id, kind: "member_added", subjectId: memberId, member: { displayName: input.displayName, previousName: null } });
 
-  return requireMember(tx, input.id);
+  return requireMember(tx, memberId);
 }
 
 /**
@@ -79,8 +75,7 @@ export function addMember(tx: Tx, input: MemberCreate, { now, actor }: WriteCont
  * account holder's name and payment handle are not, since a handle redirects
  * money. Leaving is always yours; removing somebody else requires them settled.
  */
-export function updateMember(tx: Tx, memberId: string, input: MemberUpdate, { now, actor }: WriteContext): Member {
-  requireMeta(tx);
+function updateMember(tx: Tx, memberId: string, input: MemberInput, { now, actor }: WriteContext): Member {
   const target = requireMember(tx, memberId);
   const { displayName, upiVpa, leftAt } = input;
 
@@ -106,10 +101,11 @@ export function updateMember(tx: Tx, memberId: string, input: MemberUpdate, { no
 }
 
 /**
- * An account being deleted. Its member row becomes a placeholder, keeping
- * everybody else's balances; a group with no other account holder is collected.
+ * An account being deleted. Its member row becomes a placeholder under the
+ * name the account last had, keeping everybody else's balances; a group with
+ * no other account holder is collected.
  */
-export function forgetProfile(tx: Tx, profileId: string, now: string): { forgotten: boolean; purged: boolean } {
+export function forgetProfile(tx: Tx, profileId: string, displayName: string | null, now: string): { forgotten: boolean; purged: boolean } {
   const meta = findMeta(tx);
   const member = meta && findMemberByProfile(tx, profileId);
   if (!meta || !member) return { forgotten: false, purged: false };
@@ -128,7 +124,7 @@ export function forgetProfile(tx: Tx, profileId: string, now: string): { forgott
   }
 
   tx.update(schema.members)
-    .set({ profileId: null, updatedAt: now, seq: nextSeq(tx) })
+    .set({ profileId: null, displayName: displayName ?? member.displayName, updatedAt: now, seq: nextSeq(tx) })
     .where(eq(schema.members.id, member.id))
     .run();
   return { forgotten: true, purged: false };

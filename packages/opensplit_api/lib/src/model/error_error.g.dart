@@ -42,7 +42,6 @@ const _$ErrorCodeEnumMap = {
   ErrorCode.notMember: 'not_member',
   ErrorCode.noGroup: 'no_group',
   ErrorCode.groupPurged: 'group_purged',
-  ErrorCode.groupExists: 'group_exists',
   ErrorCode.noSuchEntry: 'no_such_entry',
   ErrorCode.noSuchMember: 'no_such_member',
   ErrorCode.unbalanced: 'unbalanced',

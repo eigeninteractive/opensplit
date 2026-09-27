@@ -35,7 +35,6 @@ void main() {
       id: phone.profileId,
       isAnonymous: true,
       email: null,
-      displayName: null,
     );
     final auth = _SigningIn(account);
     final reports = <SyncReport>[];

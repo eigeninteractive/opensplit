@@ -12,8 +12,6 @@ enum ErrorCode {
   noGroup(r'no_group'),
   @JsonValue(r'group_purged')
   groupPurged(r'group_purged'),
-  @JsonValue(r'group_exists')
-  groupExists(r'group_exists'),
   @JsonValue(r'no_such_entry')
   noSuchEntry(r'no_such_entry'),
   @JsonValue(r'no_such_member')

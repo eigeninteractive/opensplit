@@ -2,7 +2,7 @@ import { and, asc, gt, lte, sql } from "drizzle-orm";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 
 import * as schema from "../../db/group/schema";
-import type { ChangePage } from "../../schemas/ledger";
+import type { GroupChanges } from "../../schemas/ledger";
 import { readEntries } from "./ledger";
 import { refuse } from "./refusal";
 import { findMemberByProfile, findMeta, findTombstone, type Tx } from "./store";
@@ -11,7 +11,7 @@ import { findMemberByProfile, findMeta, findTombstone, type Tx } from "./store";
  * One group's changes since a cursor. `limit` counts changes, not rows: a
  * page is cut only between sequence numbers, so a write arrives whole.
  */
-export function changesSince(tx: Tx, profileId: string, since: number, limit: number): ChangePage {
+export function changesSince(tx: Tx, profileId: string, since: number, limit: number): GroupChanges {
   const empty = { group: null, members: [], entries: [], events: [] };
 
   // A collected group answers anybody, and says only that it is gone.

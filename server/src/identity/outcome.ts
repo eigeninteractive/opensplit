@@ -9,12 +9,8 @@ export function outcomeFor(account: Account, previousUserId: string | null, toke
 /** The anonymous plugin's invented address. */
 const PLACEHOLDER_DOMAIN = "@anonymous.placeholder.invalid";
 
-/**
- * Better Auth's user as the app sees it. A guest reports no email and no name,
- * so "has no name of its own" stays true for them.
- */
-export function toAccount(user: { id: string; email?: string | null; name?: string | null; isAnonymous?: boolean | number | null }): Account {
-  const isAnonymous = Boolean(user.isAnonymous);
+/** Better Auth's user as the app sees it. A guest reports no email. */
+export function toAccount(user: { id: string; email?: string | null; isAnonymous?: boolean | number | null }): Account {
   const email = user.email && !user.email.endsWith(PLACEHOLDER_DOMAIN) ? user.email : null;
-  return { id: user.id, isAnonymous, email, displayName: isAnonymous ? null : user.name?.trim() || null };
+  return { id: user.id, isAnonymous: Boolean(user.isAnonymous), email };
 }

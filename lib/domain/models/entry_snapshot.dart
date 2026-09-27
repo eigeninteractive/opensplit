@@ -5,15 +5,15 @@ import 'entry.dart';
 
 /// The after-image the server records for [entry], computed on the device.
 api.EntrySnapshot snapshotOf(Entry entry) => api.EntrySnapshot(
-  kind: entry.kind,
-  description: entry.description,
-  currency: entry.currency,
-  amountMinor: entry.amountMinor,
-  entryDate: calendarDate(entry.entryDate),
-  splitKind: entry.splitKind,
-  categoryId: entry.categoryId,
-  notes: entry.notes,
-  deletedAt: entry.deletedAt?.toUtc(),
+  kind: entry.row.kind,
+  description: entry.row.description,
+  currency: entry.row.currency,
+  amountMinor: entry.row.amountMinor,
+  entryDate: calendarDate(entry.row.entryDate),
+  splitKind: entry.row.splitKind,
+  categoryId: entry.row.categoryId,
+  notes: entry.row.notes,
+  deletedAt: entry.row.deletedAt?.toUtc(),
   payers: _sorted([
     for (final payer in entry.payers)
       api.MoneyRow(memberId: payer.memberId, amountMinor: payer.amountMinor),

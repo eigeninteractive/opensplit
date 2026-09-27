@@ -4,6 +4,7 @@ import 'package:opensplit/domain/models/entry_event.dart';
 import 'package:opensplit/domain/notification_text.dart';
 import 'package:opensplit_api/opensplit_api.dart' show EntryKind, SplitKind;
 import 'package:test/test.dart';
+import 'package:opensplit_api/opensplit_api.dart' show Payer, Share;
 
 const inr = Currency(
   code: 'INR',
@@ -26,21 +27,23 @@ Entry _entry({
 }) {
   final at = DateTime.utc(2026, 8, 21);
   return Entry(
-    id: 'e1',
-    groupId: 'g1',
-    kind: kind,
-    description: description,
-    currency: currency,
-    amountMinor: amountMinor,
-    entryDate: at,
-    splitKind: SplitKind.equal,
-    payers: const [EntryPayer(memberId: 'ravi', amountMinor: 240000)],
-    shares: const [
-      EntryShare(memberId: 'ravi', amountMinor: 120000),
-      EntryShare(memberId: 'priya', amountMinor: 120000),
+    EntryRow(
+      id: 'e1',
+      groupId: 'g1',
+      kind: kind,
+      description: description,
+      currency: currency,
+      amountMinor: amountMinor,
+      entryDate: at,
+      splitKind: SplitKind.equal,
+      createdBy: 'ravi',
+      createdAt: at,
+    ),
+    payers: [Payer(memberId: 'ravi', amountMinor: 240000)],
+    shares: [
+      Share(memberId: 'ravi', amountMinor: 120000, weightMicros: null),
+      Share(memberId: 'priya', amountMinor: 120000, weightMicros: null),
     ],
-    createdBy: 'ravi',
-    createdAt: at,
   );
 }
 

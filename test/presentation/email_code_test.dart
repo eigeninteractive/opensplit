@@ -7,12 +7,7 @@ import 'package:opensplit/presentation/widgets/account_section.dart';
 import 'package:opensplit/presentation/widgets/identity_choices.dart';
 import 'package:opensplit_api/opensplit_api.dart' show Account, EmailFlow;
 
-final _guest = Account(
-  id: 'guest',
-  isAnonymous: true,
-  email: null,
-  displayName: null,
-);
+final _guest = Account(id: 'guest', isAnonymous: true, email: null);
 
 void main() {
   for (final linking in [false, true]) {

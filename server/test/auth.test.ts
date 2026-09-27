@@ -44,7 +44,7 @@ describe("guest accounts", () => {
 
     expect(response.status).toBe(200);
     const body = (await response.json()) as Session;
-    expect(body.account).toEqual({ id: guest.id, isAnonymous: true, email: null, displayName: null });
+    expect(body.account).toEqual({ id: guest.id, isAnonymous: true, email: null });
   });
 
   it("gives two guests two accounts", async () => {

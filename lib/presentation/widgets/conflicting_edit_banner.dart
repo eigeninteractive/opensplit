@@ -88,7 +88,7 @@ class ConflictingEditBanner extends ConsumerWidget {
           'is no longer on this device.';
     }
     return 'You set it to $mine. Somebody else changed it first, so the group '
-        'has ${_money(ref, theirs.currency, theirs.amountMinor)}.';
+        'has ${_money(ref, theirs.row.currency, theirs.row.amountMinor)}.';
   }
 
   /// The same formatter every other amount in the app goes through, so a

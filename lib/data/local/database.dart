@@ -74,7 +74,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Bump this on **any** change to a table in `tables.dart`.
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   /// Timestamps are stored as ISO-8601 text rather than Unix seconds.
   @override

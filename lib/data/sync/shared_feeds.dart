@@ -55,11 +55,11 @@ class SharedFeeds {
       ).timeout(requestTimeout);
       await db.batch((batch) {
         for (final currency in reference.currencies) {
-          final row = currency.toRow();
+          final row = currency.toRow().toCompanion(false);
           batch.insert(db.currencies, row, onConflict: DoUpdate((_) => row));
         }
         for (final category in reference.categories) {
-          final row = category.toRow();
+          final row = category.toRow().toCompanion(false);
           batch.insert(db.categories, row, onConflict: DoUpdate((_) => row));
         }
       });
@@ -153,31 +153,6 @@ class SharedFeeds {
       cursor = next;
     }
     return applied;
-  }
-
-  /// Profiles that became visible behind the feed's cursor (a placeholder was
-  /// claimed by an account named long ago).
-  Future<void> hydrateProfiles(Set<String> profileIds) async {
-    if (profileIds.isEmpty) return;
-
-    final held = await (db.select(
-      db.profiles,
-    )..where((t) => t.id.isIn(profileIds))).get();
-    final missing = profileIds.difference({for (final row in held) row.id});
-    if (missing.isEmpty) return;
-
-    await assertActive();
-    final list = await fetch(
-      client.getSyncApi().lookupProfiles(
-        profileLookup: api.ProfileLookup(ids: missing.toList()..sort()),
-      ),
-    ).timeout(requestTimeout);
-    if (list.profiles.isEmpty) return;
-
-    await db.transaction(() async {
-      await assertActive();
-      await applyProfiles(db, list.profiles);
-    });
   }
 
   /// Forgets where the profile feed stands, so the next pull re-reads it.

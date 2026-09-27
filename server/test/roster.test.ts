@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { editGroup, editMember, evenly, freshId, makeGroup, makeGroupOfTwo, ok, PRIYA, RAVI, refusal, stub, ZARA } from "./group";
+import { deleteEntry, editGroup, editMember, evenly, freshId, makeGroup, makeGroupOfTwo, ok, PRIYA, RAVI, refusal, saveEntry, stub, ZARA } from "./group";
 
 /** What one member of a group can do to another, which is a different question from what a stranger can do and has a much less obvious answer. */
 
@@ -57,7 +57,7 @@ describe("leaving, and being removed", () => {
     const { groupId, ravi, priya } = await makeGroupOfTwo();
     const object = stub(groupId);
 
-    ok(await object.upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 1000), RAVI));
+    ok(await saveEntry(object, evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 1000), RAVI));
 
     const left = ok(await editMember(groupId, ravi.id, RAVI, { leftAt: new Date().toISOString() }));
     expect(left.leftAt).not.toBeNull();
@@ -72,7 +72,7 @@ describe("leaving, and being removed", () => {
     const { groupId, ravi, priya } = await makeGroupOfTwo();
     const object = stub(groupId);
 
-    ok(await object.upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 1000), RAVI));
+    ok(await saveEntry(object, evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 1000), RAVI));
 
     const refused = refusal(await editMember(groupId, priya.id, RAVI, { leftAt: new Date().toISOString() }));
     expect(refused.code).toBe("not_settled");
@@ -84,8 +84,8 @@ describe("leaving, and being removed", () => {
     const object = stub(groupId);
 
     const id = freshId("e");
-    const entry = ok(await object.upsertEntry(evenly(id, ravi.id, [ravi.id, priya.id], 1000), RAVI));
-    ok(await object.deleteEntry(id, entry.seq, RAVI));
+    const entry = ok(await saveEntry(object, evenly(id, ravi.id, [ravi.id, priya.id], 1000), RAVI));
+    ok(await deleteEntry(object, entry, RAVI));
 
     expect(ok(await editMember(groupId, priya.id, RAVI, { leftAt: new Date().toISOString() })).leftAt).not.toBeNull();
   });
@@ -104,7 +104,7 @@ describe("leaving, and being removed", () => {
     expect(hers.seq).toBe(removed.seq);
     expect(hers.members.find((member) => member.id === priya.id)?.leftAt).not.toBeNull();
 
-    ok(await object.upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id], 700), RAVI));
+    ok(await saveEntry(object, evenly(freshId("e"), ravi.id, [ravi.id], 700), RAVI));
 
     const after = ok(await object.changes(PRIYA, hers.seq, 500));
     expect(after.entries).toHaveLength(0);
@@ -116,7 +116,7 @@ describe("leaving, and being removed", () => {
     const object = stub(groupId);
 
     ok(await editMember(groupId, priya.id, RAVI, { leftAt: new Date().toISOString() }));
-    expect(refusal(await object.upsertEntry(evenly(freshId("e"), ravi.id, [ravi.id], 300), PRIYA)).code).toBe("not_member");
+    expect(refusal(await saveEntry(object, evenly(freshId("e"), ravi.id, [ravi.id], 300), PRIYA)).code).toBe("not_member");
   });
 });
 
@@ -143,16 +143,25 @@ describe("the group itself", () => {
 
   it("cannot be claimed at an id somebody else is already using", async () => {
     const { groupId } = await makeGroup();
-    const refused = refusal(await stub(groupId).create({ id: groupId, name: "Mine now", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, memberId: freshId("m"), displayName: "Zara" }, ZARA));
+    const refused = refusal(await stub(groupId).putGroup(groupId, { name: "Mine now", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, creatorId: freshId("m"), creatorName: "Zara" }, ZARA));
 
-    expect(refused.code).toBe("group_exists");
+    // Somebody writing to an id that is taken is a stranger to that group.
+    expect(refused.code).toBe("not_member");
   });
 
   it("answers the account that made it idempotently, for a retry whose response was lost", async () => {
     const { groupId, group } = await makeGroup();
-    const again = ok(await stub(groupId).create({ id: groupId, name: "Goa trip", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, memberId: `${groupId}-ravi`, displayName: "Ravi" }, RAVI));
+    const again = ok(await stub(groupId).putGroup(groupId, { name: "Goa trip", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, creatorId: `${groupId}-ravi`, creatorName: "Ravi" }, RAVI));
 
     expect(again.seq).toBe(group.seq);
+  });
+
+  it("cannot be made again at an id that was collected", async () => {
+    const { groupId } = await makeGroup();
+    await stub(groupId).forgetProfile(RAVI, null);
+
+    const refused = refusal(await stub(groupId).putGroup(groupId, { name: "Back again", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, creatorId: freshId("m"), creatorName: "Ravi" }, RAVI));
+    expect(refused.code).toBe("group_purged");
   });
 });
 
@@ -168,10 +177,10 @@ describe("an expense", () => {
     const attacker = await makeGroup({ owner: ZARA });
 
     const id = freshId("e");
-    const original = ok(await stub(victim.groupId).upsertEntry(evenly(id, victim.ravi.id, [victim.ravi.id, victim.priya.id], 5000), RAVI));
+    const original = ok(await saveEntry(stub(victim.groupId), evenly(id, victim.ravi.id, [victim.ravi.id, victim.priya.id], 5000), RAVI));
 
     // Zara writes to *her* group's object using the same id.
-    ok(await stub(attacker.groupId).upsertEntry(evenly(id, attacker.ravi.id, [attacker.ravi.id], 1), ZARA));
+    ok(await saveEntry(stub(attacker.groupId), evenly(id, attacker.ravi.id, [attacker.ravi.id], 1), ZARA));
 
     const page = ok(await stub(victim.groupId).changes(RAVI, 0, 500));
     const after = page.entries.find((entry) => entry.id === id);
@@ -182,7 +191,7 @@ describe("an expense", () => {
   it("is recorded under the caller's own name, whatever else they send", async () => {
     const { groupId, ravi, priya } = await makeGroupOfTwo();
 
-    const entry = ok(await stub(groupId).upsertEntry({ ...evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 800), createdBy: ravi.id } as never, PRIYA));
+    const entry = ok(await saveEntry(stub(groupId), { ...evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 800), createdBy: ravi.id } as never, PRIYA));
 
     expect(entry.createdBy).toBe(priya.id);
   });
@@ -190,7 +199,7 @@ describe("an expense", () => {
   it("cannot be back-dated into somebody else's history", async () => {
     const { groupId, ravi, priya } = await makeGroupOfTwo();
 
-    const entry = ok(await stub(groupId).upsertEntry({ ...evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 800), createdAt: "2001-01-01T00:00:00.000Z", updatedAt: "3000-01-01T00:00:00.000Z" } as never, RAVI));
+    const entry = ok(await saveEntry(stub(groupId), { ...evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 800), createdAt: "2001-01-01T00:00:00.000Z", updatedAt: "3000-01-01T00:00:00.000Z" } as never, RAVI));
 
     /** The year-3000 timestamp is the one that used to matter. */
     expect(Date.parse(entry.createdAt)).toBeGreaterThan(Date.parse("2020-01-01T00:00:00.000Z"));
