@@ -7,6 +7,8 @@ import { apiError } from "./schemas/common";
 export interface Session {
   userId: string;
   isAnonymous: boolean;
+  /** When this session was signed in, in epoch milliseconds: how recently its holder proved who they are. */
+  createdAt: number;
 }
 
 interface Services {
@@ -33,7 +35,7 @@ export const services = createMiddleware<AppEnv>(async (c, next) => {
 
 async function resolveSession(auth: Auth, headers: Headers): Promise<Session | null> {
   const resolved = await auth.api.getSession({ headers });
-  return resolved ? { userId: resolved.user.id, isAnonymous: Boolean(resolved.user.isAnonymous) } : null;
+  return resolved ? { userId: resolved.user.id, isAnonymous: Boolean(resolved.user.isAnonymous), createdAt: new Date(resolved.session.createdAt).getTime() } : null;
 }
 
 /** For routes that behave differently with and without a session. */

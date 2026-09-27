@@ -75,6 +75,11 @@ export const EmailVerifyRequestSchema = z
   })
   .openapi("EmailVerifyRequest");
 
+/** Where the code to confirm it is you went: the account's own address, never one the caller names. */
+export const ReauthStartSchema = z.object({ email: z.email() }).openapi("ReauthStart");
+
+export const ReauthVerifyRequestSchema = z.object({ code: z.string().min(4).max(12) }).openapi("ReauthVerifyRequest");
+
 export type Account = z.infer<typeof AccountSchema>;
 export type Session = z.infer<typeof SessionSchema>;
 export type IdentityOutcome = z.infer<typeof IdentityOutcomeSchema>;

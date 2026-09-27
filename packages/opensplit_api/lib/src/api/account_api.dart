@@ -18,7 +18,7 @@ class AccountApi {
   const AccountApi(this._dio);
 
   /// Delete this account, permanently
-  /// Other people&#39;s ledgers stay: your member rows become placeholders that keep your name. A group where you were the last account holder is collected. The session is left for the caller to clear.
+  /// Other people&#39;s ledgers stay: your member rows become placeholders that keep your name. A group where you were the last account holder is collected. The session is left for the caller to clear. An account with an email address must have signed in within the last ten minutes (&#x60;POST /identity/reauth&#x60;); a guest has nothing to confirm with.
   ///
   /// Parameters:
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation

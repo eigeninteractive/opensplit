@@ -167,7 +167,7 @@ class ReferenceApi {
   }
 
   /// Ask for a day the server has never needed
-  /// Fire and forget, and heavily throttled: the rate arrives on a later sync.
+  /// Fire and forget, and heavily throttled: the rate arrives on a later sync. Needs a session, since each one can send the server to its providers.
   ///
   /// Parameters:
   /// * [fxBackfillRequest]
@@ -193,7 +193,18 @@ class ReferenceApi {
     final _options = Options(
       method: r'POST',
       headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookie',
+            'keyName': 'better-auth.session_token',
+            'where': '',
+          },
+          {'type': 'http', 'scheme': 'bearer', 'name': 'bearer'},
+        ],
+        ...?extra,
+      },
       contentType: 'application/json',
       validateStatus: validateStatus,
     );

@@ -46,7 +46,13 @@ export const FxPageSchema = z
   .openapi("FxPage");
 
 /** Ask for a day the server has never needed; the rate arrives on a later sync. */
-export const FxBackfillRequestSchema = fxRateRow.pick({ asOf: true, currency: true }).openapi("FxBackfillRequest");
+/** The first day of the ECB series every provider's history starts from; nothing earlier can be answered. */
+export const FIRST_RATE_DAY = "1999-01-04";
+
+export const FxBackfillRequestSchema = fxRateRow
+  .pick({ asOf: true, currency: true })
+  .refine((request) => request.asOf >= FIRST_RATE_DAY, { path: ["asOf"], message: `No rates exist before ${FIRST_RATE_DAY}.` })
+  .openapi("FxBackfillRequest");
 
 /** Whether this request was taken up (false for a covered, throttled or future day). */
 export const FxBackfillResponseSchema = z.object({ accepted: z.boolean() }).openapi("FxBackfillResponse");

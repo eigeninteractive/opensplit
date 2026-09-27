@@ -10,6 +10,13 @@ export const RAVI = "11111111-1111-4111-8111-111111111111";
 export const PRIYA = "22222222-2222-4222-8222-222222222222";
 export const ZARA = "99999999-9999-4999-8999-999999999999";
 
+/** A real account (a `user` row) at a fresh id: D1 refuses memberships for any other kind. */
+export async function makeAccount(displayName: string | null = null): Promise<string> {
+  const id = crypto.randomUUID();
+  await env.DB.batch([env.DB.prepare("insert into user (id, name, email, updated_at) values (?, ?, ?, ?)").bind(id, "", `${id}@fixture.invalid`, Date.now()), env.DB.prepare("insert into profiles (id, display_name, updated_at) values (?, ?, ?)").bind(id, displayName, new Date().toISOString())]);
+  return id;
+}
+
 export function stub(groupId: string) {
   return env.GROUP.getByName(groupId);
 }

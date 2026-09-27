@@ -21,10 +21,16 @@
 # these rules before handing the response back — verified, because the opposite
 # would mean cross-origin isolation depended on how somebody arrived at a page.
 
+# Nothing here is meant to be shown inside another site's page, and the app
+# has buttons (join a group, delete an account) that a page framing it could
+# trick somebody into pressing. frame-ancestors is the standard; X-Frame-Options
+# is for browsers that predate it.
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=()
+  Content-Security-Policy: frame-ancestors 'none'
+  X-Frame-Options: DENY
 
 # Cross-origin isolation, scoped to the client rather than to the origin.
 #

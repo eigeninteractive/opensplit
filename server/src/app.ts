@@ -86,7 +86,9 @@ app.onError((error, c) => {
     return c.json(apiError("auth_failed", error.body?.message ?? error.message), error.statusCode as ContentfulStatusCode);
   }
   console.error("unhandled", error);
-  return c.json(apiError("internal", "Something went wrong."), 500);
+  // Transient: a crash says nothing about whether the same request would succeed, and a write
+  // told "permanent" is set aside on the device until somebody retries it by hand.
+  return c.json(apiError("internal", "Something went wrong.", "transient"), 500);
 });
 
 export { app };

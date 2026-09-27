@@ -4,11 +4,11 @@ import { and, eq, ne, sql } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import type { Context } from "hono";
 
-import { maybeSignedIn } from "../api/routing";
+import { clientIp, exhausted, maybeSignedIn, rateLimited, signedIn, tooMany } from "../api/routing";
 import { user } from "../auth-schema";
 import type { AppEnv } from "../context";
 import { apiError, errorResponse, jsonBody, jsonResponse } from "../schemas/common";
-import { EmailStartRequestSchema, EmailStartResponseSchema, EmailVerifyRequestSchema, GoogleIdentityRequestSchema, GoogleRedirectRequestSchema, GoogleRedirectSchema, IdentityOutcomeSchema, SessionSchema } from "../schemas/identity";
+import { EmailStartRequestSchema, EmailStartResponseSchema, EmailVerifyRequestSchema, GoogleIdentityRequestSchema, GoogleRedirectRequestSchema, GoogleRedirectSchema, IdentityOutcomeSchema, ReauthStartSchema, ReauthVerifyRequestSchema, SessionSchema } from "../schemas/identity";
 import { outcomeFor, toAccount } from "./outcome";
 
 /**
@@ -29,7 +29,7 @@ const guestRoute = createRoute({
   path: "/identity/guest",
   tags: ["identity"],
   summary: "Start a guest account on this device",
-  responses: { 200: jsonResponse(IdentityOutcomeSchema, "Signed in as a new guest") },
+  responses: { 200: jsonResponse(IdentityOutcomeSchema, "Signed in as a new guest"), ...rateLimited },
 });
 
 const sessionRoute = createRoute({
@@ -76,7 +76,7 @@ const googleRedirectRoute = createRoute({
   summary: "Where to send the browser to link or sign in with Google",
   description: "Links to the session in hand unless allowSignIn is set or there is none. Afterwards, read `GET /identity/session`.",
   request: { body: jsonBody(GoogleRedirectRequestSchema) },
-  responses: { 200: jsonResponse(GoogleRedirectSchema, "The URL to visit") },
+  responses: { 200: jsonResponse(GoogleRedirectSchema, "The URL to visit"), 400: errorResponse("The callback URL is not on this origin.") },
 });
 
 const emailStartRoute = createRoute({
@@ -87,7 +87,7 @@ const emailStartRoute = createRoute({
   tags: ["identity"],
   summary: "Send a sign-in code, and say which flow it started",
   request: { body: jsonBody(EmailStartRequestSchema) },
-  responses: { 200: jsonResponse(EmailStartResponseSchema, "A code is on its way") },
+  responses: { 200: jsonResponse(EmailStartResponseSchema, "A code is on its way"), ...rateLimited },
 });
 
 const emailVerifyRoute = createRoute({
@@ -102,13 +102,75 @@ const emailVerifyRoute = createRoute({
     200: jsonResponse(IdentityOutcomeSchema, "Attached, or signed in"),
     400: errorResponse("The code is wrong or has expired."),
     401: errorResponse("That code was for a flow this session cannot finish."),
+    ...rateLimited,
+  },
+});
+
+const reauthStartRoute = createRoute({
+  ...signedIn,
+  method: "post",
+  operationId: "startReauthentication",
+  path: "/identity/reauth",
+  tags: ["identity"],
+  summary: "Send a code to this account's own address, to confirm it is still you",
+  description: "For actions that cannot be undone, such as deleting the account. A guest has no address and nothing to confirm with.",
+  responses: {
+    200: jsonResponse(ReauthStartSchema, "A code is on its way"),
+    400: errorResponse("A guest account has no address to send a code to."),
+    401: errorResponse("No session."),
+    ...rateLimited,
+  },
+});
+
+const reauthVerifyRoute = createRoute({
+  ...signedIn,
+  method: "post",
+  operationId: "reauthenticate",
+  path: "/identity/reauth/verify",
+  tags: ["identity"],
+  summary: "Trade the code for a new session on this same account",
+  description: "The session in hand is ended; use the one returned.",
+  request: { body: jsonBody(ReauthVerifyRequestSchema) },
+  responses: {
+    200: jsonResponse(SessionSchema, "The new session"),
+    400: errorResponse("The code is wrong or has expired, or this is a guest account."),
+    401: errorResponse("No session."),
+    ...rateLimited,
   },
 });
 
 const google = (idToken: string, nonce: string | null) => ({ provider: "google" as const, idToken: { token: idToken, nonce: nonce ?? undefined } });
 
 export function identityRoutes(routes: OpenAPIHono<AppEnv>) {
+  routes.openapi(reauthStartRoute, async (c) => {
+    const email = await ownAddress(c.var.db, c.var.session);
+    if (email === null) return c.json(apiError("malformed", "A guest account has no address to send a code to."), 400);
+    if (await exhausted([c.env.EMAIL_IP_LIMIT, clientIp(c)], [c.env.EMAIL_ADDRESS_LIMIT, email])) return tooMany(c);
+
+    await c.var.auth.api.sendVerificationOTP({ body: { email, type: "sign-in" } });
+    return c.json({ email }, 200);
+  });
+
+  routes.openapi(reauthVerifyRoute, async (c) => {
+    const { auth, session } = c.var;
+    const email = await ownAddress(c.var.db, session);
+    if (email === null) return c.json(apiError("malformed", "A guest account has no address to confirm with."), 400);
+    if (await exhausted([c.env.VERIFY_IP_LIMIT, clientIp(c)])) return tooMany(c);
+
+    const previous = await auth.api.getSession({ headers: c.req.raw.headers });
+    const signedIn = await auth.api.signInEmailOTP({ body: { email, otp: c.req.valid("json").code }, headers: c.req.raw.headers, returnHeaders: true });
+    // The address is this account's, so the code can only sign in to this account.
+    if (signedIn.response.user.id !== session.userId) throw new Error("A re-authentication code signed in to a different account");
+
+    // The old session ends here, so proving it is you leaves exactly one session behind, not two.
+    if (previous) await auth.api.revokeSession({ body: { token: previous.session.token }, headers: c.req.raw.headers });
+    const token = forward(c, signedIn.headers);
+    return c.json({ account: toAccount(signedIn.response.user), token }, 200);
+  });
+
   routes.openapi(guestRoute, async (c) => {
+    if (await exhausted([c.env.GUEST_LIMIT, clientIp(c)])) return tooMany(c);
+
     const signedIn = await c.var.auth.api.signInAnonymous({ headers: c.req.raw.headers, returnHeaders: true });
     if (!signedIn.response) throw new Error("Anonymous sign-in returned no session");
     return c.json(outcomeFor(toAccount(signedIn.response.user), c.var.session?.userId ?? null, forward(c, signedIn.headers)), 200);
@@ -155,6 +217,9 @@ export function identityRoutes(routes: OpenAPIHono<AppEnv>) {
 
   routes.openapi(googleRedirectRoute, async (c) => {
     const { callbackUrl, allowSignIn } = c.req.valid("json");
+    // Better Auth checks this only for requests through its own handler, and this call is not one.
+    // Google's answer, including a failed one, sends the browser here.
+    if (new URL(callbackUrl).origin !== new URL(c.env.APP_ORIGIN).origin) return c.json(apiError("malformed", "The callback URL must be on this site."), 400);
     const body = { provider: "google" as const, callbackURL: callbackUrl, errorCallbackURL: callbackUrl, disableRedirect: true };
     const link = c.var.session !== null && !allowSignIn;
     const started = link ? await c.var.auth.api.linkSocialAccount({ body, headers: c.req.raw.headers, returnHeaders: true }) : await c.var.auth.api.signInSocial({ body, headers: c.req.raw.headers, returnHeaders: true });
@@ -168,6 +233,7 @@ export function identityRoutes(routes: OpenAPIHono<AppEnv>) {
   routes.openapi(emailStartRoute, async (c) => {
     const { auth, session } = c.var;
     const email = c.req.valid("json").email.trim().toLowerCase();
+    if (await exhausted([c.env.EMAIL_IP_LIMIT, clientIp(c)], [c.env.EMAIL_ADDRESS_LIMIT, email])) return tooMany(c);
 
     // Nobody signed in, or the address is somebody else's: a sign-in code, which only the owner can read.
     if (session === null || (await emailBelongsToAnother(c.var.db, email, session.userId))) {
@@ -182,6 +248,7 @@ export function identityRoutes(routes: OpenAPIHono<AppEnv>) {
   routes.openapi(emailVerifyRoute, async (c) => {
     const { auth, session } = c.var;
     const { code, flow } = c.req.valid("json");
+    if (await exhausted([c.env.VERIFY_IP_LIMIT, clientIp(c)])) return tooMany(c);
     const email = c.req.valid("json").email.trim().toLowerCase();
     const before = session?.userId ?? null;
 
@@ -197,8 +264,14 @@ export function identityRoutes(routes: OpenAPIHono<AppEnv>) {
   });
 }
 
+/** The address a signed-in account's code goes to, or null for a guest. */
+async function ownAddress(db: DrizzleD1Database, session: { userId: string; isAnonymous: boolean }): Promise<string | null> {
+  if (session.isAnonymous) return null;
+  return (await db.select({ email: user.email }).from(user).where(eq(user.id, session.userId)).get())?.email ?? null;
+}
+
 /** Passes Better Auth's cookies through, and returns the bearer token it issued (null on the web). */
-function forward(c: Context<AppEnv>, headers: Headers): string | null {
+function forward(c: Pick<Context, "header">, headers: Headers): string | null {
   for (const cookie of headers.getSetCookie()) c.header("Set-Cookie", cookie, { append: true });
   return headers.get("set-auth-token");
 }

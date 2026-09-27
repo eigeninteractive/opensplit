@@ -9,8 +9,10 @@ import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'application/backend_providers.dart';
 import 'application/preferences_providers.dart';
 import 'config.dart';
+import 'data/auth/session_store.dart';
 import 'presentation/app.dart';
 
 Future<void> main() async {
@@ -32,9 +34,10 @@ Future<void> main() async {
 
   final prefs = await SharedPreferences.getInstance();
 
-  // Nothing to initialise for the backend: the session is a stored token and a
-  // cached account that `BetterAuthService` reads synchronously from the
-  // preferences above and revalidates later.
+  // The session is a cached account in the preferences above and, on Android,
+  // a bearer token in secure storage. Both are read now so that
+  // `BetterAuthService` can answer synchronously, then revalidates.
+  final sessions = await SessionStore.load(prefs);
 
   // A build that cannot reach its backend says so, rather than looking correct
   // and quietly doing nothing.
@@ -53,7 +56,10 @@ Future<void> main() async {
 
   runApp(
     ProviderScope(
-      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        sessionStoreProvider.overrideWithValue(sessions),
+      ],
       child: const OpenSplitApp(),
     ),
   );

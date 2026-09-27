@@ -280,7 +280,7 @@ curl -s -X POST $base/api/identity/guest
 A body carrying `"isAnonymous":true` and a non-null `token` means D1 is real and `BETTER_AUTH_SECRET` is set. `D1_ERROR: no such database`
 means step 1's id did not make it into the config.
 
-That leaves one guest account behind. It is collected by the weekly sweep after
+That leaves one guest account behind. It is collected by the daily sweep after
 ninety days, or you can delete the row now:
 
 ```sh

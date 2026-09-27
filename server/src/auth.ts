@@ -8,6 +8,7 @@ import { drizzle } from "drizzle-orm/d1";
 import * as authSchema from "./auth-schema";
 import { profiles } from "./db/d1/schema";
 import { createEmailSender, signInCodeMessage } from "./email/sender";
+import { handOverGuest } from "./forget";
 
 /**
  * Better Auth on D1. Its tables are generated into `src/auth-schema.ts`;
@@ -17,6 +18,9 @@ import { createEmailSender, signInCodeMessage } from "./email/sender";
  * attached, so linking goes through `linkSocial` and email-OTP `changeEmail`
  * (both keep the session's user) and the anonymous plugin only mints guests.
  */
+/** Seconds a session lives after it was last used. */
+export const SESSION_LIFETIME = 60 * 60 * 24 * 365;
+
 export function build(env: Env) {
   const email = createEmailSender(env);
 
@@ -29,6 +33,14 @@ export function build(env: Env) {
 
     // No passwords: Google, an emailed code, or a guest.
     emailAndPassword: { enabled: false },
+
+    /**
+     * A year from last use, extended at most daily. The app is opened for trips,
+     * not every day, and a guest whose session lapses can never get back in.
+     * Under Chrome's 400-day cap on cookie lifetimes, so the web lasts as long.
+     * Sessions are rows, so a long one is still revocable at any moment.
+     */
+    session: { expiresIn: SESSION_LIFETIME, updateAge: 60 * 60 * 24 },
 
     socialProviders: {
       google: { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET },
@@ -45,8 +57,20 @@ export function build(env: Env) {
     },
 
     plugins: [
-      // Identity is attached in place, so the plugin's migrate-and-delete path must never fire.
-      anonymous({ disableDeleteAnonymousUser: true }),
+      /**
+       * Attaching an identity keeps the guest's user id, so that path never
+       * reaches this hook. Signing in to an account that already existed does:
+       * the guest's places go to that account, and `handOverGuest` ends the
+       * guest itself (the plugin's own deletion stays off, so it happens only
+       * after the handover).
+       */
+      anonymous({
+        disableDeleteAnonymousUser: true,
+        async onLinkAccount({ anonymousUser, newUser }) {
+          if (newUser.user.id === anonymousUser.user.id || newUser.user.isAnonymous) return;
+          await handOverGuest(env, anonymousUser.user.id, newUser.user.id);
+        },
+      }),
 
       emailOTP({
         otpLength: 8,

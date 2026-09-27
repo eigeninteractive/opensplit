@@ -46,6 +46,10 @@ enum ErrorCode {
   identityAlreadyInUse(r'identity_already_in_use'),
   @JsonValue(r'auth_failed')
   authFailed(r'auth_failed'),
+  @JsonValue(r'rate_limited')
+  rateLimited(r'rate_limited'),
+  @JsonValue(r'reauth_required')
+  reauthRequired(r'reauth_required'),
   @JsonValue(r'unknown_default_open_api')
   unknownDefaultOpenApi(r'unknown_default_open_api');
 

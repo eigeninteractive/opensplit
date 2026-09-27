@@ -44,6 +44,16 @@ void main() {
     expect(rules['/*'], contains('X-Content-Type-Options'));
   });
 
+  test('no page can be framed by another site', () {
+    final rules = _headerRules();
+    final text = File('site/_headers').readAsStringSync();
+
+    expect(rules['/*'], contains('Content-Security-Policy'));
+    expect(rules['/*'], contains('X-Frame-Options'));
+    expect(text, contains("Content-Security-Policy: frame-ancestors 'none'"));
+    expect(text, contains('X-Frame-Options: DENY'));
+  });
+
   test('the header rules reach the bundle Cloudflare is given', () {
     // Cloudflare parses _headers and never serves it, so losing it produces no
     // 404 and no error: the site simply comes back without cross-origin

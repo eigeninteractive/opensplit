@@ -70,6 +70,21 @@ class SessionController extends _$SessionController {
     state = null;
   }
 
+  /// Sends a code to this account's own address, before an action that
+  /// cannot be undone. Returns the address.
+  Future<String> startReauthentication() => _auth().startReauthentication();
+
+  /// Confirms it is still this account's owner.
+  Future<void> reauthenticate(String code) => _auth().reauthenticate(code);
+
+  AuthService _auth() {
+    final auth = ref.read(authServiceProvider);
+    if (auth == null) {
+      throw StateError('This build has no backend, so it has no accounts.');
+    }
+    return auth;
+  }
+
   /// Deletes the account, then leaves the device as a sign-out would.
   Future<void> deleteAccount() async {
     final auth = ref.read(authServiceProvider);
@@ -93,9 +108,13 @@ class AccountController extends _$AccountController {
   @override
   void build() {}
 
-  /// How many expenses signing in as somebody else would leave behind.
-  Future<int> entriesLeftBehind() =>
-      ref.read(entryRepositoryProvider).countLiveEntries();
+  /// How many groups a guest signing in to an existing account brings along.
+  Future<int> groupsToHandOver() async =>
+      (await ref
+              .read(groupRepositoryProvider)
+              .watchGroups(includeArchived: true)
+              .first)
+          .length;
 
   AuthService _auth() {
     final auth = ref.read(authServiceProvider);

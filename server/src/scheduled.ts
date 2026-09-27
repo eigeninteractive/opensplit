@@ -1,8 +1,10 @@
-import { and, eq, inArray, isNull, lt, notInArray, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, notExists, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
-import { user } from "./auth-schema";
+import { session, user } from "./auth-schema";
+import { chunked } from "./chunked";
 import { memberships, profiles } from "./db/d1/schema";
+import { finishDeletions } from "./forget";
 
 /** The two crons. Dormant groups are not swept: each group object arms its own alarm. */
 
@@ -17,59 +19,42 @@ const DAY = 24 * 60 * 60 * 1000;
 const GUEST_LIFETIME = 90 * DAY;
 const GUEST_BATCH = 500;
 
-/** Guests older than 90 days who never joined a group: nothing to lose, and no way to recover them. */
+/**
+ * Guests over 90 days old who are in no group and have not used a session in
+ * 90 days: nothing to lose, and no way to recover them. One statement decides
+ * and deletes, so a group joined in between cannot be missed; a membership
+ * that reaches D1 afterwards is refused, and its group forgets the guest.
+ */
 export async function collectAbandonedGuests(env: Env, now: number = Date.now()): Promise<number> {
   const db = drizzle(env.DB);
-  // Ordered, so the two deletes below see the same batch.
+  const cutoff = new Date(now - GUEST_LIFETIME);
   const stale = db
     .select({ id: user.id })
     .from(user)
-    .where(and(eq(user.isAnonymous, true), lt(user.createdAt, new Date(now - GUEST_LIFETIME)), notInArray(user.id, db.select({ id: memberships.profileId }).from(memberships))))
-    .orderBy(user.id)
+    .where(
+      and(
+        eq(user.isAnonymous, true),
+        lt(user.createdAt, cutoff),
+        notExists(db.select({ one: sql`1` }).from(memberships).where(eq(memberships.profileId, user.id))),
+        notExists(
+          db
+            .select({ one: sql`1` })
+            .from(session)
+            .where(and(eq(session.userId, user.id), gte(session.updatedAt, cutoff))),
+        ),
+      ),
+    )
     .limit(GUEST_BATCH);
 
-  await db.delete(profiles).where(inArray(profiles.id, stale));
   const collected = await db.delete(user).where(inArray(user.id, stale)).returning({ id: user.id });
+  for (const ids of chunked(collected.map((row) => row.id))) await db.delete(profiles).where(inArray(profiles.id, ids));
 
   if (collected.length > 0) console.log("[sweep] collected", collected.length, "abandoned guest accounts");
   return collected.length;
 }
 
-const RECONCILE_BATCH = 200;
-
-/** Restates a rotating slice of groups from their objects into D1's derived index. */
-export async function reconcileIndex(env: Env, now: number = Date.now()): Promise<number> {
-  const db = drizzle(env.DB);
-  const live = isNull(memberships.leftAt);
-  const total =
-    (
-      await db
-        .select({ count: sql<number>`count(distinct ${memberships.groupId})` })
-        .from(memberships)
-        .where(live)
-        .get()
-    )?.count ?? 0;
-  const batches = Math.max(1, Math.ceil(total / RECONCILE_BATCH));
-  const week = Math.floor(now / (7 * DAY));
-
-  const groups = await db
-    .selectDistinct({ groupId: memberships.groupId })
-    .from(memberships)
-    .where(live)
-    .orderBy(memberships.groupId)
-    .limit(RECONCILE_BATCH)
-    .offset((week % batches) * RECONCILE_BATCH)
-    .all();
-
-  let staged = 0;
-  for (const { groupId } of groups) staged += await env.GROUP.getByName(groupId).reconcile();
-
-  console.log("[sweep] reconciled", groups.length, "groups,", staged, "rows restated");
-  return groups.length;
-}
-
-export async function weeklySweep(env: Env, now: number = Date.now()): Promise<void> {
-  const results = await Promise.allSettled([collectAbandonedGuests(env, now), reconcileIndex(env, now)]);
+export async function housekeeping(env: Env, now: number = Date.now()): Promise<void> {
+  const results = await Promise.allSettled([collectAbandonedGuests(env, now), finishDeletions(env)]);
   for (const result of results) {
     if (result.status === "rejected") console.error("[sweep] failed", result.reason);
   }

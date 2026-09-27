@@ -1,4 +1,4 @@
-import { eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 
 import type { LinkKind } from "../../db/d1/schema";
 import * as schema from "../../db/group/schema";
@@ -111,9 +111,9 @@ export function stageMembership(tx: Tx, profileId: string, leftAt: string | null
     .run();
 }
 
-export function stageLinkToken(tx: Tx, token: string, tokenKind: LinkKind, now: string, revoked = false): void {
+export function stageLinkToken(tx: Tx, token: string, tokenKind: LinkKind, now: string): void {
   const groupId = requireMeta(tx).id;
-  tx.insert(schema.outbox).values({ kind: "link_token", payload: { groupId, token, tokenKind, revoked }, createdAt: now }).run();
+  tx.insert(schema.outbox).values({ kind: "link_token", payload: { groupId, token, tokenKind }, createdAt: now }).run();
 }
 
 export function stagePurge(tx: Tx, groupId: string, now: string): void {
@@ -127,8 +127,10 @@ export function pendingOutbox(tx: Tx, limit: number): OutboxRow[] {
   return tx.select().from(schema.outbox).orderBy(schema.outbox.id).limit(limit).all() as OutboxRow[];
 }
 
+/** Removes what D1 has taken. An empty outbox owes the alarm nothing, so its retry is dropped too. */
 export function clearOutbox(tx: Tx, ids: number[]): void {
   if (ids.length > 0) tx.delete(schema.outbox).where(inArray(schema.outbox.id, ids)).run();
+  if (tx.select({ id: schema.outbox.id }).from(schema.outbox).limit(1).get() === undefined) unschedule(tx, "outbox");
 }
 
 /** Counts a failed flush and schedules the retry. Every staged write is idempotent. */
@@ -145,20 +147,4 @@ export function backoffOutbox(tx: Tx, ids: number[], now: number): void {
       .from(schema.outbox)
       .get()?.attempts ?? 1;
   scheduleAt(tx, "outbox", now + (RETRY_BACKOFF[Math.min(worst, RETRY_BACKOFF.length) - 1] ?? RETRY_BACKOFF[0]));
-}
-
-/** Restates this object's memberships and live tokens for the weekly reconciliation. */
-export function restageIndex(tx: Tx, now: string): number {
-  if (!findMeta(tx)) return 0;
-
-  const members = tx.select({ profileId: schema.members.profileId, leftAt: schema.members.leftAt }).from(schema.members).where(isNotNull(schema.members.profileId)).all();
-  for (const { profileId, leftAt } of members) if (profileId !== null) stageMembership(tx, profileId, leftAt, now);
-
-  const invites = tx.select({ token: schema.invites.token }).from(schema.invites).where(isNull(schema.invites.redeemedAt)).all();
-  for (const { token } of invites) stageLinkToken(tx, token, "invite", now);
-
-  const link = tx.select().from(schema.groupLink).where(isNull(schema.groupLink.revokedAt)).get();
-  if (link) stageLinkToken(tx, link.token, "group_link", now);
-
-  return members.length + invites.length + (link ? 1 : 0);
 }

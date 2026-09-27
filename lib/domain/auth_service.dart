@@ -15,6 +15,17 @@ class IdentityAlreadyInUse implements Exception {
   String toString() => 'IdentityAlreadyInUse: $message';
 }
 
+/// Raised when an action cannot be undone and the session is too old to vouch
+/// for it: confirm with [AuthService.reauthenticate] first.
+class ReauthenticationRequired implements Exception {
+  const ReauthenticationRequired(this.message);
+
+  final String message;
+
+  @override
+  String toString() => 'ReauthenticationRequired: $message';
+}
+
 /// What attaching an identity did.
 sealed class IdentityOutcome {
   const IdentityOutcome({required this.account});
@@ -93,6 +104,15 @@ abstract interface class AuthService {
 
   Future<void> signOut();
 
-  /// Deletes this account on the server, permanently.
+  /// Deletes this account on the server, permanently. Throws
+  /// [ReauthenticationRequired] when an account with an address has not signed
+  /// in recently; a guest never needs to.
   Future<void> deleteAccount();
+
+  /// Sends a code to this account's own address, and says which address.
+  Future<String> startReauthentication();
+
+  /// Confirms it is still this account's owner with the code
+  /// [startReauthentication] sent, replacing the session with a fresh one.
+  Future<void> reauthenticate(String code);
 }

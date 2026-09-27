@@ -9,10 +9,16 @@ export interface Guest {
 }
 
 export async function signInAsGuest(): Promise<Guest> {
-  const response = await workerExports.default.fetch("https://opensplit.test/api/identity/guest", { method: "POST" });
+  // A client of its own, as each real guest is: the guest door is rate-limited per address.
+  const response = await workerExports.default.fetch("https://opensplit.test/api/identity/guest", { method: "POST", headers: { "CF-Connecting-IP": randomIp() } });
   if (response.status !== 200) throw new Error(`Guest sign-in failed: ${response.status}`);
 
   const body = (await response.json()) as IdentityOutcome;
   if (!body.token) throw new Error("Guest sign-in returned no bearer token");
   return { id: body.account.id, token: body.token };
+}
+
+/** A distinct client address, so one test's guests do not spend another's rate limit. */
+export function randomIp(): string {
+  return Array.from({ length: 4 }, () => Math.floor(Math.random() * 256)).join(".");
 }

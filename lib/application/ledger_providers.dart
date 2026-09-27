@@ -252,11 +252,6 @@ EstimatedTotal? groupEstimate(Ref ref, String groupId) {
   );
 }
 
-/// How many entries this device has recorded, across every group.
-@riverpod
-Stream<int> totalEntryCount(Ref ref) =>
-    ref.watch(entryRepositoryProvider).watchTotalCount();
-
 /// What deleting this account would take with it, for the dialog that asks.
 @riverpod
 Future<({int solo, int shared})> deletionImpact(Ref ref) async {

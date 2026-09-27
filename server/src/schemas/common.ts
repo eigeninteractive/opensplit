@@ -83,7 +83,7 @@ export const RetrySchema = z.enum(["stale", "permanent", "transient"]).openapi("
   description: "stale: re-read, re-compose and send again. permanent: this will be refused identically forever; do not retry. transient: back off and try the same request again.",
 });
 
-export const ErrorCodeSchema = z.enum([...refusalCodes, "no_session", "not_found", "internal", "identity_already_in_use", "auth_failed"]).openapi("ErrorCode");
+export const ErrorCodeSchema = z.enum([...refusalCodes, "no_session", "not_found", "internal", "identity_already_in_use", "auth_failed", "rate_limited", "reauth_required"]).openapi("ErrorCode");
 
 /** Every failure's body. The client acts on `retry`, never on the status code. */
 export const ErrorSchema = z

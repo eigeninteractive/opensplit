@@ -5,13 +5,17 @@ import type { DrizzleD1Database } from "drizzle-orm/d1";
 import { user } from "../auth-schema";
 import type { AppEnv } from "../context";
 import { deviceTokens, memberships, profiles } from "../db/d1/schema";
+import { forgetAccount } from "../forget";
 import { AccountDeletionSchema, DeviceForgottenSchema, DeviceSchema, ProfilePageSchema, ProfileSchema, ProfileUpdateSchema } from "../schemas/account";
-import { apiError, jsonBody, jsonResponse } from "../schemas/common";
+import { apiError, errorResponse, jsonBody, jsonResponse } from "../schemas/common";
 import { refusals, signedIn } from "./routing";
 
 /** The person, their devices, and ending the account. */
 
 const PAGE_MAX = 200;
+
+/** How recently somebody must have proved who they are to delete their account: Better Auth's `freshAge`, for our route. */
+const REAUTH_WINDOW = 10 * 60 * 1000;
 
 const profileFeedRoute = createRoute({
   ...signedIn,
@@ -75,8 +79,13 @@ const deleteAccountRoute = createRoute({
   path: "/account",
   tags: ["account"],
   summary: "Delete this account, permanently",
-  description: "Other people's ledgers stay: your member rows become placeholders that keep your name. A group where you were the last account holder is collected. The session is left for the caller to clear.",
-  responses: { 200: jsonResponse(AccountDeletionSchema, "What it did, group by group"), 401: refusals[401] },
+  description:
+    "Other people's ledgers stay: your member rows become placeholders that keep your name. A group where you were the last account holder is collected. The session is left for the caller to clear. An account with an email address must have signed in within the last ten minutes (`POST /identity/reauth`); a guest has nothing to confirm with.",
+  responses: {
+    200: jsonResponse(AccountDeletionSchema, "What it did, group by group"),
+    401: refusals[401],
+    403: errorResponse("Confirm it is you first: `POST /identity/reauth`, then `POST /identity/reauth/verify`."),
+  },
 });
 
 export function accountRoutes(routes: OpenAPIHono<AppEnv>) {
@@ -127,26 +136,17 @@ export function accountRoutes(routes: OpenAPIHono<AppEnv>) {
   routes.openapi(deleteAccountRoute, async (c) => {
     const self = c.var.session.userId;
     const db = c.var.db;
-    const now = new Date().toISOString();
 
-    // Every group, including ones left: a left group still holds the member row.
-    const groups = await db.select({ groupId: memberships.groupId }).from(memberships).where(eq(memberships.profileId, self)).all();
-    // Read before it is blanked below: the placeholders left behind keep the name the account last had.
-    const name = (await db.select({ displayName: profiles.displayName }).from(profiles).where(eq(profiles.id, self)).get())?.displayName ?? null;
-
-    let forgotten = 0;
-    let purged = 0;
-    for (const { groupId } of groups) {
-      const outcome = await c.env.GROUP.getByName(groupId).forgetProfile(self, name);
-      if (outcome.forgotten) forgotten += 1;
-      if (outcome.purged) purged += 1;
+    // A session lasts a year, so holding one is not enough to end the account behind it.
+    if (!c.var.session.isAnonymous && Date.now() - c.var.session.createdAt > REAUTH_WINDOW) {
+      return c.json(apiError("reauth_required", "Confirm it is you before deleting this account."), 403);
     }
 
-    // One batch, so a failure cannot leave half an account. The profile stays,
-    // emptied, so co-members' history still resolves; sessions cascade from the user.
-    await db.batch([db.update(profiles).set({ displayName: null, upiVpa: null, deletedAt: now, updatedAt: now }).where(eq(profiles.id, self)), db.delete(deviceTokens).where(eq(deviceTokens.profileId, self)), db.delete(memberships).where(eq(memberships.profileId, self)), db.delete(user).where(eq(user.id, self))]);
+    // The account first: from here no group can record a membership for it, so what
+    // `forgetAccount` reads is complete. Sessions cascade from the user.
+    await db.batch([db.delete(deviceTokens).where(eq(deviceTokens.profileId, self)), db.delete(user).where(eq(user.id, self))]);
 
-    return c.json({ forgotten, purged }, 200);
+    return c.json(await forgetAccount(c.env, self), 200);
   });
 }
 

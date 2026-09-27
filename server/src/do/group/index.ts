@@ -1,9 +1,10 @@
 import { DurableObject } from "cloudflare:workers";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { type DrizzleD1Database, drizzle as drizzleD1 } from "drizzle-orm/d1";
 import { drizzle } from "drizzle-orm/durable-sqlite";
 import { migrate } from "drizzle-orm/durable-sqlite/migrator";
 
+import { user } from "../../auth-schema";
 import * as d1 from "../../db/d1/schema";
 import * as schema from "../../db/group/schema";
 import { wakeDevices } from "../../push/fcm";
@@ -14,9 +15,9 @@ import { putEntry } from "./ledger";
 import migrations from "./migrations/migrations";
 import { pendingNotices } from "./notices";
 import { attempt, type Result } from "./refusal";
-import { createGroup, forgetProfile, putMember, updateGroup } from "./roster";
+import { createGroup, forgetProfile, handOver, putMember, updateGroup } from "./roster";
 import { currentSeq, findMeta, findTombstone, type GroupDb, nowIso, requireActiveMember, requireMeta, type Tx, type WriteContext } from "./store";
-import { backoffOutbox, clearOutbox, nextDue, type OutboxRow, pendingOutbox, restageIndex, runDormancy, type UpkeepOutcome } from "./upkeep";
+import { backoffOutbox, clearOutbox, nextDue, type OutboxRow, pendingOutbox, runDormancy, type UpkeepOutcome } from "./upkeep";
 
 /**
  * One group's ledger and its authorization boundary. The object runs one
@@ -101,6 +102,13 @@ export class Group extends DurableObject<Env> {
     return outcome;
   }
 
+  /** A guest became an account they already had. Not a `Result`, for the same reason as `forgetProfile`. */
+  async handOver(profileId: string, heirId: string): Promise<{ forgotten: boolean; purged: boolean }> {
+    const outcome = this.db.transaction((tx) => handOver(tx, profileId, heirId, nowIso()));
+    await this.settle();
+    return outcome;
+  }
+
   /** Housekeeping as of an instant, so dormancy is testable without waiting months. */
   async runUpkeep(now: number = Date.now()): Promise<UpkeepOutcome> {
     const outcome = this.db.transaction((tx) => runDormancy(tx, now));
@@ -108,16 +116,10 @@ export class Group extends DurableObject<Env> {
     return outcome;
   }
 
-  /** Overwrites D1's index with what this object believes, through the ordinary outbox. */
-  async reconcile(): Promise<number> {
-    const staged = this.db.transaction((tx) => restageIndex(tx, nowIso()));
-    await this.settle();
-    return staged;
-  }
-
   override async alarm(): Promise<void> {
     this.db.transaction((tx) => runDormancy(tx, Date.now()));
-    await this.settle();
+    // Re-armed unconditionally: the alarm that is firing is spent once this returns.
+    await this.settle({ rearm: true });
   }
 
   private async read<T>(body: (tx: Tx, now: string) => T): Promise<Result<T>> {
@@ -155,25 +157,59 @@ export class Group extends DurableObject<Env> {
     this.ctx.waitUntil(wakeDevices(this.env, groupId, actorProfileId, messages).catch((error) => console.error("[group] push failed", error)));
   }
 
-  private async settle(): Promise<void> {
+  private async settle({ rearm = false } = {}): Promise<void> {
     await this.flush();
     const due = this.db.transaction((tx) => nextDue(tx));
-    if (due !== null && (await this.ctx.storage.getAlarm()) !== due) await this.ctx.storage.setAlarm(due);
+    if (due !== null && (rearm || (await this.ctx.storage.getAlarm()) !== due)) await this.ctx.storage.setAlarm(due);
   }
 
-  /** Pushes staged index writes to D1, at least once; a failure backs off and the alarm retries. */
-  private async flush(): Promise<void> {
-    const rows = this.db.transaction((tx) => pendingOutbox(tx, 20));
-    if (rows.length === 0) return;
+  /** The flush in progress, if any. Flushes run one after another, never side by side. */
+  private flushing: Promise<void> = Promise.resolve();
 
-    const ids = rows.map((row) => row.id);
-    try {
-      const db = drizzleD1(this.env.DB);
-      for (const row of rows) await apply(db, row);
-      this.db.transaction((tx) => clearOutbox(tx, ids));
-    } catch (error) {
-      console.error("[group] index flush failed", error);
-      this.db.transaction((tx) => backoffOutbox(tx, ids, Date.now()));
+  /**
+   * Sends every staged index write to D1, oldest first, and resolves once the
+   * outbox is empty or D1 has refused one (the alarm retries it). Queued behind
+   * any flush already running, so two requests can never interleave their
+   * writes, and a caller's own rows are always sent before its promise settles.
+   */
+  private flush(): Promise<void> {
+    this.flushing = this.flushing
+      .then(() => this.drain())
+      .catch((error) => {
+        // A bug, not D1 refusing: keep the chain usable and leave the rows for the alarm.
+        console.error("[group] index flush crashed", error);
+        this.db.transaction((tx) =>
+          backoffOutbox(
+            tx,
+            pendingOutbox(tx, 1).map((row) => row.id),
+            Date.now(),
+          ),
+        );
+      });
+    return this.flushing;
+  }
+
+  private async drain(): Promise<void> {
+    const db = drizzleD1(this.env.DB);
+    for (;;) {
+      const rows = this.db.transaction((tx) => pendingOutbox(tx, 20));
+      if (rows.length === 0) return;
+
+      for (const row of rows) {
+        let outcome: Applied;
+        try {
+          outcome = await apply(db, row);
+        } catch (error) {
+          console.error("[group] index flush failed", error);
+          this.db.transaction((tx) => backoffOutbox(tx, [row.id], Date.now()));
+          return;
+        }
+        this.db.transaction((tx) => {
+          clearOutbox(tx, [row.id]);
+          // The account was deleted before this reached D1: finish what deleting it would have done here.
+          if (outcome === "account_gone" && row.kind === "membership") forgetProfile(tx, row.payload.profileId, null, nowIso());
+        });
+      }
     }
   }
 }
@@ -184,29 +220,47 @@ function as(tx: Tx, profileId: string, now: string): WriteContext {
   return { now, actor: requireActiveMember(tx, profileId) };
 }
 
-/** One staged write; every statement is an idempotent upsert or delete. */
-async function apply(db: DrizzleD1Database, row: OutboxRow): Promise<void> {
+/** Whether D1 took a membership, or the account behind it no longer exists. */
+type Applied = "applied" | "account_gone";
+
+/**
+ * One staged write. Each is safe to repeat and safe to arrive late: a
+ * membership only replaces an older version of itself, and nothing is written
+ * for a group D1 has been told is purged.
+ */
+async function apply(db: DrizzleD1Database, row: OutboxRow): Promise<Applied> {
+  const notPurged = (groupId: string) => sql`not exists (select 1 from ${d1.purgedGroups} where ${d1.purgedGroups.groupId} = ${groupId})`;
+
   switch (row.kind) {
     case "membership": {
       const { profileId, groupId, leftAt, updatedAt } = row.payload;
-      await db
-        .insert(d1.memberships)
-        .values({ profileId, groupId, leftAt, updatedAt })
-        .onConflictDoUpdate({ target: [d1.memberships.profileId, d1.memberships.groupId], set: { leftAt, updatedAt } });
-      return;
+      const accountExists = sql`exists (select 1 from ${user} where ${user.id} = ${profileId})`;
+      await db.run(sql`
+        insert into ${d1.memberships} (profile_id, group_id, left_at, updated_at, version)
+        select ${profileId}, ${groupId}, ${leftAt}, ${updatedAt}, ${row.id}
+         where ${accountExists} and ${notPurged(groupId)}
+        on conflict (profile_id, group_id) do update
+           set left_at = excluded.left_at, updated_at = excluded.updated_at, version = excluded.version
+         where excluded.version > ${d1.memberships}.version`);
+
+      // Read after the write, so an account deleted either side of it is caught: before, and this
+      // sees it gone; after, and the deletion finds the row this wrote.
+      const account = await db.select({ id: user.id }).from(user).where(eq(user.id, profileId)).get();
+      return account ? "applied" : "account_gone";
     }
     case "link_token": {
-      const { token, groupId, tokenKind, revoked } = row.payload;
-      if (revoked) {
-        await db.delete(d1.linkTokens).where(eq(d1.linkTokens.token, token));
-        return;
-      }
-      await db.insert(d1.linkTokens).values({ token, groupId, kind: tokenKind, createdAt: row.createdAt }).onConflictDoNothing();
-      return;
+      const { token, groupId, tokenKind } = row.payload;
+      await db.run(sql`
+        insert into ${d1.linkTokens} (token, group_id, kind, created_at)
+        select ${token}, ${groupId}, ${tokenKind}, ${row.createdAt}
+         where ${notPurged(groupId)}
+        on conflict (token) do nothing`);
+      return "applied";
     }
-    case "group_purged":
-      await db.delete(d1.memberships).where(eq(d1.memberships.groupId, row.payload.groupId));
-      await db.delete(d1.linkTokens).where(eq(d1.linkTokens.groupId, row.payload.groupId));
-      return;
+    case "group_purged": {
+      const { groupId } = row.payload;
+      await db.batch([db.insert(d1.purgedGroups).values({ groupId, purgedAt: row.createdAt }).onConflictDoNothing(), db.delete(d1.memberships).where(eq(d1.memberships.groupId, groupId)), db.delete(d1.linkTokens).where(eq(d1.linkTokens.groupId, groupId))]);
+      return "applied";
+    }
   }
 }

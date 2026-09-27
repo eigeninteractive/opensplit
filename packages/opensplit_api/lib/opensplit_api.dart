@@ -73,6 +73,8 @@ export 'package:opensplit_api/src/model/profile.dart';
 export 'package:opensplit_api/src/model/profile_page.dart';
 export 'package:opensplit_api/src/model/profile_update.dart';
 export 'package:opensplit_api/src/model/push_data.dart';
+export 'package:opensplit_api/src/model/reauth_start.dart';
+export 'package:opensplit_api/src/model/reauth_verify_request.dart';
 export 'package:opensplit_api/src/model/reference.dart';
 export 'package:opensplit_api/src/model/retry.dart';
 export 'package:opensplit_api/src/model/session.dart';

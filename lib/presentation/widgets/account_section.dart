@@ -86,24 +86,24 @@ class _AccountSectionState extends ConsumerState<AccountSection> {
   Future<bool> _confirmSignIn(String who) async {
     final count = await ref
         .read(accountControllerProvider.notifier)
-        .entriesLeftBehind();
+        .groupsToHandOver();
     if (!mounted) return false;
 
-    final loses = count > 0;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Sign in as $who?'),
         content: Text(
-          loses
+          count > 0
               ? 'That already has an OpenSplit account, so this signs you in '
-                    'to it rather than saving what is here.\n\n'
-                    'The $count ${count == 1 ? 'expense' : 'expenses'} on this '
-                    'device belong to the anonymous account that recorded '
-                    'them. They will be removed from this device and they '
-                    'cannot be moved across.'
+                    'to it and this guest account ends.\n\n'
+                    'Your place in ${count == 1 ? 'your group' : 'all $count '
+                              'groups'} comes with you, balances and all. In '
+                    'any group that account is already in, your guest place '
+                    'stays behind as a placeholder under its name.'
               : 'That already has an OpenSplit account, so this signs you in '
-                    'to it. There is nothing recorded on this device to lose.',
+                    'to it and this guest account ends. It is in no groups, '
+                    'so there is nothing to bring along.',
         ),
         actions: [
           TextButton(
@@ -112,7 +112,7 @@ class _AccountSectionState extends ConsumerState<AccountSection> {
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: Text(loses ? 'Sign in and remove' : 'Sign in'),
+            child: const Text('Sign in'),
           ),
         ],
       ),
@@ -231,8 +231,9 @@ class _AccountSectionState extends ConsumerState<AccountSection> {
         const SizedBox(height: 8),
         Text(
           'Your groups are synchronized, but this device is the only way back '
-          'into this guest account. Adding an email address lets you recover '
-          'it and use OpenSplit on more than one device.',
+          'into this guest account, and only while you open OpenSplit at '
+          'least once a year. Adding an email address lets you recover it and '
+          'use OpenSplit on more than one device.',
           style: Theme.of(
             context,
           ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
@@ -252,8 +253,7 @@ class _AccountSectionState extends ConsumerState<AccountSection> {
           const SizedBox(height: 12),
           _Notice(
             'That address already has an OpenSplit account. Entering the code '
-            'signs you in to it — what is on this device stays with the '
-            'anonymous account that recorded it.',
+            'signs you in to it, and your groups come with you.',
           ),
         ],
         if (_codeSent) ...[

@@ -19,6 +19,7 @@ CREATE TABLE `memberships` (
 	`group_id` text NOT NULL,
 	`left_at` text,
 	`updated_at` text NOT NULL,
+	`version` integer NOT NULL,
 	PRIMARY KEY(`profile_id`, `group_id`)
 );
 --> statement-breakpoint
@@ -32,6 +33,11 @@ CREATE TABLE `profiles` (
 );
 --> statement-breakpoint
 CREATE INDEX `profiles_updated` ON `profiles` (`updated_at`,`id`);--> statement-breakpoint
+CREATE TABLE `purged_groups` (
+	`group_id` text PRIMARY KEY NOT NULL,
+	`purged_at` text NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE `account` (
 	`id` text PRIMARY KEY NOT NULL,
 	`account_id` text NOT NULL,

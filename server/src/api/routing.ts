@@ -51,7 +51,31 @@ export const refusals = {
   422: errorResponse("The expense does not add up."),
 };
 
+/** Every route that spends a rate limit answers this when the limit is spent. */
+export const rateLimited = { 429: errorResponse("Too many attempts. Wait a minute and try again.") };
+
 type WorkerEnv = { Bindings: Env };
+
+/** The client's address. Cloudflare always sets it; only a test calling the Worker directly omits it. */
+export function clientIp<E extends WorkerEnv>(c: Context<E>): string {
+  return c.req.header("cf-connecting-ip") ?? "unknown";
+}
+
+/**
+ * Spends one unit of each limit and says whether any was already exhausted.
+ * Approximate and counted per Cloudflare location: a brake on abuse, not an
+ * accounting system.
+ */
+export async function exhausted(...limits: [RateLimit, string][]): Promise<boolean> {
+  for (const [limiter, key] of limits) {
+    if (!(await limiter.limit({ key })).success) return true;
+  }
+  return false;
+}
+
+export function tooMany<E extends WorkerEnv>(c: Context<E>) {
+  return c.json(apiError("rate_limited", "Too many attempts. Wait a minute and try again.", "transient"), 429);
+}
 
 export function respond<T extends object, E extends WorkerEnv>(c: Context<E>, result: Result<T>) {
   return result.ok ? c.json(result.value, 200) : refused(c, result.error);

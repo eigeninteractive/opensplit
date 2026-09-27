@@ -21,7 +21,9 @@ no real mobile app.
 - **You can leave with everything.** The whole journal lives on your device in
   plain SQLite and exports to CSV. The server stores rows and enforces one
   invariant; it computes nothing. There is no self-host path and
-  [PRINCIPLES.md](PRINCIPLES.md) #6 says so outright.
+  [PRINCIPLES.md](PRINCIPLES.md) #6 says so outright. The one exception is a
+  group the server collects (settled, and quiet for a year): the next sync
+  removes it from every device too, so export it first to keep a copy.
 
 ## Architecture in one paragraph
 
@@ -63,7 +65,10 @@ npm test                           # the Durable Object and the routes
 
 `wrangler dev` runs the real Worker over local D1, KV and Durable Object
 storage. Nothing it does touches a Cloudflare account, and it needs no
-credentials beyond `cp .dev.vars.example .dev.vars`.
+credentials beyond `cp .dev.vars.example .dev.vars`. The npm scripts run it as
+`--env test`, which is production's config with the rate limits raised out of
+the way; run `wrangler` by hand with the same flag. `npm test` does not use it,
+so the server's own suite runs against the real limits.
 
 The first line is there because the Worker serves the site and the client as
 well as the API, and it refuses to start at all without an assets directory.
@@ -116,7 +121,7 @@ account and no credentials are needed.
 
 They skip themselves unless an OpenSplit Worker answers `/api/health`, so
 `flutter test` stays green without one. To use another port (`npx wrangler dev
---port 8797`), pass `--dart-define=API_BASE_URL=http://127.0.0.1:8797`. CI runs
+--env test --port 8797`), pass `--dart-define=API_BASE_URL=http://127.0.0.1:8797`. CI runs
 them in the `backend` job with `--dart-define=REQUIRE_BACKEND=true`, so a
 missing Worker there fails rather than skips.
 
@@ -636,7 +641,7 @@ afternoon:
 | Android emulator | `http://10.0.2.2:8787` — the emulator's own 127.0.0.1 is the emulator |
 | Physical Android device | `http://<this machine's LAN address>:8787`, same Wi-Fi |
 
-For the last two, start the Worker with `npx wrangler dev --ip 0.0.0.0`, which
+For the last two, start the Worker with `npx wrangler dev --env test --ip 0.0.0.0`, which
 it does not do by default.
 
 Android has blocked cleartext HTTP since API 28, so a debug build also needs
@@ -663,7 +668,7 @@ The rate cron can be driven by hand, which is also what CI does before the
 adapter tests:
 
 ```bash
-npx wrangler dev --test-scheduled          # exposes the handler
+npx wrangler dev --env test --test-scheduled   # exposes the handler
 curl 'http://127.0.0.1:8787/cdn-cgi/handler/scheduled?cron=0+4+*+*+*'
 curl 'http://127.0.0.1:8787/api/fx?since=2026-01-01'
 ```
@@ -767,9 +772,10 @@ verify too. All four certificates are shown under *Play Console → Test and
 release → Setup → App signing*. Getting this wrong is silent in the worst way:
 links simply open in a browser, with nothing in the app to say why.
 
-Anonymous sign-in is unauthenticated row creation, so it is swept rather than
-gated: a weekly job deletes guest accounts that joined no group and were never
-used again after ninety days. No CAPTCHA — it would sit in front of the one
+Anonymous sign-in is unauthenticated row creation, so it is swept and
+rate-limited rather than gated: a daily job deletes guest accounts that joined
+no group and were never used again after ninety days, and each IP address may
+start only a few a minute. No CAPTCHA — it would sit in front of the one
 flow that has to be invisible, and an invite link that opens a puzzle is an
 invite link nobody follows.
 

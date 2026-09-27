@@ -82,20 +82,6 @@ final class DriftEntryRepository {
     return row?.entry;
   }
 
-  /// How many live entries this device holds, across every group.
-  Stream<int> watchTotalCount() => _liveCount().watchSingle();
-
-  /// The same count, once.
-  Future<int> countLiveEntries() => _liveCount().getSingle();
-
-  Selectable<int> _liveCount() {
-    final total = _db.entries.id.count();
-    final query = _db.selectOnly(_db.entries)
-      ..addColumns([total])
-      ..where(_db.entries.deletedAt.isNull());
-    return query.map((row) => row.read(total) ?? 0);
-  }
-
   /// Hydrates specific entries, in the order asked for.
   Future<List<Entry>> getByIds(List<String> ids) async {
     if (ids.isEmpty) return const [];

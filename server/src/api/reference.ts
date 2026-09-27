@@ -5,6 +5,7 @@ import { type MonthBlob, monthKey } from "../fx/blob";
 import { reference, referenceEtag } from "../reference";
 import { DateSchema, errorResponse, jsonBody, jsonResponse } from "../schemas/common";
 import { FxBackfillRequestSchema, FxBackfillResponseSchema, FxPageSchema, ReferenceSchema } from "../schemas/reference";
+import { exhausted, rateLimited, refusals, signedIn, tooMany } from "./routing";
 
 /**
  * The responses that are the same for everybody, so outside the session and
@@ -44,16 +45,19 @@ const fxRoute = createRoute({
 });
 
 const backfillRoute = createRoute({
+  ...signedIn,
   method: "post",
   operationId: "requestFxBackfill",
   path: "/fx/backfill",
   tags: ["reference"],
   summary: "Ask for a day the server has never needed",
-  description: "Fire and forget, and heavily throttled: the rate arrives on a later sync.",
+  description: "Fire and forget, and heavily throttled: the rate arrives on a later sync. Needs a session, since each one can send the server to its providers.",
   request: { body: jsonBody(FxBackfillRequestSchema) },
   responses: {
     200: jsonResponse(FxBackfillResponseSchema, "Whether this request was taken up"),
-    400: errorResponse("That is not a date, or not a currency."),
+    400: errorResponse("That is not a date, not a currency, or earlier than any rate."),
+    401: refusals[401],
+    ...rateLimited,
   },
 });
 
@@ -79,6 +83,7 @@ export function referenceRoutes(routes: OpenAPIHono<AppEnv>) {
 
   routes.openapi(backfillRoute, async (c) => {
     const { asOf, currency } = c.req.valid("json");
+    if (await exhausted([c.env.BACKFILL_LIMIT, c.var.session.userId])) return tooMany(c);
     return c.json({ accepted: await c.env.FX.getByName("global").backfill(asOf, currency) }, 200);
   });
 }

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../application/ledger_providers.dart';
 import '../../application/session_providers.dart';
 import '../../data/local/database.dart';
+import '../../domain/auth_service.dart';
 import '../../domain/settle/upi.dart';
 import '../feedback.dart';
 import '../widgets/account_section.dart';
@@ -134,6 +135,21 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   }
 
   /// Deletes the account, after saying precisely what that costs.
+  /// Sends a code to the account's own address and asks for it. True once the
+  /// session has been replaced with a fresh one.
+  Future<bool> _confirmItIsYou() async {
+    final session = ref.read(sessionControllerProvider.notifier);
+    final email = await session.startReauthentication();
+    if (!mounted) return false;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) =>
+          _ConfirmItIsYou(email: email, verify: session.reauthenticate),
+    );
+    return confirmed ?? false;
+  }
+
   Future<void> _deleteAccount() async {
     final impact = await ref.read(deletionImpactProvider.future);
     if (!mounted) return;
@@ -192,7 +208,18 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
 
     setState(() => _deleting = true);
     try {
-      await ref.read(sessionControllerProvider.notifier).deleteAccount();
+      final session = ref.read(sessionControllerProvider.notifier);
+      try {
+        await session.deleteAccount();
+      } on ReauthenticationRequired {
+        // A session lasts a year, so holding one is not proof enough for
+        // this. Nothing has been deleted yet.
+        if (!await _confirmItIsYou()) {
+          if (mounted) setState(() => _deleting = false);
+          return;
+        }
+        await session.deleteAccount();
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() => _deleting = false);
@@ -351,5 +378,81 @@ class _Bullet extends StatelessWidget {
         Expanded(child: Text(text)),
       ],
     ),
+  );
+}
+
+/// Asks for the code sent to [email], and checks it before closing.
+class _ConfirmItIsYou extends StatefulWidget {
+  const _ConfirmItIsYou({required this.email, required this.verify});
+
+  final String email;
+  final Future<void> Function(String code) verify;
+
+  @override
+  State<_ConfirmItIsYou> createState() => _ConfirmItIsYouState();
+}
+
+class _ConfirmItIsYouState extends State<_ConfirmItIsYou> {
+  final _code = TextEditingController();
+  bool _checking = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _code.dispose();
+    super.dispose();
+  }
+
+  Future<void> _check() async {
+    final code = _code.text.trim();
+    if (code.isEmpty) return;
+    setState(() {
+      _checking = true;
+      _error = null;
+    });
+    try {
+      await widget.verify(code);
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _checking = false;
+        _error = 'That code is wrong or has expired.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Confirm it is you'),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'We sent a code to ${widget.email}. Enter it to delete your account.',
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _code,
+          autofocus: true,
+          enabled: !_checking,
+          keyboardType: TextInputType.number,
+          autofillHints: const [AutofillHints.oneTimeCode],
+          decoration: InputDecoration(labelText: 'Code', errorText: _error),
+          onSubmitted: (_) => _check(),
+        ),
+      ],
+    ),
+    actions: [
+      TextButton(
+        onPressed: _checking ? null : () => Navigator.of(context).pop(false),
+        child: const Text('Keep my account'),
+      ),
+      FilledButton(
+        onPressed: _checking ? null : _check,
+        child: const Text('Confirm'),
+      ),
+    ],
   );
 }

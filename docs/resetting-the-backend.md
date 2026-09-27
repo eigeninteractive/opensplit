@@ -118,8 +118,8 @@ work that is no longer there.
 D1 is an index, not the truth. Wipe it while the group objects survive and every
 group still exists, still holds its ledger, and is still billed for its storage
 — but nothing can name it. `memberships` is how a device discovers which groups
-it is in, and the weekly reconciliation sweep reads that same table to decide
-which objects to check, so it cannot find them either.
+it is in, and account deletion reads that same table to decide which objects to
+visit, so it cannot find them either.
 
 Nothing reports this. It looks like every account came back empty.
 

@@ -71,6 +71,10 @@ export const EntryInputSchema = entryRow
     path: ["timeZone"],
     message: "occurredAt and timeZone are both set or both null.",
   })
+  .refine((input) => (input.fxRate === null) === (input.fxSource === null), {
+    path: ["fxSource"],
+    message: "fxRate and fxSource are both set or both null.",
+  })
   .openapi("EntryInput");
 
 /**

@@ -28,11 +28,10 @@ export function createInvite(tx: Tx, memberId: string, { now, actor }: WriteCont
   if (member.profileId !== null) refuse("slot_taken", `${member.displayName} has already joined.`);
   if (member.leftAt !== null) refuse("slot_taken", `${member.displayName} has left this group.`);
 
-  const unredeemed = and(eq(schema.invites.memberId, memberId), isNull(schema.invites.redeemedAt));
-  for (const { token } of tx.select({ token: schema.invites.token }).from(schema.invites).where(unredeemed).all()) {
-    stageLinkToken(tx, token, "invite", now, true);
-  }
-  tx.delete(schema.invites).where(unredeemed).run();
+  // D1 keeps routing the old token here, where it no longer names anything.
+  tx.delete(schema.invites)
+    .where(and(eq(schema.invites.memberId, memberId), isNull(schema.invites.redeemedAt)))
+    .run();
 
   const invite = { token: crypto.randomUUID(), memberId, createdBy: actor.id, createdAt: now, expiresAt: expiry(now, INVITE_TTL), redeemedAt: null, redeemedBy: null };
   tx.insert(schema.invites).values(invite).run();
@@ -55,7 +54,6 @@ export function createGroupLink(tx: Tx, { now, actor }: WriteContext): GroupLink
   }
   append(tx, { ...written, kind: "link_created", subjectId: link.token, link: { expiresAt: link.expiresAt } });
 
-  if (previous) stageLinkToken(tx, previous.token, "group_link", now, true);
   stageLinkToken(tx, link.token, "group_link", now);
   return { token: link.token, expiresAt: link.expiresAt };
 }
@@ -68,7 +66,8 @@ export function liveLink(tx: Tx, now: string): GroupLink | null {
 
 /**
  * Turns the open link off. D1 keeps routing the token, so a stale URL is told
- * "turned off" rather than "never valid"; minting a new link forgets it.
+ * "turned off" rather than "never valid"; once a new link replaces this one,
+ * the old token names nothing here.
  */
 export function revokeGroupLink(tx: Tx, { now, actor }: WriteContext): string | null {
   const live = tx.select().from(schema.groupLink).where(isNull(schema.groupLink.revokedAt)).get();

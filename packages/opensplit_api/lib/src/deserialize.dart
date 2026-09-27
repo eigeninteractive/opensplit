@@ -46,6 +46,8 @@ import 'package:opensplit_api/src/model/profile.dart';
 import 'package:opensplit_api/src/model/profile_page.dart';
 import 'package:opensplit_api/src/model/profile_update.dart';
 import 'package:opensplit_api/src/model/push_data.dart';
+import 'package:opensplit_api/src/model/reauth_start.dart';
+import 'package:opensplit_api/src/model/reauth_verify_request.dart';
 import 'package:opensplit_api/src/model/reference.dart';
 import 'package:opensplit_api/src/model/session.dart';
 import 'package:opensplit_api/src/model/share.dart';
@@ -193,6 +195,11 @@ ReturnType deserialize<ReturnType, BaseType>(
           as ReturnType;
     case 'PushData':
       return PushData.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'ReauthStart':
+      return ReauthStart.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'ReauthVerifyRequest':
+      return ReauthVerifyRequest.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
     case 'Reference':
       return Reference.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'Retry':

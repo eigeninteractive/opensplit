@@ -181,9 +181,31 @@ final class BetterAuthService implements AuthService {
 
   @override
   Future<void> deleteAccount() async {
-    await fetch(client.getAccountApi().deleteAccount());
+    try {
+      await fetch(client.getAccountApi().deleteAccount());
+    } on ApiFailure catch (failure) {
+      if (failure.code == api.ErrorCode.reauthRequired) {
+        throw ReauthenticationRequired(failure.message);
+      }
+      rethrow;
+    }
     // The session went with the account.
     await _adopt(null, token: null);
+  }
+
+  @override
+  Future<String> startReauthentication() async =>
+      (await fetch(_identity.startReauthentication())).email;
+
+  @override
+  Future<void> reauthenticate(String code) async {
+    final session = await fetch(
+      _identity.reauthenticate(
+        reauthVerifyRequest: api.ReauthVerifyRequest(code: code),
+      ),
+    );
+    // The old session ended on the server; this one replaces it.
+    await _adopt(session.account, token: session.token);
   }
 
   /// Asks the server who this device is. Never throws (the constructor does not

@@ -6,7 +6,10 @@ import 'package:go_router/go_router.dart';
 import '../../application/ledger_providers.dart';
 import '../../application/session_providers.dart';
 
-/// Asks the user to attach a real account, once they have something to lose.
+/// Asks a guest to attach a real account as soon as they are in any group:
+/// from then on the server holds something only this session can reach, and
+/// somebody who joined through an invite and only reads balances has as much
+/// to lose as somebody recording every expense.
 class LinkAccountPrompt extends ConsumerWidget {
   const LinkAccountPrompt({super.key, this.padding = EdgeInsets.zero});
 
@@ -14,17 +17,15 @@ class LinkAccountPrompt extends ConsumerWidget {
   /// needs does not leave a gap where a caller placed it in a column.
   final EdgeInsets padding;
 
-  /// Entries recorded before it is worth interrupting anyone.
-  static const int threshold = 3;
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final account = ref.watch(accountProvider).value;
-    final count = ref.watch(totalEntryCountProvider).value ?? 0;
-    final dismissed = ref.watch(promptDismissedProvider);
-
     if (account == null || !account.isAnonymous) return const SizedBox.shrink();
-    if (count < threshold || dismissed) return const SizedBox.shrink();
+
+    final groups =
+        ref.watch(groupsProvider(includeArchived: true)).value ?? const [];
+    final dismissed = ref.watch(promptDismissedProvider);
+    if (groups.isEmpty || dismissed) return const SizedBox.shrink();
 
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;

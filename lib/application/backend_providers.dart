@@ -10,14 +10,14 @@ import '../data/push/device_tokens.dart';
 import '../data/sync/api_client.dart';
 import '../data/sync/invites.dart';
 import '../domain/auth_service.dart';
-import 'preferences_providers.dart';
 
 part 'backend_providers.g.dart';
 
-/// Where this device's session lives between launches.
+/// Where this device's session lives between launches. Overridden in `main`,
+/// which reads the token from secure storage before the first frame.
 @Riverpod(keepAlive: true)
 SessionStore sessionStore(Ref ref) =>
-    SessionStore(ref.watch(sharedPreferencesProvider));
+    throw UnimplementedError('sessionStoreProvider must be overridden');
 
 /// The one client for the app's lifetime, since the session belongs to it.
 /// [BetterAuthService] sets the bearer token (Android) whenever the session

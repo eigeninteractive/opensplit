@@ -55,7 +55,7 @@
 <main>
 <div class="eyebrow">LEGAL</div>
 <h1>Privacy Policy</h1>
-<p class="updated">Last updated 25 September 2026</p>
+<p class="updated">Last updated 27 September 2026</p>
 
 <p>OpenSplit is an expense splitter. It exists to answer one question — who owes
 whom — and it collects what it needs to answer that, and nothing else. There is
@@ -112,8 +112,14 @@ server is never asked to compute anything.</p>
 their groups and expenses are stored on the server and shared with group
 members. Until you attach an email address or Google account, the session on
 that device is the only way to return to the account. Losing it, reinstalling,
-or clearing browser data can therefore leave the server data in place while
-you lose access to it.</p>
+clearing browser data, or not opening OpenSplit for a year (when the session
+lapses) can therefore leave the server data in place while you lose access to
+it.</p>
+<p>If a guest signs in to an account that already exists, the two are treated
+as the same person: the guest's places in its groups, with everything paid and
+owed, move to that account, and the guest account is deleted. In a group that
+account was already in, the guest's place stays as a separate entry under the
+guest's name.</p>
 
 <h2>Who can see what</h2>
 <p>Access is enforced by the server, not by the app asking politely. Each group
@@ -146,12 +152,18 @@ notifications on.</li>
 <h2>How long we keep it</h2>
 <ul>
 <li>Your account and its data are kept until you delete them.</li>
+<li>A sign-in lasts a year from the last time you opened the app. After that
+you sign in again; a guest, having nothing to sign in with, cannot.</li>
 <li>A group with no activity for <strong>three months</strong> is archived. This
 changes nothing about it — it still opens, still adds up, and adding an expense
 brings it back — it simply moves out of your main list.</li>
 <li>An archived group in which every balance has been settled to zero, and which
 has had no activity for <strong>a year</strong>, is deleted. A group with money
 still outstanding is never deleted automatically, however old it is.</li>
+<li>When a group is deleted this way, it is also removed from every member's
+device the next time the app synchronizes, with all of its expenses and
+history. If you want to keep a record, export it as CSV or JSON from the
+group's screen before then.</li>
 <li>A guest account that never joined a group and was never used again is
 deleted after <strong>90 days</strong>.</li>
 </ul>

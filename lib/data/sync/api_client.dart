@@ -39,7 +39,12 @@ class ApiFailure implements Exception {
       return ApiFailure(
         envelope.message,
         code: envelope.code,
-        retry: envelope.retry,
+        // A server failure says nothing about whether the same request would
+        // succeed, whatever its body claims; a write told otherwise would sit
+        // set aside until somebody retried it by hand.
+        retry: status != null && status >= 500
+            ? api.Retry.transient
+            : envelope.retry,
       );
     }
     return ApiFailure(

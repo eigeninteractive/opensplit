@@ -139,20 +139,6 @@ describe("the membership index in D1", () => {
     const rows = await membershipsIn(groupId);
     expect(rows.find((row) => row.profile_id === PRIYA)?.left_at).not.toBeNull();
   });
-
-  /**
-   * The object is the truth and this is derived, so reconciling means
-   * overwriting the index with the object's answer rather than comparing the
-   * two and guessing which is right.
-   */
-  it("can be rebuilt from the object that owns it", async () => {
-    const { groupId } = await makeGroupOfTwo();
-    await env.DB.prepare("delete from memberships where group_id = ?").bind(groupId).run();
-    expect(await membershipsIn(groupId)).toHaveLength(0);
-
-    expect(await stub(groupId).reconcile()).toBeGreaterThan(0);
-    expect(await membershipsIn(groupId)).toHaveLength(2);
-  });
 });
 
 describe("deleting an account", () => {

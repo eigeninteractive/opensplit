@@ -8,6 +8,7 @@ import 'package:opensplit/application/backend_providers.dart';
 import 'package:opensplit/application/local_providers.dart';
 import 'package:opensplit/application/preferences_providers.dart';
 import 'package:opensplit/application/session_providers.dart';
+import 'package:opensplit/data/auth/session_store.dart';
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/domain/auth_service.dart';
 import 'package:opensplit/presentation/app.dart';
@@ -23,6 +24,10 @@ void main() {
   ) async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
+    final sessions = await SessionStore.load(
+      preferences,
+      vault: MemoryTokenVault(),
+    );
     final db = AppDatabase(NativeDatabase.memory());
     await seedReferenceData(db);
     addTearDown(() => tester.runAsync(db.close));
@@ -31,6 +36,7 @@ void main() {
       ProviderScope(
         overrides: [
           sharedPreferencesProvider.overrideWithValue(preferences),
+          sessionStoreProvider.overrideWithValue(sessions),
           authServiceProvider.overrideWithValue(_SignedIn()),
           appDatabaseProvider.overrideWithValue(db),
         ],

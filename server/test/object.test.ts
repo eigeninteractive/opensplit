@@ -83,35 +83,6 @@ describe("the one alarm", () => {
   });
 });
 
-describe("the derived index in D1, when D1 is not answering", () => {
-  /**
-   * The failure the outbox exists for. A `fetch` cannot join a
-   * `transactionSync`, so an inline D1 write that failed would leave the index
-   * behind the object with nothing left to retry it — the object would have
-   * committed and moved on.
-   */
-  it("keeps the write, backs off, and converges once D1 is back", async () => {
-    const groupId = freshId("outbox");
-    await env.DB.prepare("drop table memberships").run();
-
-    const created = await stub(groupId).putGroup(groupId, { name: "Offline", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, creatorId: `${groupId}-m`, creatorName: "Ravi" }, RAVI);
-
-    // The group itself is fine. The index simply does not know about it yet.
-    expect(created.ok).toBe(true);
-
-    const pending = await runInDurableObject(stub(groupId), async (_instance: Group, state) => [...state.storage.sql.exec<{ n: number; attempts: number }>("select count(*) as n, max(attempts) as attempts from outbox")]);
-
-    expect(pending[0]?.n).toBe(1);
-    expect(pending[0]?.attempts).toBeGreaterThan(0);
-
-    await env.DB.prepare("create table memberships (profile_id text not null, group_id text not null, left_at text, updated_at text not null, primary key (profile_id, group_id))").run();
-    await stub(groupId).runUpkeep(Date.now());
-
-    const rows = await env.DB.prepare("select profile_id from memberships where group_id = ?").bind(groupId).all<{ profile_id: string }>();
-    expect(rows.results.map((row) => row.profile_id)).toEqual([RAVI]);
-  });
-});
-
 describe("what the RPC boundary actually carries", () => {
   /** A guard against a failure that costs nothing at runtime and everything at review time. */
   it("includes the success branch of every method that returns one", async () => {

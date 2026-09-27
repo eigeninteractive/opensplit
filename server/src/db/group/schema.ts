@@ -221,12 +221,14 @@ export const groupLink = sqliteTable("group_link", {
 export const outboxKinds = ["membership", "link_token", "group_purged"] as const;
 
 export type MembershipWrite = { groupId: string; profileId: string; leftAt: string | null; updatedAt: string };
-export type LinkTokenWrite = { groupId: string; token: string; tokenKind: LinkKind; revoked: boolean };
+export type LinkTokenWrite = { groupId: string; token: string; tokenKind: LinkKind };
 export type PurgeWrite = { groupId: string };
 
 /**
- * D1 index writes, staged in the transaction that caused them and flushed
- * afterwards (retried by the alarm on failure).
+ * D1 index writes, staged in the transaction that caused them and sent in `id`
+ * order, one flush at a time, until D1 has taken every one. The alarm retries
+ * a failure. `id` is also the write's version in D1, so a copy that arrives
+ * late never overwrites a newer one.
  */
 export const outbox = sqliteTable("outbox", {
   id: integer("id").primaryKey({ autoIncrement: true }),

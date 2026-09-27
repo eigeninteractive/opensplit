@@ -46,7 +46,10 @@ class _Device {
     final client = buildApiClient(baseUrl: backendOrigin);
     final auth = BetterAuthService(
       client: client,
-      sessions: SessionStore(await SharedPreferences.getInstance()),
+      sessions: await SessionStore.load(
+        await SharedPreferences.getInstance(),
+        vault: MemoryTokenVault(),
+      ),
     );
     await auth.signInAnonymously();
     return _Device._(auth: auth, client: client);
@@ -644,12 +647,15 @@ void main() {
 
     test('a backfill is fire and forget, and does not refuse', () async {
       if (!backendUp) return;
+      // Each one can send the server to its rate providers, so it needs a
+      // session, unlike reading the rates it produces.
+      final signedIn = (await _Device.guest()).client;
 
       // The client cannot act on the answer either way — the rate arrives on a
       // later sync or it does not — so what matters is that asking never throws
       // into the editor that asked.
       await fetch(
-        public.getReferenceApi().requestFxBackfill(
+        signedIn.getReferenceApi().requestFxBackfill(
           fxBackfillRequest: api.FxBackfillRequest(
             asOf: '2026-08-14',
             currency: 'INR',
@@ -659,10 +665,32 @@ void main() {
       // Twice, because six devices in one group sync the same backdated
       // expense within a second of each other.
       await fetch(
-        public.getReferenceApi().requestFxBackfill(
+        signedIn.getReferenceApi().requestFxBackfill(
           fxBackfillRequest: api.FxBackfillRequest(
             asOf: '2026-08-14',
             currency: 'INR',
+          ),
+        ),
+      );
+    });
+
+    test('a backfill without a session is refused', () async {
+      if (!backendUp) return;
+
+      await expectLater(
+        fetch(
+          public.getReferenceApi().requestFxBackfill(
+            fxBackfillRequest: api.FxBackfillRequest(
+              asOf: '2026-08-14',
+              currency: 'INR',
+            ),
+          ),
+        ),
+        throwsA(
+          isA<ApiFailure>().having(
+            (error) => error.code,
+            'code',
+            api.ErrorCode.noSession,
           ),
         ),
       );
@@ -1191,6 +1219,12 @@ void _serving() {
       response.headers.value('cross-origin-embedder-policy'),
       'credentialless',
     );
+    // The app's buttons must not be pressable from inside another site.
+    expect(
+      response.headers.value('content-security-policy'),
+      "frame-ancestors 'none'",
+    );
+    expect(response.headers.value('x-frame-options'), 'DENY');
   });
 
   test('the static root is not isolated, and says so by omission', () async {

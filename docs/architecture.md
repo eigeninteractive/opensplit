@@ -60,12 +60,35 @@ tables that exist because the object is a little machine as well as a table:
 it rather than being refused forever), `outbox` (writes owed to D1) and
 `schedule` (the dormancy alarm).
 
+A purge happens when a group is archived, settled in every currency and quiet
+for a year, or at once when its last account holder deletes their account.
+Dropping it on the device is not a soft delete: `applyGroupChanges` deletes the
+local group row and the foreign keys cascade to its members, expenses, payers,
+shares and activity. An edit that device never pushed goes with it. The copy
+that survives is whatever somebody exported beforehand.
+
 **D1** (`server/src/db/d1/schema.ts`) — `profiles`, `memberships`,
 `device_tokens`, `link_tokens`, plus Better Auth's own four tables. Everything
 here except `profiles` is a **derived index**: the objects are the truth, and D1
 is what makes "which groups am I in" and "what does this token point at"
-answerable without asking every object in the account. A weekly sweep checks it
-still agrees.
+answerable without asking every object in the account.
+
+The index is kept by rules, not by a repair job. Each object stages its index
+writes in `outbox` in the same transaction as the change, and sends them in
+order, one flush at a time, until D1 has taken every one; a failure is retried
+by the object's alarm. The outbox row's id travels as `memberships.version`, so
+a copy that arrives late never replaces a newer one, and `purged_groups` stops
+any write reaching D1 for a group already collected. `link_tokens` is
+insert-only: a token never moves between groups, and whether it still works is
+the object's call.
+
+D1 refuses a membership for an account whose `user` row is gone, and the object
+then turns that member into a placeholder itself. That is what makes account
+deletion complete without depending on timing: it deletes the `user` row first,
+so every membership D1 will ever hold for the account is already there when it
+reads them, and each group's row is removed only once that group has forgotten
+the account. Rows left for an account that no longer exists are a deletion that
+was interrupted, and the daily sweep finishes it.
 
 **The rate object** (`server/src/db/fx/schema.ts`) — `fx_rates`,
 `provider_health`, `backfill_requests`. A singleton, and that is deliberate: KV
@@ -219,12 +242,29 @@ one and is not a credential.
 
 **The identity endpoints are ours, not Better Auth's** — `/api/identity/
 guest`, `/session`, `/sign-out`, `/google`, `/google/redirect`, `/email`,
-`/email/verify`. Attaching an identity to a guest session and
-signing in to an existing account are opposite outcomes: one keeps everything on
-this device, the other leaves it behind. Better Auth's own endpoints will do
-either without saying which happened, so these wrap it and report the outcome by
-comparing account ids, and refuse a sign-in that would strand a ledger until the
-caller has said it asked.
+`/email/verify`, `/reauth`, `/reauth/verify`. Attaching an identity to a guest
+session and signing in to an existing account are opposite outcomes: one keeps
+the account id, the other replaces the session. Better Auth's own endpoints will
+do either without saying which happened, so these wrap it and report the outcome
+by comparing account ids, and refuse a sign-in that replaces the session until
+the caller has said it asked.
+
+When a guest signs in to an account that already existed, the anonymous
+plugin's `onLinkAccount` hands the guest's places to that account
+(`handOverGuest` in `server/src/forget.ts`, `handOver` in the group object) and
+ends the guest. In a group both were already in, the guest's place stays as a
+placeholder, since two places cannot become one row. The guest's local ledger
+file is left on the device, unreachable; its groups arrive again under the
+account that inherited them.
+
+A session lasts a year from its last use (`expiresIn`, extended at most daily
+by `updateAge`): the app is opened for trips, and a guest whose session lapses
+can never get back in. A session is a row, so a long one is still revocable,
+but holding one is not proof enough to delete the account behind it. An account
+with an address must have signed in within ten minutes: `/identity/reauth`
+sends a code to its own address, and `/identity/reauth/verify` trades it for a
+fresh session and ends the old one. A guest has nothing to confirm with and
+deletes without it.
 
 The Worker resolves a session to a profile id and passes it to the group's
 object, which checks its own membership list. The Worker's check is a first
@@ -256,8 +296,9 @@ tokens.
 
 ## Cron: two schedules
 
-`0 4 * * *` refreshes exchange rates. `0 5 * * 0` collects abandoned guest
-accounts and reconciles a slice of the D1 index.
+`0 4 * * *` refreshes exchange rates. `0 5 * * *` collects abandoned guest
+accounts (over ninety days old, in no group, no session used in ninety days) and
+finishes any account deletion a request started and did not complete.
 
 There is deliberately no nightly dormancy sweep. A Durable Object sets its own
 alarm, so each group carries its own clock: one wake-up in three months rather

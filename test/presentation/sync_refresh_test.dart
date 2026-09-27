@@ -58,7 +58,6 @@ Future<void> _mount(
       failedWritesProvider.overrideWith((ref) => Stream.value([])),
       pendingConflictsProvider.overrideWith((ref) => Stream.value([])),
       accountProvider.overrideWith((ref) => Stream.value(null)),
-      totalEntryCountProvider.overrideWith((ref) => Stream.value(0)),
     ],
     child: MaterialApp(home: screen),
   ),

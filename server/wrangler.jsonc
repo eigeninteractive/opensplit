@@ -63,12 +63,63 @@
   "triggers": {
     "crons": [
       "0 4 * * *", // exchange rates
-      "0 5 * * 0" // abandoned guests, index reconciliation
+      "0 5 * * *" // abandoned guests, interrupted account deletions
     ]
   },
 
   // Better Auth's baseURL and sole trusted origin. Local runs override it in .dev.vars, tests in vitest.config.ts.
   "vars": {
     "APP_ORIGIN": "https://opensplit.eigeninteractive.com"
+  },
+
+  /**
+   * Brakes on the unauthenticated doors and on anything that costs money per
+   * call. Approximate and per Cloudflare location, which is all a brake needs.
+   * `namespace_id` is any account-unique integer; two Workers sharing one
+   * would share counters.
+   */
+  "ratelimits": [
+    { "name": "GUEST_LIMIT", "namespace_id": "1001", "simple": { "limit": 5, "period": 60 } },
+    { "name": "EMAIL_IP_LIMIT", "namespace_id": "1002", "simple": { "limit": 10, "period": 60 } },
+    { "name": "EMAIL_ADDRESS_LIMIT", "namespace_id": "1003", "simple": { "limit": 3, "period": 60 } },
+    { "name": "VERIFY_IP_LIMIT", "namespace_id": "1004", "simple": { "limit": 10, "period": 60 } },
+    { "name": "BACKFILL_LIMIT", "namespace_id": "1005", "simple": { "limit": 10, "period": 60 } }
+  ],
+
+  /**
+   * Local runs and CI: `wrangler dev --env test`. Identical except that the
+   * limits are out of the way, because the app's integration tests start
+   * dozens of guests from one address. Never deployed.
+   *
+   * Wrangler does not inherit bindings or vars into a named environment, so
+   * everything below restates the top level; keep the two in step. `vitest`
+   * reads the top level, so the server's own tests run against the real limits.
+   */
+  "env": {
+    "test": {
+      "routes": [],
+      "durable_objects": {
+        "bindings": [{ "name": "GROUP", "class_name": "Group" }, { "name": "FX", "class_name": "Fx" }]
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "opensplit",
+          "database_id": "00000000-0000-0000-0000-000000000000",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "kv_namespaces": [{ "binding": "CACHE", "id": "0000000000000000000000000000000f" }],
+      "vars": {
+        "APP_ORIGIN": "http://localhost:8787"
+      },
+      "ratelimits": [
+        { "name": "GUEST_LIMIT", "namespace_id": "1001", "simple": { "limit": 10000, "period": 60 } },
+        { "name": "EMAIL_IP_LIMIT", "namespace_id": "1002", "simple": { "limit": 10000, "period": 60 } },
+        { "name": "EMAIL_ADDRESS_LIMIT", "namespace_id": "1003", "simple": { "limit": 10000, "period": 60 } },
+        { "name": "VERIFY_IP_LIMIT", "namespace_id": "1004", "simple": { "limit": 10000, "period": 60 } },
+        { "name": "BACKFILL_LIMIT", "namespace_id": "1005", "simple": { "limit": 10000, "period": 60 } }
+      ]
+    }
   }
 }

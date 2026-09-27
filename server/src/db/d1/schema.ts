@@ -1,4 +1,4 @@
-import { index, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 /**
  * What D1 holds: profiles, plus derived indexes over the group objects (which
@@ -26,7 +26,10 @@ export const profiles = sqliteTable(
   (table) => [index("profiles_updated").on(table.updatedAt, table.id)],
 );
 
-/** Which groups a person is in. Derived from the group objects; may briefly lag. */
+/**
+ * Which groups a person is in. Derived from the group objects, which send
+ * every change in order and retry until D1 takes it.
+ */
 export const memberships = sqliteTable(
   "memberships",
   {
@@ -34,6 +37,8 @@ export const memberships = sqliteTable(
     groupId: text("group_id").notNull(),
     leftAt: text("left_at"),
     updatedAt: text("updated_at").notNull(),
+    /** The group's outbox id for this write: an older write arriving late is ignored. */
+    version: integer("version").notNull(),
   },
   (table) => [primaryKey({ columns: [table.profileId, table.groupId] }), index("memberships_group").on(table.groupId)],
 );
@@ -50,7 +55,10 @@ export const deviceTokens = sqliteTable(
   (table) => [index("device_tokens_profile").on(table.profileId)],
 );
 
-/** Routes a token to its group before the holder is a member. State lives in the object. */
+/**
+ * Routes a token to its group before the holder is a member. Insert-only, since
+ * a token never moves between groups; whether it still works is the object's call.
+ */
 export const linkTokens = sqliteTable(
   "link_tokens",
   {
@@ -61,3 +69,9 @@ export const linkTokens = sqliteTable(
   },
   (table) => [index("link_tokens_group").on(table.groupId)],
 );
+
+/** Groups that were collected. No index write for one is accepted afterwards, however late it arrives. */
+export const purgedGroups = sqliteTable("purged_groups", {
+  groupId: text("group_id").primaryKey(),
+  purgedAt: text("purged_at").notNull(),
+});

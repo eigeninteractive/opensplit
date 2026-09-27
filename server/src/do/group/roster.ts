@@ -129,3 +129,23 @@ export function forgetProfile(tx: Tx, profileId: string, displayName: string | n
     .run();
   return { forgotten: true, purged: false };
 }
+
+/**
+ * A guest signing in to an account they already had: the guest's place in
+ * this group becomes that account's, balances and all, since both are the same
+ * person. Where that account already holds a place here, the two cannot
+ * become one row, so the guest's is left as a placeholder under its name.
+ */
+export function handOver(tx: Tx, profileId: string, heirId: string, now: string): { forgotten: boolean; purged: boolean } {
+  const meta = findMeta(tx);
+  const member = meta && findMemberByProfile(tx, profileId);
+  if (!meta || !member) return { forgotten: false, purged: false };
+  if (findMemberByProfile(tx, heirId)) return forgetProfile(tx, profileId, null, now);
+
+  tx.update(schema.members)
+    .set({ profileId: heirId, updatedAt: now, seq: nextSeq(tx) })
+    .where(eq(schema.members.id, member.id))
+    .run();
+  stageMembership(tx, heirId, member.leftAt, now);
+  return { forgotten: true, purged: false };
+}
