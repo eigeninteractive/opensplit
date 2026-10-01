@@ -1,18 +1,20 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../application/ledger_providers.dart';
 import '../../application/session_providers.dart';
-import '../../data/local/database.dart';
 import '../../domain/auth_service.dart';
-import '../../domain/settle/upi.dart';
 import '../feedback.dart';
-import '../widgets/account_section.dart';
 import '../widgets/page_body.dart';
+import 'edit_profile_screen.dart';
 
-/// Who you are, in one place: linking the account, which decides whether
-/// somebody's data survives losing their phone, and the one name and payment
-/// handle everybody who shares a group with you reads.
+/// Who you are, in one place: the name and payment handle everybody who shares
+/// a group with you reads, whether the account survives losing this device,
+/// and the ways to leave.
+///
+/// Read-only. It shows the stored profile as it is, and editing happens on its
+/// own screen, so nothing here holds a copy that could fall behind.
 class AccountScreen extends ConsumerStatefulWidget {
   const AccountScreen({super.key});
 
@@ -21,81 +23,7 @@ class AccountScreen extends ConsumerStatefulWidget {
 }
 
 class _AccountScreenState extends ConsumerState<AccountScreen> {
-  final _name = TextEditingController();
-  final _vpa = TextEditingController();
-
-  /// Seeded once, from the first profile that arrives. Re-seeding would fight
-  /// whoever is typing.
-  bool _seeded = false;
-  bool _saving = false;
   bool _deleting = false;
-  String? _nameError;
-  String? _vpaError;
-
-  @override
-  void initState() {
-    super.initState();
-    // Filling a form from asynchronous data is initialisation, not something to
-    // do while building: writing to a controller notifies the field attached to
-    // it, and doing that from inside a build is how a widget ends up marking
-    // itself dirty mid-frame.
-    ref.listenManual(
-      myProfileProvider,
-      (_, next) => _seed(next.value),
-      fireImmediately: true,
-    );
-  }
-
-  @override
-  void dispose() {
-    _name.dispose();
-    _vpa.dispose();
-    super.dispose();
-  }
-
-  /// No setState: the controllers notify the fields bound to them, which is the
-  /// only thing on screen that any of this changes.
-  void _seed(Profile? profile) {
-    if (_seeded || profile == null) return;
-    _seeded = true;
-    _name.text = profile.displayName ?? '';
-    _vpa.text = profile.upiVpa ?? '';
-  }
-
-  Future<void> _save() async {
-    final name = _name.text.trim();
-    final vpa = _vpa.text.trim();
-
-    // Refused here as well as by the column's own CHECK, because a blank name
-    // is not a visible error: GroupLedger.nameOfMember falls back to the member
-    // row, so the field would look saved while the name quietly stopped
-    // travelling to anybody else.
-    if (name.isEmpty) {
-      setState(() => _nameError = 'Your name cannot be blank.');
-      return;
-    }
-    if (vpa.isNotEmpty && !isValidUpiVpa(vpa)) {
-      setState(() => _vpaError = 'That does not look like a UPI ID.');
-      return;
-    }
-    setState(() {
-      _nameError = null;
-      _vpaError = null;
-      _saving = true;
-    });
-    try {
-      await ref
-          .read(myProfileControllerProvider.notifier)
-          .save(displayName: name, upiVpa: vpa);
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Saved')));
-      }
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
 
   Future<void> _signOut() async {
     final confirmed = await showDialog<bool>(
@@ -238,63 +166,41 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final account = ref.watch(accountProvider).value;
+    final profile = ref.watch(myProfileProvider).value;
 
     return DestinationScaffold(
       title: 'Account',
       slivers: [
         SliverList.list(
           children: [
-            // The prompt to attach a real account, when there is not one yet.
-            const AccountSection(),
-
-            if (account != null && !account.isAnonymous)
-              const SizedBox(height: 8),
-
-            const Divider(height: 40),
-
-            Text('Your name', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 4),
-            Text(
-              'What everybody in your groups sees. Changing it here changes it '
-              'everywhere, including for them.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
+            _Identity(
+              name: profile?.displayName,
+              email: account?.email,
+              isGuest: account?.isAnonymous ?? false,
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _name,
-              textCapitalization: TextCapitalization.words,
-              decoration: InputDecoration(
-                labelText: 'Name',
-                errorText: _nameError,
-              ),
-            ),
+            if (account != null && account.isAnonymous) ...[
+              const SizedBox(height: 16),
+              const _SaveAccountCard(),
+            ],
 
-            const SizedBox(height: 32),
-            Text('Getting paid', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _vpa,
-              decoration: InputDecoration(
-                labelText: 'UPI ID (optional)',
-                hintText: 'you@bank',
-                errorText: _vpaError,
-                helperText:
-                    'Lets people in your groups open their UPI app to pay '
-                    'you. OpenSplit never handles the money.',
-                helperMaxLines: 3,
-              ),
+            const _SectionHeader('Profile'),
+            _ProfileRow(
+              icon: Icons.badge_outlined,
+              label: 'Name',
+              value: profile?.displayName,
+              unset: 'Add the name your groups see',
+              field: ProfileField.name,
             ),
-
-            const SizedBox(height: 24),
-            FilledButton(
-              onPressed: _saving ? null : _save,
-              child: const Text('Save'),
+            _ProfileRow(
+              icon: Icons.account_balance_wallet_outlined,
+              label: 'UPI ID',
+              value: profile?.upiVpa,
+              unset: 'Add one so people can pay you by UPI',
+              field: ProfileField.upi,
             ),
 
             if (account != null) ...[
-              const Divider(height: 48),
+              const _SectionHeader('Account'),
               // Offered only to an account somebody can get back into.
               if (!account.isAnonymous)
                 ListTile(
@@ -304,9 +210,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                     'Sign out',
                     style: TextStyle(color: theme.colorScheme.error),
                   ),
-                  subtitle: Text(
+                  subtitle: const Text(
                     'Removes this device\'s copy. Sign back in to get it again.',
-                    style: theme.textTheme.bodySmall,
                   ),
                   onTap: _signOut,
                 )
@@ -322,14 +227,10 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                     'Signing out would end this account',
                     style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
                   ),
-                  subtitle: Text(
+                  subtitle: const Text(
                     'Nothing but this device identifies a guest, so there '
-                    'would be no signing back in. Add an email address above '
-                    'to make this account recoverable — or use the same field '
-                    'to sign in as an account you already have.',
-                    style: theme.textTheme.bodySmall,
+                    'would be no signing back in. Save your account first.',
                   ),
-                  isThreeLine: true,
                 ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
@@ -360,6 +261,190 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       ],
     );
   }
+}
+
+/// Who this is, as the people in your groups see them.
+class _Identity extends StatelessWidget {
+  const _Identity({
+    required this.name,
+    required this.email,
+    required this.isGuest,
+  });
+
+  final String? name;
+  final String? email;
+  final bool isGuest;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final named = name?.trim() ?? '';
+    final initials = initialsOf(named);
+
+    return Card.filled(
+      margin: EdgeInsets.zero,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _edit(context, ProfileField.name),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 32,
+                backgroundColor: scheme.primaryContainer,
+                foregroundColor: scheme.onPrimaryContainer,
+                child: initials.isEmpty
+                    ? const Icon(Icons.person_outline, size: 32)
+                    : Text(initials, style: theme.textTheme.titleLarge),
+              ),
+              const SizedBox(width: 20),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      named.isEmpty ? 'No name yet' : named,
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        color: named.isEmpty ? scheme.onSurfaceVariant : null,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      isGuest
+                          ? 'Guest account on this device'
+                          : email ?? 'Saved account',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.edit_outlined),
+                tooltip: 'Edit profile',
+                onPressed: () => _edit(context, ProfileField.name),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The one thing a guest should do, said once and with one button.
+class _SaveAccountCard extends StatelessWidget {
+  const _SaveAccountCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final onCard = scheme.onSecondaryContainer;
+
+    return Card.filled(
+      margin: EdgeInsets.zero,
+      color: scheme.secondaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Save your account',
+              style: theme.textTheme.titleMedium?.copyWith(color: onCard),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Add an email address or Google so you can get back in after '
+              'losing this device, and use OpenSplit on more than one.',
+              style: theme.textTheme.bodyMedium?.copyWith(color: onCard),
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: () => context.push('/account/save'),
+              child: const Text('Save my account'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader(this.title);
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 32, bottom: 4),
+      child: Semantics(
+        header: true,
+        child: Text(
+          title,
+          style: theme.textTheme.titleSmall?.copyWith(
+            color: theme.colorScheme.primary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One stored value, read-only, opening the editor on its own field.
+class _ProfileRow extends StatelessWidget {
+  const _ProfileRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.unset,
+    required this.field,
+  });
+
+  final IconData icon;
+  final String label;
+  final String? value;
+
+  /// What to say instead of a value, as an invitation rather than a blank.
+  final String unset;
+  final ProfileField field;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final shown = value?.trim() ?? '';
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(icon),
+      title: Text(label),
+      subtitle: Text(
+        shown.isEmpty ? unset : shown,
+        style: shown.isEmpty ? TextStyle(color: scheme.onSurfaceVariant) : null,
+      ),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => _edit(context, field),
+    );
+  }
+}
+
+void _edit(BuildContext context, ProfileField field) =>
+    context.push('/account/edit?field=${field.name}');
+
+/// Up to two letters for an avatar: the first of the first and last words.
+@visibleForTesting
+String initialsOf(String name) {
+  final words = name.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+  if (words.isEmpty) return '';
+  final first = words.first.characters.first;
+  final last = words.length > 1 ? words.last.characters.first : '';
+  return (first + last).toUpperCase();
 }
 
 /// A dash and a line of text, for a dialog that has to list consequences.

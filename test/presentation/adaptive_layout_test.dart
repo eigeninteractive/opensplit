@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 // test framework's group().
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/presentation/app.dart';
+import 'package:opensplit/presentation/screens/account_screen.dart';
 import 'package:opensplit/presentation/widgets/page_body.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -171,7 +172,7 @@ void main() {
       await tester.tap(find.text('Account'));
       await _beats(tester);
 
-      expect(find.text('Your name'), findsOneWidget);
+      expect(find.byType(AccountScreen), findsOneWidget);
       expect(
         find.byType(NavigationDrawer),
         findsNothing,
@@ -194,7 +195,7 @@ void main() {
       await tester.tap(find.byIcon(Icons.person_outline).last);
       await _beats(tester);
 
-      expect(find.text('Your name'), findsOneWidget);
+      expect(find.byType(AccountScreen), findsOneWidget);
       expect(
         tester
             .widget<NavigationRail>(find.byType(NavigationRail))

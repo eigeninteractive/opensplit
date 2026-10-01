@@ -7,6 +7,7 @@ import 'screens/about_screen.dart';
 import 'screens/account_screen.dart';
 import 'screens/activity_screen.dart';
 import 'screens/archived_groups_screen.dart';
+import 'screens/edit_profile_screen.dart';
 import 'screens/entry_editor_screen.dart';
 import 'screens/group_detail_screen.dart';
 import 'screens/group_list_screen.dart';
@@ -15,6 +16,7 @@ import 'screens/insights_screen.dart';
 import 'screens/join_screen.dart';
 import 'screens/members_screen.dart';
 import 'screens/not_found_screen.dart';
+import 'screens/save_account_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/settle_up_screen.dart';
 import 'screens/welcome_screen.dart';
@@ -102,6 +104,21 @@ GoRouter buildRouter({
         GoRoute(
           path: '/about',
           builder: (context, state) => const AboutScreen(),
+        ),
+        // Reached from the Account destination, above the shell for the same
+        // reason as About.
+        GoRoute(
+          path: '/account/edit',
+          builder: (context, state) => EditProfileScreen(
+            focus:
+                ProfileField.values
+                    .asNameMap()[state.uri.queryParameters['field']] ??
+                ProfileField.name,
+          ),
+        ),
+        GoRoute(
+          path: '/account/save',
+          builder: (context, state) => const SaveAccountScreen(),
         ),
         GoRoute(
           path: '/g/:groupId',
