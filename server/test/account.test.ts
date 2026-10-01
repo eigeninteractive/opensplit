@@ -167,6 +167,9 @@ describe("a group's change page", () => {
     expect(page.profiles.map((row) => row.id).sort()).toEqual([host.id, friend.id].sort());
   });
 
+  // 121 accounts joining one at a time, each through the group's object and on
+  // to D1: half a second on a laptop, four or five on a CI runner, which is the
+  // default limit. The size is the point of the test, so the limit gives way.
   it("carries more profiles than D1 binds in one query", async () => {
     const host = await signInAsGuest();
     const groupId = await makeGroup(host);
@@ -178,7 +181,7 @@ describe("a group's change page", () => {
 
     const page = await json<ChangePage>(await call(`/api/groups/${groupId}/changes?since=0`, host));
     expect(page.profiles).toHaveLength(121);
-  });
+  }, 30_000);
 
   it("carries somebody who only just became visible, though the profile feed has passed them", async () => {
     const host = await signInAsGuest();
