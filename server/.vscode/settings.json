@@ -1,4 +1,9 @@
 {
+  // For server/ opened on its own; the repository's .vscode/settings.json explains these.
+  "[javascript]": { "editor.defaultFormatter": "biomejs.biome" },
+  "[typescript]": { "editor.defaultFormatter": "biomejs.biome" },
+  "[json]": { "editor.defaultFormatter": "biomejs.biome" },
+  "[jsonc]": { "editor.defaultFormatter": "biomejs.biome" },
   "files.associations": {
     "wrangler.json": "jsonc"
   }

@@ -1,9 +1,11 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
-  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  // Nested under the repository's biome.jsonc, which is what lets an editor opened at the
+  // repository root find this file at all.
+  "root": false,
   "files": {
     "ignoreUnknown": false,
-    // `useIgnoreFile` above already drops everything `.gitignore` does — `.wrangler`,
+    // The root's `useIgnoreFile` already drops everything `.gitignore` does — `.wrangler`,
     // `node_modules`, `public` — so what is listed here is the opposite case: files that
     // *are* committed and still are not ours to format.
     //
