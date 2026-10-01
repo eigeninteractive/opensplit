@@ -5,6 +5,9 @@ What changed in each version of the app, newest first. The format is
 [cider](https://pub.dev/packages/cider): see "Versions" in docs/runbook.md.
 
 ## [Unreleased]
+### Changed
+- Sign-in code emails have a new look to match the app.
+
 ### Fixed
 - A group where you're owed one currency and owe another now says both on the groups list, instead of calling it all owed to you.
 - Signing in with Google on Android works again.
