@@ -1,36 +1,16 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:opensplit_api/opensplit_api.dart' show EmailFlow;
 
-import '../../application/providers.dart';
+import '../../application/session_providers.dart';
 import '../../data/auth/google_sign_in_gateway.dart';
-import '../../domain/repositories/auth_service.dart';
+import '../../domain/auth_service.dart';
 import '../navigation.dart';
 
 /// Attaches a real account to an anonymous session.
-///
-/// An eight-digit code, not a magic link. Magic links open in whichever browser
-/// the mail app prefers rather than the one holding the session, lose the app's
-/// context entirely on mobile, and are routinely followed and consumed by
-/// corporate mail scanners before the recipient ever sees them. That requires
-/// an email template carrying the token — see `supabase/templates/`.
-///
-/// No SMS either, despite being the Indian default: per-message cost scales
-/// linearly with signups and never goes away, and SMS pumping fraud can produce
-/// a real bill overnight. That is exactly the kind of recurring per-user cost
-/// that forces a paywall later.
-///
-/// ## Two outcomes, and the difference matters
-///
-/// Giving an address that is free ATTACHES it: the user id does not change and
-/// every expense on this device is still theirs. Giving one that already has an
-/// OpenSplit account is a SIGN-IN: the session is replaced, and what this
-/// device recorded anonymously stays with the anonymous account, unreachable.
-///
-/// The screen has to name that before it happens rather than after, so both
-/// paths stop and ask, and both say how many expenses are at stake.
 class AccountSection extends ConsumerStatefulWidget {
   const AccountSection({super.key});
 
@@ -53,21 +33,13 @@ class _AccountSectionState extends ConsumerState<AccountSection> {
     super.initState();
     // A refusal that came back from a redirect has no caller left to catch it,
     // so it waits in a provider for whichever screen the user was returned to.
-    // This is that screen: nothing else ever asks to link without permission
-    // to fall back, so nothing else can be refused.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final parked = ref.read(googleRefusalProvider);
-      final refusal = parked.value;
-      if (refusal == null) return;
-      parked.value = null;
+      if (ref.read(googleRefusalProvider.notifier).take() == null) return;
       unawaited(_run(() => _signInAfterRefusal()));
     });
   }
 
   /// Asks the question the redirect could not, then signs in if told to.
-  ///
-  /// The same two steps [_attach] takes on Android, split across the page load
-  /// that happened in between.
   Future<void> _signInAfterRefusal() async {
     final returnTo = returnDestination(GoRouterState.of(context).uri);
     if (!await _confirmSignIn('that Google account')) return;
@@ -111,30 +83,27 @@ class _AccountSectionState extends ConsumerState<AccountSection> {
   }
 
   /// Asks whether to go ahead with replacing the session, naming the cost.
-  ///
-  /// Returns false if they back out, and false if the widget went away while
-  /// the dialog was open.
   Future<bool> _confirmSignIn(String who) async {
     final count = await ref
         .read(accountControllerProvider.notifier)
-        .entriesLeftBehind();
+        .groupsToHandOver();
     if (!mounted) return false;
 
-    final loses = count > 0;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Sign in as $who?'),
         content: Text(
-          loses
+          count > 0
               ? 'That already has an OpenSplit account, so this signs you in '
-                    'to it rather than saving what is here.\n\n'
-                    'The $count ${count == 1 ? 'expense' : 'expenses'} on this '
-                    'device belong to the anonymous account that recorded '
-                    'them. They will be removed from this device and they '
-                    'cannot be moved across.'
+                    'to it and this guest account ends.\n\n'
+                    'Your place in ${count == 1 ? 'your group' : 'all $count '
+                              'groups'} comes with you, balances and all. In '
+                    'any group that account is already in, your guest place '
+                    'stays behind as a placeholder under its name.'
               : 'That already has an OpenSplit account, so this signs you in '
-                    'to it. There is nothing recorded on this device to lose.',
+                    'to it and this guest account ends. It is in no groups, '
+                    'so there is nothing to bring along.',
         ),
         actions: [
           TextButton(
@@ -143,7 +112,7 @@ class _AccountSectionState extends ConsumerState<AccountSection> {
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: Text(loses ? 'Sign in and remove' : 'Sign in'),
+            child: const Text('Sign in'),
           ),
         ],
       ),
@@ -157,13 +126,6 @@ class _AccountSectionState extends ConsumerState<AccountSection> {
         .sendEmailCode(_email.text.trim());
 
     if (!mounted) return;
-    // Nothing was sent and nothing is pending: this deployment attaches an
-    // address without confirming it. Already done.
-    if (flow == EmailFlow.linked) {
-      setState(() => _flow = null);
-      _saved();
-      return;
-    }
     setState(() => _flow = flow);
   });
 
@@ -195,15 +157,6 @@ class _AccountSectionState extends ConsumerState<AccountSection> {
   Future<void> _google() => _run(_attach);
 
   /// Attaches Google to this session, or signs in as it.
-  ///
-  /// Linking is tried first and the refusal is the one chance to ask before a
-  /// sign-in replaces the session and strands this device's rows.
-  ///
-  /// On Android the whole exchange happens here. On the web the first call
-  /// hands the page to Google and returns [AttemptRedirected]; the refusal, if
-  /// there is one, is raised on the way back by
-  /// [AccountController.resumeGoogleRedirect] on the next launch and asked from
-  /// [_resumeRedirect] — the same question, from the other end of a page load.
   Future<void> _attach() async {
     // Read before any await: on the web this navigates the page away.
     final returnTo = returnDestination(GoRouterState.of(context).uri);
@@ -278,8 +231,9 @@ class _AccountSectionState extends ConsumerState<AccountSection> {
         const SizedBox(height: 8),
         Text(
           'Your groups are synchronized, but this device is the only way back '
-          'into this guest account. Adding an email address lets you recover '
-          'it and use OpenSplit on more than one device.',
+          'into this guest account, and only while you open OpenSplit at '
+          'least once a year. Adding an email address lets you recover it and '
+          'use OpenSplit on more than one device.',
           style: Theme.of(
             context,
           ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
@@ -299,8 +253,7 @@ class _AccountSectionState extends ConsumerState<AccountSection> {
           const SizedBox(height: 12),
           _Notice(
             'That address already has an OpenSplit account. Entering the code '
-            'signs you in to it — what is on this device stays with the '
-            'anonymous account that recorded it.',
+            'signs you in to it, and your groups come with you.',
           ),
         ],
         if (_codeSent) ...[

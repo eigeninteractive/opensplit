@@ -11,9 +11,6 @@ Future<({String epoch, bool enabled})> readSyncSession(AppDatabase db) async {
 }
 
 /// Invalidates in-flight work before clearing private data.
-///
-/// The marker survives cleanup and is visible to other tabs and isolates.
-/// Only opening an authenticated foreground database enables it again.
 Future<void> suspendSyncSession(AppDatabase db) async {
   await db
       .into(db.syncSessions)

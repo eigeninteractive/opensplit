@@ -1,20 +1,11 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../application/providers.dart';
+import '../../application/local_providers.dart';
+import '../../application/sync_providers.dart';
 import '../../data/sync/outbox_queue.dart';
 
 /// Says out loud that something recorded on this device never reached anyone.
-///
-/// The outbox sets aside a write the server refuses in a way retrying cannot
-/// fix, so that one poisoned item cannot wedge everything queued behind it.
-/// That is right, but on its own it produces the worst failure this app has:
-/// not a crash, but an expense that looks saved forever on one phone and does
-/// not exist for anybody else — discovered weeks later as two people reading
-/// different balances, with nothing anywhere to explain it.
-///
-/// So it is stated plainly and it does not go away on its own. Offline is
-/// silent, because offline is normal and resolves itself; this is neither.
 class UnsyncedChangesBanner extends ConsumerWidget {
   const UnsyncedChangesBanner({super.key, this.padding = EdgeInsets.zero});
 
@@ -33,12 +24,8 @@ class UnsyncedChangesBanner extends ConsumerWidget {
 
     return Padding(
       padding: padding,
-      // MaterialBanner, rather than the Card and Row this used to build by
-      // hand. Material's definition of a banner is "an important, succinct
-      // message with actions, that requires a user action to dismiss" — which
-      // is this, exactly. Using the component means the leading icon, the
-      // content style, the action layout and the divider all come from the
-      // theme instead of being re-specified here.
+      // Material's banner: "an important, succinct message with actions,
+      // that requires a user action to dismiss".
       child: MaterialBanner(
         backgroundColor: scheme.errorContainer,
         contentTextStyle: text.bodyMedium?.copyWith(
@@ -75,6 +62,10 @@ class UnsyncedChangesBanner extends ConsumerWidget {
             onPressed: () => _showDetails(context, failures),
             child: const Text('Details'),
           ),
+          TextButton(
+            onPressed: () => _confirmDiscard(context, ref, failures),
+            child: const Text('Discard'),
+          ),
           FilledButton(
             onPressed: () =>
                 ref.read(syncControllerProvider.notifier).retryFailed(),
@@ -85,11 +76,44 @@ class UnsyncedChangesBanner extends ConsumerWidget {
     );
   }
 
+  Future<void> _confirmDiscard(
+    BuildContext context,
+    WidgetRef ref,
+    List<FailedWrite> failures,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          failures.length == 1 ? 'Discard this change?' : 'Discard changes?',
+        ),
+        content: Text(
+          failures.length == 1
+              ? 'Your change to “${failures.single.label}” is removed from '
+                    'this device, and the group’s version is shown instead. '
+                    'This cannot be undone.'
+              : 'Your ${failures.length} changes are removed from this '
+                    'device, and the group’s version is shown instead. This '
+                    'cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed ?? false) {
+      await ref.read(syncControllerProvider.notifier).discardFailed();
+    }
+  }
+
   /// The server's own words, unedited.
-  ///
-  /// Almost nobody will read this. The one person who does is trying to work
-  /// out why their balance is wrong, and a paraphrase would cost them the only
-  /// evidence there is.
   void _showDetails(BuildContext context, List<FailedWrite> failures) {
     showDialog<void>(
       context: context,

@@ -1,6 +1,6 @@
+import 'package:drift/drift.dart' show Value;
+import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/domain/member_identity.dart';
-import 'package:opensplit/domain/models/member.dart';
-import 'package:opensplit/domain/models/profile.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -24,7 +24,7 @@ void main() {
 
   test('a placeholder uses the name stored on the member', () {
     expect(
-      memberDisplayName(claimed.copyWith(profileId: null), null),
+      memberDisplayName(claimed.copyWith(profileId: const Value(null)), null),
       'Brinda',
     );
   });

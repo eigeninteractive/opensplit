@@ -1,41 +1,20 @@
 import 'package:drift/drift.dart';
 
+import '../../domain/calendar_date.dart';
 import '../../domain/models/entry.dart';
 import '../../domain/analytics/analytics_query.dart';
 import '../local/database.dart';
 import 'drift_entry_repository.dart';
 
 /// Local analytics.
-///
-/// Every one of these is SQL over data already on the device: no endpoint, no
-/// per-query cost, no cache to invalidate, and it all works with no connection.
-/// Searching your own expense history is not something worth charging for.
-///
-/// All of it is watched rather than fetched. Every query here already declares
-/// what it reads from, which is the expensive half of making it live, and the
-/// alternative is a screen that answers as of the moment it was opened: a sync
-/// landing behind an open Insights tab, or an expense added in the pane beside
-/// it, would leave totals that disagree with the list they were computed from
-/// and nothing on screen to say so.
-///
-/// Settlements are excluded throughout. Paying a friend back is not spending,
-/// and counting it would double every settled expense.
 final class DriftAnalyticsRepository {
   /// [_entries] hydrates the rows a search matches.
-  ///
-  /// Injected rather than constructed here, so there is one place that knows
-  /// how an entry is assembled from its three tables and analytics is a caller
-  /// of it rather than a second copy.
   DriftAnalyticsRepository(this._db, this._entries);
 
   final AppDatabase _db;
   final DriftEntryRepository _entries;
 
   /// Builds the shared WHERE clause and its variables.
-  ///
-  /// `kind = 'expense'` and `deleted_at IS NULL` are not optional: a settlement
-  /// is a transfer, not spending, and counting one would inflate every figure
-  /// on the screen.
   ({String sql, List<Variable<Object>> vars}) _where(
     AnalyticsFilter filter, {
     String alias = 'e',
@@ -57,11 +36,11 @@ final class DriftAnalyticsRepository {
     }
     if (filter.from != null) {
       clauses.add('$alias.entry_date >= ?');
-      vars.add(Variable<String>(_iso(filter.from!)));
+      vars.add(Variable<String>(calendarDate(filter.from!)));
     }
     if (filter.to != null) {
       clauses.add('$alias.entry_date <= ?');
-      vars.add(Variable<String>(_iso(filter.to!)));
+      vars.add(Variable<String>(calendarDate(filter.to!)));
     }
     if (filter.memberId != null) {
       clauses.add(
@@ -84,11 +63,6 @@ final class DriftAnalyticsRepository {
   }
 
   /// Turns user input into an FTS5 query.
-  ///
-  /// Each term is quoted so that punctuation cannot be read as FTS5 operators —
-  /// an apostrophe or a stray `*` would otherwise be a syntax error thrown at
-  /// someone who was only typing a restaurant name. A trailing `*` makes it
-  /// match as you type.
   static String? _ftsMatch(String query) {
     final terms = query
         .replaceAll('"', ' ')
@@ -99,22 +73,19 @@ final class DriftAnalyticsRepository {
     return terms.map((t) => '"$t"*').join(' ');
   }
 
-  static String _iso(DateTime date) =>
-      DateTime.utc(date.year, date.month, date.day).toIso8601String();
-
   Stream<List<Entry>> search(AnalyticsFilter filter) {
     final where = _where(filter);
     return _db
         .customSelect(
           'SELECT e.id FROM entries e WHERE ${where.sql} '
-          'ORDER BY e.entry_date DESC, e.created_at DESC',
+          'ORDER BY e.entry_date DESC, e.occurred_at DESC NULLS LAST, '
+          'e.created_at DESC',
           variables: where.vars,
           readsFrom: {_db.entries, _db.entryShares},
         )
         .watch()
-        // Hydrating only what matched, rather than the group's whole journal
-        // and then discarding most of it. A search for one restaurant used to
-        // load every expense in the group on every keystroke.
+        // Hydrating only what matched, not the group's whole journal, since
+        // this runs on every keystroke.
         .asyncMap(
           (rows) => _entries.getByIds([
             for (final row in rows) row.read<String>('id'),

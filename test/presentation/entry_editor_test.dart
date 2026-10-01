@@ -1,6 +1,6 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:opensplit/data/local/database.dart';
@@ -12,20 +12,12 @@ import '../harness.dart';
 
 /// The editor seeds itself from asynchronous data, and hands its two sections
 /// read-only copies of the selection which come back as new values through
-/// callbacks. Both used to work the other way round — seeded inside `build`,
-/// with the sections editing the screen's own collections in place — so these
-/// hold the corrected shape down.
-///
-/// Driven through the real router rather than pumped on its own: saving calls
-/// [goBack], which needs one, and the editor is only ever reached by a push.
+/// callbacks.
 Future<void> _pumpApp(WidgetTester tester, AppDatabase db) async {
   SharedPreferences.setMockInitialValues({});
   final prefs = await SharedPreferences.getInstance();
 
-  // A tall phone rather than the default 800x600. The editor is a long form and
-  // its save button sits below three members' worth of split rows, so on the
-  // default surface the thing under test is off screen. Kept under the 840dp
-  // rail breakpoint so the layout is still the phone one.
+  // A tall phone rather than the default 800x600.
   tester.view.physicalSize = const Size(400, 1600);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -42,11 +34,6 @@ Future<void> _go(WidgetTester tester, String location) async {
 }
 
 /// Opens the editor the way a person does: into the group, then the button.
-///
-/// Deliberately not `go('/g/g1/add')`. Going straight to a two-level location
-/// builds both pages in one frame, and SelectionArea — which wraps the whole
-/// app — walks the selectables of a page whose transition has not been laid out
-/// yet, tripping a framework assertion that has nothing to do with this screen.
 Future<void> _openEditor(WidgetTester tester) async {
   await _go(tester, '/g/g1');
   await tester.tap(find.widgetWithText(FloatingActionButton, 'Add expense'));
@@ -173,8 +160,8 @@ void main() {
     await _beats(tester);
 
     final saved = (await DriftEntryRepository(db).getEntries('g1')).single;
-    expect(saved.description, 'Dinner');
-    expect(saved.amountMinor, 30000);
+    expect(saved.row.description, 'Dinner');
+    expect(saved.row.amountMinor, 30000);
     expect(
       {for (final share in saved.shares) share.memberId},
       {'m-ravi', 'm-priya'},
@@ -190,6 +177,38 @@ void main() {
       {'m-ravi'},
       reason: 'the person adding it paid, by default',
     );
+    await _unmount(tester);
+  });
+
+  testWidgets('a new expense happened now, here, unless the time is removed', (
+    tester,
+  ) async {
+    await _seed(db);
+    await _pumpApp(tester, db);
+    final before = DateTime.now().toUtc();
+
+    await _openEditor(tester);
+    await _type(tester, what: 'Chai', amount: '30');
+    await tester.tap(find.widgetWithText(FilledButton, 'Add expense'));
+    await _beats(tester);
+
+    final chai = (await DriftEntryRepository(db).getEntries('g1')).single;
+    expect(chai.row.timeZone, testZone);
+    expect(chai.row.occurredAt!.isBefore(before), isFalse);
+
+    await _openEditor(tester);
+    await _type(tester, what: 'Snacks', amount: '60');
+    await tester.tap(find.byTooltip('Remove the time'));
+    await _beats(tester);
+    expect(find.text('Add a time'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Add expense'));
+    await _beats(tester);
+
+    final snacks = (await DriftEntryRepository(db).getEntries(
+      'g1',
+    )).firstWhere((entry) => entry.row.description == 'Snacks');
+    expect(snacks.row.occurredAt, isNull, reason: 'only the day is known');
+    expect(snacks.row.timeZone, isNull);
     await _unmount(tester);
   });
 

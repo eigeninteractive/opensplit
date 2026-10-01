@@ -1,14 +1,16 @@
 import 'package:drift/drift.dart' show InsertMode, Value;
 import 'package:drift/native.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:opensplit/application/providers.dart';
+import 'package:opensplit/application/local_providers.dart';
+import 'package:opensplit/application/preferences_providers.dart';
+import 'package:opensplit/application/sync_coordinator.dart';
+import 'package:opensplit/application/sync_providers.dart';
 import 'package:opensplit/data/local/database.dart';
-import 'package:opensplit/data/sync/outbox_queue.dart';
-import 'package:opensplit/domain/models/entry.dart';
-import 'package:opensplit/domain/split/splitter.dart';
+import 'package:opensplit/data/local/tables.dart';
 import 'package:opensplit/presentation/widgets/unsynced_changes_banner.dart';
+import 'package:opensplit_api/opensplit_api.dart' show EntryKind, SplitKind;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../harness.dart';
@@ -17,7 +19,11 @@ import '../harness.dart';
 /// server. Everything upstream of it — the dead letter, the recorded reason —
 /// already existed and told nobody, which is exactly the failure these tests
 /// exist to keep fixed.
-Future<void> _pump(WidgetTester tester, AppDatabase db) async {
+Future<void> _pump(
+  WidgetTester tester,
+  AppDatabase db, {
+  _RecordingSync? sync,
+}) async {
   SharedPreferences.setMockInitialValues({});
   final prefs = await SharedPreferences.getInstance();
 
@@ -26,6 +32,7 @@ Future<void> _pump(WidgetTester tester, AppDatabase db) async {
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         appDatabaseProvider.overrideWithValue(db),
+        if (sync != null) syncControllerProvider.overrideWith(() => sync),
       ],
       child: const MaterialApp(home: Scaffold(body: UnsyncedChangesBanner())),
     ),
@@ -40,11 +47,6 @@ Future<void> _beats(WidgetTester tester) async {
 }
 
 /// Tears the tree down while the binding is still pumping.
-///
-/// Cancelling a Drift query stream schedules a zero-duration cleanup timer. If
-/// the tree is disposed by the test framework instead, that timer is still
-/// pending when it checks, and every test in the file fails on an invariant
-/// that has nothing to do with what it was testing.
 Future<void> _teardown(WidgetTester tester) async {
   await tester.pumpWidget(const SizedBox.shrink());
   await tester.pump(Duration.zero);
@@ -81,7 +83,6 @@ Future<void> _deadLetter(
           splitKind: SplitKind.equal,
           createdBy: 'me',
           createdAt: DateTime.utc(2026, 8, 21),
-          updatedAt: DateTime.utc(2026, 8, 21),
           description: Value(description),
         ),
       );
@@ -89,8 +90,8 @@ Future<void> _deadLetter(
       .into(db.outbox)
       .insert(
         OutboxCompanion.insert(
-          id: OutboxQueue.idFor(OutboxTarget.entry, entryId),
-          operation: OutboxTarget.entry.name,
+          target: OutboxTarget.entry,
+          revision: 'r1',
           targetId: entryId,
           createdAt: DateTime.utc(2026, 8, 21),
           lastError: Value(error),
@@ -144,7 +145,7 @@ void main() {
       db,
       entryId: 'e1',
       description: 'Taxi',
-      error: 'new row violates row-level security policy for table "entries"',
+      error: 'You are not a member of that group.',
     );
     await _pump(tester, db);
 
@@ -152,10 +153,35 @@ void main() {
     await _beats(tester);
 
     expect(
-      find.textContaining('row-level security'),
+      find.textContaining('not a member of that group'),
       findsOneWidget,
       reason: 'the one person who opens this is debugging a wrong balance',
     );
+    await _teardown(tester);
+  });
+
+  testWidgets('discarding asks first, and only then discards', (tester) async {
+    await _deadLetter(
+      db,
+      entryId: 'e1',
+      description: 'Taxi',
+      error: 'You are not a member of that group.',
+    );
+    final sync = _RecordingSync();
+    await _pump(tester, db, sync: sync);
+
+    await tester.tap(find.text('Discard'));
+    await _beats(tester);
+    expect(find.text('Discard this change?'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await _beats(tester);
+    expect(sync.calls, isEmpty);
+
+    await tester.tap(find.text('Discard'));
+    await _beats(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Discard'));
+    await _beats(tester);
+    expect(sync.calls, ['discard']);
     await _teardown(tester);
   });
 
@@ -179,4 +205,14 @@ void main() {
     expect(find.text('2 changes could not be saved'), findsOneWidget);
     await _teardown(tester);
   });
+}
+
+class _RecordingSync extends SyncController {
+  final calls = <String>[];
+
+  @override
+  SyncStatus build() => const SyncStatus(hasCompletedFullSync: true);
+
+  @override
+  Future<void> discardFailed() async => calls.add('discard');
 }

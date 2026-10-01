@@ -1,0 +1,3 @@
+# Wrangler's: files in the served tree that are not to be served. build_web.dart
+# copies this to the root of build/web with the rest of site/.
+.well-known/README.md

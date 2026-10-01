@@ -1,6 +1,5 @@
 import 'package:drift/native.dart';
 import 'package:opensplit/application/entry_notification.dart';
-import 'package:opensplit/domain/models/group_event.dart';
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/repositories/drift_activity_repository.dart';
 import 'package:opensplit/data/repositories/drift_currency_repository.dart';
@@ -8,19 +7,13 @@ import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';
 import 'package:opensplit/data/repositories/drift_profile_repository.dart';
 import 'package:opensplit/domain/entry_draft.dart';
-import 'package:opensplit/domain/models/profile.dart';
 import 'package:opensplit/domain/split/splitter.dart';
+import 'package:opensplit_api/opensplit_api.dart' show EventKind;
 import 'package:test/test.dart';
 
 import '../harness.dart';
 
 /// The composer both push paths use.
-///
-/// It exists as its own function so that the app and the background isolate —
-/// which share no memory, no provider container and no open database — cannot
-/// end up with two answers to "what does this expense say". These tests are
-/// what makes that claim checkable: the background isolate itself cannot be
-/// exercised from a test, but everything in it that decides wording is here.
 void main() {
   late AppDatabase db;
   late DriftGroupRepository groups;
@@ -92,7 +85,7 @@ void main() {
       activity: activity,
       myProfileId: 'profile-priya',
       groupId: g.groupId,
-      kind: GroupEventKind.entry,
+      kind: EventKind.entry,
       subjectId: entryId,
     );
 
@@ -120,7 +113,7 @@ void main() {
       activity: activity,
       myProfileId: 'profile-priya',
       groupId: g.groupId,
-      kind: GroupEventKind.entry,
+      kind: EventKind.entry,
       subjectId: entryId,
     );
 
@@ -139,7 +132,7 @@ void main() {
       activity: activity,
       myProfileId: 'profile-ravi',
       groupId: g.groupId,
-      kind: GroupEventKind.entry,
+      kind: EventKind.entry,
       subjectId: entryId,
     );
     final forPriya = await composeEventNotification(
@@ -150,7 +143,7 @@ void main() {
       activity: activity,
       myProfileId: 'profile-priya',
       groupId: g.groupId,
-      kind: GroupEventKind.entry,
+      kind: EventKind.entry,
       subjectId: entryId,
     );
 
@@ -174,7 +167,7 @@ void main() {
       // expense, or a profile that has not been reconciled yet.
       myProfileId: 'profile-nobody',
       groupId: g.groupId,
-      kind: GroupEventKind.entry,
+      kind: EventKind.entry,
       subjectId: entryId,
     );
 
@@ -197,7 +190,7 @@ void main() {
       activity: activity,
       myProfileId: 'profile-priya',
       groupId: g.groupId,
-      kind: GroupEventKind.entry,
+      kind: EventKind.entry,
       subjectId: 'an-id-this-device-has-never-seen',
     );
 

@@ -21,16 +21,9 @@ void main() {
     // background isolate: the file changed, but this connection did not issue
     // the write through a Drift statement and therefore emitted no update.
     await db.customStatement(
-      'INSERT INTO groups '
-      '(id, name, default_currency, created_at, updated_at) '
+      'INSERT INTO groups (id, name, default_currency, created_at, seq) '
       'VALUES (?, ?, ?, ?, ?)',
-      [
-        'g1',
-        'Goa Trip',
-        'INR',
-        DateTime.utc(2026, 8, 31).toIso8601String(),
-        DateTime.utc(2026, 8, 31).toIso8601String(),
-      ],
+      ['g1', 'Goa Trip', 'INR', DateTime.utc(2026, 8, 31).toIso8601String(), 7],
     );
 
     db.refreshAfterExternalSync();

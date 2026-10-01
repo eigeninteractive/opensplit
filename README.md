@@ -18,23 +18,35 @@ no real mobile app.
   indefinitely. Trips abroad are the main use case, not an edge case.
 - **Multi-currency is core.** Balances are always per currency, never silently
   netted across one.
-- **Self-hostable for real.** The server stores rows and enforces one
-  invariant. It computes nothing. The same local stack and migrations used by
-  CI are the supported self-host path.
+- **You can leave with everything.** The whole journal lives on your device in
+  plain SQLite and exports to CSV. The server stores rows and enforces one
+  invariant; it computes nothing. There is no self-host path and
+  [PRINCIPLES.md](PRINCIPLES.md) #6 says so outright. The one exception is a
+  group the server collects (settled, and quiet for a year): the next sync
+  removes it from every device too, so export it first to keep a copy.
 
 ## Architecture in one paragraph
 
 A Flutter client (Riverpod, Drift, go_router) holds the entire journal in
 SQLite and does all computation locally — split arithmetic, the balance fold,
-debt simplification, analytics. Supabase is a paginated row feed behind a Dart
-repository interface: Postgres with row-level security and a deferred
-constraint trigger that enforces `sum(payers) = sum(shares) = amount` at commit.
-Reads outnumber writes roughly 50:1, so putting reads on devices people already
-own is what makes "free forever" credible rather than aspirational.
+debt simplification, analytics. The backend is a Cloudflare Worker whose Dart
+client is generated from its OpenAPI contract: one Durable Object per group, which is that group's
+only writer and therefore the thing that can hand out a strictly increasing
+sequence number, enforce `sum(payers) = sum(shares) = amount` in ordinary code,
+and answer "are you a member" by reading its own table. D1 holds the handful of
+facts that are genuinely cross-group — profiles, which groups somebody is in,
+where to wake them, and what a link token points at. Types are declared once
+(Drizzle tables → Zod → OpenAPI → the generated Dart client); see
+[docs/architecture.md](docs/architecture.md). Reads outnumber writes
+roughly 50:1, so putting reads on devices people already own is what makes
+"free forever" credible rather than aspirational.
 
 ## Development
 
-Requires the Flutter SDK, Docker, and the Supabase CLI.
+Requires the Flutter SDK and [pnpm](https://pnpm.io/installation), installed
+once by any means. pnpm brings the rest of the server's toolchain itself: its
+own version from `packageManager` in `server/package.json`, and Node from
+`devEngines.runtime` beside it, so there is no Node version to manage.
 
 ```bash
 flutter pub get
@@ -46,39 +58,89 @@ flutter run
 The local backend:
 
 ```bash
-supabase start                     # applies supabase/migrations in order
-supabase db reset                  # rebuild from scratch
-supabase test db                   # pgTAP: invariants, RLS, invite claims
+dart run tool/build_web.dart --site-only   # the Worker serves a front end too
+cd server
+pnpm install
+pnpm db:migrate:local      # applies server/migrations to local D1
+pnpm dev                   # the real Worker, on localhost:8787
+pnpm test                  # the Durable Object and the routes
 ```
 
-The database tests are not optional decoration. They cover the deferred
-constraint trigger rejecting unbalanced entries, that `is_group_member` does
-not recurse through its own policy (Postgres 42P17, the standard failure for
-this shape of schema), that entries cannot be hard-deleted, that an anonymous
-account cannot destroy a group, and that an invite token can be spent exactly
-once by someone with no other access to the group.
+`wrangler dev` runs the real Worker over local D1, KV and Durable Object
+storage. Nothing it does touches a Cloudflare account, and it needs no
+credentials beyond `cp .dev.vars.example .dev.vars`. The package scripts run it as
+`--env test`, which is production's config with the rate limits raised out of
+the way; run `wrangler` by hand with the same flag. `pnpm test` does not use it,
+so the server's own suite runs against the real limits.
+
+The first line is there because the Worker serves the site and the client as
+well as the API, and it refuses to start at all without an assets directory.
+`--site-only` builds the static root in about a second and skips the Flutter
+client; drop the flag when you want `/app` too. `pnpm test` needs neither — the
+server suite serves a three-file fixture it owns, so it never depends on which
+build ran last.
+
+After changing a Drizzle table or a Zod schema, regenerate the contract and the
+Dart client (CI fails if they differ from what is committed):
+
+```bash
+dart run tool/generate_api_client.dart
+```
+
+Formatting and linting are split by language. Dart is `dart format` and
+`dart analyze`. Everything Biome understands is Biome, from the one
+`biome.jsonc` at the root: the Worker's TypeScript, the HTML, CSS and
+JavaScript of `site/` and `web/`, the SVGs and the JSON. Files a tool writes
+are excluded there, because CI regenerates them and diffs.
+
+```bash
+dart format lib test tool && dart analyze
+cd server && pnpm format     # Biome, across the whole repository; CI runs `pnpm lint`
+```
+
+`.vscode/settings.json` sends each language to the same tool on save, and
+outranks a personal default formatter.
+
+The server tests are not optional decoration. They cover the balance invariant
+rejecting an expense that does not add up, that a stale edit is refused only
+when applying it would move money, that entries cannot be hard-deleted, that an
+invite token can be spent exactly once by somebody with no other access to the
+group, and that a collected group answers everybody with a tombstone rather
+than refusing every device that still holds a copy.
 
 They also cover what one member of a group can do to another, which is a
 different question from what a stranger can do and has a much less obvious
-answer. An RLS policy chooses rows; it cannot say "this column, but only on
-your own row", and its `WITH CHECK` cannot see the old row at all. So the
-column rules live in `guard_member_update` instead, and the tests are what say
-that an ordinary member cannot promote themselves to owner, cannot blank
-somebody's `profile_id` and evict them, and — the one that moves real money —
-cannot rewrite another member's UPI handle so a settle-up handoff pays the
-wrong person.
+answer: that an ordinary member cannot blank somebody's account link and evict
+them, cannot remove a co-member who still owes or is owed, and — the one that
+moves real money — cannot rewrite another member's UPI handle so a settle-up
+handoff pays the wrong person.
+
+Those are the rules that get expensive when the check and the data are in
+different places. A Durable Object runs one thing at a time and owns exactly
+one group's rows, so each of them is a function with the before-and-after
+values in hand: no second mechanism for column-level rules, and no cross-table
+lookup to answer "is this person a member".
 
 ```bash
-flutter test test/data/supabase_integration_test.dart   # needs supabase start
+dart run tool/build_web.dart                           # the whole front end
+cd server && pnpm db:migrate:local && pnpm dev   # in one terminal
+flutter test --tags integration
 ```
 
-That runs the real adapter against the local instance. It skips itself when
-nothing is listening, so `flutter test` stays green without it — which is also
-why it has to be run somewhere that *does* have a backend, or it never runs at
-all. CI does, in the `database` job. It is the only thing that catches a wrong
-RPC signature, a PostgREST filter that does not mean what it looks like, or an
-RLS policy that forbids something the app has to do. Every one of those has
-already happened once.
+The full build and not `--site-only`, because one of these asserts that a cold
+deep link into `/app` arrives cross-origin isolated — a fact about the Worker
+and the asset router together, checked nowhere else.
+
+These run the app's sync, sessions and generated client against the real
+Worker over local D1, KV and Durable Object storage. There is no fake server:
+the rules they exercise are the server's own. Nothing touches a Cloudflare
+account and no credentials are needed.
+
+They skip themselves unless an OpenSplit Worker answers `/api/health`, so
+`flutter test` stays green without one. To use another port (`pnpm exec wrangler dev
+--env test --port 8797`), pass `--dart-define=API_BASE_URL=http://127.0.0.1:8797`. CI runs
+them in the `backend` job with `--dart-define=REQUIRE_BACKEND=true`, so a
+missing Worker there fails rather than skips.
 
 ### The local database schema is versioned
 
@@ -89,12 +151,17 @@ snapshot of every shipped schema, and `test/data/migration_test.dart` fails the
 moment the code drifts from the newest one.
 
 After changing anything in `lib/data/local/tables.dart`, bump
-`AppDatabase.schemaVersion`, add a step to `onUpgrade`, and then:
+`AppDatabase.schemaVersion` (never re-dump a version that has been pushed) and
+then:
 
 ```bash
 dart run drift_dev schema dump lib/data/local/database.dart drift_schemas/
 dart run drift_dev schema generate drift_schemas/ test/data/generated_migrations/
 ```
+
+Until the first public release, an upgrade rebuilds the local database and
+re-syncs, which loses anything recorded offline and never pushed. See
+[docs/local-database.md](docs/local-database.md).
 
 The domain layer is also run in a real browser:
 
@@ -140,7 +207,8 @@ refusals have separate notices.
 Network and pull failures retry after 5 seconds with exponential backoff,
 capped at 5 minutes. Upload deadlines live in the outbox and are restored on
 the next launch; dependent writes cannot overtake a backed-off parent.
-Permanent refusals require an explicit retry. Active-run status is kept in
+A permanent refusal waits in a banner for the person to retry it or discard it;
+discarding puts back the group's version of that row. Active-run status is kept in
 memory and discarded on account changes, avoiding stale "running" flags after
 a crash. Ledger rows, cursors and queued writes remain durable.
 
@@ -197,7 +265,9 @@ package name and signing certificate. Both live in `env/app.json` under
 can be run with the wrong one, and the unused branch never reaches the bundle.
 
 `web/sqlite3.wasm` and `web/drift_worker.js` are committed: Drift needs both at
-runtime to use OPFS. OpenSplit deliberately has no IndexedDB fallback because a
+runtime to use OPFS. They come from the drift release `pubspec.lock` resolves,
+and CI fails when they do not; after a drift upgrade, run
+`dart run tool/update_drift_web_assets.dart`. OpenSplit deliberately has no IndexedDB fallback because a
 second browser backend would be a second, independent local ledger.
 
 OPFS also needs the page to be cross-origin isolated, which is why `/app/**` is
@@ -224,8 +294,9 @@ The source service workers intentionally contain unresolved placeholders. Only
 configuration, injects Firebase's public identifiers, and keys the offline cache
 to the commit being built. CI uses structurally valid inert identifiers to prove
 the release build. After every CI gate passes, pushes to `main` build with real
-production variables, deploy Firebase Hosting, and distribute a signed AAB to
-Play closed testing. Release reruns the same CI checks before publishing.
+production variables, deploy the Worker and the bundle together, and distribute
+a signed AAB to Play closed testing. Release reruns the same CI checks before
+publishing.
 A manual **Release** run with **deploy unchecked** creates
 artifacts only, for first-upload bootstrap.
 
@@ -233,7 +304,7 @@ Every integration is off unless configured, and hidden rather than shown broken:
 
 | Key | Enables |
 |---|---|
-| `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` | Sync and accounts |
+| `API_BASE_URL` | Sync and accounts |
 | `GOOGLE_WEB_CLIENT_ID` | Sign in with Google |
 | `FCM_PROJECT_ID`, `FCM_SENDER_ID`, and the `ANDROID_`/`WEB_` key and app id | Push |
 | `FCM_VAPID_KEY` | Web push, in addition to the above |
@@ -247,51 +318,63 @@ front of anyone else. Everything is stored against a single base (USD), one row
 per currency per day, so any pair is a division and there is no such thing as a
 supported *pair*.
 
-```
-supabase functions deploy fetch-fx
-supabase secrets set FX_FETCH_SECRET="$(openssl rand -hex 32)" \
-                     EXCHANGERATE_API_KEY=<your key>
-
-# Point the scheduled job at the function:
-insert into app_settings (key, value) values
-  ('fx_function_url', 'https://<project>.supabase.co/functions/v1/fetch-fx'),
-  ('fx_fetch_secret', '<the same FX_FETCH_SECRET>');
-
-# Seed history so backdated entries can be converted from day one:
-select trigger_fx_fetch('{"backfill_days": 120}'::jsonb);
+```bash
+# Required for a deploy, like every secret in wrangler.jsonc — see the table below.
+cd server && pnpm exec wrangler secret put EXCHANGERATE_API_KEY --env=""
 ```
 
-A daily `pg_cron` job (16:30 UTC, after ECB publishes) keeps today topped up.
-Two providers run in `priority` order, the second filling what the first could
-not:
+A daily cron (`0 4 * * *`, after ECB publishes) calls the `Fx` Durable Object,
+which is the **only writer** of rates. It holds the history in its own SQLite
+and publishes one blob per month to KV, where every device reads it through
+`GET /api/fx`.
+
+A singleton object rather than a scheduled function writing KV directly,
+because KV is last-write-wins: the daily run and an on-demand backfill
+rebuilding the same month from two reads would silently drop whichever rate
+landed first, and the only symptom would be a month missing a currency.
+Serializing writers is what the primitive is for. The object writes; the edge
+serves, so a rate pull never crosses the planet to reach it.
+
+Two providers run in order, the second filling what the first could not:
 
 | Provider | Covers | History |
 |---|---|---|
 | Frankfurter (ECB) | ~30 currencies | yes, free |
 | ExchangeRate-API | 166 currencies | no — free plan is latest only |
 
-The ExchangeRate-API key is required for full coverage: without it only
-Frankfurter runs, and AED, KWD, BHD, LKR, NPR and VND get no rate at all.
-The free tier is 1,500 requests a month and the cron uses about 30.
+The ExchangeRate-API key is what covers AED, KWD, BHD, LKR, NPR and VND, which
+Frankfurter does not publish, so a deploy refuses to go out without it. Locally
+it is empty, and an unconfigured provider skips itself rather than failing the
+run, so `wrangler dev` runs on Frankfurter alone. The free tier is 1,500 requests a month and the
+cron uses about 30.
 
-**Fetch once, keep forever.** A rate is immutable once published, so every
-fetched row is stored permanently and synced to every device — not scoped to
-whichever group happened to need it. Clients keep a high-water mark and only
-ask for what came after it.
+**Fetch once, keep forever.** A rate is immutable once published, so nothing
+already stored is ever overwritten — a second provider answering for a day we
+already covered would otherwise make the `source` stamped on somebody's
+converted expense quietly wrong.
 
 **Backdated entries fetch on demand.** Recording an expense on a date the app
-has never priced calls `request_fx_backfill(date, currency)`, which fetches
-that day and caches it for everyone. The server refuses dates it can already
-answer, repeats within a day, futures, anything over five years old, and more
-than twenty requests an hour.
+has never priced posts to `/api/fx/backfill`, which fetches that day and caches
+it for everyone. The object refuses dates it can already answer, repeats within
+the hour, futures, and dates chased more than five times — some days are
+unanswerable, and without a ceiling every device retries them forever against
+a quota. Six devices in one group sync the same backdated expense within a
+second of each other, so this is the common case rather than the edge one.
+
+The device reaches *backwards* for those. A high-water mark alone cannot
+deliver a rate older than the ones already held, which is exactly what a
+backfill produces — so the pull widens to the oldest expense it has no rate
+for, once, and records how far back it went.
 
 **Known limitation:** the ~136 currencies ECB does not publish have no free
 historical source, so an entry backdated before the daily job started
 accumulating gets no converted estimate for those. Balances are unaffected —
 they are per-currency and exact.
 
-Adding a provider is one adapter in `supabase/functions/fetch-fx/providers/`
-plus one row in `fx_providers`; reordering or disabling one is just the row.
+Adding a provider is one adapter in `server/src/fx/providers.ts` plus one entry
+in the array at the bottom of it. Each provider's last attempt, success and
+error are recorded, because "why is AED missing" is otherwise unanswerable
+from outside.
 
 ### Firebase, for push and Google sign-in
 
@@ -340,18 +423,20 @@ wants the second. It is also the path segment in the console's own URL:
 ### Google sign-in
 
 **Nothing here is created for you.** Firebase auto-creates OAuth clients only
-when *Firebase Auth* is enabled, and this app authenticates through Supabase, so
-Firebase Auth is never switched on and Credentials stays empty. Create both
-clients by hand, in the same Google Cloud project the Firebase project made:
+when *Firebase Auth* is enabled, and this app authenticates through its own
+Worker, so Firebase Auth is never switched on and Credentials stays empty.
+Create both clients by hand, in the same Google Cloud project the Firebase
+project made:
 
 1. **Google Auth Platform → Branding** (formerly the OAuth consent screen).
    App name, support email, developer contact. Nothing works until this exists.
 2. **Credentials → Create credentials → OAuth client ID → Web application.**
-   Add `https://<project-ref>.supabase.co/auth/v1/callback` as an authorized
-   redirect URI, and your site origins under authorized JavaScript origins.
-   Its **Client ID** is `GOOGLE_WEB_CLIENT_ID` — one value, used on both
-   platforms, because Supabase verifies the ID token's audience against the web
-   client even when the token was minted on Android.
+   Add `https://<your host>/api/auth/callback/google` as an authorized redirect
+   URI, and your site origin under authorized JavaScript origins. Its
+   **Client ID** is `GOOGLE_WEB_CLIENT_ID` — one value, used on both platforms,
+   because the Worker verifies the ID token's audience against the web client
+   even when the token was minted on Android. The same pair goes into the
+   Worker as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
 3. **Credentials → Create credentials → OAuth client ID → Android.** Package
    name `com.eigeninteractive.opensplit`, plus the SHA-1 of the signing key.
    Its id is never needed in the app, but the client is what binds the package
@@ -359,8 +444,10 @@ clients by hand, in the same Google Cloud project the Firebase project made:
    App Signing certificates: the original classical key and the new classical
    and post-quantum keys used by Android 17+. A missing client may surface as a
    `clientConfigurationError`, or even as `canceled`, in Credential Manager.
-4. **Supabase dashboard → Authentication → Providers → Google:** enable it, and
-   paste the *web* client's ID and secret.
+4. **The Worker's own secrets:** `wrangler secret put GOOGLE_CLIENT_ID` and
+   `GOOGLE_CLIENT_SECRET`, the *web* client's pair. Locally they live in
+   `server/.dev.vars`, which is gitignored; `server/.dev.vars.example` shows
+   the shape.
 
 ```bash
 # The debug SHA-1, for step 3 during development:
@@ -368,41 +455,53 @@ keytool -list -v -keystore ~/.android/debug.keystore \
   -alias androiddebugkey -storepass android | grep SHA1
 ```
 
-### Accounts: two settings that are not optional
+### Accounts: linking is not signing in
 
 A session begins because somebody chose one of three things — Google, an email
 code, or being a guest — and being a guest is a real account with no credential
 attached, not a lesser mode. Attaching a credential to a guest session later has
-to **link**: same user id, same rows, nothing to migrate. Two things on the
-Supabase side have to be right or that silently becomes something else entirely.
+to **link**: same account id, same rows, nothing to migrate. Signing in instead
+mints or resumes a *different* account and leaves the guest holding every group
+the person has created so far, at which point they are a stranger to their own
+data.
+
+That decision lives in `server/src/identity/routes.ts` rather than on the
+device, and the move is the point: each of the three entry points tries the
+linking call first and only falls back to signing in when the identity provably
+belongs to somebody already — and then only when the caller has said the cost
+has been explained. In TypeScript, inside the Worker, every one of those
+branches is reachable from `vitest`, including the one that fires when an
+identity is already claimed, which is exactly where the damage happens and
+exactly what no Flutter test could reach before.
 
 The app deliberately does *not* create a session on startup. It used to, and
 that broke the arrival it was meant to protect: somebody who already had an
 account and tapped an invite link had the single-use token spent by a throwaway
 anonymous account, and no way into the group afterwards. `/join/:token` now
-reads the link with `peek_invite` or `peek_group_link` — the two functions
-granted to `anon` — shows what it is for, and joins only after the identity
-question has an answer.
+reads the link with `GET /api/links/{token}`, which is the one route that runs
+with no session at all, shows what the link is for, and joins only after the
+identity question has an answer.
 
 ### Two kinds of link
 
 `/join/:token` serves both, so there is one URL shape, one App Links filter and
 one route; which kind a token names is the server's business.
 
-A **named invite** (`invites`) hands one unclaimed place to one person and is
-spent by being used. It is the right link when you know who is coming: they
+A **named invite** hands one unclaimed place to one person and is spent by
+being used. It is the right link when you know who is coming: they
 open it and become the "Priya" somebody already typed.
 
-A **group link** (`group_links`) lets anybody holding it join, until it expires
-after seven days or is revoked. It is the link you paste into the chat you
+A **group link** lets anybody holding it join, until it expires after seven days
+or is revoked. It is the link you paste into the chat you
 already have, for a trip whose guest list does not exist yet. Possession is the
 whole authorisation, which is a larger claim than an invite makes, so:
 
-* there is one live link per group, enforced by a partial unique index, and
-  minting revokes whatever preceded it;
+* there is one live link per group — a single row the group's Durable Object
+  overwrites, which needs no unique index because the object is its only
+  writer — and minting revokes whatever preceded it;
 * it can be turned off without minting another;
-* `link_created`, `link_revoked` and `member_joined` all land in
-  `group_events`, so the group can see the door open, close, and be walked
+* `link_created`, `link_revoked` and `member_joined` all land in the activity
+  feed, so the group can see the door open, close, and be walked
   through. A group that can see who arrived has a better remedy than an
   approval queue, which is why there is not one.
 
@@ -410,31 +509,24 @@ Arriving on a group link asks which of the group's unclaimed placeholders you
 are, if any. Claiming one is the same single-column update a named invite
 performs — no expense is rewritten and no balance moves — and it is what stops
 one shared link turning a group of six into a group of twelve.
-`list_link_placeholders` is deliberately **not** granted to `anon`: those are
-other people's names, which is more than the token itself implies, and it is
-asked after an account has been chosen rather than before.
+`GET /api/links/{token}/placeholders` deliberately **requires** a session,
+unlike the preview beside it: those are other people's names, which is more than
+the token itself implies, and it is asked after an account has been chosen
+rather than before.
 
-**1. Allow manual linking.** *Authentication → Providers → Allow manual
-linking*, and `enable_manual_linking = true` in `supabase/config.toml` for
-local. Attaching Google goes through `linkIdentityWithIdToken`, which is
-refused outright when this is off. Its cousin `signInWithIdToken` does not
-link: it signs in as a *different* user and leaves the anonymous one holding
-every group the person had created, at which point the new account is a
-stranger to its own data and every push is refused by RLS. The app refuses to
-fall back to it silently, and says which switch is off instead — but the switch
-still has to be on.
+Arriving as somebody new needs a name, and there is no sentinel. The name on the
+account is used when there is one — anybody who signed in with Google or an
+email address has one — and a guest who has never chosen one is asked on the
+join screen. "Someone" in a ledger is worse than a question, and a sentinel
+stored on a profile could never afterwards be told from a name somebody meant.
 
-**2. Email templates.** The app asks for an eight-digit code. Supabase's stock
-templates send a magic link and no token at all, so against them the "check
-your email" step waits for a number that is never sent. `supabase/templates/`
-holds three that carry `{{ .Token }}`; local picks them up from `config.toml`,
-and a hosted project needs them pasted into *Authentication → Emails →
-Templates* by hand, because templates are **not** deployed by `supabase db
-push`. See [`supabase/templates/README.md`](supabase/templates/README.md).
-
-Also leave `enable_confirmations = true`. With it off an email change is
-applied outright, so a guest session can claim any address at all, having proved
-nothing — and the real owner of that address finds it already spoken for.
+**Email codes, not magic links.** The app asks for an eight-digit code, because
+a magic link opens in whichever browser the mail app prefers, loses the app's
+context entirely, and is routinely consumed by corporate mail scanners before
+the recipient ever sees it. The Worker sends it through Resend; set
+`RESEND_API_KEY` as a secret. Without one, codes are logged rather than sent,
+which is right for local development and would be a silent failure in
+production — so the log line says so.
 
 ### One name, one ledger per account
 
@@ -456,37 +548,40 @@ that reference data is per-account and re-pulled after a switch.
 
 ### Push notifications
 
-The client values above cover the app. The fan-out also needs a service account,
-three function secrets and a webhook. Project settings → Service accounts →
-Generate new private key gives you the JSON; unlike everything above, **it is a
-real secret**:
+The client values above cover the app. The fan-out also needs a service account.
+Project settings → Service accounts → Generate new private key gives you the
+JSON; unlike everything above, **it is a real secret**:
 
-```
-supabase functions deploy notify-event
-supabase secrets set FCM_PROJECT_ID=your-project \
-                     FCM_SERVICE_ACCOUNT="$(cat service-account.json)" \
-                     NOTIFY_WEBHOOK_SECRET="$(openssl rand -hex 32)"
-
-# Point the trigger at the function, exactly as the rate fetch is pointed:
-insert into app_settings (key, value) values
-  ('notify_function_url',
-   'https://<project>.supabase.co/functions/v1/notify-event'),
-  ('notify_webhook_secret', '<the same NOTIFY_WEBHOOK_SECRET>');
+```bash
+cd server
+pnpm exec wrangler secret put FCM_PROJECT_ID --env=""
+pnpm exec wrangler secret put FCM_SERVICE_ACCOUNT --env=""   # paste the whole JSON
 ```
 
-There is deliberately **no Database Webhook to create in the dashboard**. A
-Supabase webhook is a row that creates a trigger calling
-`supabase_functions.http_request()`; `trg_group_events_notify` is that trigger,
-declared in `20260101000008_push.sql` and applied by `db push` like everything
-else. So it cannot be lost, the secret lives beside `fx_fetch_secret` rather
-than in dashboard config, and the chain works on any Postgres with pg_net.
+There is no webhook, no shared secret and no trigger. The group's Durable
+Object sends directly, inside `waitUntil`, after its own write has committed —
+so the response goes back as soon as the expense is saved, and a person
+recording one never waits on Google. A function reached over HTTP has to prove
+who is calling it; a function the object calls in-process does not, so there
+is one secret here rather than three.
 
-Until both rows are set the trigger no-ops, which is why a deployment with no
-push configured still records expenses normally.
+With `FCM_PROJECT_ID` or `FCM_SERVICE_ACCOUNT` unset the send is skipped and
+nothing else changes, which is why a deployment with no push configured still
+records expenses normally.
 
-**The secret is not optional.** The function refuses to run without it, because
-otherwise anyone holding the publishable key — which is public by design —
-could drive the fan-out.
+**Three kinds wake a device:** an expense, somebody arriving, somebody leaving.
+Not renames, archives or links — those belong in the activity feed, which is
+read on purpose, rather than on a lock screen. `link_created` in particular
+would wake a whole group to say that one of them tapped Share.
+
+**The actor is excluded, not the author.** On an edit those are usually
+different people, and the author is precisely who needs to hear that somebody
+changed their expense.
+
+**The OAuth token lives in KV**, not in a module variable. There is one isolate
+in an Edge Function and potentially hundreds of group objects here, each in its
+own place: a per-instance cache would mint a token per active group per hour,
+which is hundreds of round trips to Google to say the same thing.
 
 For web push, `dart run tool/build_web.dart` injects the public Firebase values
 from the same configuration file as Flutter. Do not edit the worker by hand.
@@ -505,14 +600,15 @@ is data-only, so nothing is drawn unless the app draws it — and a stub
 background handler therefore means the only notifications anyone ever sees are
 the ones that arrive while they are already looking at the app, which is the
 one case a notification is not for. `lib/data/push/background_handler.dart`
-runs in a background isolate with its own Firebase, its own Supabase client and
-a second connection to the SQLite file (which is why the database is opened in
+runs in a background isolate with its own Firebase, its own HTTP client and a
+second connection to the SQLite file (which is why the database is opened in
 WAL mode with a busy timeout). It syncs, then formats with the same Dart the
 screens use. It reloads the stored session for every message, honors the
-notification preference, and cannot resume an account cleared by sign-out.
-Token refresh and persistence belong only to the foreground SDK; background
-work with an expired session waits for the next app resume. Push is best-effort,
-not a delivery guarantee or the source of ledger correctness.
+notification preference, and cannot resume an account cleared by sign-out. It
+never refreshes or rotates that session — the foreground owns it, and a second
+writer could otherwise restore one after a sign-out — so background work with
+an expired session waits for the next app resume. Push is best-effort, not a
+delivery guarantee or the source of ledger correctness.
 
 On the web there is no equivalent — a service worker cannot run Dart — so
 `web/firebase-messaging-sw.js` deliberately draws nothing and web push only
@@ -520,35 +616,55 @@ wakes an open tab. Tapping any of these opens the entry it was about rather
 than the app's front door, on all three paths: foreground, backgrounded, and
 launched from cold.
 
-## Developing against local Supabase with the real Firebase
+## Developing against a local Worker
 
-The usual working setup: Postgres, edge functions and auth all local, but push
-going through the real FCM project, because there is no local FCM.
+Everything local: the API, D1, KV, the Durable Objects and auth all run inside
+`wrangler dev`, which keeps their data under `server/.wrangler/state` and never
+reaches a Cloudflare account. With `server/.dev.vars` copied from the example
+nothing leaves the machine either: no Google credentials (sign in as a guest or
+by email code), no email provider (the code is printed in the Worker's
+terminal), and no FCM credentials (push is skipped). The step-by-step version,
+including a phone, is in [docs/runbook.md](docs/runbook.md) under *Testing a
+branch locally*.
 
-Config files are merged in order and **later files win**, so a local override
-goes last:
+**The web client** is served by the Worker it talks to, exactly as in
+production, and on the web it uses its page's origin as the API: the same
+bundle works on `localhost:8787` and on the real domain. So build it once and
+open it through the Worker:
 
 ```bash
-cp env/local.example.json env/local.json
+dart run tool/build_web.dart     # the whole front end, into build/web
+cd server && pnpm db:migrate:local && pnpm dev
+# then open http://localhost:8787/app
+```
 
-flutter run -d chrome \
+`localhost`, not `127.0.0.1`: the session cookie and Better Auth's
+`APP_ORIGIN` in `.dev.vars` are both for `localhost`. Rebuild after changing
+Dart code; there is no hot reload on this path. `flutter run -d chrome` still
+works for layout work, but it serves the app from its own origin, so it has no
+backend there and no cross-origin isolation for the local database.
+
+**Android** has no page to take an origin from, so it is told where the Worker
+is, and the override goes last because later files win:
+
+```bash
+cp env/local.example.json env/local.json   # API_BASE_URL for the emulator
+
+flutter run \
   --dart-define-from-file=env/app.json \
   --dart-define-from-file=env/local.json
 ```
 
-`env/local.json` only needs to override `SUPABASE_URL` and
-`SUPABASE_PUBLISHABLE_KEY`. Later files win, so it goes last. The local publishable key is the same for everyone
-and is already the default in `lib/config.dart`, so a bare `flutter run` with no
-defines at all is already a local-Supabase build — just without Firebase.
-
 **The URL depends on where the app runs**, and this is the step that wastes an
 afternoon:
 
-| Running on | `SUPABASE_URL` |
+| Running on | `API_BASE_URL` in `env/local.json` |
 |---|---|
-| Chrome, on this machine | `http://127.0.0.1:54321` |
-| Android emulator | `http://10.0.2.2:54321` — the emulator's own 127.0.0.1 is the emulator |
-| Physical Android device | `http://<this machine's LAN address>:54321`, same Wi-Fi |
+| Android emulator | `http://10.0.2.2:8787` — the emulator's own 127.0.0.1 is the emulator |
+| Physical Android device | `http://<this machine's LAN address>:8787`, same Wi-Fi |
+
+For a physical phone, start the Worker with `pnpm dev --ip 0.0.0.0`, which it
+does not do by default.
 
 Android has blocked cleartext HTTP since API 28, so a debug build also needs
 `android/app/src/debug/res/xml/network_security_config.xml` — already committed,
@@ -556,45 +672,33 @@ and scoped to the debug source set so release builds keep HTTPS mandatory. Witho
 it every request fails with `CLEARTEXT communication not permitted`, and the
 app shows a refresh failure while keeping saved data available.
 
-### Push, locally
+### Push and rates, locally
 
-Three terminals:
-
-```bash
-supabase start                                    # database, auth, storage
-supabase functions serve --env-file supabase/functions/.env
-./supabase/dev/local-notify.sh                    # points the trigger locally
-```
-
-`supabase/functions/.env` needs `NOTIFY_WEBHOOK_SECRET` (any random string
-locally), plus `FCM_PROJECT_ID` and `FCM_SERVICE_ACCOUNT` if you want the send
-to actually reach a device. Without the FCM pair the function still runs and
-answers `unconfigured`, which is enough to prove the wiring.
-
-The trigger comes from the migrations and is always present. What that script
-writes is the two `app_settings` rows it reads, pointing at the functions
-running on the host. **`supabase db reset` clears them** — rerun the script
-afterwards, or the trigger keeps firing into a URL it does not have and pushes
-silently stop.
-
-To check the chain without a device:
+One terminal. Both live inside the Worker now, so there is nothing separate to
+serve and no trigger to point anywhere:
 
 ```bash
-curl -s -X POST http://127.0.0.1:54321/functions/v1/notify-event \
-  -H 'Content-Type: application/json' \
-  -H "x-webhook-secret: $(grep '^NOTIFY_WEBHOOK_SECRET=' supabase/functions/.env | cut -d= -f2-)" \
-  -d '{"type":"UPDATE","table":"groups","record":null}'
-# -> ignored
-
-# And after adding an expense in the app, what the database got back:
-docker exec supabase_db_opensplit psql -U postgres \
-  -c "select status_code, content from net._http_response order by id desc limit 3;"
-# -> 200 | nobody to wake      (no devices registered yet)
-# -> 200 | ok                  (a device was notified)
+cd server && pnpm dev
 ```
 
-A wrong secret returns `403`, which is the function refusing to be driven by
-anyone holding the publishable key.
+Put `FCM_PROJECT_ID` and `FCM_SERVICE_ACCOUNT` in `.dev.vars` if you want a
+send to actually reach a device. Without them the object still runs its write,
+skips the send, and logs nothing — which is the ordinary state for a fork and
+not a failure.
+
+The rate cron can be driven by hand, which is also what CI does before the
+adapter tests:
+
+```bash
+pnpm dev --test-scheduled   # exposes the handler
+curl 'http://127.0.0.1:8787/cdn-cgi/handler/scheduled?cron=0+4+*+*+*'
+curl 'http://127.0.0.1:8787/api/fx?since=2026-01-01'
+```
+
+This reaches the real ECB feed, and with no `EXCHANGERATE_API_KEY` set the log
+says which currencies went uncovered — `AED,VND,LKR,NPR,KWD,BHD`, which is
+exactly the set ECB does not publish, and the whole reason there is a second
+provider.
 
 ## Deploying
 
@@ -606,31 +710,56 @@ The deployed tree is two things, and the split is the point:
 ```
 
 `site/` needs no engine, no session and no JavaScript, so a crawler, a Play
-reviewer and a Google OAuth reviewer can all read what the app is. The client
-used to sit at the root, which meant the public face of the product was a
-sign-in screen — the router sends anyone without a session to `/welcome` — and
-OAuth branding verification failed on exactly that.
+reviewer and a Google OAuth reviewer can all read what the app is. With the
+client at the root, the public face would be a sign-in screen, which OAuth
+branding verification rejects.
 
 Nothing in Dart knows about the prefix. `--base-href=/app/` puts it below the
 path URL strategy, so go_router still sees `/g/123` while the browser shows
 `/app/g/123`. Two places do encode it, and `test/deep_link_host_test.dart`
-holds them together: the invite URL in `lib/domain/repositories/invite_api.dart`
+holds them together: `joinUrl` in `lib/data/sync/invites.dart`
 and the App Links `pathPrefix` in `AndroidManifest.xml`.
 
-Any host works, provided it serves an SPA fallback under `/app` —
-`/app/join/<token>` must return the app shell rather than a 404, since that is
-the entire point of an invite link — and serves `site/` as real files at the
-root. `firebase.json` does both.
+Both halves are served by the Worker, from the same origin as the API. There is
+no separate hosting product and no CORS, which is what lets the web build keep
+its session in a first-party `HttpOnly` cookie rather than a token JavaScript
+can read.
 
 ```bash
-firebase use --add                 # writes .firebaserc, which is gitignored
-dart run tool/build_web.dart       # builds /app/, then copies site/ over the root
-firebase deploy --only hosting
+dart run tool/build_web.dart             # builds /app/, then copies site/ over the root
+cd server && pnpm exec wrangler deploy --env=""   # script and bundle, one version
 ```
 
-`opensplit.web.app` is the official domain, and the only one. It hosts the web
-app, it is the host written into every invite link (`LINK_HOST` in
-`lib/config.dart`), and it is the single entry in the App Links intent filter.
+`build/web` is the Worker's `assets.directory`, so those two commands are one
+deploy: the script and the front end go up together and become live together,
+and a client that is newer or older than the API it talks to is a state this
+arrangement cannot reach. `docs/runbook.md` has the account-level steps that
+have to happen once before the second command works at all.
+
+Two parts of serving are not ordinary code:
+
+- `site/_headers` — security headers for everything, and cross-origin isolation
+  for `/app/*` only. Cloudflare parses it and never serves it, so losing it is
+  silent: the site comes back without isolation and the client's database stops
+  working in a way that reads as a Flutter bug. `tool/build_web.dart` fails the
+  build rather than ship a bundle without it.
+- `server/src/app.ts` — the deep-link fallback, written by hand. `/app/join/
+  <token>` has to return the client's document rather than a 404, since that is
+  the entire point of an invite link, and none of the platform's three
+  `not_found_handling` settings answers the right document: two of them would
+  hand a deep link the landing page or the 404 page instead.
+
+For work on the server alone, `dart run tool/build_web.dart --site-only` builds
+the static root in about a second and skips the Flutter client. `wrangler dev`
+refuses to start without an assets directory, and a two-minute Flutter build is
+a strange price for editing a route handler.
+
+`opensplit.eigeninteractive.com` is the official domain, and the only one. It
+hosts the web app, it is the host in every invite link (`LINK_HOST` in
+`lib/config.dart` for Android; the web mints links under the origin that served
+it, which in production is this one), and it is the single entry in the App
+Links intent filter.
+`workers.dev` is switched off so that there is no second address at all.
 
 That is a deliberate commitment rather than a default. Every host the app has
 ever claimed has to keep serving, keep resolving, and keep an
@@ -640,20 +769,20 @@ host doubles that obligation and buys nothing, since both would serve the same
 build.
 
 A vanity domain may point here later. If one does it should **redirect** to
-`opensplit.web.app` rather than serve alongside it. A redirect leaves one URL
-that links are minted with and one origin that owns the stored data — which
-matters here, because this is a local-first app whose database is keyed to its
-origin, so a second origin is a second, empty copy of the app.
+`opensplit.eigeninteractive.com` rather than serve alongside it. A redirect
+leaves one URL that links are minted with and one origin that owns the stored
+data — which matters here, because this is a local-first app whose database is
+keyed to its origin, so a second origin is a second, empty copy of the app.
 
 After the first deploy, confirm the file actually shipped, because the failure
 mode is silence:
 
 ```bash
-curl -sI https://opensplit.web.app/.well-known/assetlinks.json
+curl -sI https://opensplit.eigeninteractive.com/.well-known/assetlinks.json
 ```
 
-It must return `200` and `content-type: application/json`. HTML means the SPA
-rewrite swallowed it, and App Links will not verify.
+It must return `200` and `content-type: application/json`. HTML means the
+deep-link fallback swallowed it, and App Links will not verify.
 
 **Before the first Play Store release**, read
 [`site/.well-known/README.md`](site/.well-known/README.md). `assetlinks.json`
@@ -667,11 +796,12 @@ verify too. All four certificates are shown under *Play Console → Test and
 release → Setup → App signing*. Getting this wrong is silent in the worst way:
 links simply open in a browser, with nothing in the app to say why.
 
-Anonymous sign-in is unauthenticated row creation, so it is rate limited rather
-than gated: `anonymous_users = 30` per hour per IP in `supabase/config.toml`,
-plus a nightly job that deletes anonymous accounts which never joined a group.
-No CAPTCHA — it would sit in front of the one flow that has to be invisible,
-and an invite link that opens a puzzle is an invite link nobody follows.
+Anonymous sign-in is unauthenticated row creation, so it is swept and
+rate-limited rather than gated: a daily job deletes guest accounts that joined
+no group and were never used again after ninety days, and each IP address may
+start only a few a minute. No CAPTCHA — it would sit in front of the one
+flow that has to be invisible, and an invite link that opens a puzzle is an
+invite link nobody follows.
 
 Code generation runs over Drift tables, Freezed models and Riverpod providers.
 After changing any of them, re-run `dart run build_runner build`.
@@ -679,31 +809,45 @@ After changing any of them, re-run `dart run build_runner build`.
 ### Layout
 
 ```
-lib/domain/         pure Dart: splitting, balance fold, simplify. No Flutter,
-                    no imports from data/.
-lib/data/           Drift database, repositories, sync. The only place the
-                    backend is referenced.
+lib/domain/         pure Dart: splitting, balance fold, simplify. No Flutter.
+                    Its models are the Drift row classes plus the Entry
+                    aggregate; its vocabularies (entry, split and event kinds)
+                    are the generated contract's own enums.
+lib/data/           Drift database, repositories, sync. `sync/wire.dart` is
+                    the one place wire types and local rows meet.
+packages/opensplit_api/
+                    the API client, generated from docs/openapi.json.
 lib/application/    Riverpod providers and view models.
 lib/presentation/   screens and widgets.
-supabase/           migrations, organised by subject rather than by date:
-                    foundation, currencies, identity, groups, entries, fx,
-                    invites, push, write path, security, grants, jobs.
-                    Plus templates/, the email templates that carry the code
-                    the app asks for.
+server/src/do/      the Durable Objects: one class per group, and the
+                    singleton that writes exchange rates.
+server/src/api/     the HTTP layer, declared with @hono/zod-openapi so the
+                    committed contract cannot drift from the routes.
+server/migrations/  D1. Generated by drizzle-kit, one folder per
+                    migration, applied by wrangler.
+                    The Durable Objects have their own two sets, bundled
+                    into the script because each object migrates itself.
+site/               the static root: landing page, the three document
+                    pages, and the _headers that configures serving.
+legacy-domains/     Firebase Hosting config that 301s the old
+                    opensplit.web.app addresses here. Deployed by hand.
 drift_schemas/      a snapshot of every shipped local schema, so a future
                     migration can be tested against a real old database
                     rather than a guess at one.
-docs/               procedures and rules that are too long for a commit
-                    message and have to be followed exactly: rebuilding the
-                    backend from the migrations, and what to know before
-                    changing the local database.
+docs/               the design (architecture.md: stores, sync, and how
+                    types flow from the tables to the app), procedures that
+                    have to be followed exactly (standing the backend up,
+                    rebuilding it), and what to know before changing the
+                    local database.
 ```
 
-The migrations are edited in place rather than appended to while the app is
-unreleased — that is what keeps them readable by subject — so applying a change
-locally means `supabase db reset`, not `supabase db push`. Once there is a
-deployment holding real data that stops being true, and the file numbering
-starts going up.
+Migrations are never edited in place, on either side. `drizzle-kit generate`
+appends, `wrangler d1 migrations apply` runs what is new, and each group object
+applies its own outstanding ones on first open after a deploy — so a file that
+has already run somewhere has run for good. Correcting one that shipped means
+rebuilding rather than editing; see
+[docs/resetting-the-backend.md](docs/resetting-the-backend.md), which is mostly
+about how much harder that is for a Durable Object than for a database.
 
 The domain layer is pure functions over immutable data, which is why it is
 tested with generated cases rather than examples: thousands of random entry

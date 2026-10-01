@@ -1,14 +1,19 @@
 import 'dart:async';
 import 'dart:developer' as developer;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:in_app_update/in_app_update.dart';
 
-import '../application/providers.dart';
+import '../application/local_providers.dart';
+import '../application/preferences_providers.dart';
+import '../application/push_providers.dart';
+import '../application/router_provider.dart';
+import '../application/session_providers.dart';
+import '../application/sync_providers.dart';
 import '../data/platform/app_update_service.dart';
-import '../domain/repositories/auth_service.dart';
 import '../data/web/boot_hint.dart';
+import '../domain/auth_service.dart';
 import '../l10n/app_localizations.dart';
 import 'dynamic_colors.dart';
 import 'theme.dart';
@@ -52,35 +57,26 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
     if (_listeningForSession) return;
     _listeningForSession = true;
 
-    // Start every account-scoped scheduler, including replacements. Listening
-    // only to signedIn misses account changes where that boolean stays true.
-    ref.listenManual(syncSchedulerProvider, (_, scheduler) {
-      scheduler?.start();
-    }, fireImmediately: true);
+    // Built for each account, which starts its automatic sync.
+    ref.listenManual(syncControllerProvider, (_, _) {}, fireImmediately: true);
 
     ref.listenManual(signedInProvider, (_, signedIn) {
       // Leaves a note for the next cold start, so the web loader draws the
-      // layout this session will actually land on. See [recordSignedIn] — it
-      // does nothing on Android, which has a platform splash instead.
+      // layout this session will actually land on.
       recordSignedIn(signedIn);
     }, fireImmediately: true);
 
-    // A Google flow that left the page finishes here, on the one launch that
-    // is a return from it. A no-op on every other launch, and on Android
-    // always, where the flow never leaves the app.
+    // A Google flow that left the page finishes here, on the one launch that is
+    // a return from it.
     unawaited(_finishIdentityRedirect());
   }
 
   /// Completes a redirect sign-in, and parks its refusal if it was refused.
-  ///
-  /// The refusal is not shown from here. There is no Navigator yet at this
-  /// point in the first frame, and the question needs the screen the user was
-  /// sent back to anyway — see [googleRefusalProvider].
   Future<void> _finishIdentityRedirect() async {
     try {
       await ref.read(accountControllerProvider.notifier).resumeGoogleRedirect();
     } on IdentityAlreadyInUse catch (refusal) {
-      ref.read(googleRefusalProvider).value = refusal;
+      ref.read(googleRefusalProvider.notifier).park(refusal);
     } catch (error, stackTrace) {
       // A failed return must not take the launch down with it: the session is
       // simply unchanged, and every other route into the app still works.
@@ -100,7 +96,7 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
     if (ref.read(signedInProvider)) {
       ref.read(appDatabaseProvider).refreshAfterExternalSync();
     }
-    ref.read(syncSchedulerProvider)?.resumed();
+    ref.read(syncControllerProvider.notifier).resumed();
     _offerUpdate();
   }
 
@@ -112,13 +108,6 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
 
   /// Takes a waiting update, in whichever of the two ways the release asked
   /// for.
-  ///
-  /// Normally nothing here blocks and nothing is a wall: the download runs
-  /// while the app stays usable and declining costs nothing. A release marked
-  /// urgent at upload time gets the blocking flow instead, and that is reserved
-  /// for a client the server can no longer talk to — see [AppUpdateService] for
-  /// where the decision is actually made, and for why this reports nothing at
-  /// all on a build Play did not install.
   Future<void> _offerUpdate() async {
     final service = ref.read(appUpdateServiceProvider);
     if (!service.isSupported || _busy) return;
@@ -134,8 +123,7 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
           return;
         case UpdateUrgency.immediate:
           // Hands the screen to Play, which restarts the app itself once the
-          // update lands. Nothing follows, and nothing needs to: if the person
-          // backs out, the next check comes round again.
+          // update lands.
           await service.installNow();
           return;
         case UpdateUrgency.flexible:
@@ -162,8 +150,7 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
       );
     } catch (_) {
       // Every failure mode here is Play's, and none of them is something the
-      // person holding the phone can do anything about. See the logging in
-      // AppUpdateService.
+      // person holding the phone can do anything about.
     } finally {
       _busy = false;
     }
@@ -172,8 +159,7 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
   @override
   Widget build(BuildContext context) {
     // Establishes a session and registers for push, both silently and both
-    // optional. Neither blocks a single frame: every screen renders from the
-    // local database regardless of how these turn out.
+    // optional.
     ref.watch(pushRegistrationProvider);
 
     // Material You on Android 12+, when the user has not turned it off.
@@ -183,7 +169,13 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
     return MaterialApp.router(
       onGenerateTitle: (context) => AppLocalizations.of(context).appTitle,
       debugShowCheckedModeBanner: false,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      // Not the generated `AppLocalizations.localizationsDelegates`: that
+      // names flutter_localizations' Material delegates, which material_ui's
+      // widgets never read, so they would fall back to hard-coded defaults.
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        ...GlobalMaterialLocalizations.delegates,
+      ],
       supportedLocales: AppLocalizations.supportedLocales,
       scaffoldMessengerKey: _messengerKey,
       theme: buildTheme(Brightness.light, wallpaper?.light),

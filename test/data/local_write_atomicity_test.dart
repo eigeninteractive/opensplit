@@ -1,13 +1,13 @@
 import 'package:drift/native.dart';
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/local/local_reset.dart';
+import 'package:opensplit/data/local/tables.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';
 import 'package:opensplit/data/repositories/drift_profile_repository.dart';
 import 'package:opensplit/data/sync/outbox_queue.dart';
 import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/models/entry.dart';
-import 'package:opensplit/domain/models/profile.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:test/test.dart';
 
@@ -133,7 +133,7 @@ void main() {
         entries.delete(opened.id, actorId: group.creator.id, expected: opened),
         throwsA(isA<StaleEntryException>()),
       );
-      expect((await entries.getEntry(opened.id))!.amountMinor, 200);
+      expect((await entries.getEntry(opened.id))!.row.amountMinor, 200);
       expect((await entries.getEntry(opened.id))!.isDeleted, isFalse);
     },
   );

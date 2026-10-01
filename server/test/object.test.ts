@@ -1,0 +1,153 @@
+import { runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
+import { env } from "cloudflare:workers";
+import { describe, expect, expectTypeOf, it } from "vitest";
+
+import type { Group } from "../src/do/group";
+import type { append } from "../src/do/group/events";
+import migrations from "../src/do/group/migrations/migrations.js";
+import { kindOf, statusFor } from "../src/do/group/refusal";
+import { refusalCodes } from "../src/schemas/common";
+import { evenly, freshId, makeGroup, ok, RAVI, saveEntry, stub } from "./group";
+
+const DAYS = 24 * 60 * 60 * 1000;
+
+/** The object as a Cloudflare object, rather than as a ledger: its migrations, its alarm, and the type its methods actually present across the RPC boundary. */
+
+describe("the schema this object migrates itself to", () => {
+  /** Migrations here are lazy and per object — a group nobody has touched for six months migrates on its next open — which is the property that makes re-application worth testing at all. */
+  it("is applied exactly once, however many times the object is opened", async () => {
+    const { groupId, ravi, priya } = await makeGroup();
+    ok(await saveEntry(stub(groupId), evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 450), RAVI));
+
+    // Several more opens, each of which re-enters the constructor's
+    // blockConcurrencyWhile.
+    for (let index = 0; index < 3; index += 1) await stub(groupId).ping();
+
+    await runInDurableObject(stub(groupId), async (_instance: Group, state) => {
+      const applied = [...state.storage.sql.exec<{ n: number }>("select count(*) as n from __drizzle_migrations")];
+      expect(applied[0]?.n).toBe(Object.keys(migrations.migrations).length);
+
+      const entries = [...state.storage.sql.exec<{ n: number }>("select count(*) as n from entries")];
+      expect(entries[0]?.n).toBe(1);
+    });
+  });
+
+  /**
+   * Nothing enforces this at runtime, and it is the rule the whole
+   * authorization model rests on: this object holds one group's rows, so
+   * "in this group" is a statement about which database you are in.
+   */
+  it("has no group_id column anywhere, because the object is the group", async () => {
+    const { groupId } = await makeGroup();
+
+    await runInDurableObject(stub(groupId), async (_instance: Group, state) => {
+      const columns = [...state.storage.sql.exec<{ name: string }>("select name from pragma_table_info('entries') union all select name from pragma_table_info('members') union all select name from pragma_table_info('events')")];
+
+      expect(columns.map((column) => column.name)).not.toContain("group_id");
+    });
+  });
+});
+
+describe("the one alarm", () => {
+  it("is armed for the dormancy clock as soon as there is a group", async () => {
+    const { groupId } = await makeGroup();
+
+    await runInDurableObject(stub(groupId), async (_instance: Group, state) => {
+      const at = await state.storage.getAlarm();
+      expect(at).not.toBeNull();
+      expect(at ?? 0).toBeGreaterThan(Date.now() + 80 * DAYS);
+      expect(at ?? 0).toBeLessThan(Date.now() + 100 * DAYS);
+    });
+  });
+
+  it("is pushed out again by every expense, so a group in use is never put away", async () => {
+    const { groupId, ravi, priya } = await makeGroup();
+
+    const before = await runInDurableObject(stub(groupId), async (_instance: Group, state) => state.storage.getAlarm());
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    ok(await saveEntry(stub(groupId), evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 300), RAVI));
+
+    const after = await runInDurableObject(stub(groupId), async (_instance: Group, state) => state.storage.getAlarm());
+    expect(after ?? 0).toBeGreaterThan(before ?? 0);
+  });
+
+  it("finds nothing to do when it fires early, and simply re-arms", async () => {
+    const { groupId } = await makeGroup();
+
+    await runInDurableObject(stub(groupId), async (_instance: Group, state) => {
+      await state.storage.setAlarm(Date.now() + 10);
+    });
+
+    expect(await runDurableObjectAlarm(stub(groupId))).toBe(true);
+    expect(ok(await stub(groupId).changes(RAVI, 0, 100)).group?.archivedAt).toBeNull();
+  });
+});
+
+describe("what the RPC boundary actually carries", () => {
+  /** A guard against a failure that costs nothing at runtime and everything at review time. */
+  it("includes the success branch of every method that returns one", async () => {
+    const object = env.GROUP.getByName("type-check");
+
+    type Success<T> = Extract<Awaited<T>, { ok: true }>;
+
+    expectTypeOf<Success<ReturnType<typeof object.changes>>>().not.toBeNever();
+    expectTypeOf<Success<ReturnType<typeof object.putEntry>>>().not.toBeNever();
+    expectTypeOf<Success<ReturnType<typeof object.putGroup>>>().not.toBeNever();
+    expectTypeOf<Success<ReturnType<typeof object.putMember>>>().not.toBeNever();
+    expectTypeOf<Success<ReturnType<typeof object.createInvite>>>().not.toBeNever();
+    expectTypeOf<Success<ReturnType<typeof object.peekLink>>>().not.toBeNever();
+    expectTypeOf<Success<ReturnType<typeof object.placeholders>>>().not.toBeNever();
+
+    // And the page really does arrive whole at runtime, not just in the types.
+    const { groupId } = await makeGroup();
+    const page = ok(await stub(groupId).changes(RAVI, 0, 100));
+    const added = page.events.find((event) => event.kind === "member_added");
+    expect(added?.member?.displayName).toBe("Priya");
+  });
+
+  /**
+   * The pairing between an event's kind and its payload, asserted the only way
+   * a type rule can be: by writing the wrong one and requiring the compiler to
+   * object. If this stops being an error, `@ts-expect-error` becomes one.
+   */
+  it("will not let an event be appended with the wrong kind of payload", () => {
+    type Appendable = Parameters<typeof append>[1];
+
+    const wrong = {
+      seq: 1,
+      now: "2026-09-23T00:00:00.000Z",
+      actorId: null,
+      kind: "member_renamed",
+      subjectId: "member-1",
+      // @ts-expect-error a member event carries a member payload, not a group's
+      group: { name: "Goa trip", previousName: null },
+    } satisfies Appendable;
+
+    expect(wrong.kind).toBe("member_renamed");
+  });
+});
+
+describe("what a refusal tells a client to do", () => {
+  /**
+   * The rule the plan originally stated — "409 is a conflict a person
+   * resolves, other 4xx are permanent" — is not true of this API, and a client
+   * that believed it would spin on the outbox forever.
+   */
+  it("does not let the status code stand in for the retry decision", () => {
+    const conflicts = refusalCodes.filter((code) => statusFor(code) === 409);
+
+    // Five codes are 409, and 409 is right for all of them: the request
+    // conflicts with the resource's current state.
+    expect(conflicts.length).toBeGreaterThan(1);
+
+    // Only one of them is worth re-composing and sending again.
+    expect(conflicts.filter((code) => kindOf(code) === "stale")).toEqual(["stale_base"]);
+  });
+
+  it("gives every code a status and a retry kind, so a new one cannot be forgotten", () => {
+    for (const code of refusalCodes) {
+      expect(statusFor(code)).toBeGreaterThanOrEqual(400);
+      expect(["stale", "permanent"]).toContain(kindOf(code));
+    }
+  });
+});

@@ -1,5 +1,5 @@
 import 'package:drift/native.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 // `group` here is the Riverpod provider function, which collides with the
@@ -78,9 +78,7 @@ void main() {
     });
   });
 
-  // One set of destinations, two presentations of it. Which one is on screen
-  // is the only thing the width decides — there is never both, and never
-  // neither.
+  // One set of destinations, two presentations of it.
   group('the navigation surface', () {
     testWidgets('stays usable on a small screen at 200% text scale', (
       tester,

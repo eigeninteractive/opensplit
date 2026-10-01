@@ -1,25 +1,27 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
+import 'package:opensplit_api/opensplit_api.dart' show EntryKind;
 
-import '../../application/providers.dart';
-import '../../domain/models/currency.dart';
+import '../../application/ledger_providers.dart';
+import '../../application/sync_providers.dart';
+import '../../data/local/database.dart';
 import '../../domain/models/entry.dart';
+import '../../domain/money_format.dart';
 import '../format.dart';
 import '../navigation.dart';
 import '../theme.dart';
 import '../widgets/balance_arrow.dart';
 import '../widgets/balances_panel.dart';
-import '../widgets/link_account_prompt.dart';
+import '../widgets/conflicting_edit_banner.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/link_account_prompt.dart';
 import '../widgets/page_body.dart';
 import '../widgets/pull_to_sync.dart';
-import '../widgets/conflicting_edit_banner.dart';
-import '../widgets/unsynced_changes_banner.dart';
-import '../widgets/sync_status_notice.dart';
 import '../widgets/sync_refresh_button.dart';
+import '../widgets/sync_status_notice.dart';
+import '../widgets/unsynced_changes_banner.dart';
 
 /// Width at which the two halves of a group stop competing for the screen.
 const double _wideBreakpoint = 840;
@@ -119,19 +121,12 @@ class GroupDetailScreen extends ConsumerWidget {
             const UnsyncedChangesBanner(
               padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
             ),
-            // Beside it rather than folded into it. Both are about a write
-            // that did not land, and they mean opposite things: one says
-            // nobody else can see this, the other says everybody can see
-            // something else. Merging them would have to pick one wording.
+            // Beside it rather than folded into it.
             const ConflictingEditBanner(
               padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
             ),
             const SyncStatusBanner(padding: EdgeInsets.fromLTRB(16, 8, 16, 0)),
-            // Also here, not only on the group list. Someone who arrived on an
-            // invite link lands inside a group and stays there — they have the
-            // most to lose, since the group is shared and their share of it is
-            // real, and they are the least likely ever to see the list screen
-            // the other copy of this sits on.
+            // Also here, not only on the group list.
             const LinkAccountPrompt(padding: EdgeInsets.fromLTRB(16, 8, 16, 0)),
             Expanded(
               child: wide
@@ -197,7 +192,7 @@ class _EntriesList extends ConsumerWidget {
           return _EntryTile(
             entry: entry,
             ledger: ledger,
-            currency: currencies[entry.currency],
+            currency: currencies[entry.row.currency],
           );
         },
       ),
@@ -220,7 +215,7 @@ class _EntryTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final me = ledger.me;
-    final isSettlement = entry.kind == EntryKind.settlement;
+    final isSettlement = entry.row.kind == EntryKind.settlement;
 
     // What this entry did to your position: what you paid, less what you owe.
     var myDelta = 0;
@@ -234,12 +229,6 @@ class _EntryTile extends StatelessWidget {
     }
 
     // The same arithmetic, described in the two different things it can mean.
-    //
-    // A settlement moves your position exactly as an expense does, which is
-    // why it folds through the identical path — but "you owe ₹500" is a lie
-    // about money that has already changed hands. Being paid *reduces* what
-    // you are owed, so it is a negative delta, and reading that back as a debt
-    // is precisely backwards.
     final myDeltaWords = isSettlement
         ? (myDelta > 0
               ? 'you paid ${formatMoneyAbs(currency, myDelta)}'
@@ -259,8 +248,7 @@ class _EntryTile extends StatelessWidget {
           : ledger.nameOf(entry.shares.first.memberId);
       subtitle = '$payerNames paid $payee';
     } else {
-      subtitle =
-          '$payerNames paid · ${DateFormat.MMMd().format(entry.entryDate)}';
+      subtitle = '$payerNames paid · ${formatWhen(entry)}';
     }
 
     return ListTile(
@@ -278,11 +266,11 @@ class _EntryTile extends StatelessWidget {
         ),
       ),
       title: Text(
-        isSettlement && entry.description.isEmpty
+        isSettlement && entry.row.description.isEmpty
             ? 'Settlement'
-            : entry.description.isEmpty
+            : entry.row.description.isEmpty
             ? 'Expense'
-            : entry.description,
+            : entry.row.description,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
@@ -293,7 +281,7 @@ class _EntryTile extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Text(
-            formatMoney(currency, entry.amountMinor),
+            formatMoney(currency, entry.row.amountMinor),
             style: moneyStyle(Theme.of(context).textTheme.titleSmall!),
           ),
           if (me != null && myDelta != 0)

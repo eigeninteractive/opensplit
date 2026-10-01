@@ -1,4 +1,5 @@
-import 'package:opensplit/domain/models/currency.dart';
+import 'package:opensplit/data/local/database.dart';
+import 'package:opensplit/domain/money_format.dart';
 import 'package:test/test.dart';
 
 const inr = Currency(

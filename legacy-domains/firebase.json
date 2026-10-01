@@ -1,0 +1,36 @@
+{
+  "hosting": [
+    {
+      "site": "opensplit",
+      "public": "public",
+      "redirects": [
+        {
+          "source": "/",
+          "destination": "https://opensplit.eigeninteractive.com/",
+          "type": 301
+        },
+        {
+          "regex": "^/(.+)$",
+          "destination": "https://opensplit.eigeninteractive.com/:1",
+          "type": 301
+        }
+      ]
+    },
+    {
+      "site": "opensplit-app",
+      "public": "public",
+      "redirects": [
+        {
+          "source": "/",
+          "destination": "https://opensplit.eigeninteractive.com/",
+          "type": 301
+        },
+        {
+          "regex": "^/(.+)$",
+          "destination": "https://opensplit.eigeninteractive.com/:1",
+          "type": 301
+        }
+      ]
+    }
+  ]
+}

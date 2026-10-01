@@ -1,12 +1,16 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:opensplit/application/providers.dart';
+import 'package:opensplit/application/ledger_providers.dart';
+import 'package:opensplit/application/local_providers.dart';
+import 'package:opensplit/application/session_providers.dart';
+import 'package:opensplit/application/sync_coordinator.dart';
+import 'package:opensplit/application/sync_providers.dart';
+import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/sync/sync_engine.dart';
-import 'package:opensplit/domain/models/group.dart';
 import 'package:opensplit/presentation/screens/group_detail_screen.dart';
 import 'package:opensplit/presentation/screens/group_list_screen.dart';
 import 'package:opensplit/presentation/widgets/group_skeleton.dart';
@@ -19,6 +23,8 @@ final _group = Group(
   name: 'Saved home group',
   defaultCurrency: 'INR',
   createdAt: DateTime.utc(2026, 8, 29),
+  isDirect: false,
+  simplifyDebts: true,
 );
 
 final _ledger = GroupLedger(
@@ -52,7 +58,6 @@ Future<void> _mount(
       failedWritesProvider.overrideWith((ref) => Stream.value([])),
       pendingConflictsProvider.overrideWith((ref) => Stream.value([])),
       accountProvider.overrideWith((ref) => Stream.value(null)),
-      totalEntryCountProvider.overrideWith((ref) => Stream.value(0)),
     ],
     child: MaterialApp(home: screen),
   ),
@@ -167,9 +172,9 @@ void main() {
       groups: groups.stream,
     );
     // The skeleton, not a spinner and not a blank body: the point of the
-    // assertion is that something group-shaped is on screen before the
-    // database has answered, which is what the web loader has already been
-    // drawing for the whole of the engine download.
+    // assertion is that something group-shaped is on screen before the database
+    // has answered, which is what the web loader has already been drawing for
+    // the whole of the engine download.
     expect(find.byType(GroupListSkeleton), findsOneWidget);
     expect(find.text('No groups yet'), findsNothing);
     groups.add([_group]);

@@ -1,22 +1,10 @@
-import 'models/currency.dart';
+import '../data/local/database.dart';
 
 /// Currencies conventionally grouped in the Indian system — the last three
 /// digits, then pairs: 1,23,45,678 rather than 12,345,678.
 const _indianGrouping = {'INR', 'NPR', 'LKR', 'PKR', 'BDT'};
 
 /// Formats [amountMinor] for display.
-///
-/// Lives in the domain rather than the presentation layer because it is used by
-/// two things that must never disagree: the screens, and the text of a local
-/// notification. Two implementations of grouping and exponents would drift, and
-/// the failure mode is a banner that quotes a different figure from the app.
-///
-/// The whole path is integer arithmetic. Converting to a double to hand off to
-/// a number formatter would be the one place float sneaks into a money app, and
-/// it is avoidable: the grouping is done on the digit string.
-///
-/// [currency] may be null while reference data is still loading, in which case
-/// the raw minor units are shown rather than a wrong-by-a-factor-of-100 figure.
 String formatMoney(
   Currency? currency,
   int amountMinor, {
@@ -75,4 +63,51 @@ String _group(String digits, {required bool indian}) {
   }
   if (head.isNotEmpty) parts.insert(0, head);
   return '${parts.join(',')},$tail';
+}
+
+extension CurrencyAmounts on Currency {
+  /// Minor units in one major unit: 100 for INR, 1 for JPY, 1000 for KWD.
+  int get minorPerMajor {
+    var factor = 1;
+    for (var i = 0; i < exponent; i++) {
+      factor *= 10;
+    }
+    return factor;
+  }
+
+  /// Formats [amountMinor] as a plain decimal string, without a symbol.
+  ///
+  /// `250000` in INR is `2500.00`; in JPY it is `250000`; in KWD `250.000`.
+  String formatPlain(int amountMinor) {
+    final negative = amountMinor < 0;
+    final abs = amountMinor.abs();
+    if (exponent == 0) return '${negative ? '-' : ''}$abs';
+
+    final major = abs ~/ minorPerMajor;
+    final minor = abs % minorPerMajor;
+    final fraction = minor.toString().padLeft(exponent, '0');
+    return '${negative ? '-' : ''}$major.$fraction';
+  }
+
+  /// Parses user input in major units into minor units.
+  int? parseToMinor(String input) {
+    final trimmed = input.trim().replaceAll(',', '');
+    if (trimmed.isEmpty) return null;
+
+    final match = RegExp(r'^(-)?(\d*)(?:\.(\d*))?$').firstMatch(trimmed);
+    if (match == null) return null;
+
+    final sign = match.group(1) == null ? 1 : -1;
+    final majorText = match.group(2) ?? '';
+    final fractionText = match.group(3) ?? '';
+    if (majorText.isEmpty && fractionText.isEmpty) return null;
+    if (fractionText.length > exponent) return null;
+
+    final major = majorText.isEmpty ? 0 : int.parse(majorText);
+    final fraction = fractionText.isEmpty
+        ? 0
+        : int.parse(fractionText.padRight(exponent, '0'));
+
+    return sign * (major * minorPerMajor + fraction);
+  }
 }

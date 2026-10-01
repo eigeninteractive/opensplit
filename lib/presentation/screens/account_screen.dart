@@ -1,24 +1,18 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../application/providers.dart';
-import '../../domain/models/profile.dart';
+import '../../application/ledger_providers.dart';
+import '../../application/session_providers.dart';
+import '../../data/local/database.dart';
+import '../../domain/auth_service.dart';
 import '../../domain/settle/upi.dart';
 import '../feedback.dart';
 import '../widgets/account_section.dart';
 import '../widgets/page_body.dart';
 
-/// Who you are, in one place.
-///
-/// Everything here used to be somewhere else and worse. Linking an account was
-/// three quarters of the way down Settings, below the notification switch —
-/// the wrong place for the one action that decides whether somebody's data
-/// survives losing their phone. The name and payment handle were device
-/// preferences mirrored into a profile row and copied again into every group's
-/// member row, so a rename was three writes that nothing kept in step, and it
-/// never reached the people who actually see the name.
-///
-/// One name now, on the account, read by everybody who shares a group with you.
+/// Who you are, in one place: linking the account, which decides whether
+/// somebody's data survives losing their phone, and the one name and payment
+/// handle everybody who shares a group with you reads.
 class AccountScreen extends ConsumerStatefulWidget {
   const AccountScreen({super.key});
 
@@ -44,9 +38,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     // Filling a form from asynchronous data is initialisation, not something to
     // do while building: writing to a controller notifies the field attached to
     // it, and doing that from inside a build is how a widget ends up marking
-    // itself dirty mid-frame. listenManual fires once with whatever is already
-    // known and again when the profile lands, runs outside the build phase, and
-    // unsubscribes with the widget.
+    // itself dirty mid-frame.
     ref.listenManual(
       myProfileProvider,
       (_, next) => _seed(next.value),
@@ -143,12 +135,21 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   }
 
   /// Deletes the account, after saying precisely what that costs.
-  ///
-  /// Two steps rather than one, and the second names numbers. Play requires
-  /// this to be reachable in the app rather than only by email, which means it
-  /// sits a few taps from a screen people open to change their name — so the
-  /// only protection against a mis-tap is a dialog nobody could confirm by
-  /// accident.
+  /// Sends a code to the account's own address and asks for it. True once the
+  /// session has been replaced with a fresh one.
+  Future<bool> _confirmItIsYou() async {
+    final session = ref.read(sessionControllerProvider.notifier);
+    final email = await session.startReauthentication();
+    if (!mounted) return false;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) =>
+          _ConfirmItIsYou(email: email, verify: session.reauthenticate),
+    );
+    return confirmed ?? false;
+  }
+
   Future<void> _deleteAccount() async {
     final impact = await ref.read(deletionImpactProvider.future);
     if (!mounted) return;
@@ -207,7 +208,18 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
 
     setState(() => _deleting = true);
     try {
-      await ref.read(sessionControllerProvider.notifier).deleteAccount();
+      final session = ref.read(sessionControllerProvider.notifier);
+      try {
+        await session.deleteAccount();
+      } on ReauthenticationRequired {
+        // A session lasts a year, so holding one is not proof enough for
+        // this. Nothing has been deleted yet.
+        if (!await _confirmItIsYou()) {
+          if (mounted) setState(() => _deleting = false);
+          return;
+        }
+        await session.deleteAccount();
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() => _deleting = false);
@@ -233,8 +245,6 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         SliverList.list(
           children: [
             // The prompt to attach a real account, when there is not one yet.
-            // Renders nothing once there is, rather than becoming a permanent
-            // banner about a settled question.
             const AccountSection(),
 
             if (account != null && !account.isAnonymous)
@@ -285,11 +295,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
 
             if (account != null) ...[
               const Divider(height: 48),
-              // Offered only to an account somebody can get back into. Signing
-              // out of a guest account is not the reversible thing the word
-              // promises: nothing but this device identifies it, so leaving is
-              // leaving for good — which is what Delete account below does,
-              // properly and with the warning it deserves.
+              // Offered only to an account somebody can get back into.
               if (!account.isAnonymous)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
@@ -304,12 +310,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                   ),
                   onTap: _signOut,
                 )
-              // Said out loud rather than left as a gap. Somebody looking for
-              // sign out and finding only Delete account cannot tell whether
-              // the control is missing or the app is broken, and the answer —
-              // that there is nowhere to sign back in from — is also the
-              // reason to attach an address, which is the next thing they
-              // should do.
+              // Said out loud rather than left as a gap.
               else
                 ListTile(
                   contentPadding: EdgeInsets.zero,
@@ -377,5 +378,81 @@ class _Bullet extends StatelessWidget {
         Expanded(child: Text(text)),
       ],
     ),
+  );
+}
+
+/// Asks for the code sent to [email], and checks it before closing.
+class _ConfirmItIsYou extends StatefulWidget {
+  const _ConfirmItIsYou({required this.email, required this.verify});
+
+  final String email;
+  final Future<void> Function(String code) verify;
+
+  @override
+  State<_ConfirmItIsYou> createState() => _ConfirmItIsYouState();
+}
+
+class _ConfirmItIsYouState extends State<_ConfirmItIsYou> {
+  final _code = TextEditingController();
+  bool _checking = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _code.dispose();
+    super.dispose();
+  }
+
+  Future<void> _check() async {
+    final code = _code.text.trim();
+    if (code.isEmpty) return;
+    setState(() {
+      _checking = true;
+      _error = null;
+    });
+    try {
+      await widget.verify(code);
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _checking = false;
+        _error = 'That code is wrong or has expired.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Confirm it is you'),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'We sent a code to ${widget.email}. Enter it to delete your account.',
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _code,
+          autofocus: true,
+          enabled: !_checking,
+          keyboardType: TextInputType.number,
+          autofillHints: const [AutofillHints.oneTimeCode],
+          decoration: InputDecoration(labelText: 'Code', errorText: _error),
+          onSubmitted: (_) => _check(),
+        ),
+      ],
+    ),
+    actions: [
+      TextButton(
+        onPressed: _checking ? null : () => Navigator.of(context).pop(false),
+        child: const Text('Keep my account'),
+      ),
+      FilledButton(
+        onPressed: _checking ? null : _check,
+        child: const Text('Confirm'),
+      ),
+    ],
   );
 }

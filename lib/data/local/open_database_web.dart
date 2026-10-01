@@ -5,10 +5,6 @@ const _sqlite3Wasm = 'sqlite3.wasm';
 const _driftWorker = 'drift_worker.js';
 
 /// Opens [name] in the browser's Origin Private File System.
-///
-/// OpenSplit deliberately has no second browser database backend. Falling back
-/// to another storage API would create an independent local ledger under the
-/// same account and make data appear to disappear between browser sessions.
 QueryExecutor openPlatformDatabase(String name) => DatabaseConnection.delayed(
   Future(() async {
     final probe = await WasmDatabase.probe(

@@ -1,0 +1,75 @@
+// Biome formats and lints everything in the repository that it understands:
+// the Worker's TypeScript, the web shell's and the site's HTML, CSS and
+// JavaScript, the SVGs, and the JSON. Dart is `dart format` and `dart analyze`.
+// One config at the root, so the CLI from server/ (`pnpm lint`, which CI runs)
+// and an editor opened here read the same rules.
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
+  "root": true,
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "ignoreUnknown": false,
+    // `useIgnoreFile` above already drops everything `.gitignore` does, so what
+    // is listed here is the opposite case: files that *are* committed and are
+    // written by a tool. Most are regenerated in CI and diffed, so formatting
+    // them would turn a regeneration into a drift failure.
+    "includes": [
+      "**",
+      // Better Auth's tables, from `auth generate`.
+      "!server/src/auth-schema.ts",
+      // drizzle-kit's, including `migrations.js`, which every generate rewrites.
+      "!server/migrations",
+      "!server/src/do/*/migrations",
+      // `wrangler types`.
+      "!server/worker-configuration.d.ts",
+      // The API contract, emitted from the Worker's Zod schemas.
+      "!docs/openapi.json",
+      // `drift_dev schema dump`.
+      "!drift_schemas",
+      // Drift's release file, which CI compares byte for byte.
+      "!web/drift_worker.js",
+      // Not JavaScript until Flutter fills in its `{{flutter_js}}` placeholders.
+      "!web/flutter_bootstrap.js",
+      // The skills and openapi-generator CLIs'.
+      "!skills-lock.json",
+      "!openapitools.json"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "lineWidth": 320
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended"
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "trailingCommas": "all"
+    }
+  },
+  "html": {
+    "formatter": { "enabled": true },
+    "linter": { "enabled": true }
+  },
+  "overrides": [
+    {
+      // Whitespace between the <tspan>s of a <text> is drawn as a space, so the
+      // default would turn the lockups' "OpenSplit" into "Open Split".
+      "includes": ["**/*.svg"],
+      "html": { "formatter": { "whitespaceSensitivity": "strict" } }
+    }
+  ],
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  }
+}

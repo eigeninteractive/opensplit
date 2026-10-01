@@ -1,26 +1,16 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
-import '../../application/providers.dart';
-import '../../domain/models/group.dart';
+import '../../application/ledger_providers.dart';
+import '../../application/local_providers.dart';
+import '../../data/local/database.dart';
 import '../navigation.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/page_body.dart';
 
 /// Groups that have been put away, and the way back.
-///
-/// Archiving is not deleting and never was — the ledger is intact, the
-/// balances still resolve, and an archived group can be opened, exported and
-/// un-archived. Until this screen existed there was simply nowhere to see one:
-/// the group list filters them out, and both the leave-group flow and the
-/// server's dormancy job archive without asking, so a group could vanish from
-/// the app with nothing anywhere to say where it went.
-///
-/// Adding an expense to an archived group un-archives it, on the device and on
-/// the server alike, so this is a resting place rather than a state anyone has
-/// to manage.
 class ArchivedGroupsScreen extends ConsumerWidget {
   const ArchivedGroupsScreen({super.key});
 

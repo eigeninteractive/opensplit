@@ -1,27 +1,17 @@
 import 'package:drift/drift.dart';
+import 'package:opensplit_api/opensplit_api.dart' as api;
 import 'package:uuid/uuid.dart';
 
 import '../../domain/activity/snapshot_diff.dart';
 import '../../domain/entry_draft.dart';
 import '../../domain/models/entry.dart';
 import '../../domain/models/entry_snapshot.dart';
-import '../../domain/models/group_event.dart';
 import '../local/database.dart';
 import '../local/entry_writer.dart';
+import '../local/tables.dart';
 import '../sync/outbox_queue.dart';
-import 'mappers.dart';
 
 /// Local-first entry storage.
-///
-/// Writes land here first and are answered immediately; getting them to the
-/// server is a separate, later concern. That ordering is the whole offline
-/// story — the app is fully usable on a plane, and "add expense" never shows a
-/// spinner because there is nothing to wait for.
-///
-/// An entry, its payers and its shares are one atomic fact. They are never
-/// written separately — a torn write would leave a row that violates the
-/// balance invariant, which is exactly what the server's deferred trigger
-/// exists to make impossible.
 final class DriftEntryRepository {
   DriftEntryRepository(
     this._db, {
@@ -39,65 +29,37 @@ final class DriftEntryRepository {
   final DateTime Function() _clock;
 
   /// Queues a row for the server.
-  ///
-  /// Done here rather than left to callers so that no write path can forget:
-  /// an entry that is saved locally but never queued would silently never
-  /// leave the device.
   Future<void> _enqueue(String entryId) async =>
       outbox?.enqueue(OutboxTarget.entry, entryId);
 
-  /// Writes an entry, this device's record of the write, and the queue item,
-  /// as one operation.
-  ///
-  /// Every local write of an entry goes through here, which is the point: a
-  /// change and the record of it are one fact, and committing them separately
-  /// would allow either an expense with no history or history for an expense
-  /// that was never stored.
-  ///
-  /// The snapshot written here is PROVISIONAL and is never pushed. The
-  /// authoritative record is the server's, taken by a trigger from the row it
-  /// actually committed -- which is what makes the feed something a reader can
-  /// trust rather than something the editing device asserted about itself. This
-  /// one exists because the server's arrives only after a round trip, and the
-  /// one screen whose whole job is to say what happened must not be the one
-  /// screen that needs a network to do it. It is dropped the moment the
-  /// server's account of the same expense is pulled.
-  ///
-  /// [actorId] is a member id, not an account id. Authorship is group-scoped
-  /// for the same reason `entries.created_by` is: a placeholder's edits have to
-  /// survive them claiming an account later. Null when this device has no
-  /// member row in the group -- recorded anyway, with nobody named, because a
-  /// change nobody can be attributed to still belongs on the record.
+  /// Writes an entry, a provisional feed line for it, and its outbox item.
   Future<void> _writeWithSnapshot({
     required Entry after,
     required String? actorId,
     required DateTime at,
   }) async {
-    final snapshot = snapshotOf(
-      after,
-      id: _uuid.v4(),
-      actorId: actorId,
-      at: at,
-    );
-
-    // The same dedup the server applies, so a re-saved editor produces no line
-    // here either -- rather than one that appears and then disappears when the
-    // server's deduped account of the write arrives.
+    final snapshot = snapshotOf(after);
     final latest = await _latestSnapshot(after.id);
-    final worthRecording =
-        latest == null || !recordsSameShape(latest, snapshot);
 
-    await writeEntryInTransaction(
-      _db,
-      after,
-      snapshot: worthRecording ? snapshot : null,
-    );
+    await writeEntryInTransaction(_db, after);
+    if (latest == null || !recordsSameShape(latest, snapshot)) {
+      await _db
+          .into(_db.groupEvents)
+          .insert(
+            GroupEventsCompanion.insert(
+              id: _uuid.v4(),
+              groupId: after.row.groupId,
+              actorId: Value(actorId),
+              createdAt: at,
+              kind: api.EventKind.entry,
+              subjectId: Value(after.id),
+              entry: Value(snapshot),
+              isProvisional: const Value(true),
+            ),
+          );
+    }
 
-    // Editing an expense acknowledges any notice about it. Whatever the person
-    // decided -- to put their change back, to keep what the group has, or
-    // something else entirely -- they have now seen what it says and acted, so
-    // a banner still asking them to look would be asking about a question they
-    // have answered.
+    // Editing an expense acknowledges any conflict notice about it.
     await (_db.delete(
       _db.entryConflicts,
     )..where((t) => t.entryId.equals(after.id))).go();
@@ -106,50 +68,21 @@ final class DriftEntryRepository {
   }
 
   /// The most recent thing recorded about an entry, from either source.
-  Future<EntrySnapshot?> _latestSnapshot(String entryId) async {
+  Future<api.EntrySnapshot?> _latestSnapshot(String entryId) async {
     final row =
         await (_db.select(_db.groupEvents)
               ..where(
                 (t) =>
                     t.subjectId.equals(entryId) &
-                    t.kind.equals(GroupEventKind.entry.wireName),
+                    t.kind.equalsValue(api.EventKind.entry),
               )
-              ..orderBy([
-                (t) => OrderingTerm(
-                  expression: t.createdAt,
-                  mode: OrderingMode.desc,
-                ),
-              ])
+              ..orderBy(newestFirst)
               ..limit(1))
             .getSingleOrNull();
-    return row?.toDomain()?.snapshot;
-  }
-
-  /// How many live entries this device holds, across every group.
-  ///
-  /// Counted in SQL rather than by reading every row and taking the length of
-  /// the result — this is watched for as long as the app is open, and the
-  /// caller only ever compares it against a small number.
-  Stream<int> watchTotalCount() => _liveCount().watchSingle();
-
-  /// The same count, once.
-  ///
-  /// Asked before signing in as somebody else, to say how many expenses that
-  /// would leave behind — so it is a number in a warning, never a list.
-  Future<int> countLiveEntries() => _liveCount().getSingle();
-
-  Selectable<int> _liveCount() {
-    final total = _db.entries.id.count();
-    final query = _db.selectOnly(_db.entries)
-      ..addColumns([total])
-      ..where(_db.entries.deletedAt.isNull());
-    return query.map((row) => row.read(total) ?? 0);
+    return row?.entry;
   }
 
   /// Hydrates specific entries, in the order asked for.
-  ///
-  /// Ids the group no longer holds are skipped rather than reported: the caller
-  /// is a search whose id list came from a query that has since moved on.
   Future<List<Entry>> getByIds(List<String> ids) async {
     if (ids.isEmpty) return const [];
     final rows = await (_db.select(
@@ -161,22 +94,12 @@ final class DriftEntryRepository {
   }
 
   /// Every entry in a group, most recent first.
-  ///
-  /// Returns the whole journal rather than a page: balances are a fold over all
-  /// of it, and the fold runs locally on every read. For the group sizes this
-  /// app targets that is microseconds, and it is what removes the spinner from
-  /// every screen.
-  ///
-  /// Soft-deleted entries are excluded unless [includeDeleted] is set. The
-  /// balance fold ignores them either way; history screens want them.
   Stream<List<Entry>> watchEntries(
     String groupId, {
     bool includeDeleted = false,
   }) {
     // A payer or share row can change without the parent entry row itself being
-    // rewritten — a sync applying children, for instance. Declaring all three
-    // tables as dependencies means the stream re-emits whenever any of them
-    // moves, so a balance on screen can never be stale.
+    // rewritten — a sync applying children, for instance.
     return _db
         .customSelect(
           'select 1',
@@ -205,6 +128,11 @@ final class DriftEntryRepository {
       })
       ..orderBy([
         (t) => OrderingTerm.desc(t.entryDate),
+        (t) => OrderingTerm(
+          expression: t.occurredAt,
+          mode: OrderingMode.desc,
+          nulls: NullsOrder.last,
+        ),
         (t) => OrderingTerm.desc(t.createdAt),
       ]);
 
@@ -243,7 +171,8 @@ final class DriftEntryRepository {
 
     return [
       for (final row in rows)
-        row.toDomain(
+        entryFromRows(
+          row,
           payers: payersByEntry[row.id] ?? const [],
           shares: sharesByEntry[row.id] ?? const [],
         ),
@@ -251,9 +180,6 @@ final class DriftEntryRepository {
   }
 
   /// Resolves [draft] into a balanced entry and stores it.
-  ///
-  /// Throws [SplitException] if the draft does not describe a valid entry, in
-  /// which case nothing is written.
   Future<Entry> create(
     EntryDraft draft, {
     required String createdBy,
@@ -270,19 +196,13 @@ final class DriftEntryRepository {
     );
 
     await _db.transaction(() async {
-      await _unarchive(entry.groupId);
+      await _unarchive(entry.row.groupId);
       await _writeWithSnapshot(after: entry, actorId: createdBy, at: at);
     });
     return entry;
   }
 
   /// A group somebody is still using is not dormant.
-  ///
-  /// `upsert_entry` does the same thing on the server, and this is the local
-  /// half of it. Without it, adding an expense to a group the reaper archived
-  /// three months ago leaves the group hidden until the next successful sync —
-  /// which offline is never, so the expense would land somewhere the person who
-  /// typed it cannot see.
   Future<void> _unarchive(String groupId) async {
     await (_db.update(_db.groups)
           ..where((t) => t.id.equals(groupId) & t.archivedAt.isNotNull()))
@@ -291,11 +211,6 @@ final class DriftEntryRepository {
 
   /// Replaces an existing entry's contents, keeping its id and creation
   /// metadata.
-  ///
-  /// [actorId] is who is making the edit — the member row for this device in
-  /// this group — which is not necessarily whoever created the entry. That
-  /// distinction is the whole value of the feed: "Priya edited Ravi's expense"
-  /// is the line people actually want to see.
   Future<Entry> update(
     String entryId,
     EntryDraft draft, {
@@ -311,15 +226,21 @@ final class DriftEntryRepository {
 
     final at = now ?? _clock();
     // Recomposed rather than patched, so an edit goes through exactly the same
-    // validation as a creation. Creation metadata and the client key are
-    // preserved: this is the same fact, revised.
-    final recomposed = composeEntry(
+    // validation as a creation.
+    final composed = composeEntry(
       draft,
       id: entryId,
-      createdBy: existing.createdBy,
+      createdBy: existing.row.createdBy,
       now: at,
-      clientKey: existing.clientKey,
-    ).copyWith(createdAt: existing.createdAt);
+    );
+    final recomposed = composed.copyWith(
+      row: composed.row.copyWith(
+        createdAt: existing.row.createdAt,
+        seq: Value(existing.row.seq),
+        // An edit is not an undelete.
+        deletedAt: Value(existing.row.deletedAt),
+      ),
+    );
 
     await _writeWithSnapshot(after: recomposed, actorId: actorId, at: at);
     return recomposed;
@@ -338,21 +259,24 @@ final class DriftEntryRepository {
     _checkExpected(existing, expected);
 
     final at = now ?? _clock();
-    // Soft delete, and `updatedAt` moves so the deletion is itself a delta that
-    // other devices will pull. A hard delete would simply vanish from their
-    // cursor sweep and live on forever on every device that already had it.
+    // Soft delete.
     await _writeWithSnapshot(
-      after: existing.copyWith(deletedAt: at, updatedAt: at),
+      after: existing.copyWith(
+        row: existing.row.copyWith(deletedAt: Value(at)),
+      ),
       actorId: actorId,
       at: at,
     );
   });
 
   void _checkExpected(Entry current, Entry? expected) {
-    // An acknowledgement only changes updatedAt. It must not invalidate an
-    // open form, but an actual local or remote edit must not be overwritten.
+    // An acknowledgement only moves `seq`. It must not invalidate an open
+    // form, but an actual local or remote edit must not be overwritten.
     if (expected != null &&
-        expected.copyWith(updatedAt: current.updatedAt) != current) {
+        expected.copyWith(
+              row: expected.row.copyWith(seq: Value(current.row.seq)),
+            ) !=
+            current) {
       throw const StaleEntryException();
     }
   }

@@ -2,38 +2,26 @@ import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart'
     show LicenseEntryWithLineBreaks, LicenseRegistry;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'application/providers.dart';
+import 'application/backend_providers.dart';
+import 'application/preferences_providers.dart';
 import 'config.dart';
-import 'data/auth/session_storage.dart';
+import 'data/auth/session_store.dart';
 import 'presentation/app.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // google_fonts falls back to downloading a face it cannot find in the
-  // bundle. Everything this app uses is bundled, so a miss is a packaging
-  // mistake, and it should surface as one rather than as a silent request to
-  // Google on a user's first launch — which is exactly what an app promising
-  // to work offline and report nothing must not do.
+  // google_fonts falls back to downloading a face it cannot find in the bundle.
   GoogleFonts.config.allowRuntimeFetching = false;
 
   // The faces ship with their licence, and the app can show it.
-  //
-  // Flutter's licence page is built from [LicenseRegistry], which is populated
-  // from the LICENSE file of every *package* in the build. These four faces are
-  // not a package — they are .ttf files in `assets/`, and package:google_fonts
-  // registers nothing of its own -- so the one screen that offers "the packages
-  // this app is built on, and their terms" was missing the only third-party
-  // work the app actually redistributes. The OFL asks for the notice and the
-  // licence to accompany every copy; this is the copy a user can read.
   LicenseRegistry.addLicense(() async* {
     yield LicenseEntryWithLineBreaks(const [
       'Instrument Sans',
@@ -41,48 +29,18 @@ Future<void> main() async {
     ], await rootBundle.loadString('assets/google_fonts/LICENSE'));
   });
 
-  // Real paths, not hash fragments. A fragment is never sent to the server, so
-  // a `#/g/123` URL cannot be an Android App Link — the whole "tap a shared
-  // link and land in the group" flow depends on this one line.
+  // Real paths, not hash fragments.
   usePathUrlStrategy();
 
   final prefs = await SharedPreferences.getInstance();
 
-  if (hasBackend) {
-    try {
-      await Supabase.initialize(
-        url: supabaseUrl,
-        publishableKey: supabasePublishableKey,
-        authOptions: FlutterAuthClientOptions(
-          localStorage: SharedPreferencesLocalStorage(
-            persistSessionKey: sessionStorageKey,
-          ),
-        ),
-      );
-    } catch (error, stackTrace) {
-      // Startup must not depend on reaching a server. Every screen is rendered
-      // from the local database, so a build that cannot initialise its backend
-      // is still a working app — it simply will not sync.
-      //
-      // developer.log rather than a print: this carries the error and the trace
-      // as structured fields, so DevTools shows it as one collapsible entry
-      // with a real stack instead of a line of text, and level 900 (WARNING)
-      // says what it is. A print would also have gone to release console output
-      // on the web, where anyone can read it.
-      developer.log(
-        'Continuing without a backend',
-        name: 'opensplit.startup',
-        level: 900,
-        error: error,
-        stackTrace: stackTrace,
-      );
-    }
-  }
+  // The session is a cached account in the preferences above and, on Android,
+  // a bearer token in secure storage. Both are read now so that
+  // `BetterAuthService` can answer synchronously, then revalidates.
+  final sessions = await SessionStore.load(prefs);
 
   // A build that cannot reach its backend says so, rather than looking correct
-  // and quietly doing nothing. See [configurationProblem]: this only ever fires
-  // on a release build that was made without its dart-defines, which is
-  // indistinguishable from a working one until somebody tries to sign in.
+  // and quietly doing nothing.
   final problem = configurationProblem;
   if (problem != null) {
     developer.log(
@@ -91,27 +49,23 @@ Future<void> main() async {
       level: 1000, // SEVERE
     );
     // Scoped like the real launch below, though this screen reads nothing from
-    // a provider. It costs an empty container and buys an invariant with no
-    // exceptions in it: every runApp in this app is inside a ProviderScope,
-    // which is a cheaper thing to hold in your head than one that is true
-    // apart from the error path.
+    // a provider.
     runApp(ProviderScope(child: _Misconfigured(problem)));
     return;
   }
 
   runApp(
     ProviderScope(
-      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        sessionStoreProvider.overrideWithValue(sessions),
+      ],
       child: const OpenSplitApp(),
     ),
   );
 }
 
 /// Shown instead of the app when the build itself is wrong.
-///
-/// Deliberately plain: no theme, no router, no providers. Everything that would
-/// make this look like the app is a thing that could fail for the same reason
-/// the app cannot run.
 class _Misconfigured extends StatelessWidget {
   const _Misconfigured(this.problem);
 

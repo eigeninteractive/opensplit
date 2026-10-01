@@ -4,20 +4,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart';
 
 /// The icons `dart run tool/brand_icons.dart` produces.
-///
-/// They exist because flutter_launcher_icons builds every output from one
-/// opaque master, which is right for a launcher icon and wrong for both of
-/// these. That also means running the generator overwrites one of them, so
-/// these tests are the thing standing between a routine `dart run
-/// flutter_launcher_icons` and a silently wrong icon.
 void main() {
   group('the browser tab icon', () {
     test('is transparent, not a tile', () {
       // flutter_launcher_icons resizes assets/icon/icon.png for the favicon,
       // and that file is deliberately opaque — primaryContainer behind the
-      // mark, because iOS and legacy Android icons cannot carry alpha. Resized
-      // into a tab it becomes a pale lilac square, brightest thing on the row
-      // in a dark theme.
+      // mark, because iOS and legacy Android icons cannot carry alpha.
       final favicon = decodePng(File('site/favicon.png').readAsBytesSync());
       expect(favicon, isNotNull, reason: 'site/favicon.png is not a PNG');
 
@@ -61,10 +53,8 @@ void main() {
     });
 
     test('is named in one place, not once per isolate', () {
-      // The app and the push background isolate each initialise the plugin,
-      // and they run in separate memory with no shared setup. Two literals
-      // here is not a compile error — it is one of them being changed and the
-      // other quietly keeping the old icon, on whichever path nobody tested.
+      // The app and the push background isolate each initialise the plugin, and
+      // they run in separate memory with no shared setup.
       for (final path in [
         'lib/data/push/push_service.dart',
         'lib/data/push/background_handler.dart',
@@ -97,13 +87,7 @@ void main() {
     });
 
     test('survives resource shrinking', () {
-      // The whole reason this test exists. Release builds run R8 with resource
-      // shrinking on — the Flutter Gradle plugin enables both — and the icon is
-      // referenced only as a string, so nothing in the compiled code points at
-      // it. Before the keep rule the shrinker reported the old
-      // @mipmap/ic_launcher as "not reachable", which in release means Android
-      // looks the resource up, fails to find it, and posts nothing at all. No
-      // error, no crash, and nothing reproducible on a debug build.
+      // The whole reason this test exists.
       final keep = File(
         'android/app/src/main/res/raw/keep.xml',
       ).readAsStringSync();

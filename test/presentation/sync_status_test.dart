@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:opensplit/application/providers.dart';
+import 'package:opensplit/application/sync_coordinator.dart';
+import 'package:opensplit/application/sync_providers.dart';
 import 'package:opensplit/data/sync/sync_engine.dart';
 import 'package:opensplit/presentation/widgets/sync_status_notice.dart';
 
@@ -120,11 +121,6 @@ void main() {
 }
 
 /// How many times [_StatusController] was asked to retry.
-///
-/// Off the notifier for the reason riverpod_lint gives: its public surface is
-/// meant to be `state`, and a spy's tally is not state anything renders -- it
-/// is what the test asserts on. A final field holding a mutable counter is
-/// both what the rule permits and a clearer separation.
 class _Calls {
   int retries = 0;
 }

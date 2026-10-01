@@ -159,14 +159,14 @@ void main() {
       final found = await analytics
           .search(AnalyticsFilter(groupId: groupId, query: 'toit'))
           .first;
-      expect(found.map((e) => e.description), ['Dinner at Toit']);
+      expect(found.map((e) => e.row.description), ['Dinner at Toit']);
     });
 
     test('matches on a prefix, so it works as you type', () async {
       final found = await analytics
           .search(AnalyticsFilter(groupId: groupId, query: 'brea'))
           .first;
-      expect(found.single.description, 'Breakfast dosa');
+      expect(found.single.row.description, 'Breakfast dosa');
     });
 
     test(
@@ -199,10 +199,10 @@ void main() {
         EntryDraft(
           groupId: groupId,
           currency: 'INR',
-          amountMinor: target.amountMinor,
+          amountMinor: target.row.amountMinor,
           description: 'Dinner at Koshys',
           split: EqualSplit([ravi, priya]),
-          payerAmounts: {ravi: target.amountMinor},
+          payerAmounts: {ravi: target.row.amountMinor},
         ),
       );
 
@@ -248,14 +248,12 @@ void main() {
       final found = await analytics
           .search(AnalyticsFilter(groupId: groupId, categoryId: transport))
           .first;
-      expect(found.single.description, 'Auto to the beach');
+      expect(found.single.row.description, 'Auto to the beach');
     });
   });
 
   // What this guards: every one of these used to be a one-shot query, so the
-  // Insights screen answered as of the moment it was opened. An expense added
-  // in the pane beside it — or arriving on a sync while it sat open — left
-  // totals that quietly disagreed with the ledger they came from.
+  // Insights screen answered as of the moment it was opened.
   group('is live, not a snapshot', () {
     test('a new expense reaches an open query', () async {
       final totals = analytics
@@ -287,7 +285,7 @@ void main() {
     test('so does a search', () async {
       final descriptions = analytics
           .search(AnalyticsFilter(groupId: groupId, query: 'chai'))
-          .map((found) => found.map((e) => e.description).toList());
+          .map((found) => found.map((e) => e.row.description).toList());
 
       expect(
         descriptions,

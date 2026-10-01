@@ -1,8 +1,9 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../application/providers.dart';
+import '../../application/ledger_providers.dart';
+import '../../application/local_providers.dart';
 import 'currency_picker.dart';
 
 Future<void> showCreateGroupSheet(BuildContext context) => showModalBottomSheet(
@@ -13,20 +14,6 @@ Future<void> showCreateGroupSheet(BuildContext context) => showModalBottomSheet(
 );
 
 /// Naming a group, and — exactly once, ever — naming yourself.
-///
-/// The name field used to be unconditional, pre-filled from the account and
-/// written back to it on save. That made one name editable from two places
-/// with no indication that the second one was an account edit at all, and the
-/// write-back ran *before* the group was created, so a profile save that failed
-/// took the group down with it while still having changed the name. Reopening
-/// the sheet then pre-filled the new name, the comparison matched, the save was
-/// skipped, and the group appeared — which reads exactly like "it works the
-/// second time" and is impossible to reason about.
-///
-/// Now the field is shown only when the account genuinely has no name, which
-/// [Profile.displayName] can finally express, and answering it is understood as
-/// the account edit it always was. Once there is a name there is nothing to
-/// mismatch, because there is only one place holding it.
 class _CreateGroupSheet extends ConsumerStatefulWidget {
   const _CreateGroupSheet();
 
@@ -49,10 +36,6 @@ class _CreateGroupSheetState extends ConsumerState<_CreateGroupSheet> {
   }
 
   /// The account's name, or null if nobody has chosen one.
-  ///
-  /// Watched rather than read once in `initState`. The profile arrives from a
-  /// database stream, so on the first frame there is nothing yet — reading it
-  /// there is why the field could open blank for someone who did have a name.
   String? get _accountName {
     final name = ref.watch(myProfileProvider).value?.displayName?.trim();
     return name == null || name.isEmpty ? null : name;
@@ -73,9 +56,7 @@ class _CreateGroupSheetState extends ConsumerState<_CreateGroupSheet> {
       _error = null;
     });
     try {
-      // The group first, and the account second. Both orderings write the same
-      // two things, but only this one cannot lose the group: creating it is
-      // what the user asked for, and naming the account is a consequence.
+      // The group first, and the account second.
       final created = await ref
           .read(groupRepositoryProvider)
           .createGroup(
@@ -97,9 +78,7 @@ class _CreateGroupSheetState extends ConsumerState<_CreateGroupSheet> {
       Navigator.of(context).pop();
       router.push('/g/${created.group.id}');
     } catch (error) {
-      // Shown rather than swallowed. This used to have a bare `finally`, so
-      // anything thrown here left the sheet open, the button live and no
-      // explanation anywhere on screen.
+      // Shown rather than swallowed.
       if (mounted) setState(() => _error = '$error');
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -141,8 +120,7 @@ class _CreateGroupSheetState extends ConsumerState<_CreateGroupSheet> {
               decoration: const InputDecoration(
                 labelText: 'Your name',
                 // Said out loud, because it is true: this is not a field about
-                // this group. Everyone in every group you join will see it,
-                // and it is changed afterwards on the Account screen.
+                // this group.
                 helperText: 'How everyone in your groups will see you.',
               ),
               onChanged: (_) => setState(() {}),

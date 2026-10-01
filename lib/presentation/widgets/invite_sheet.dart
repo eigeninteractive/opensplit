@@ -1,12 +1,14 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../application/providers.dart';
-import 'notification_invitation.dart';
+import '../../application/backend_providers.dart';
+import '../../application/sync_providers.dart';
 import '../../config.dart';
-import '../../domain/models/member.dart';
-import '../../domain/repositories/invite_api.dart';
+import '../../data/local/database.dart';
+import '../../data/sync/api_client.dart';
+import '../../data/sync/invites.dart';
+import 'notification_invitation.dart';
 
 /// Creates and shows a link that hands over one unclaimed place in a group.
 Future<void> showInviteSheet(
@@ -41,7 +43,7 @@ class _InviteSheetState extends ConsumerState<_InviteSheet> {
   }
 
   Future<void> _create() async {
-    final invites = ref.read(inviteApiProvider);
+    final invites = ref.read(invitesProvider);
     if (invites == null) {
       setState(
         () => _error =
@@ -57,14 +59,17 @@ class _InviteSheetState extends ConsumerState<_InviteSheet> {
           .read(syncControllerProvider.notifier)
           .syncGroup(widget.member.groupId);
 
-      final invite = await invites.create(widget.member.id);
+      final invite = await invites.create(
+        widget.member.groupId,
+        widget.member.id,
+      );
       if (mounted) {
         setState(() {
-          _url = invite.urlFor(linkHost);
+          _url = joinUrl(linkOrigin, invite.token);
           _expires = invite.expiresAt;
         });
       }
-    } on InviteRejected catch (e) {
+    } on ApiFailure catch (e) {
       if (mounted) setState(() => _error = e.message);
     } catch (e) {
       if (mounted) setState(() => _error = 'Could not create a link. $e');
@@ -72,10 +77,6 @@ class _InviteSheetState extends ConsumerState<_InviteSheet> {
   }
 
   /// When the link stops working, in words.
-  ///
-  /// A date only once one is known: until the server has answered there is no
-  /// expiry to quote, and inventing one would be a promise the link cannot
-  /// keep.
   String get _expiry => _expires == null
       ? 'shortly'
       : 'on ${_expires!.toLocal().toString().split(' ').first}';

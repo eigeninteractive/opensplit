@@ -1,10 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/domain/fx/convert.dart';
 import 'package:opensplit/domain/fx/estimated_total.dart';
 import 'package:opensplit/domain/fx/fx_quote.dart';
-import 'package:opensplit/domain/models/currency.dart';
 import 'package:opensplit/domain/models/entry.dart';
-import 'package:opensplit/domain/split/splitter.dart';
+import 'package:opensplit_api/opensplit_api.dart' show EntryKind, SplitKind;
+import 'package:opensplit_api/opensplit_api.dart' show Payer, Share;
 
 const inr = Currency(code: 'INR', exponent: 2, symbol: '₹', name: 'Rupee');
 const usd = Currency(code: 'USD', exponent: 2, symbol: r'$', name: 'Dollar');
@@ -30,21 +31,25 @@ Entry entry({
 }) {
   final date = DateTime.utc(2026, 8, 20);
   return Entry(
-    id: 'e-$currency-$paid-$share-$member',
-    groupId: 'g',
-    kind: EntryKind.expense,
-    description: 'test',
-    currency: currency,
-    amountMinor: paid,
-    entryDate: date,
-    splitKind: SplitKind.equal,
-    payers: [if (paid != 0) EntryPayer(memberId: member, amountMinor: paid)],
-    shares: [if (share != 0) EntryShare(memberId: member, amountMinor: share)],
-    fxRate: fxRate,
-    createdBy: member,
-    createdAt: date,
-    updatedAt: date,
-    deletedAt: deleted ? date : null,
+    EntryRow(
+      id: 'e-$currency-$paid-$share-$member',
+      groupId: 'g',
+      kind: EntryKind.expense,
+      description: 'test',
+      currency: currency,
+      amountMinor: paid,
+      entryDate: date,
+      splitKind: SplitKind.equal,
+      fxRate: fxRate,
+      createdBy: member,
+      createdAt: date,
+      deletedAt: deleted ? date : null,
+    ),
+    payers: [if (paid != 0) Payer(memberId: member, amountMinor: paid)],
+    shares: [
+      if (share != 0)
+        Share(memberId: member, amountMinor: share, weightMicros: null),
+    ],
   );
 }
 
@@ -149,11 +154,7 @@ void main() {
     });
 
     test('rounds per entry, which is what makes the sum reconcile', () {
-      // 0.01 USD at 87.5 is 0.875 INR, which rounds up to 88 paise. Two of
-      // them shown on screen read 88 + 88 = 176. Converting the 0.02 USD
-      // total instead gives 1.75 INR -> 175. The old behaviour produced 175
-      // and printed 176, and this is the one paisa that told the user the
-      // screen did not add up.
+      // 0.01 USD at 87.5 is 0.875 INR, which rounds up to 88 paise.
       final total = estimateBalance(
         entries: [
           entry(currency: 'USD', paid: 1, share: 0, fxRate: 87.5),

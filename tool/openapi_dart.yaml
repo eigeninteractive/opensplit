@@ -1,0 +1,48 @@
+# The Dart client, generated from docs/openapi.json.
+#
+# A config file rather than a wall of --additional-properties, because these
+# are decisions and decisions deserve somewhere to be written down.
+#
+# Run with `dart run tool/generate_api_client.dart`. The output is committed
+# and CI fails on drift, the same discipline drift_schemas/ and
+# docs/openapi.json already get: a wire change that skips the client shows up
+# in review as a change to the client.
+
+generatorName: dart-dio
+inputSpec: docs/openapi.json
+outputDir: packages/opensplit_api
+
+additionalProperties:
+  pubName: opensplit_api
+  pubLibrary: opensplit_api
+  pubVersion: 1.0.0
+
+  # json_serializable, not built_value, whose BuiltList and BuiltMap would
+  # follow the generated types into every call site.
+  serializationLibrary: json_serializable
+
+  # copyWith on a wire DTO is not useful: it is read once and stored, or
+  # built once and sent.
+  skipCopyWith: true
+
+  # Every enum gets an `unknownDefaultOpenApi` member, and an unrecognised
+  # value decodes into it. The plain `dart` generator emits the member but
+  # returns null and force-unwraps it, so one new event kind from a newer
+  # server would throw and take the whole sync page with it. The sentinel is
+  # read-side only: serialising it emits a value the API rejects.
+  enumUnknownDefaultCase: true
+
+# A calendar date stays the `YYYY-MM-DD` string it is on the wire. As a
+# DateTime, json_serializable would parse it as local midnight and send it
+# back as a full timestamp, which the server refuses. It becomes a DateTime at
+# the one edge where it meets local storage (lib/data/sync/wire.dart).
+typeMappings:
+  date: String
+
+globalProperties:
+  # No generated tests asserting that generated constructors construct, and no
+  # markdown rendering of a spec that is already committed as JSON.
+  modelTests: "false"
+  apiTests: "false"
+  modelDocs: "false"
+  apiDocs: "false"

@@ -1,0 +1,16 @@
+# Local secrets for `wrangler dev`. Copy to .dev.vars, which is gitignored.
+# The names are the ones `secrets.required` lists in wrangler.jsonc: dev loads
+# only those (plus overrides of `vars`, like APP_ORIGIN below) and warns about
+# any that are missing. Empty is fine locally; production sets real values.
+
+BETTER_AUTH_SECRET="a-long-random-string-for-local-development-only"
+GOOGLE_CLIENT_ID=""
+GOOGLE_CLIENT_SECRET=""
+RESEND_API_KEY=""
+FCM_PROJECT_ID=""
+FCM_SERVICE_ACCOUNT=""
+EXCHANGERATE_API_KEY=""
+
+# The origin the Worker believes it is. Overrides the deployed value in
+# wrangler.jsonc so that OAuth callbacks and cookies come back here.
+APP_ORIGIN="http://localhost:8787"

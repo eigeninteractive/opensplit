@@ -1,6 +1,4 @@
 {
-  "_": "Local Supabase. Pass this LAST so it overrides common.json; later files win.",
-  "SUPABASE_URL": "http://127.0.0.1:54321",
-  "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH",
-  "LINK_HOST": "127.0.0.1:5000"
+  "_": "Android builds against a local `wrangler dev` (the web uses its page's origin and reads none of this). Pass LAST, after env/app.json. 10.0.2.2 is this machine as seen from the Android emulator; for a physical phone use this machine's LAN address and start the Worker with `pnpm dev --ip 0.0.0.0`.",
+  "API_BASE_URL": "http://10.0.2.2:8787"
 }

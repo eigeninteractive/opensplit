@@ -1,0 +1,189 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "id": "e4ec0dbf-384d-4bea-b95a-7b78c2d4fb45",
+  "prevIds": [
+    "00000000-0000-0000-0000-000000000000"
+  ],
+  "ddl": [
+    {
+      "name": "backfill_requests",
+      "entityType": "tables"
+    },
+    {
+      "name": "fx_rates",
+      "entityType": "tables"
+    },
+    {
+      "name": "provider_health",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "as_of",
+      "entityType": "columns",
+      "table": "backfill_requests"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "attempted_at",
+      "entityType": "columns",
+      "table": "backfill_requests"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "1",
+      "generated": null,
+      "name": "attempts",
+      "entityType": "columns",
+      "table": "backfill_requests"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "as_of",
+      "entityType": "columns",
+      "table": "fx_rates"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "currency",
+      "entityType": "columns",
+      "table": "fx_rates"
+    },
+    {
+      "type": "real",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "rate",
+      "entityType": "columns",
+      "table": "fx_rates"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "source",
+      "entityType": "columns",
+      "table": "fx_rates"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "fx_rates"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "provider_health"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "last_attempt_at",
+      "entityType": "columns",
+      "table": "provider_health"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "last_success_at",
+      "entityType": "columns",
+      "table": "provider_health"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "last_error",
+      "entityType": "columns",
+      "table": "provider_health"
+    },
+    {
+      "columns": [
+        "as_of",
+        "currency"
+      ],
+      "nameExplicit": false,
+      "name": "fx_rates_pk",
+      "entityType": "pks",
+      "table": "fx_rates"
+    },
+    {
+      "columns": [
+        "as_of"
+      ],
+      "nameExplicit": false,
+      "name": "backfill_requests_pk",
+      "table": "backfill_requests",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "name"
+      ],
+      "nameExplicit": false,
+      "name": "provider_health_pk",
+      "table": "provider_health",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        {
+          "value": "currency",
+          "isExpression": false
+        },
+        {
+          "value": "as_of",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "fx_rates_currency",
+      "entityType": "indexes",
+      "table": "fx_rates"
+    }
+  ],
+  "renames": []
+}

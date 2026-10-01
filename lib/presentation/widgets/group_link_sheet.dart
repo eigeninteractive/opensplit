@@ -1,28 +1,19 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:opensplit_api/opensplit_api.dart' as api;
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../../application/providers.dart';
+import '../../application/backend_providers.dart';
+import '../../application/ledger_providers.dart';
+import '../../application/sync_providers.dart';
 import '../../config.dart';
-import '../../domain/repositories/invite_api.dart';
+import '../../data/sync/api_client.dart';
+import '../../data/sync/invites.dart';
 import 'notification_invitation.dart';
 
 /// The group's one open invite link: share it, show it, or turn it off.
-///
-/// The case this exists for is the one people actually have. A trip already has
-/// a WhatsApp group; what it does not have is a list of who is definitely
-/// coming. Naming six placeholders in order to mint six named invites, and then
-/// working out in a chat of twelve which link belongs to whom, is a worse
-/// version of posting one link — so this is one link, and whoever opens it can
-/// say which of the people already in the group they are, or that they are
-/// nobody yet.
-///
-/// Shown rather than hidden: the sheet always says the link is live, when it
-/// expires, and offers to turn it off. A door into a group's finances that only
-/// the person who opened it can see is the thing worth refusing, and the
-/// activity feed records the opening and closing for the same reason.
 Future<void> showGroupLinkSheet(BuildContext context, String groupId) =>
     showModalBottomSheet(
       context: context,
@@ -41,7 +32,7 @@ class _GroupLinkSheet extends ConsumerStatefulWidget {
 }
 
 class _GroupLinkSheetState extends ConsumerState<_GroupLinkSheet> {
-  GroupLink? _link;
+  api.GroupLink? _link;
   String? _error;
   bool _busy = true;
   bool _showQr = false;
@@ -52,13 +43,9 @@ class _GroupLinkSheetState extends ConsumerState<_GroupLinkSheet> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
-  InviteApi? get _invites => ref.read(inviteApiProvider);
+  Invites? get _invites => ref.read(invitesProvider);
 
   /// Reuses the live link rather than minting one per visit.
-  ///
-  /// Minting on open would revoke the link somebody posted in a chat an hour
-  /// ago, every time anybody looked at this sheet — which is the one way an
-  /// invite link can break that nobody would ever think to check.
   Future<void> _load() async {
     final invites = _invites;
     if (invites == null) {
@@ -102,7 +89,7 @@ class _GroupLinkSheetState extends ConsumerState<_GroupLinkSheet> {
     });
     try {
       await body();
-    } on InviteRejected catch (e) {
+    } on ApiFailure catch (e) {
       if (mounted) setState(() => _error = e.message);
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
@@ -111,7 +98,7 @@ class _GroupLinkSheetState extends ConsumerState<_GroupLinkSheet> {
     }
   }
 
-  String get _url => _link!.urlFor(linkHost);
+  String get _url => joinUrl(linkOrigin, _link!.token);
 
   Future<void> _share() async {
     final name = ref.read(groupLedgerProvider(widget.groupId))?.group.name;
@@ -218,9 +205,7 @@ class _GroupLinkSheetState extends ConsumerState<_GroupLinkSheet> {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            // White regardless of theme. A QR code is read by a camera, not by
-            // a person, and inverting one in dark mode is how you produce a
-            // code that looks right and does not scan.
+            // White regardless of theme.
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
           ),
@@ -298,9 +283,7 @@ class _NoLinkYet extends StatelessWidget {
         ),
         const SizedBox(height: 20),
         FilledButton.icon(
-          // No haptic. Minting a link is revocable -- there is a button for it
-          // two rows down -- and the buzz in this app means precisely "that
-          // cannot be taken back".
+          // No haptic.
           onPressed: busy ? null : onCreate,
           icon: const Icon(Icons.link),
           label: const Text('Create invite link'),

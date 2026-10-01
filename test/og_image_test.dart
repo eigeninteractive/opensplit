@@ -5,11 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart';
 
 /// The link preview, which nobody on this side of the link ever sees.
-///
-/// Every failure here is silent by construction: a card at the wrong aspect is
-/// cropped by the network showing it, a relative `og:image` is dropped
-/// entirely, and either way the first thing anyone learns is that the link
-/// unfurled badly in somebody else's feed.
 void main() {
   late final String landing;
 
@@ -62,9 +57,9 @@ void main() {
   test('every page carries a description and a canonical', () {
     for (final page in [
       'site/index.html',
-      'site/privacy/index.html',
-      'site/terms/index.html',
-      'site/delete-account/index.html',
+      'site/privacy.html',
+      'site/terms.html',
+      'site/delete-account.html',
     ]) {
       final html = File(page).readAsStringSync();
       expect(
@@ -93,9 +88,7 @@ void main() {
       reason: 'the app shell must exclude itself from the index',
     );
 
-    // And the exclusion has to be reachable. A Disallow would stop the fetch
-    // that reads the line above, which leaves the landing page's two links to
-    // /app pointing at something Google may still list without a snippet.
+    // And the exclusion has to be reachable.
     expect(
       File('site/robots.txt').readAsStringSync(),
       isNot(contains(RegExp(r'^Disallow: /app', multiLine: true))),
@@ -139,13 +132,16 @@ void main() {
   test('the sitemap lists exactly the pages that exist', () {
     final sitemap = File('site/sitemap.xml').readAsStringSync();
     final listed = RegExp(
-      r'<loc>https://opensplit\.web\.app/([^<]*)</loc>',
+      r'<loc>https://opensplit\.eigeninteractive\.com/([^<]*)</loc>',
     ).allMatches(sitemap).map((match) => match.group(1)!).toSet();
 
     expect(listed, {'', 'privacy', 'terms', 'delete-account'});
     for (final page in listed.where((page) => page.isNotEmpty)) {
+      // A file and not a directory, because `<name>/index.html` is answered
+      // with a redirect to `<name>/` — and a sitemap that advertises a URL
+      // which redirects is a sitemap arguing with its own canonical tags.
       expect(
-        File('site/$page/index.html').existsSync(),
+        File('site/$page.html').existsSync(),
         isTrue,
         reason: 'the sitemap advertises /$page, which is not a file',
       );

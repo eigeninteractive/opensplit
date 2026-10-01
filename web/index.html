@@ -1,63 +1,63 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <base href="$FLUTTER_BASE_HREF">
+  <head>
+    <base href="$FLUTTER_BASE_HREF">
 
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="description" content="Split expenses with friends. Free forever, no ads, works offline, open source.">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="description" content="Split expenses with friends. Free forever, no ads, works offline, open source.">
 
-  <!-- ColorScheme.surface, the colour the app bar and the page both sit on.
+    <!-- ColorScheme.surface, the colour the app bar and the page both sit on.
        Anything else here shows as a seam between the browser chrome and the
        first pixel of the app. -->
-  <meta name="theme-color" content="#fcf8ff" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#131318" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#fcf8ff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#131318" media="(prefers-color-scheme: dark)">
 
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="OpenSplit">
-  <link rel="apple-touch-icon" href="/icons/Icon-192.png">
-  <!-- The mark is a ring with one diagonal knockout, which is four shapes of
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="OpenSplit">
+    <link rel="apple-touch-icon" href="/icons/Icon-192.png">
+    <!-- The mark is a ring with one diagonal knockout, which is four shapes of
        vector and blurs into a smudge as a 32px bitmap. SVG first, so any
        browser that takes it renders it sharp at whatever size the tab is. -->
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
 
-  <!-- Exactly what Flutter sets through MaterialApp.onGenerateTitle once it
+    <!-- Exactly what Flutter sets through MaterialApp.onGenerateTitle once it
        boots, and pinned to it by a test. Anything else here is a tab title
        that visibly rewrites itself a second into every cold start. -->
-  <title>OpenSplit</title>
-  <link rel="manifest" href="manifest.json">
+    <title>OpenSplit</title>
+    <link rel="manifest" href="manifest.json">
 
-  <!-- Not a page, and not a search result. Everything under /app returns this
+    <!-- Not a page, and not a search result. Everything under /app returns this
        one shell, so left to itself it would offer the index an unbounded set
        of URLs that are all the same document and all competing with the
        landing page. noindex rather than a robots.txt Disallow on purpose:
        a disallowed URL is never fetched, so the rule that would keep it out
        of the index is never read, and a page linked from the landing page can
        still be listed with no snippet at all. This is read, and obeyed. -->
-  <meta name="robots" content="noindex">
+    <meta name="robots" content="noindex">
 
-  <!-- The app's own link is shared as often as the landing page's, and had
+    <!-- The app's own link is shared as often as the landing page's, and had
        nothing to unfurl with. Same card as the landing page, deliberately:
        whichever of the two somebody pastes, it is the same product. -->
-  <meta property="og:type" content="website">
-  <meta property="og:site_name" content="OpenSplit">
-  <meta property="og:title" content="OpenSplit — Free, Open Source Expense Splitting">
-  <meta property="og:description" content="Track shared expenses, fairly. No subscriptions, no ads, no hidden fees — and the code is public.">
-  <meta property="og:url" content="https://opensplit.web.app/">
-  <meta property="og:image" content="https://opensplit.web.app/store/og-card.png">
-  <meta property="og:image:type" content="image/png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="OpenSplit — open source, no fees, no ads — shown beside a phone listing group balances">
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="OpenSplit — Free, Open Source Expense Splitting">
-  <meta name="twitter:description" content="Track shared expenses, fairly. No subscriptions, no ads, no hidden fees.">
-  <meta name="twitter:image" content="https://opensplit.web.app/store/og-card.png">
-  <meta name="twitter:image:alt" content="OpenSplit — open source, no fees, no ads — shown beside a phone listing group balances">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="OpenSplit">
+    <meta property="og:title" content="OpenSplit — Free, Open Source Expense Splitting">
+    <meta property="og:description" content="Track shared expenses, fairly. No subscriptions, no ads, no hidden fees — and the code is public.">
+    <meta property="og:url" content="https://opensplit.eigeninteractive.com/">
+    <meta property="og:image" content="https://opensplit.eigeninteractive.com/store/og-card.png">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="OpenSplit — open source, no fees, no ads — shown beside a phone listing group balances">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="OpenSplit — Free, Open Source Expense Splitting">
+    <meta name="twitter:description" content="Track shared expenses, fairly. No subscriptions, no ads, no hidden fees.">
+    <meta name="twitter:image" content="https://opensplit.eigeninteractive.com/store/og-card.png">
+    <meta name="twitter:image:alt" content="OpenSplit — open source, no fees, no ads — shown beside a phone listing group balances">
 
-  <style>
+    <style>
     /* A real skeleton, not a spinner.
      *
      * The gap before the first frame is the worst impression the app makes,
@@ -79,16 +79,16 @@
      * exactly. Only the parts that are still unknown are drawn as placeholders.
      */
     :root {
-      --surface: #fcf8ff;              /* ColorScheme.surface */
-      --placeholder: #e5e1e9;          /* ColorScheme.surfaceContainerHighest */
-      --outline-variant: #c8c5d0;      /* the Card border, and dividers */
-      --on-surface: #1c1b21;           /* the app bar title */
-      --secondary-container: #e3e0f9;  /* the group avatar */
-      --primary-container: #e3dfff;    /* the extended FAB */
+      --surface: #fcf8ff; /* ColorScheme.surface */
+      --placeholder: #e5e1e9; /* ColorScheme.surfaceContainerHighest */
+      --outline-variant: #c8c5d0; /* the Card border, and dividers */
+      --on-surface: #1c1b21; /* the app bar title */
+      --secondary-container: #e3e0f9; /* the group avatar */
+      --primary-container: #e3dfff; /* the extended FAB */
       --on-primary-container: #434078;
-      --primary: #5b5891;             /* the brand mark */
+      --primary: #5b5891; /* the brand mark */
       --on-surface-variant: #47464f; /* the unselected rail label */
-      --surface-container: #f0ecf4;    /* the navigation bar */
+      --surface-container: #f0ecf4; /* the navigation bar */
     }
     @media (prefers-color-scheme: dark) {
       :root {
@@ -105,7 +105,13 @@
       }
     }
 
-    html, body { margin: 0; padding: 0; height: 100%; background: var(--surface); }
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: var(--surface);
+    }
     body {
       /* The app's own face first, so that a warm cache matches it exactly; the
        * system face only stands in for the first paint of a first visit.
@@ -114,7 +120,11 @@
       color: var(--on-surface);
     }
 
-    #skeleton { position: fixed; inset: 0; z-index: 1; }
+    #skeleton {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+    }
 
     /* Two shapes, because the app has two landing places and they look nothing
      * alike. Signed in is the chrome below; signed out is WelcomeScreen, which
@@ -126,7 +136,10 @@
      * right way round: they are signed out by definition, they have the
      * emptiest cache, and they wait the longest to find out the loader was
      * wrong. */
-    #chrome[hidden], #intro[hidden] { display: none; }
+    #chrome[hidden],
+    #intro[hidden] {
+      display: none;
+    }
     #intro {
       position: fixed;
       inset: 0;
@@ -136,7 +149,12 @@
       justify-content: center;
       gap: 12px;
     }
-    #intro .mark { width: 56px; height: 56px; color: var(--primary); flex: none; }
+    #intro .mark {
+      width: 56px;
+      height: 56px;
+      color: var(--primary);
+      flex: none;
+    }
     /* textTheme.headlineMedium: the size WelcomeScreen titles itself with. */
     #intro p {
       margin: 0;
@@ -167,15 +185,21 @@
     /* The navigation menu button, which the app grows from its Scaffold's
      * drawer. Only the glyph stands in. */
     .bar .menu {
-      position: absolute; left: 16px; top: 20px;
-      width: 24px; height: 24px; border-radius: 4px;
+      position: absolute;
+      left: 16px;
+      top: 20px;
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
       background: var(--placeholder);
     }
     /* textTheme.headlineMedium, which is what a large bar sets its expanded
      * headline in. 16dp from the left and 28dp up from the bottom. */
     .bar h1 {
       position: absolute;
-      left: 16px; right: 16px; bottom: 28px;
+      left: 16px;
+      right: 16px;
+      bottom: 28px;
       margin: 0;
       height: 36px;
       display: flex;
@@ -191,7 +215,14 @@
      * than linked so it paints on the first round trip, like everything else
      * here — an <img> would also be a second request, and could not be tinted.
      * See lib/presentation/widgets/brand_mark.dart. */
-    .bar .mark { width: 44.7px; height: 44.7px; flex: none; margin-right: 9.55px; color: var(--primary); }
+    /* biome-ignore lint/style/noDescendingSpecificity: .bar is in #chrome, never in #intro. */
+    .bar .mark {
+      width: 44.7px;
+      height: 44.7px;
+      flex: none;
+      margin-right: 9.55px;
+      color: var(--primary);
+    }
 
     /* DestinationScaffold insets the content by max(16, (width - 760) / 2) on
      * each side, so the cards are 760 wide once there is room and 16 from each
@@ -213,7 +244,9 @@
     }
     /* `display: flex` above outranks the user-agent rule for [hidden], so the
      * attribute needs saying again here to actually hide anything. */
-    .list[hidden] { display: none; }
+    .list[hidden] {
+      display: none;
+    }
 
     /* Card.outlined wrapping a two-line ListTile: elevation 0, 12dp radius, a
      * hairline in outlineVariant, and a container the same colour as the page
@@ -238,20 +271,43 @@
     /* CircleAvatar's default 40dp, already the right colour — there is no
      * version of this row without one, so it is not a placeholder. */
     .avatar {
-      width: 40px; height: 40px; border-radius: 50%;
-      background: var(--secondary-container); flex: none;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: var(--secondary-container);
+      flex: none;
     }
     /* 44dp: a titleMedium line box (24) plus a bodyMedium one (20), which is
      * the block ListTile centres between its 16dp of vertical padding. Each
      * bar is centred in its own line box, so the bars sit where the text will
      * and the card does not resize under the swap. */
-    .lines { flex: 1; height: 44px; }
-    .line { border-radius: 4px; background: var(--placeholder); }
-    .line.title { height: 16px; margin-top: 4px; width: 62%; }
-    .line.detail { height: 12px; margin-top: 8px; width: 40%; }
-    .card:nth-child(2) .line.title { width: 44%; }
-    .card:nth-child(2) .line.detail { width: 56%; }
-    .card:nth-child(3) .line.title { width: 55%; }
+    .lines {
+      flex: 1;
+      height: 44px;
+    }
+    .line {
+      border-radius: 4px;
+      background: var(--placeholder);
+    }
+    .line.title {
+      height: 16px;
+      margin-top: 4px;
+      width: 62%;
+    }
+    .line.detail {
+      height: 12px;
+      margin-top: 8px;
+      width: 40%;
+    }
+    .card:nth-child(2) .line.title {
+      width: 44%;
+    }
+    .card:nth-child(2) .line.detail {
+      width: 56%;
+    }
+    .card:nth-child(3) .line.title {
+      width: 55%;
+    }
 
     /* FloatingActionButton.extended, 16dp clear of both edges: 56dp tall,
      * 16dp radius, on primaryContainer, padded 16 before the icon and 20 after
@@ -270,13 +326,25 @@
       background: var(--primary-container);
       color: var(--on-primary-container);
       /* Material's elevation 6, the extended FAB's resting shadow. */
-      box-shadow: 0 3px 5px -1px rgba(0,0,0,.20),
-                  0 6px 10px 0 rgba(0,0,0,.14),
-                  0 1px 18px 0 rgba(0,0,0,.12);
+      box-shadow:
+        0 3px 5px -1px rgba(0, 0, 0, 0.2),
+        0 6px 10px 0 rgba(0, 0, 0, 0.14),
+        0 1px 18px 0 rgba(0, 0, 0, 0.12);
     }
-    .fab .icon { width: 24px; height: 24px; border-radius: 4px; background: currentColor; opacity: .35; }
+    .fab .icon {
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      background: currentColor;
+      opacity: 0.35;
+    }
     /* textTheme.labelLarge. */
-    .fab .label { font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; }
+    .fab .label {
+      font-size: 14px;
+      line-height: 20px;
+      font-weight: 500;
+      letter-spacing: 0.1px;
+    }
 
     /* At 840px — Material's medium-to-expanded boundary, and _railBreakpoint
      * in router.dart — the app puts a NavigationRail on the left: 80dp of rail
@@ -291,43 +359,86 @@
      * the selected indicator occupies y 8-40, its label's cap height sits at
      * 48-57, the second destination's icon at 76-100 and its label at 111-121.
      */
-    .rail { display: none; }
+    .rail {
+      display: none;
+    }
 
     @media (min-width: 840px) {
-      #skeleton { padding-left: 81px; }
+      #skeleton {
+        padding-left: 81px;
+      }
       #skeleton::before {
-        content: '';
+        content: "";
         position: fixed;
-        left: 80px; top: 0; bottom: 0;
+        left: 80px;
+        top: 0;
+        bottom: 0;
         width: 1px;
         background: var(--outline-variant);
       }
 
-      .rail { display: block; position: fixed; left: 0; top: 0; bottom: 0; width: 80px; }
-      .rail > * { position: absolute; left: 0; width: 80px; text-align: center; }
+      .rail {
+        display: block;
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 80px;
+      }
+      .rail > * {
+        position: absolute;
+        left: 0;
+        width: 80px;
+        text-align: center;
+      }
 
       /* The selected destination's indicator: 56x32 on secondaryContainer,
        * which is exactly what the app draws and needs no placeholder. */
       .rail .pill {
-        top: 8px; height: 32px; width: 56px; left: 12px;
-        border-radius: 16px; background: var(--secondary-container);
+        top: 8px;
+        height: 32px;
+        width: 56px;
+        left: 12px;
+        border-radius: 16px;
+        background: var(--secondary-container);
       }
       /* textTheme.labelMedium, the rail's label style. The words are real. */
       .rail .label {
-        font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px;
+        font-size: 12px;
+        line-height: 16px;
+        font-weight: 500;
+        letter-spacing: 0.5px;
       }
-      .rail .selected { top: 44px; color: var(--on-surface); }
-      .rail .u1 { top: 108px; color: var(--on-surface-variant); }
-      .rail .u2 { top: 172px; color: var(--on-surface-variant); }
+      .rail .selected {
+        top: 44px;
+        color: var(--on-surface);
+      }
+      .rail .u1 {
+        top: 108px;
+        color: var(--on-surface-variant);
+      }
+      .rail .u2 {
+        top: 172px;
+        color: var(--on-surface-variant);
+      }
 
       /* Only the glyphs stand in; the labels are the real words. */
       .rail .glyph {
-        width: 24px; height: 24px; left: 28px; border-radius: 4px;
+        width: 24px;
+        height: 24px;
+        left: 28px;
+        border-radius: 4px;
         background: var(--placeholder);
       }
-      .rail .g1 { top: 12px; }
-      .rail .g2 { top: 76px; }
-      .rail .g3 { top: 140px; }
+      .rail .g1 {
+        top: 12px;
+      }
+      .rail .g2 {
+        top: 76px;
+      }
+      .rail .g3 {
+        top: 140px;
+      }
     }
 
     /* Below the rail breakpoint the same three destinations are a
@@ -336,128 +447,197 @@
      * beneath it. Drawn here for the same reason the rail is — it is chrome
      * that is on screen from the first frame of the real app, so leaving a
      * gap where it goes is the one thing that visibly pops into place. */
-    .nav { display: flex; position: fixed; left: 0; right: 0; bottom: 0; height: 80px;
-           background: var(--surface-container); }
-    .nav > div { flex: 1; position: relative; }
+    .nav {
+      display: flex;
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 80px;
+      background: var(--surface-container);
+    }
+    .nav > div {
+      flex: 1;
+      position: relative;
+    }
     .nav .pill {
-      position: absolute; top: 12px; left: 50%; margin-left: -32px;
-      width: 64px; height: 32px; border-radius: 16px;
+      position: absolute;
+      top: 12px;
+      left: 50%;
+      margin-left: -32px;
+      width: 64px;
+      height: 32px;
+      border-radius: 16px;
       background: var(--secondary-container);
     }
     .nav .glyph {
-      position: absolute; top: 16px; left: 50%; margin-left: -12px;
-      width: 24px; height: 24px; border-radius: 4px; background: var(--placeholder);
+      position: absolute;
+      top: 16px;
+      left: 50%;
+      margin-left: -12px;
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      background: var(--placeholder);
     }
     /* textTheme.labelMedium, the navigation bar's label style. */
     .nav .label {
-      position: absolute; top: 48px; left: 0; right: 0; text-align: center;
-      font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px;
+      position: absolute;
+      top: 48px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-size: 12px;
+      line-height: 16px;
+      font-weight: 500;
+      letter-spacing: 0.5px;
       color: var(--on-surface-variant);
     }
-    .nav .selected .label { color: var(--on-surface); }
+    .nav .selected .label {
+      color: var(--on-surface);
+    }
 
-    @media (min-width: 840px) { .nav { display: none; } }
+    @media (min-width: 840px) {
+      .nav {
+        display: none;
+      }
+    }
     /* The FAB clears the bar rather than sitting on it: 16dp above 80dp. */
-    @media (max-width: 839px) { .fab { bottom: 96px; } }
+    @media (max-width: 839px) {
+      .fab {
+        bottom: 96px;
+      }
+    }
 
     /* One slow pulse, on the placeholders only. Pulsing the card would fade
      * its border and its avatar, which are not placeholders at all — they are
      * already exactly what the app is about to draw. */
-    @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
-    .line { animation: breathe 1.8s ease-in-out infinite; }
-    .card:nth-child(2) .line { animation-delay: 0.15s; }
-    .card:nth-child(3) .line { animation-delay: 0.3s; }
-
-    @media (prefers-reduced-motion: reduce) {
-      .line { animation: none; }
-      #skeleton.done { transition: none; }
+    @keyframes breathe {
+      0%,
+      100% {
+        opacity: 1;
+      }
+      50% {
+        opacity: 0.45;
+      }
+    }
+    .line {
+      animation: breathe 1.8s ease-in-out infinite;
+    }
+    .card:nth-child(2) .line {
+      animation-delay: 0.15s;
+    }
+    .card:nth-child(3) .line {
+      animation-delay: 0.3s;
     }
 
-    #skeleton.done { opacity: 0; transition: opacity 180ms ease-out; pointer-events: none; }
-  </style>
-</head>
-<body>
-  <div id="skeleton" aria-hidden="true">
-   <div id="chrome" hidden>
-    <div class="rail">
-      <div class="pill"></div>
-      <div class="glyph g1"></div>
-      <div class="label selected">Groups</div>
-      <div class="glyph g2"></div>
-      <div class="label u1">Account</div>
-      <div class="glyph g3"></div>
-      <div class="label u2">Settings</div>
-    </div>
-    <div class="bar">
-      <div class="menu"></div>
-      <h1>
-        <svg class="mark" viewBox="0 0 48 48" aria-hidden="true">
-          <mask id="slash">
-            <rect width="48" height="48" fill="#fff"></rect>
-            <rect x="20.75" y="-4" width="6.5" height="56" fill="#000" transform="rotate(24 24 24)"></rect>
-          </mask>
-          <circle cx="24" cy="24" r="17" fill="none" stroke="currentColor" stroke-width="6.5" mask="url(#slash)"></circle>
-        </svg>
-        <span>OpenSplit</span>
-      </h1>
-    </div>
-    <div class="list" id="cards" hidden>
-      <div class="card">
-        <div class="avatar"></div>
-        <div class="lines"><div class="line title"></div><div class="line detail"></div></div>
-      </div>
-      <div class="card">
-        <div class="avatar"></div>
-        <div class="lines"><div class="line title"></div><div class="line detail"></div></div>
-      </div>
-      <div class="card">
-        <div class="avatar"></div>
-        <div class="lines"><div class="line title"></div><div class="line detail"></div></div>
-      </div>
-    </div>
-    <div class="fab">
-      <div class="icon"></div>
-      <div class="label">New group</div>
-    </div>
-    <div class="nav">
-      <div class="selected">
-        <div class="pill"></div>
-        <div class="glyph"></div>
-        <div class="label">Groups</div>
-      </div>
-      <div>
-        <div class="glyph"></div>
-        <div class="label">Account</div>
-      </div>
-      <div>
-        <div class="glyph"></div>
-        <div class="label">Settings</div>
-      </div>
-    </div>
-   </div>
+    @media (prefers-reduced-motion: reduce) {
+      .line {
+        animation: none;
+      }
+      #skeleton.done {
+        transition: none;
+      }
+    }
 
-    <!-- What somebody signed out is about to see. Both the mark and the word
+    #skeleton.done {
+      opacity: 0;
+      transition: opacity 180ms ease-out;
+      pointer-events: none;
+    }
+    </style>
+  </head>
+  <body>
+    <div id="skeleton" aria-hidden="true">
+      <div id="chrome" hidden>
+        <div class="rail">
+          <div class="pill"></div>
+          <div class="glyph g1"></div>
+          <div class="label selected">Groups</div>
+          <div class="glyph g2"></div>
+          <div class="label u1">Account</div>
+          <div class="glyph g3"></div>
+          <div class="label u2">Settings</div>
+        </div>
+        <div class="bar">
+          <div class="menu"></div>
+          <h1>
+            <svg class="mark" viewBox="0 0 48 48" aria-hidden="true">
+              <mask id="slash">
+                <rect width="48" height="48" fill="#fff"></rect>
+                <rect x="20.75" y="-4" width="6.5" height="56" fill="#000" transform="rotate(24 24 24)"></rect>
+              </mask>
+              <circle cx="24" cy="24" r="17" fill="none" stroke="currentColor" stroke-width="6.5" mask="url(#slash)"></circle>
+            </svg>
+            <span>OpenSplit</span>
+          </h1>
+        </div>
+        <div class="list" id="cards" hidden>
+          <div class="card">
+            <div class="avatar"></div>
+            <div class="lines">
+              <div class="line title"></div>
+              <div class="line detail"></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="avatar"></div>
+            <div class="lines">
+              <div class="line title"></div>
+              <div class="line detail"></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="avatar"></div>
+            <div class="lines">
+              <div class="line title"></div>
+              <div class="line detail"></div>
+            </div>
+          </div>
+        </div>
+        <div class="fab">
+          <div class="icon"></div>
+          <div class="label">New group</div>
+        </div>
+        <div class="nav">
+          <div class="selected">
+            <div class="pill"></div>
+            <div class="glyph"></div>
+            <div class="label">Groups</div>
+          </div>
+          <div>
+            <div class="glyph"></div>
+            <div class="label">Account</div>
+          </div>
+          <div>
+            <div class="glyph"></div>
+            <div class="label">Settings</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- What somebody signed out is about to see. Both the mark and the word
          are certain, so both are drawn outright; the three identity buttons
          below them are not — whether Google is offered depends on the build —
          and a placeholder for a button that never arrives is worse than the
          space it would have taken. -->
-    <div id="intro">
-      <svg class="mark" viewBox="0 0 48 48" aria-hidden="true">
-        <mask id="slash-intro">
-          <rect width="48" height="48" fill="#fff"></rect>
-          <rect x="20.75" y="-4" width="6.5" height="56" fill="#000" transform="rotate(24 24 24)"></rect>
-        </mask>
-        <circle cx="24" cy="24" r="17" fill="none" stroke="currentColor" stroke-width="6.5" mask="url(#slash-intro)"></circle>
-      </svg>
-      <p>OpenSplit</p>
+      <div id="intro">
+        <svg class="mark" viewBox="0 0 48 48" aria-hidden="true">
+          <mask id="slash-intro">
+            <rect width="48" height="48" fill="#fff"></rect>
+            <rect x="20.75" y="-4" width="6.5" height="56" fill="#000" transform="rotate(24 24 24)"></rect>
+          </mask>
+          <circle cx="24" cy="24" r="17" fill="none" stroke="currentColor" stroke-width="6.5" mask="url(#slash-intro)"></circle>
+        </svg>
+        <p>OpenSplit</p>
+      </div>
     </div>
-  </div>
 
-  <noscript>
-    <p style="padding:24px">OpenSplit needs JavaScript. The Android app does not.</p>
-  </noscript>
+    <noscript>
+      <p style="padding:24px">OpenSplit needs JavaScript. The Android app does not.</p>
+    </noscript>
 
-  <script>
+    <script>
     // Placeholder cards are a promise that content is coming, and for a
     // first-time visitor that promise is false: they have no groups, so the app
     // opens on "No groups yet". They are also the ones who wait longest, with
@@ -478,26 +658,30 @@
     // Read synchronously, before first paint, so nothing moves afterwards.
     // Wrapped because reading storage throws outright in some privacy modes.
     try {
-      if (localStorage.getItem('opensplit.signedIn') === '1') {
-        document.getElementById('chrome').hidden = false;
-        document.getElementById('intro').hidden = true;
+      if (localStorage.getItem("opensplit.signedIn") === "1") {
+        document.getElementById("chrome").hidden = false;
+        document.getElementById("intro").hidden = true;
 
-        if (localStorage.getItem('opensplit.hasGroups') === '1') {
-          document.getElementById('cards').hidden = false;
+        if (localStorage.getItem("opensplit.hasGroups") === "1") {
+          document.getElementById("cards").hidden = false;
         }
       }
-    } catch (e) { /* the mark alone, which is the safe default */ }
+    } catch {
+      /* the mark alone, which is the safe default */
+    }
 
     // Flutter fires this once it has actually painted, so the swap happens
     // when there is something real underneath rather than on a timer that
     // guesses.
-    window.addEventListener('flutter-first-frame', function () {
-      var skeleton = document.getElementById('skeleton');
+    window.addEventListener("flutter-first-frame", () => {
+      var skeleton = document.getElementById("skeleton");
       if (!skeleton) return;
-      skeleton.classList.add('done');
-      setTimeout(function () { skeleton.remove(); }, 200);
+      skeleton.classList.add("done");
+      setTimeout(() => {
+        skeleton.remove();
+      }, 200);
     });
-  </script>
-  <script src="flutter_bootstrap.js" async></script>
-</body>
+    </script>
+    <script src="flutter_bootstrap.js" async></script>
+  </body>
 </html>

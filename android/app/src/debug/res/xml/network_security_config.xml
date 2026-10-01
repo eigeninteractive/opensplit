@@ -4,8 +4,8 @@
   release build, which keeps HTTPS mandatory for anything a user installs.
 
   It exists because Android has blocked cleartext HTTP by default since API 28,
-  and a local Supabase stack is plain http on port 54321. Without this, a debug
-  build pointed at http://10.0.2.2:54321 fails every request with
+  and `wrangler dev` serves plain http on port 8787. Without this, a debug
+  build pointed at http://10.0.2.2:8787 fails every request with
   "CLEARTEXT communication not permitted" — which surfaces in this app as a
   sync that silently never completes, because sync failures are swallowed by
   design.

@@ -1,58 +1,63 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:opensplit_api/opensplit_api.dart' as api;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
+import '../config.dart';
+import '../data/auth/better_auth_service.dart';
 import '../data/auth/google_sign_in_gateway.dart';
-import '../data/auth/supabase_auth_service.dart';
-import '../data/push/supabase_device_token_repository.dart';
-import '../data/sync/supabase_invite_api.dart';
-import '../data/sync/supabase_ledger_api.dart';
-import '../domain/repositories/auth_service.dart';
-import '../domain/repositories/device_token_repository.dart';
-import '../domain/repositories/invite_api.dart';
-import '../data/sync/remote_ledger_api.dart';
+import '../data/auth/session_store.dart';
+import '../data/push/device_tokens.dart';
+import '../data/sync/api_client.dart';
+import '../data/sync/invites.dart';
+import '../domain/auth_service.dart';
 
 part 'backend_providers.g.dart';
 
-/// The configured backend client, or null for a deliberately local-only build.
+/// Where this device's session lives between launches. Overridden in `main`,
+/// which reads the token from secure storage before the first frame.
 @Riverpod(keepAlive: true)
-sb.SupabaseClient? supabaseClient(Ref ref) {
-  try {
-    return sb.Supabase.instance.client;
-  } catch (_) {
-    return null;
-  }
-}
+SessionStore sessionStore(Ref ref) =>
+    throw UnimplementedError('sessionStoreProvider must be overridden');
 
+/// The one client for the app's lifetime, since the session belongs to it.
+/// [BetterAuthService] sets the bearer token (Android) whenever the session
+/// changes. Null for a local-only build, which works and simply never syncs.
 @Riverpod(keepAlive: true)
-AuthService? authService(Ref ref) {
-  final client = ref.watch(supabaseClientProvider);
-  if (client == null) return null;
-  // The one place the two Google flows are chosen between. A platform that can
-  // mint an ID token in-process gets that capability; the web is handed null
-  // and sends the browser to Google instead, because Identity Services answers
-  // into an iframe or a popup and neither survives the cross-origin isolation
-  // `/app/**` needs for its database.
-  return SupabaseAuthService(
-    client,
-    googleTokens: kIsWeb ? null : GoogleSignInGateway(),
+api.OpensplitApi? apiClient(Ref ref) {
+  if (apiBaseUrl.isEmpty) return null;
+  return buildApiClient(
+    baseUrl: apiBaseUrl,
+    token: ref.watch(sessionStoreProvider).read()?.token,
   );
 }
 
 @Riverpod(keepAlive: true)
-InviteApi? inviteApi(Ref ref) {
-  final client = ref.watch(supabaseClientProvider);
-  return client == null ? null : SupabaseInviteApi(client);
+AuthService? authService(Ref ref) {
+  final client = ref.watch(apiClientProvider);
+  if (client == null) return null;
+
+  final sessions = ref.watch(sessionStoreProvider);
+  final service = BetterAuthService(
+    client: client,
+    sessions: sessions,
+    // Synchronously, so `currentUser` has an answer before the first frame.
+    restored: sessions.read(),
+    // The one place the two Google flows are chosen between.
+    googleTokens: kIsWeb ? null : GoogleSignInGateway(),
+  );
+
+  ref.onDispose(service.dispose);
+  return service;
 }
 
 @Riverpod(keepAlive: true)
-RemoteLedgerApi? remoteLedgerApi(Ref ref) {
-  final client = ref.watch(supabaseClientProvider);
-  return client == null ? null : SupabaseLedgerApi(client);
+Invites? invites(Ref ref) {
+  final client = ref.watch(apiClientProvider);
+  return client == null ? null : Invites(client);
 }
 
 @Riverpod(keepAlive: true)
-DeviceTokenRepository? deviceTokenRepository(Ref ref) {
-  final client = ref.watch(supabaseClientProvider);
-  return client == null ? null : SupabaseDeviceTokenRepository(client);
+DeviceTokens? deviceTokens(Ref ref) {
+  final client = ref.watch(apiClientProvider);
+  return client == null ? null : DeviceTokens(client);
 }

@@ -60,6 +60,7 @@ app.*.map.json
 # Regenerate with: dart run build_runner build
 *.g.dart
 *.freezed.dart
+*.drift.dart
 lib/l10n/app_localizations*.dart
 
 # Locked CI dependencies and ephemeral Google credentials.
@@ -69,23 +70,12 @@ gha-creds-*.json
 fastlane/report.xml
 fastlane/README.md
 
-# Supabase CLI local state
-supabase/.temp/
-supabase/.branches/
-supabase/functions/.env
-
 # Build-time configuration for real projects. Nothing here is a secret — the
-# publishable key and the Firebase ids are public identifiers — but they are
+# origin and the Firebase ids are public identifiers — but they are
 # per-deployment, and committing one means a fork silently builds against
 # somebody else's backend.
 env/*.json
 !env/*.example.json
-
-# Firebase Hosting. firebase.json is committed — it is the deploy contract, and
-# it is the same for anyone. .firebaserc just names one person's project, so
-# each deployer runs `firebase use --add` instead of inheriting a fork's.
-.firebaserc
-.firebase/
 
 # The brand kit exactly as the designer delivered it. Everything the app
 # actually uses has been moved into the tree — assets/brand/, assets/icon/,
@@ -94,3 +84,19 @@ env/*.json
 # preview HTML its authoring tool wrote. Kept out of the repo rather than
 # deleted, so re-running the generators against the originals stays possible.
 /brand/
+
+# The generated API client is committed; what resolving it produces is not.
+# `pubspec.lock` belongs to applications, not to libraries, and this package is
+# only ever consumed by the app above it.
+packages/*/.dart_tool/
+packages/*/pubspec.lock
+
+# ...except the API client's, which must be committed.
+#
+# `*.g.dart` above is right for the app: build_runner regenerates freezed,
+# drift and riverpod output locally and in CI. It is wrong for a package that
+# is consumed as a dependency, because a consumer never runs build_runner on
+# one — so a package whose `part 'x.g.dart'` directives point at nothing simply
+# does not compile. These are a build artefact that has to travel with its
+# sources; `tool/generate_api_client.dart` produces them and CI diffs them.
+!packages/opensplit_api/lib/**/*.g.dart

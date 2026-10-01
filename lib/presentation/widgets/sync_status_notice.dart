@@ -1,17 +1,10 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/widget_previews.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../application/providers.dart';
+import '../../application/sync_providers.dart';
 
 /// Indicates that the local database has not produced its first result yet.
-///
-/// The label is announced and not drawn. A spinner already says "wait"; the
-/// sentence under it said the same thing in words, and it was on screen for the
-/// few hundred milliseconds a local database takes to answer — long enough to
-/// register as a flash of text, never long enough to read. What it is genuinely
-/// needed for is a screen reader, which cannot see the spinner, so it moves to
-/// [CircularProgressIndicator.semanticsLabel] rather than being deleted.
 class SavedDataLoading extends StatelessWidget {
   const SavedDataLoading({super.key, required this.label});
 

@@ -1,0 +1,140 @@
+/**
+ * One Worker serving the static site, the Flutter web client and the API, with
+ * one Durable Object per group. docs/architecture.md explains the shape;
+ * docs/runbook.md creates the resources named here.
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "opensplit",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-23",
+
+  // Better Auth needs node built-ins; without this the Worker fails at import.
+  "compatibility_flags": ["nodejs_compat"],
+
+  "observability": { "enabled": true },
+  "upload_source_maps": true,
+
+  // Durable Object migrations travel in the bundle as text; each object applies its own.
+  // `fallthrough` keeps the default rules (source maps, WASM).
+  "rules": [{ "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }],
+
+  /**
+   * The front end from `dart run tool/build_web.dart` (`--site-only` for the
+   * site alone), same origin as the API. Assets are served before the Worker;
+   * `/api/*` runs the Worker first so no emitted file can shadow an endpoint.
+   * `not_found_handling` stays default: `src/app.ts` answers `/app/*` deep links
+   * with the client's document, which neither built-in mode does.
+   */
+  "assets": {
+    "directory": "../build/web",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+
+  // One origin only: the client is local-first, and a second origin would be a silently separate copy of someone's data.
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "opensplit.eigeninteractive.com", "custom_domain": true }],
+
+  "durable_objects": {
+    "bindings": [{ "name": "GROUP", "class_name": "Group" }, { "name": "FX", "class_name": "Fx" }]
+  },
+
+  "exports": {
+    "Group": { "type": "durable-object", "storage": "sqlite" },
+    "Fx": { "type": "durable-object", "storage": "sqlite" }
+  },
+
+  // Production's. Local runs ignore the id and use local storage under .wrangler/.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "opensplit",
+      "database_id": "482a8a45-b638-4143-9873-e746df38495c",
+      "migrations_dir": "migrations",
+      "migrations_pattern": "migrations/*/migration.sql"
+    }
+  ],
+
+  // Derived, rebuildable data: month blobs of rates and the cached FCM token.
+  // Production's `opensplit-cache` namespace; local runs ignore the id too.
+  "kv_namespaces": [{ "binding": "CACHE", "id": "791356628add46dcba93cbd86c75c9ac" }],
+
+  // No dormancy sweep: each group object arms its own alarm.
+  "triggers": {
+    "crons": [
+      "0 4 * * *", // exchange rates
+      "0 5 * * *" // abandoned guests, interrupted account deletions
+    ]
+  },
+
+  // Better Auth's baseURL and sole trusted origin. Local runs override it in .dev.vars, tests in vitest.config.ts,
+  // which is why `cf-typegen` passes `--strict-vars false`: typed as `string`, not as a union of the two origins
+  // written here, since an override can be any origin.
+  "vars": {
+    "APP_ORIGIN": "https://opensplit.eigeninteractive.com"
+  },
+
+  /**
+   * Every secret the Worker reads, by name; values are set with `wrangler
+   * secret put` and never appear here. A deploy refuses to go out while any is
+   * unset, so a missing key is a failed release rather than email codes that
+   * are only logged or pushes that are silently skipped. The same list types
+   * `Env` and decides what `wrangler dev` loads from .dev.vars.
+   */
+  "secrets": { "required": ["BETTER_AUTH_SECRET", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "RESEND_API_KEY", "FCM_PROJECT_ID", "FCM_SERVICE_ACCOUNT", "EXCHANGERATE_API_KEY"] },
+
+  /**
+   * Brakes on the unauthenticated doors and on anything that costs money per
+   * call. Approximate and per Cloudflare location, which is all a brake needs.
+   * `namespace_id` is any account-unique integer; two Workers sharing one
+   * would share counters.
+   */
+  "ratelimits": [
+    { "name": "GUEST_LIMIT", "namespace_id": "1001", "simple": { "limit": 5, "period": 60 } },
+    { "name": "EMAIL_IP_LIMIT", "namespace_id": "1002", "simple": { "limit": 10, "period": 60 } },
+    { "name": "EMAIL_ADDRESS_LIMIT", "namespace_id": "1003", "simple": { "limit": 3, "period": 60 } },
+    { "name": "VERIFY_IP_LIMIT", "namespace_id": "1004", "simple": { "limit": 10, "period": 60 } },
+    { "name": "BACKFILL_LIMIT", "namespace_id": "1005", "simple": { "limit": 10, "period": 60 } }
+  ],
+
+  /**
+   * Local runs and CI: `wrangler dev --env test`. Identical except that the
+   * limits are out of the way, because the app's integration tests start
+   * dozens of guests from one address. Never deployed.
+   *
+   * Wrangler does not inherit bindings or vars into a named environment, so
+   * everything below restates the top level; keep the two in step. `vitest`
+   * reads the top level, so the server's own tests run against the real limits.
+   */
+  "env": {
+    "test": {
+      "routes": [],
+      "durable_objects": {
+        "bindings": [{ "name": "GROUP", "class_name": "Group" }, { "name": "FX", "class_name": "Fx" }]
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "opensplit",
+          "database_id": "00000000-0000-0000-0000-000000000000",
+          "migrations_dir": "migrations",
+          "migrations_pattern": "migrations/*/migration.sql"
+        }
+      ],
+      "kv_namespaces": [{ "binding": "CACHE", "id": "0000000000000000000000000000000f" }],
+      "vars": {
+        "APP_ORIGIN": "http://localhost:8787"
+      },
+      "secrets": { "required": ["BETTER_AUTH_SECRET", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "RESEND_API_KEY", "FCM_PROJECT_ID", "FCM_SERVICE_ACCOUNT", "EXCHANGERATE_API_KEY"] },
+      "ratelimits": [
+        { "name": "GUEST_LIMIT", "namespace_id": "1001", "simple": { "limit": 10000, "period": 60 } },
+        { "name": "EMAIL_IP_LIMIT", "namespace_id": "1002", "simple": { "limit": 10000, "period": 60 } },
+        { "name": "EMAIL_ADDRESS_LIMIT", "namespace_id": "1003", "simple": { "limit": 10000, "period": 60 } },
+        { "name": "VERIFY_IP_LIMIT", "namespace_id": "1004", "simple": { "limit": 10000, "period": 60 } },
+        { "name": "BACKFILL_LIMIT", "namespace_id": "1005", "simple": { "limit": 10000, "period": 60 } }
+      ]
+    }
+  }
+}

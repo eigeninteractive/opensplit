@@ -1,16 +1,14 @@
+import 'package:drift/drift.dart' show Value;
 import 'dart:math';
 
 import 'package:opensplit/domain/models/entry.dart';
 import 'package:opensplit/domain/split/allocation.dart';
 import 'package:opensplit/domain/split/splitter.dart';
+import 'package:opensplit_api/opensplit_api.dart' show EntryKind, SplitKind;
+import 'package:opensplit_api/opensplit_api.dart' show Payer, Share;
+import 'package:opensplit/data/local/database.dart' show EntryRow;
 
 /// Deterministic random generators for property-based tests.
-///
-/// Every generator draws from a seeded [Random], so a failure is reproducible
-/// from the seed printed in the test name rather than being a one-off that
-/// vanishes on re-run. The domain is pure functions over immutable data, which
-/// is what makes generating thousands of cases cheap: no database, no network,
-/// milliseconds per thousand.
 class EntryGen {
   EntryGen(this.seed) : random = Random(seed);
 
@@ -28,10 +26,6 @@ class EntryGen {
   static String _pad(int n) => n.toString().padLeft(10, '0');
 
   /// A random non-negative integer in `[0, maxInclusive]`.
-  ///
-  /// `Random.nextInt` caps at 2^32, so larger bounds are composed from two
-  /// draws — needed to exercise amounts big enough to overflow a JavaScript
-  /// double when multiplied by a 10^6-scaled weight.
   int nextIntUpTo(int maxInclusive) {
     if (maxInclusive <= 0) return 0;
     if (maxInclusive < 0xFFFFFFFF) return random.nextInt(maxInclusive + 1);
@@ -42,9 +36,6 @@ class EntryGen {
 
   /// Splits [total] into exactly [parts] non-negative integers summing to
   /// [total], by picking cut points on the interval.
-  ///
-  /// With [allowZero] false every part is at least 1, which requires
-  /// `total >= parts`.
   List<int> partition(int total, int parts, {bool allowZero = true}) {
     if (parts <= 1) return [total];
 
@@ -75,7 +66,13 @@ class EntryGen {
   /// A random split specification over a random non-empty subset of [members].
   SplitSpec splitSpec(List<String> members, int totalMinor) {
     final participants = subset(members, minSize: 1);
-    final kind = SplitKind.values[random.nextInt(SplitKind.values.length)];
+    const kinds = [
+      SplitKind.equal,
+      SplitKind.exact,
+      SplitKind.shares,
+      SplitKind.percent,
+    ];
+    final kind = kinds[random.nextInt(kinds.length)];
 
     switch (kind) {
       case SplitKind.equal:
@@ -102,6 +99,9 @@ class EntryGen {
           for (var i = 0; i < participants.length; i++)
             participants[i]: micros[i],
         });
+
+      case SplitKind.unknownDefaultOpenApi:
+        throw StateError('not generated');
     }
   }
 
@@ -113,10 +113,6 @@ class EntryGen {
   }
 
   /// A random expense over [members], guaranteed to satisfy the invariant.
-  ///
-  /// Amounts reach 10^12 minor units so that the allocation's [BigInt]
-  /// intermediates are genuinely exercised rather than staying comfortably
-  /// inside double precision.
   Entry expense(List<String> members, {required int index}) {
     final currency = currencies[random.nextInt(currencies.length)];
     final total = 1 + nextIntUpTo(1000000000000);
@@ -137,37 +133,42 @@ class EntryGen {
 
     final createdAt = DateTime.utc(2026, 1, 1).add(Duration(minutes: index));
     return Entry(
-      id: 'e${_pad(index)}',
-      groupId: 'g1',
-      kind: EntryKind.expense,
-      description: 'expense $index',
-      currency: currency,
-      amountMinor: total,
-      entryDate: DateTime.utc(2026, 1, 1 + (index % 28)),
-      splitKind: spec.kind,
+      EntryRow(
+        id: 'e${_pad(index)}',
+        groupId: 'g1',
+        kind: EntryKind.expense,
+        description: 'expense $index',
+        currency: currency,
+        amountMinor: total,
+        entryDate: DateTime.utc(2026, 1, 1 + (index % 28)),
+        splitKind: spec.kind,
+        createdBy: members.first,
+        createdAt: createdAt,
+      ),
       payers: [
         for (final p in resolvedPayers)
-          EntryPayer(memberId: p.memberId, amountMinor: p.amountMinor),
+          Payer(memberId: p.memberId, amountMinor: p.amountMinor),
       ],
       shares: [
         for (final s in shares)
-          EntryShare(
+          Share(
             memberId: s.memberId,
             amountMinor: s.amountMinor,
             weightMicros: s.weightMicros,
           ),
       ],
-      createdBy: members.first,
-      createdAt: createdAt,
-      updatedAt: createdAt,
     );
   }
+
+  static Entry _deleted(Entry entry) => entry.copyWith(
+    row: entry.row.copyWith(deletedAt: Value(DateTime.utc(2026, 2, 1))),
+  );
 
   /// A group's worth of random expenses, some of them soft-deleted.
   List<Entry> entries(List<String> members, int count) => [
     for (var i = 0; i < count; i++)
       if (random.nextInt(10) == 0)
-        expense(members, index: i).copyWith(deletedAt: DateTime.utc(2026, 2, 1))
+        _deleted(expense(members, index: i))
       else
         expense(members, index: i),
   ];

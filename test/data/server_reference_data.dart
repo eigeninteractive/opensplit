@@ -1,15 +1,4 @@
 /// The reference data a real server holds, for tests.
-///
-/// This used to live in `lib/` and be written into every new database, which
-/// made it a second copy of rows the server already had -- one that had to be
-/// kept in step by hand, and that meant adding a currency needed an app
-/// release. The app learns them from the server now.
-///
-/// It stays here because the fake server has to serve something, and because a
-/// test database needs the same reference data a real device gets from its
-/// first sweep. The ids still have to match the server's exactly: a category id
-/// is written onto entries, so one invented here would point at a category the
-/// server has never heard of.
 library;
 
 /// ISO 4217 subset, with the exponent that governs minor units.
@@ -34,16 +23,6 @@ defaultCurrencies = [
 ];
 
 /// The categories every group gets, in the order they are offered.
-///
-/// Ordered by how often a thing is actually *shared*, not alphabetically: a
-/// restaurant bill and a taxi are split constantly, a sofa once. The picker is
-/// a list someone scrolls while a waiter waits, so the first six entries carry
-/// most of the traffic.
-///
-/// Ids are fixed here and in the server migration, and are written onto
-/// entries. If a device invented its own id for "Groceries" while offline, that
-/// entry would point at a category the server has never heard of and would show
-/// as uncategorised everywhere else.
 const List<({String id, String name, String icon})> defaultCategories = [
   (
     id: 'e7b1844c-76a3-4d2b-bd81-56a74e11f943',

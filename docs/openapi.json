@@ -1,0 +1,3950 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "version": "1.0.0",
+    "title": "OpenSplit",
+    "description": "The server stores rows and enforces one invariant. It computes nothing: splitting, folding balances, simplifying debts and analytics all happen on the device."
+  },
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The session token from `set-auth-token`, on Android."
+      },
+      "cookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "better-auth.session_token",
+        "description": "The HttpOnly session cookie, on the web."
+      }
+    },
+    "schemas": {
+      "Group": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "defaultCurrency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "example": "INR"
+          },
+          "isDirect": {
+            "type": "boolean"
+          },
+          "simplifyDebts": {
+            "type": "boolean"
+          },
+          "createdBy": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "archivedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": 0,
+            "example": 412
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "defaultCurrency",
+          "isDirect",
+          "simplifyDebts",
+          "createdBy",
+          "createdAt",
+          "archivedAt",
+          "updatedAt",
+          "seq"
+        ]
+      },
+      "GroupLink": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          }
+        },
+        "required": [
+          "token",
+          "expiresAt"
+        ]
+      },
+      "Account": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "isAnonymous": {
+            "type": "boolean"
+          },
+          "email": {
+            "type": "string",
+            "nullable": true,
+            "format": "email"
+          }
+        },
+        "required": [
+          "id",
+          "isAnonymous",
+          "email"
+        ]
+      },
+      "EntrySnapshot": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/EntryKind"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "example": "INR"
+          },
+          "amountMinor": {
+            "type": "integer",
+            "minimum": 0,
+            "exclusiveMinimum": true
+          },
+          "entryDate": {
+            "type": "string",
+            "format": "date",
+            "example": "2026-09-23"
+          },
+          "splitKind": {
+            "$ref": "#/components/schemas/SplitKind"
+          },
+          "categoryId": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 2000
+          },
+          "deletedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "payers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MoneyRow"
+            }
+          },
+          "shares": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MoneyRow"
+            }
+          }
+        },
+        "required": [
+          "kind",
+          "description",
+          "currency",
+          "amountMinor",
+          "entryDate",
+          "splitKind",
+          "categoryId",
+          "notes",
+          "deletedAt",
+          "payers",
+          "shares"
+        ]
+      },
+      "EntryKind": {
+        "type": "string",
+        "enum": [
+          "expense",
+          "settlement"
+        ]
+      },
+      "SplitKind": {
+        "type": "string",
+        "enum": [
+          "equal",
+          "exact",
+          "shares",
+          "percent"
+        ]
+      },
+      "MoneyRow": {
+        "type": "object",
+        "properties": {
+          "memberId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "amountMinor": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "memberId",
+          "amountMinor"
+        ]
+      },
+      "MemberEventPayload": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "previousName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "displayName",
+          "previousName"
+        ]
+      },
+      "GroupEventPayload": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "previousName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "name",
+          "previousName"
+        ]
+      },
+      "LinkEventPayload": {
+        "type": "object",
+        "properties": {
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          }
+        },
+        "required": [
+          "expiresAt"
+        ]
+      },
+      "PushData": {
+        "type": "object",
+        "properties": {
+          "groupId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "eventId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/EventKind"
+          },
+          "subjectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          }
+        },
+        "required": [
+          "groupId",
+          "eventId",
+          "kind",
+          "subjectId"
+        ]
+      },
+      "EventKind": {
+        "type": "string",
+        "enum": [
+          "entry",
+          "member_added",
+          "member_joined",
+          "member_left",
+          "member_renamed",
+          "group_renamed",
+          "group_archived",
+          "group_restored",
+          "link_created",
+          "link_revoked"
+        ]
+      },
+      "Health": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "service": {
+            "type": "string",
+            "enum": [
+              "opensplit"
+            ]
+          },
+          "now": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "ok",
+          "service",
+          "now"
+        ]
+      },
+      "ReauthStart": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "$ref": "#/components/schemas/ErrorCode"
+              },
+              "message": {
+                "type": "string"
+              },
+              "retry": {
+                "$ref": "#/components/schemas/Retry"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "retry"
+            ]
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "ErrorCode": {
+        "type": "string",
+        "enum": [
+          "not_member",
+          "no_group",
+          "group_purged",
+          "no_such_entry",
+          "no_such_member",
+          "unbalanced",
+          "stale_base",
+          "forbidden",
+          "not_settled",
+          "invite_invalid",
+          "invite_spent",
+          "invite_expired",
+          "already_member",
+          "slot_taken",
+          "malformed",
+          "no_session",
+          "not_found",
+          "internal",
+          "identity_already_in_use",
+          "auth_failed",
+          "rate_limited",
+          "reauth_required"
+        ]
+      },
+      "Retry": {
+        "type": "string",
+        "enum": [
+          "stale",
+          "permanent",
+          "transient"
+        ],
+        "description": "stale: re-read, re-compose and send again. permanent: this will be refused identically forever; do not retry. transient: back off and try the same request again."
+      },
+      "Session": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Account"
+              },
+              {
+                "nullable": true
+              }
+            ]
+          },
+          "token": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "account",
+          "token"
+        ]
+      },
+      "ReauthVerifyRequest": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 4,
+            "maxLength": 12
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "IdentityOutcome": {
+        "type": "object",
+        "properties": {
+          "outcome": {
+            "$ref": "#/components/schemas/IdentityOutcomeKind"
+          },
+          "account": {
+            "$ref": "#/components/schemas/Account"
+          },
+          "token": {
+            "type": "string",
+            "nullable": true
+          },
+          "strandedUserId": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          }
+        },
+        "required": [
+          "outcome",
+          "account",
+          "token",
+          "strandedUserId"
+        ]
+      },
+      "IdentityOutcomeKind": {
+        "type": "string",
+        "enum": [
+          "kept",
+          "replaced"
+        ],
+        "description": "kept: the account id did not change. replaced: a different account holds the session now, and `strandedUserId` names the one this device's ledger belongs to."
+      },
+      "GoogleIdentityRequest": {
+        "type": "object",
+        "properties": {
+          "idToken": {
+            "type": "string",
+            "minLength": 1
+          },
+          "nonce": {
+            "type": "string",
+            "nullable": true
+          },
+          "allowSignIn": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "idToken",
+          "nonce",
+          "allowSignIn"
+        ]
+      },
+      "GoogleRedirect": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      },
+      "GoogleRedirectRequest": {
+        "type": "object",
+        "properties": {
+          "callbackUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "allowSignIn": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "callbackUrl",
+          "allowSignIn"
+        ]
+      },
+      "EmailStartResponse": {
+        "type": "object",
+        "properties": {
+          "flow": {
+            "$ref": "#/components/schemas/EmailFlow"
+          }
+        },
+        "required": [
+          "flow"
+        ]
+      },
+      "EmailFlow": {
+        "type": "string",
+        "enum": [
+          "linkPending",
+          "signInPending"
+        ],
+        "description": "linkPending: verifying keeps the current account id. signInPending: the address already has an account, so verifying replaces the session."
+      },
+      "EmailStartRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "EmailVerifyRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "code": {
+            "type": "string",
+            "minLength": 4,
+            "maxLength": 12
+          },
+          "flow": {
+            "$ref": "#/components/schemas/EmailFlow"
+          }
+        },
+        "required": [
+          "email",
+          "code",
+          "flow"
+        ]
+      },
+      "GroupIds": {
+        "type": "object",
+        "properties": {
+          "groupIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            }
+          }
+        },
+        "required": [
+          "groupIds"
+        ]
+      },
+      "ChangePage": {
+        "type": "object",
+        "properties": {
+          "groupId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": 0,
+            "example": 412
+          },
+          "hasMore": {
+            "type": "boolean"
+          },
+          "group": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Group"
+              },
+              {
+                "nullable": true
+              }
+            ]
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Member"
+            }
+          },
+          "profiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Profile"
+            }
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Entry"
+            }
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Event"
+            }
+          },
+          "purgedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          }
+        },
+        "required": [
+          "groupId",
+          "seq",
+          "hasMore",
+          "group",
+          "members",
+          "profiles",
+          "entries",
+          "events",
+          "purgedAt"
+        ]
+      },
+      "Member": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "profileId": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "upiVpa": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^[a-zA-Z0-9._-]{2,64}@[a-zA-Z]{2,64}$",
+            "example": "ravi@okhdfcbank"
+          },
+          "joinedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "leftAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": 0,
+            "example": 412
+          }
+        },
+        "required": [
+          "id",
+          "profileId",
+          "displayName",
+          "upiVpa",
+          "joinedAt",
+          "leftAt",
+          "updatedAt",
+          "seq"
+        ]
+      },
+      "Profile": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "upiVpa": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^[a-zA-Z0-9._-]{2,64}@[a-zA-Z]{2,64}$",
+            "example": "ravi@okhdfcbank"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "deletedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          }
+        },
+        "required": [
+          "id",
+          "displayName",
+          "upiVpa",
+          "updatedAt",
+          "deletedAt"
+        ]
+      },
+      "Entry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/EntryKind"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "categoryId": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "example": "INR"
+          },
+          "amountMinor": {
+            "type": "integer",
+            "minimum": 0,
+            "exclusiveMinimum": true
+          },
+          "entryDate": {
+            "type": "string",
+            "format": "date",
+            "example": "2026-09-23"
+          },
+          "occurredAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "timeZone": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 64,
+            "example": "Asia/Kolkata"
+          },
+          "splitKind": {
+            "$ref": "#/components/schemas/SplitKind"
+          },
+          "fxRate": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "exclusiveMinimum": true
+          },
+          "fxSource": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 64
+          },
+          "fxAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 2000
+          },
+          "createdBy": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "deletedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": 0,
+            "example": 412
+          },
+          "payers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Payer"
+            }
+          },
+          "shares": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Share"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "description",
+          "categoryId",
+          "currency",
+          "amountMinor",
+          "entryDate",
+          "occurredAt",
+          "timeZone",
+          "splitKind",
+          "fxRate",
+          "fxSource",
+          "fxAt",
+          "notes",
+          "createdBy",
+          "createdAt",
+          "updatedAt",
+          "deletedAt",
+          "seq",
+          "payers",
+          "shares"
+        ]
+      },
+      "Payer": {
+        "type": "object",
+        "properties": {
+          "memberId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "amountMinor": {
+            "type": "integer",
+            "minimum": 0,
+            "exclusiveMinimum": true
+          }
+        },
+        "required": [
+          "memberId",
+          "amountMinor"
+        ]
+      },
+      "Share": {
+        "type": "object",
+        "properties": {
+          "memberId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "amountMinor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "weightMicros": {
+            "type": "integer",
+            "nullable": true
+          }
+        },
+        "required": [
+          "memberId",
+          "amountMinor",
+          "weightMicros"
+        ]
+      },
+      "Event": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "actorId": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/EventKind"
+          },
+          "subjectId": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "entry": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EntrySnapshot"
+              },
+              {
+                "nullable": true
+              }
+            ]
+          },
+          "member": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MemberEventPayload"
+              },
+              {
+                "nullable": true
+              }
+            ]
+          },
+          "group": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GroupEventPayload"
+              },
+              {
+                "nullable": true
+              }
+            ]
+          },
+          "link": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LinkEventPayload"
+              },
+              {
+                "nullable": true
+              }
+            ]
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": 0,
+            "example": 412
+          },
+          "ordinal": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "actorId",
+          "createdAt",
+          "kind",
+          "subjectId",
+          "entry",
+          "member",
+          "group",
+          "link",
+          "seq",
+          "ordinal"
+        ]
+      },
+      "GroupInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "defaultCurrency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "example": "INR"
+          },
+          "isDirect": {
+            "type": "boolean"
+          },
+          "simplifyDebts": {
+            "type": "boolean"
+          },
+          "archivedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "creatorId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "creatorName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "name",
+          "defaultCurrency",
+          "isDirect",
+          "simplifyDebts",
+          "archivedAt",
+          "creatorId",
+          "creatorName"
+        ]
+      },
+      "MemberInput": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "upiVpa": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^[a-zA-Z0-9._-]{2,64}@[a-zA-Z]{2,64}$",
+            "example": "ravi@okhdfcbank"
+          },
+          "leftAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          }
+        },
+        "required": [
+          "displayName",
+          "upiVpa",
+          "leftAt"
+        ]
+      },
+      "EntryInput": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/EntryKind"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "categoryId": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "example": "INR"
+          },
+          "amountMinor": {
+            "type": "integer",
+            "minimum": 0,
+            "exclusiveMinimum": true
+          },
+          "entryDate": {
+            "type": "string",
+            "format": "date",
+            "example": "2026-09-23"
+          },
+          "occurredAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "timeZone": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 64,
+            "example": "Asia/Kolkata"
+          },
+          "splitKind": {
+            "$ref": "#/components/schemas/SplitKind"
+          },
+          "fxRate": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "exclusiveMinimum": true
+          },
+          "fxSource": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 64
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 2000
+          },
+          "deletedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "payers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Payer"
+            },
+            "minItems": 1,
+            "maxItems": 1000
+          },
+          "shares": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Share"
+            },
+            "minItems": 1,
+            "maxItems": 1000
+          },
+          "baseSeq": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 0,
+            "example": 412
+          }
+        },
+        "required": [
+          "kind",
+          "description",
+          "categoryId",
+          "currency",
+          "amountMinor",
+          "entryDate",
+          "occurredAt",
+          "timeZone",
+          "splitKind",
+          "fxRate",
+          "fxSource",
+          "notes",
+          "deletedAt",
+          "payers",
+          "shares",
+          "baseSeq"
+        ]
+      },
+      "Invite": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "memberId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "createdBy": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "redeemedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
+          "redeemedBy": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "token",
+          "memberId",
+          "createdBy",
+          "createdAt",
+          "expiresAt",
+          "redeemedAt",
+          "redeemedBy"
+        ]
+      },
+      "LiveLink": {
+        "type": "object",
+        "properties": {
+          "link": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GroupLink"
+              },
+              {
+                "nullable": true
+              }
+            ]
+          }
+        },
+        "required": [
+          "link"
+        ]
+      },
+      "LinkRevocation": {
+        "type": "object",
+        "properties": {
+          "revoked": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          }
+        },
+        "required": [
+          "revoked"
+        ]
+      },
+      "LinkPreview": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/LinkKind"
+          },
+          "groupId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "groupName": {
+            "type": "string"
+          },
+          "inviterName": {
+            "type": "string",
+            "nullable": true
+          },
+          "memberCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "memberName": {
+            "type": "string",
+            "nullable": true
+          },
+          "isRedeemed": {
+            "type": "boolean"
+          },
+          "isExpired": {
+            "type": "boolean"
+          },
+          "isRevoked": {
+            "type": "boolean"
+          },
+          "isMember": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "groupId",
+          "groupName",
+          "inviterName",
+          "memberCount",
+          "memberName",
+          "isRedeemed",
+          "isExpired",
+          "isRevoked",
+          "isMember"
+        ]
+      },
+      "LinkKind": {
+        "type": "string",
+        "enum": [
+          "invite",
+          "group_link"
+        ]
+      },
+      "PlaceholderList": {
+        "type": "object",
+        "properties": {
+          "placeholders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Placeholder"
+            }
+          }
+        },
+        "required": [
+          "placeholders"
+        ]
+      },
+      "Placeholder": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "id",
+          "displayName"
+        ]
+      },
+      "Joined": {
+        "type": "object",
+        "properties": {
+          "groupId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "member": {
+            "$ref": "#/components/schemas/Member"
+          }
+        },
+        "required": [
+          "groupId",
+          "member"
+        ]
+      },
+      "JoinRequest": {
+        "type": "object",
+        "properties": {
+          "memberId": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "memberId",
+          "displayName"
+        ]
+      },
+      "ProfilePage": {
+        "type": "object",
+        "properties": {
+          "profiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Profile"
+            }
+          },
+          "cursor": {
+            "type": "string",
+            "nullable": true
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "profiles",
+          "cursor",
+          "hasMore"
+        ]
+      },
+      "ProfileUpdate": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "upiVpa": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^[a-zA-Z0-9._-]{2,64}@[a-zA-Z]{2,64}$",
+            "example": "ravi@okhdfcbank"
+          }
+        },
+        "required": [
+          "displayName",
+          "upiVpa"
+        ]
+      },
+      "Device": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "platform": {
+            "$ref": "#/components/schemas/Platform"
+          }
+        },
+        "required": [
+          "token",
+          "platform"
+        ]
+      },
+      "Platform": {
+        "type": "string",
+        "enum": [
+          "android",
+          "web"
+        ]
+      },
+      "DeviceForgotten": {
+        "type": "object",
+        "properties": {
+          "forgotten": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "forgotten"
+        ]
+      },
+      "AccountDeletion": {
+        "type": "object",
+        "properties": {
+          "forgotten": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "purged": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "forgotten",
+          "purged"
+        ]
+      },
+      "Reference": {
+        "type": "object",
+        "properties": {
+          "currencies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Currency"
+            }
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Category"
+            }
+          }
+        },
+        "required": [
+          "currencies",
+          "categories"
+        ]
+      },
+      "Currency": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "example": "INR"
+          },
+          "exponent": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4
+          },
+          "symbol": {
+            "type": "string",
+            "nullable": true
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "exponent",
+          "symbol",
+          "name"
+        ]
+      },
+      "Category": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "name": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "icon"
+        ]
+      },
+      "FxPage": {
+        "type": "object",
+        "properties": {
+          "rates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FxRate"
+            }
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "rates",
+          "hasMore"
+        ]
+      },
+      "FxRate": {
+        "type": "object",
+        "properties": {
+          "asOf": {
+            "type": "string",
+            "format": "date",
+            "example": "2026-09-23"
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "example": "INR"
+          },
+          "rate": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMinimum": true
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "asOf",
+          "currency",
+          "rate",
+          "source"
+        ]
+      },
+      "FxBackfillResponse": {
+        "type": "object",
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "accepted"
+        ]
+      },
+      "FxBackfillRequest": {
+        "type": "object",
+        "properties": {
+          "asOf": {
+            "type": "string",
+            "format": "date",
+            "example": "2026-09-23"
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "example": "INR"
+          }
+        },
+        "required": [
+          "asOf",
+          "currency"
+        ]
+      }
+    },
+    "parameters": {}
+  },
+  "paths": {
+    "/api/health": {
+      "get": {
+        "operationId": "health",
+        "tags": [
+          "meta"
+        ],
+        "summary": "Whether the Worker is answering",
+        "responses": {
+          "200": {
+            "description": "It is",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/reauth": {
+      "post": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "startReauthentication",
+        "tags": [
+          "identity"
+        ],
+        "summary": "Send a code to this account's own address, to confirm it is still you",
+        "description": "For actions that cannot be undone, such as deleting the account. A guest has no address and nothing to confirm with.",
+        "responses": {
+          "200": {
+            "description": "A code is on its way",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReauthStart"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A guest account has no address to send a code to.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts. Wait a minute and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/reauth/verify": {
+      "post": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "reauthenticate",
+        "tags": [
+          "identity"
+        ],
+        "summary": "Trade the code for a new session on this same account",
+        "description": "The session in hand is ended; use the one returned.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReauthVerifyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The new session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The code is wrong or has expired, or this is a guest account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts. Wait a minute and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/guest": {
+      "post": {
+        "security": [
+          {},
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "signInAsGuest",
+        "tags": [
+          "identity"
+        ],
+        "summary": "Start a guest account on this device",
+        "responses": {
+          "200": {
+            "description": "Signed in as a new guest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityOutcome"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts. Wait a minute and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/session": {
+      "get": {
+        "security": [
+          {},
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "getSession",
+        "tags": [
+          "identity"
+        ],
+        "summary": "The session in hand, or none",
+        "responses": {
+          "200": {
+            "description": "The account, and a rotated bearer token if one was issued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/sign-out": {
+      "post": {
+        "security": [
+          {},
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "signOut",
+        "tags": [
+          "identity"
+        ],
+        "summary": "End this session",
+        "responses": {
+          "204": {
+            "description": "Signed out"
+          }
+        }
+      }
+    },
+    "/api/identity/google": {
+      "post": {
+        "security": [
+          {},
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "linkGoogle",
+        "tags": [
+          "identity"
+        ],
+        "summary": "Attach Google to this session, or sign in with it",
+        "description": "Links first, so the account id survives. Signs in instead only when the Google account already belongs to somebody, and only with allowSignIn.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleIdentityRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Linked, or signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityOutcome"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "That Google account already has an account of its own, and allowSignIn was not set.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/google/redirect": {
+      "post": {
+        "security": [
+          {},
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "startGoogleRedirect",
+        "tags": [
+          "identity"
+        ],
+        "summary": "Where to send the browser to link or sign in with Google",
+        "description": "Links to the session in hand unless allowSignIn is set or there is none. Afterwards, read `GET /identity/session`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleRedirectRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The URL to visit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleRedirect"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The callback URL is not on this origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/email": {
+      "post": {
+        "security": [
+          {},
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "startEmailSignIn",
+        "tags": [
+          "identity"
+        ],
+        "summary": "Send a sign-in code, and say which flow it started",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailStartRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A code is on its way",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailStartResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts. Wait a minute and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/email/verify": {
+      "post": {
+        "security": [
+          {},
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "verifyEmailCode",
+        "tags": [
+          "identity"
+        ],
+        "summary": "Complete the flow that POST /identity/email started",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailVerifyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Attached, or signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityOutcome"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The code is wrong or has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "That code was for a flow this session cannot finish.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts. Wait a minute and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/groups": {
+      "get": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "listGroups",
+        "tags": [
+          "sync"
+        ],
+        "summary": "The groups this account is still in",
+        "responses": {
+          "200": {
+            "description": "The group ids",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupIds"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/groups/{groupId}/changes": {
+      "get": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "getChanges",
+        "tags": [
+          "sync"
+        ],
+        "summary": "Everything that changed in one group since a cursor",
+        "description": "`limit` counts changes, not rows, and a page is cut only between sequence numbers, so a device sees a whole write or none of it. Send `seq` back as `since` next time.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            },
+            "required": true,
+            "name": "groupId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "example": 412
+            },
+            "required": false,
+            "name": "since",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "example": 200
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The page, and the cursor to send next time",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangePage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "You are not a member of this group, or not allowed to change that.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such group, entry, member or link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The request conflicts with the group's current state. Read `error.retry` before retrying.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The group was collected, or the link has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The expense does not add up.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/groups/{groupId}": {
+      "put": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "putGroup",
+        "tags": [
+          "groups"
+        ],
+        "summary": "Make a group and its creator's place in it, or rename, archive or change a setting",
+        "description": "Idempotent, so a retry whose response was lost returns the same group. Editing needs membership; creating does not.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            },
+            "required": true,
+            "name": "groupId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GroupInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The group",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Group"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "You are not a member of this group, or not allowed to change that.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such group, entry, member or link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The request conflicts with the group's current state. Read `error.retry` before retrying.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The group was collected, or the link has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The expense does not add up.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/groups/{groupId}/members/{memberId}": {
+      "put": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "putMember",
+        "tags": [
+          "groups"
+        ],
+        "summary": "Add somebody who has never opened the app, or change a name, a payment handle, or whether somebody is still here",
+        "description": "Your own row and any placeholder are editable; another account holder's are not. Leaving is always yours to do; removing somebody else requires them to be settled in every currency.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            },
+            "required": true,
+            "name": "groupId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            },
+            "required": true,
+            "name": "memberId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The member",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Member"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "You are not a member of this group, or not allowed to change that.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such group, entry, member or link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The request conflicts with the group's current state. Read `error.retry` before retrying.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The group was collected, or the link has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The expense does not add up.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/groups/{groupId}/entries/{entryId}": {
+      "put": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "putEntry",
+        "tags": [
+          "entries"
+        ],
+        "summary": "Record, edit, delete or restore an expense, whole",
+        "description": "A stale `baseSeq` is refused only when the write would move money, so two people fixing a typo never arbitrate. Deleting and restoring always move money.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            },
+            "required": true,
+            "name": "groupId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            },
+            "required": true,
+            "name": "entryId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EntryInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The expense as stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Entry"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "You are not a member of this group, or not allowed to change that.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such group, entry, member or link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The request conflicts with the group's current state. Read `error.retry` before retrying.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The group was collected, or the link has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The expense does not add up.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/groups/{groupId}/members/{memberId}/invite": {
+      "post": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "createInvite",
+        "tags": [
+          "invites"
+        ],
+        "summary": "Hand one unclaimed place to one person",
+        "description": "Reissuing invalidates whatever was sent before.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            },
+            "required": true,
+            "name": "groupId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            },
+            "required": true,
+            "name": "memberId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The invite",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Invite"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "You are not a member of this group, or not allowed to change that.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such group, entry, member or link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The request conflicts with the group's current state. Read `error.retry` before retrying.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The group was collected, or the link has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The expense does not add up.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/groups/{groupId}/link": {
+      "post": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "createGroupLink",
+        "tags": [
+          "invites"
+        ],
+        "summary": "Mint the group's one open link",
+        "description": "Whoever holds it may join until it expires or is revoked. Minting revokes the previous one; both are in the activity feed.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            },
+            "required": true,
+            "name": "groupId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The new live link",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupLink"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "You are not a member of this group, or not allowed to change that.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such group, entry, member or link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The request conflicts with the group's current state. Read `error.retry` before retrying.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The group was collected, or the link has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The expense does not add up.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "getGroupLink",
+        "tags": [
+          "invites"
+        ],
+        "summary": "The group's open link, if it has a usable one",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            },
+            "required": true,
+            "name": "groupId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The link, or null",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveLink"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "You are not a member of this group, or not allowed to change that.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such group, entry, member or link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The request conflicts with the group's current state. Read `error.retry` before retrying.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The group was collected, or the link has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The expense does not add up.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "revokeGroupLink",
+        "tags": [
+          "invites"
+        ],
+        "summary": "Turn the group's open link off",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            },
+            "required": true,
+            "name": "groupId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The token that is no longer live, or null",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkRevocation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "You are not a member of this group, or not allowed to change that.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such group, entry, member or link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The request conflicts with the group's current state. Read `error.retry` before retrying.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The group was collected, or the link has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The expense does not add up.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/links/{token}": {
+      "get": {
+        "security": [
+          {},
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "peekLink",
+        "tags": [
+          "invites"
+        ],
+        "summary": "What a link is for, without spending it",
+        "description": "Works with no session. A spent, expired or revoked token still describes itself.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            },
+            "required": true,
+            "name": "token",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "What the link names",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkPreview"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such group, entry, member or link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The group was collected, or the link has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/links/{token}/placeholders": {
+      "get": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "linkPlaceholders",
+        "tags": [
+          "invites"
+        ],
+        "summary": "The unclaimed places this link's group is holding",
+        "description": "Other people's names, so a session is required, unlike the preview.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            },
+            "required": true,
+            "name": "token",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Places nobody has claimed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaceholderList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "You are not a member of this group, or not allowed to change that.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such group, entry, member or link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The request conflicts with the group's current state. Read `error.retry` before retrying.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The group was collected, or the link has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The expense does not add up.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/links/{token}/join": {
+      "post": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "joinWithLink",
+        "tags": [
+          "invites"
+        ],
+        "summary": "Walk in on a link",
+        "description": "Claiming a place sets one column on a member row that already has balances; arriving as somebody new inserts one. Never a second place for one account.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            },
+            "required": true,
+            "name": "token",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JoinRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The group, and your place in it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Joined"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "You are not a member of this group, or not allowed to change that.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such group, entry, member or link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The request conflicts with the group's current state. Read `error.retry` before retrying.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The group was collected, or the link has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The expense does not add up.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/profiles": {
+      "get": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "getProfiles",
+        "tags": [
+          "sync"
+        ],
+        "summary": "Everybody you share a group with, plus yourself",
+        "description": "Cursored on time, since profiles have no single writer to number them. Send `cursor` back as `after`.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "after",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "example": 100
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The page, and where the feed stands",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfilePage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/profile": {
+      "put": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "updateProfile",
+        "tags": [
+          "sync"
+        ],
+        "summary": "Your own name and payment handle",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Your profile, as stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/devices": {
+      "put": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "registerDevice",
+        "tags": [
+          "devices"
+        ],
+        "summary": "Where to wake this account",
+        "description": "Idempotent, and a transfer when the token belonged to somebody else: phones change hands.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Device"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Registered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Device"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/devices/{token}": {
+      "delete": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "forgetDevice",
+        "tags": [
+          "devices"
+        ],
+        "summary": "Stop waking this device",
+        "description": "Only removes a token that belongs to this account.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "required": true,
+            "name": "token",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Whether there was one to forget",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceForgotten"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/account": {
+      "delete": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "deleteAccount",
+        "tags": [
+          "account"
+        ],
+        "summary": "Delete this account, permanently",
+        "description": "Other people's ledgers stay: your member rows become placeholders that keep your name. A group where you were the last account holder is collected. The session is left for the caller to clear. An account with an email address must have signed in within the last ten minutes (`POST /identity/reauth`); a guest has nothing to confirm with.",
+        "responses": {
+          "200": {
+            "description": "What it did, group by group",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountDeletion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Confirm it is you first: `POST /identity/reauth`, then `POST /identity/reauth/verify`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reference": {
+      "get": {
+        "operationId": "getReference",
+        "tags": [
+          "reference"
+        ],
+        "summary": "Every currency and category the server knows about",
+        "description": "Send the `ETag` back as `If-None-Match` to get a 304.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "if-none-match",
+            "in": "header"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Currencies and categories",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reference"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the ETag you sent."
+          }
+        }
+      }
+    },
+    "/api/fx": {
+      "get": {
+        "operationId": "getFxRates",
+        "tags": [
+          "reference"
+        ],
+        "summary": "Exchange rates published on or after a date",
+        "description": "Against USD. Rates are immutable, so a device keeps a high-water mark and asks for everything after it; the most recent months are served when the window is too wide.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "example": "2026-09-23"
+            },
+            "required": true,
+            "name": "since",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The rates, oldest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FxPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "That is not a date.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fx/backfill": {
+      "post": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "requestFxBackfill",
+        "tags": [
+          "reference"
+        ],
+        "summary": "Ask for a day the server has never needed",
+        "description": "Fire and forget, and heavily throttled: the rate arrives on a later sync. Needs a session, since each one can send the server to its providers.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FxBackfillRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Whether this request was taken up",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FxBackfillResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "That is not a date, not a currency, or earlier than any rate.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts. Wait a minute and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

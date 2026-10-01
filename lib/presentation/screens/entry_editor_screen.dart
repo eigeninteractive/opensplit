@@ -1,20 +1,23 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:opensplit_api/opensplit_api.dart' show SplitKind;
 
-import '../../application/providers.dart';
+import '../../application/ledger_providers.dart';
+import '../../application/local_providers.dart';
+import '../../application/sync_providers.dart';
+import '../../data/local/database.dart';
 import '../../domain/activity/activity_text.dart';
+import '../../domain/calendar_date.dart';
 import '../../domain/entry_draft.dart';
 import '../../domain/fx/fx_quote.dart';
-import '../../domain/models/category.dart';
-import '../../domain/models/currency.dart';
 import '../../domain/models/entry.dart';
 import '../../domain/models/group_event.dart';
+import '../../domain/money_format.dart';
 import '../../domain/split/allocation.dart';
 import '../../domain/split/splitter.dart';
-import '../format.dart';
 import '../feedback.dart';
 import '../navigation.dart';
 import '../theme.dart';
@@ -23,11 +26,6 @@ import '../widgets/currency_picker.dart';
 import '../widgets/page_body.dart';
 
 /// Creates or edits an expense.
-///
-/// The default path is deliberately the shortest one: type what it was, type
-/// how much, save. Everything else — several payers, unequal splits, another
-/// currency, another date — is available but never in the way, because the
-/// thing that kills an expense app is the expense you did not bother to log.
 class EntryEditorScreen extends ConsumerStatefulWidget {
   const EntryEditorScreen({super.key, required this.groupId, this.entryId});
 
@@ -51,15 +49,17 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
 
   String? _currencyCode;
   String? _categoryId;
-  DateTime _date = DateTime.now();
+
+  /// The day it happened, and when on that day if known, with the zone it
+  /// happened in. Times are shown and picked on this device's clock.
+  late DateTime _date;
+  DateTime? _occurredAt;
+  String? _zone;
   SplitKind _splitKind = SplitKind.equal;
 
   /// Who is in the split, who paid, and the relative weights.
   ///
-  /// Replaced rather than mutated. They used to be `final` collections handed
-  /// down to the two section widgets, which edited them in place and then asked
-  /// for a rebuild — so a widget declaring itself immutable was the thing
-  /// changing this screen's state, and the fields lied about who owned them.
+  /// Replaced rather than mutated, so only this state object changes them.
   Set<String> _participants = {};
   Map<String, int> _shares = {};
   Set<String> _payers = {};
@@ -73,14 +73,11 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    _date = now;
+    _occurredAt = now.toUtc();
     // Seeding the form is initialisation from asynchronous data, so it listens
-    // instead of running inside build. Writing to a TextEditingController
-    // notifies the field bound to it, and a build is the wrong place to do
-    // that.
-    //
-    // Two subscriptions because the seed needs both the ledger and the currency
-    // list, and either can arrive second. Only the first fires immediately;
-    // whichever lands later brings the other with it.
+    // instead of running inside build.
     ref.listenManual(
       groupLedgerProvider(widget.groupId),
       (_, _) => _seedWhenReady(),
@@ -111,10 +108,6 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
   ) => map.putIfAbsent(id, TextEditingController.new);
 
   /// Seeds the form as soon as everything it needs has arrived.
-  ///
-  /// No setState: the only things this changes on screen are the controllers,
-  /// which notify their own fields, and state that the build watching these
-  /// same providers is about to read anyway.
   void _seedWhenReady() {
     if (_loaded) return;
 
@@ -134,7 +127,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
     _loaded = true;
     _editingSnapshot = existing;
 
-    _currencyCode = existing?.currency ?? ledger.group.defaultCurrency;
+    _currencyCode = existing?.row.currency ?? ledger.group.defaultCurrency;
 
     if (existing == null) {
       // Everyone splits, the person adding it paid. The overwhelmingly common
@@ -145,13 +138,15 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
       return;
     }
 
-    _description.text = existing.description;
-    _categoryId = existing.categoryId;
-    _date = existing.entryDate;
-    _splitKind = existing.splitKind;
-    final currency = cx[existing.currency];
+    _description.text = existing.row.description;
+    _categoryId = existing.row.categoryId;
+    _date = existing.row.entryDate;
+    _occurredAt = existing.row.occurredAt;
+    _zone = existing.row.timeZone;
+    _splitKind = existing.row.splitKind;
+    final currency = cx[existing.row.currency];
     if (currency != null) {
-      _amount.text = currency.formatPlain(existing.amountMinor);
+      _amount.text = currency.formatPlain(existing.row.amountMinor);
     }
 
     _participants = {for (final share in existing.shares) share.memberId};
@@ -233,6 +228,10 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
           percents[id] = parsed;
         }
         return PercentSplit(percents);
+
+      // A split rule from a newer server: saving would have to guess it.
+      case SplitKind.unknownDefaultOpenApi:
+        return null;
     }
   }
 
@@ -275,6 +274,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
       return;
     }
 
+    final moment = _moment();
     final draft = EntryDraft(
       groupId: widget.groupId,
       currency: currency.code,
@@ -283,12 +283,12 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
       categoryId: _categoryId,
       split: split,
       payerAmounts: payers,
-      entryDate: DateTime.utc(_date.year, _date.month, _date.day),
-      // A fact about the transaction, captured once. Never re-fetched for a
-      // historical entry: what a rupee was worth on the night of the dinner
-      // does not change because the market moved afterwards.
+      entryDate: calendarDay(_date),
+      occurredAt: moment?.at,
+      timeZone: moment?.zone,
+      // A fact about the transaction, captured once.
       fxRate: fx?.rate,
-      fxSource: fx == null ? null : '${fx.source}@${_isoDay(fx.date)}',
+      fxSource: fx == null ? null : '${fx.source}@${calendarDate(fx.date)}',
     );
 
     setState(() => _saving = true);
@@ -322,29 +322,65 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
     }
   }
 
+  /// The moment to save. A time with no zone yet (a new expense) is this
+  /// device's. Saving never waits to learn which that is: with no zone known
+  /// yet, only the day is kept.
+  ({DateTime at, String zone})? _moment() {
+    final at = _occurredAt;
+    final zone = _zone ?? ref.read(deviceZoneProvider).value;
+    return at == null || zone == null ? null : (at: at, zone: zone);
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _date,
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked == null || DateUtils.isSameDay(picked, _date)) return;
+    setState(() {
+      _date = picked;
+      _occurredAt = null;
+      _zone = null;
+    });
+  }
+
+  /// A time picked on this device's clock happened in this device's zone.
+  Future<void> _pickTime(String device) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(
+        _occurredAt?.toLocal() ?? DateTime.now(),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _occurredAt = DateTime(
+        _date.year,
+        _date.month,
+        _date.day,
+        picked.hour,
+        picked.minute,
+      ).toUtc();
+      _zone = device;
+    });
+  }
+
   /// Dates already asked for, so a rebuild does not re-ask.
-  ///
-  /// The server deduplicates too, but a widget that fires a request on every
-  /// keystroke is wrong regardless of who absorbs it.
   final _requestedRates = <String>{};
 
   void _requestRate(DateTime asOf, String currency) {
-    if (!_requestedRates.add('${_isoDay(asOf)}|$currency')) return;
+    final day = calendarDate(asOf);
+    if (!_requestedRates.add('$day|$currency')) return;
 
-    final api = ref.read(remoteLedgerApiProvider);
-    if (api == null) return;
-    // Deliberately not awaited: this must not delay a frame or a save. The
-    // implementation swallows its own failures, because a missing rate costs an
-    // estimate and nothing more.
-    unawaited(api.requestFxBackfill(asOf: asOf, currency: currency));
+    // Not awaited: this must not delay a frame or a save.
+    ref
+        .read(syncEngineProvider)
+        ?.shared
+        .requestBackfill(asOf, currency)
+        .ignore();
   }
-
-  /// The rate's publication date, kept with the source so a stored snapshot
-  /// says both who published it and for which day.
-  static String _isoDay(DateTime date) =>
-      '${date.year.toString().padLeft(4, '0')}-'
-      '${date.month.toString().padLeft(2, '0')}-'
-      '${date.day.toString().padLeft(2, '0')}';
 
   Future<void> _delete() async {
     final confirmed = await showDialog<bool>(
@@ -389,6 +425,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
   @override
   Widget build(BuildContext context) {
     final ledger = ref.watch(groupLedgerProvider(widget.groupId));
+    final device = ref.watch(deviceZoneProvider).value;
     final currencies = ref.watch(currenciesProvider).value ?? const {};
 
     if (ledger == null) {
@@ -399,15 +436,6 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
     final totalMinor = currency?.parseToMinor(_amount.text);
 
     // The rate as it stood on the ENTRY's date, not today's.
-    //
-    // A dinner backdated to last Tuesday was worth what it was worth last
-    // Tuesday. Stamping it with today's rate would restate history every time
-    // someone recorded an old expense, and would quietly disagree with the same
-    // expense entered on the day.
-    //
-    // Resolved here rather than in _save so saving never waits on a lookup, and
-    // re-resolved when the date picker changes because the date is part of the
-    // question.
     final target = ledger.group.defaultCurrency;
     FxQuote? fx;
     if (currency != null && currency.code != target) {
@@ -418,12 +446,6 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
       // Nothing local can price this date, so ask the server: the rate lands on
       // a later sync and the entry saves without a snapshot in the meantime,
       // which the schema allows.
-      //
-      // A listener, not a line in the body — this is a network call, and a
-      // build must not make one. It still fires exactly when it should: a
-      // FutureProvider always goes loading, then data, and changing the date or
-      // the currency asks a different provider instance which makes that
-      // transition of its own.
       final code = currency.code;
       ref.listen(quote, (_, next) {
         if (next.isLoading || next.value != null) return;
@@ -509,15 +531,15 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
               leading: const Icon(Icons.event_outlined),
               title: Text(DateFormat.yMMMEd().format(_date)),
               trailing: const Icon(Icons.edit_calendar_outlined),
-              onTap: () async {
-                final picked = await showDatePicker(
-                  context: context,
-                  initialDate: _date,
-                  firstDate: DateTime(2000),
-                  lastDate: DateTime.now().add(const Duration(days: 365)),
-                );
-                if (picked != null) setState(() => _date = picked);
-              },
+              onTap: _pickDate,
+            ),
+            _TimeRow(
+              shown: _occurredAt?.toLocal(),
+              onPick: device == null ? null : () => _pickTime(device),
+              onClear: () => setState(() {
+                _occurredAt = null;
+                _zone = null;
+              }),
             ),
             const Divider(height: 32),
             _PayerSection(
@@ -742,9 +764,6 @@ class _SplitSection extends StatelessWidget {
   final VoidCallback onAmountEdited;
 
   /// The weight for [memberId], nudged by [by] and never below zero.
-  ///
-  /// Zero is legitimate — somebody present who owes nothing for this bill — so
-  /// the floor is zero rather than one.
   Map<String, int> _nudge(String memberId, int by) {
     final next = {...shares};
     next[memberId] = ((next[memberId] ?? 1) + by).clamp(0, 1 << 30);
@@ -752,9 +771,6 @@ class _SplitSection extends StatelessWidget {
   }
 
   /// A live preview of what each person ends up owing.
-  ///
-  /// Runs the real allocator, not an approximation, so the rounding shown here
-  /// is the rounding that gets stored.
   Map<String, int>? _preview() {
     if (currency == null || totalMinor == null || totalMinor! <= 0) return null;
     if (participants.isEmpty) return null;
@@ -873,7 +889,8 @@ class _SplitSection extends StatelessWidget {
                       ),
                     ],
                   ),
-                  SplitKind.equal => const SizedBox.shrink(),
+                  SplitKind.equal ||
+                  SplitKind.unknownDefaultOpenApi => const SizedBox.shrink(),
                 },
             ],
           ),
@@ -883,10 +900,6 @@ class _SplitSection extends StatelessWidget {
 }
 
 /// Picks a category from the fixed global list.
-///
-/// Optional on purpose: forcing a choice before an expense can be saved would
-/// put a decision in front of the one action that has to stay instant. There is
-/// no "add your own" — see [Category].
 class _CategoryPicker extends ConsumerWidget {
   const _CategoryPicker({required this.value, required this.onChanged});
 
@@ -933,11 +946,6 @@ class _CategoryPicker extends ConsumerWidget {
 }
 
 /// What has already happened to this expense.
-///
-/// Shown beside the fields rather than only in the group feed, because this is
-/// where somebody stands when they wonder why a number is not what they
-/// remember. Editing in place keeps the balance arithmetic simple; this is what
-/// keeps it honest.
 class _History extends ConsumerWidget {
   const _History({required this.entryId, required this.ledger});
 
@@ -990,6 +998,46 @@ class _History extends ConsumerWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// When on the day it happened: optional, and cleared or changed here.
+class _TimeRow extends StatelessWidget {
+  const _TimeRow({
+    required this.shown,
+    required this.onPick,
+    required this.onClear,
+  });
+
+  /// On this device's clock. Null when no time is recorded.
+  final DateTime? shown;
+
+  /// Null until this device's zone is known.
+  final VoidCallback? onPick;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = this.shown;
+    final theme = Theme.of(context);
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: const Icon(Icons.schedule_outlined),
+      title: shown == null
+          ? Text(
+              'Add a time',
+              style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+            )
+          : Text(DateFormat.jm().format(shown)),
+      trailing: shown == null
+          ? null
+          : IconButton(
+              tooltip: 'Remove the time',
+              onPressed: onClear,
+              icon: const Icon(Icons.close),
+            ),
+      onTap: onPick,
     );
   }
 }

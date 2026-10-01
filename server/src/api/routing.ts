@@ -1,0 +1,91 @@
+import { z } from "@hono/zod-openapi";
+import type { Context } from "hono";
+
+import { requireSession, withSession } from "../context";
+import { kindOf, type Refusal, type Result, statusFor } from "../do/group/refusal";
+import { apiError, errorResponse, IdSchema } from "../schemas/common";
+
+/** What every route module shares: session guards, addressing, and how a refusal becomes a response. */
+
+type Security = Record<string, string[]>[];
+
+/** A bearer token on Android, the HttpOnly session cookie on the web. */
+const session: Security = [{ bearer: [] }, { cookie: [] }];
+
+/** Spread into a route that requires a session. */
+export const signedIn = { middleware: requireSession, security: session };
+
+/** Spread into a route that reads the session when there is one. */
+export const maybeSignedIn = { middleware: withSession, security: [{}, ...session] as Security };
+
+/** Coerced, because a query parameter is a string. */
+export const SeqQuerySchema = z.coerce.number().int().nonnegative().openapi({ type: "integer", example: 412 });
+
+export const GroupPathSchema = z.object({
+  groupId: IdSchema.openapi({ param: { name: "groupId", in: "path" } }),
+});
+
+export const EntryPathSchema = GroupPathSchema.extend({
+  entryId: IdSchema.openapi({ param: { name: "entryId", in: "path" } }),
+});
+
+export const MemberPathSchema = GroupPathSchema.extend({
+  memberId: IdSchema.openapi({ param: { name: "memberId", in: "path" } }),
+});
+
+export const TokenPathSchema = z.object({
+  token: IdSchema.openapi({ param: { name: "token", in: "path" } }),
+});
+
+/**
+ * Every refusal a group object can give, on every route that reaches one. Not
+ * `as const`: zod-openapi cannot read readonly responses when typing a handler.
+ */
+export const refusals = {
+  400: errorResponse("The request is malformed."),
+  401: errorResponse("No session."),
+  403: errorResponse("You are not a member of this group, or not allowed to change that."),
+  404: errorResponse("No such group, entry, member or link."),
+  409: errorResponse("The request conflicts with the group's current state. Read `error.retry` before retrying."),
+  410: errorResponse("The group was collected, or the link has expired."),
+  422: errorResponse("The expense does not add up."),
+};
+
+/** Every route that spends a rate limit answers this when the limit is spent. */
+export const rateLimited = { 429: errorResponse("Too many attempts. Wait a minute and try again.") };
+
+type WorkerEnv = { Bindings: Env };
+
+/** The client's address. Cloudflare always sets it; only a test calling the Worker directly omits it. */
+export function clientIp<E extends WorkerEnv>(c: Context<E>): string {
+  return c.req.header("cf-connecting-ip") ?? "unknown";
+}
+
+/**
+ * Spends one unit of each limit and says whether any was already exhausted.
+ * Approximate and counted per Cloudflare location: a brake on abuse, not an
+ * accounting system.
+ */
+export async function exhausted(...limits: [RateLimit, string][]): Promise<boolean> {
+  for (const [limiter, key] of limits) {
+    if (!(await limiter.limit({ key })).success) return true;
+  }
+  return false;
+}
+
+export function tooMany<E extends WorkerEnv>(c: Context<E>) {
+  return c.json(apiError("rate_limited", "Too many attempts. Wait a minute and try again.", "transient"), 429);
+}
+
+export function respond<T extends object, E extends WorkerEnv>(c: Context<E>, result: Result<T>) {
+  return result.ok ? c.json(result.value, 200) : refused(c, result.error);
+}
+
+export function refused<E extends WorkerEnv>(c: Context<E>, { code, message }: Refusal) {
+  return c.json(apiError(code, message, kindOf(code)), statusFor(code));
+}
+
+/** The group's object, addressed by the id the client minted. */
+export function group<E extends WorkerEnv>(c: Context<E>, groupId: string) {
+  return c.env.GROUP.getByName(groupId);
+}

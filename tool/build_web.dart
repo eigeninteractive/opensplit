@@ -10,6 +10,10 @@
 // --base-href is what keeps the Dart side unaware of the split: Flutter's path
 // URL strategy resolves routes after the base, so go_router still sees
 // `/g/123` while the browser shows `/app/g/123`, and no route constant moves.
+//
+// `build/web` is also the Worker's `assets.directory`, so this is what stands
+// between a deploy and an empty origin: one command produces the whole front
+// end, and `wrangler deploy` uploads it alongside the script as one version.
 
 import 'dart:convert';
 import 'dart:io';
@@ -21,6 +25,13 @@ Future<void> main(List<String> args) async {
   final parser = ArgParser()
     ..addOption('config', defaultsTo: 'env/app.json')
     ..addOption('build-id')
+    ..addFlag(
+      'site-only',
+      negatable: false,
+      help:
+          'Build only the static root, skipping the Flutter client. Seconds '
+          'rather than minutes, and needs no Flutter toolchain.',
+    )
     ..addFlag('help', abbr: 'h', negatable: false);
   try {
     final options = parser.parse(args);
@@ -32,7 +43,11 @@ Future<void> main(List<String> args) async {
       stdout.writeln(parser.usage);
       return;
     }
-    await _build(options.option('config')!, options.option('build-id'));
+    await _build(
+      options.option('config')!,
+      options.option('build-id'),
+      siteOnly: options.flag('site-only'),
+    );
   } on FormatException catch (error) {
     stderr.writeln(error.message);
     stderr.writeln(parser.usage);
@@ -43,40 +58,85 @@ Future<void> main(List<String> args) async {
   }
 }
 
-Future<void> _build(String configPath, String? requestedBuildId) async {
+/// Builds `build/web`, which is both the deployable bundle and the Worker's
+/// assets directory.
+///
+/// [siteOnly] leaves out the Flutter client. That mode exists because the
+/// Worker cannot start without an assets directory — `wrangler dev` refuses
+/// outright — and requiring a two-minute Flutter build before anyone can run
+/// the server would be a strange price for editing a route handler. What it
+/// produces is not a stub: the static root and `_headers` are exactly what
+/// ships, so the part of the serving layer that lives in that file can be
+/// tested against a real Worker. Only `/app/` is missing, and a request for it
+/// answers 404 rather than pretending.
+Future<void> _build(
+  String configPath,
+  String? requestedBuildId, {
+  bool siteOnly = false,
+}) async {
   final buildId = await _buildId(requestedBuildId);
 
-  await _run('dart', [
-    'run',
-    'tool/verify_config.dart',
-    '--config=$configPath',
-  ]);
+  if (!siteOnly) {
+    await _run('dart', [
+      'run',
+      'tool/verify_config.dart',
+      '--config=$configPath',
+    ]);
+  }
   // Cleared wholesale rather than letting the Flutter build clear its own
   // output: it only owns build/web/app, so a file left at the root by an
   // earlier layout would survive and outrank the page meant to be there.
   final output = Directory('build/web');
   if (output.existsSync()) output.deleteSync(recursive: true);
 
-  await _run('flutter', [
-    'build',
-    'web',
-    '--wasm',
-    '--no-web-resources-cdn',
-    '--release',
-    '--base-href=/app/',
-    // Absolute, which is what --output requires.
-    '--output=${Directory.current.path}/build/web/app',
-    '--dart-define-from-file=$configPath',
-  ]);
+  if (!siteOnly) {
+    await _run('flutter', [
+      'build',
+      'web',
+      '--wasm',
+      '--no-web-resources-cdn',
+      '--release',
+      '--base-href=/app/',
+      // Absolute, which is what --output requires.
+      '--output=${Directory.current.path}/build/web/app',
+      '--dart-define-from-file=$configPath',
+    ]);
+  }
+
+  _copyInto(Directory('site'), output);
+  _checkServingRules(output);
+
+  if (siteOnly) {
+    stdout.writeln('Static root only — no Flutter client in this bundle.');
+    stdout.writeln('  /      static site from site/');
+    stdout.writeln('  /app/  MISSING. Do not deploy this.');
+    return;
+  }
 
   final config =
       jsonDecode(File(configPath).readAsStringSync()) as Map<String, dynamic>;
-  _copyInto(Directory('site'), output);
   final cacheId = finalizeWebBundle(output, config, buildId: buildId);
 
   stdout.writeln('Production web bundle ready (build $cacheId).');
   stdout.writeln('  /      static site from site/');
   stdout.writeln('  /app/  Flutter client');
+}
+
+/// Fails if the file that configures response headers did not reach the bundle.
+///
+/// Cloudflare parses `_headers` from the root of the assets directory and never
+/// serves it, which means its absence produces no 404 and no error anywhere —
+/// the site simply comes back without cross-origin isolation, and the client's
+/// database stops working in a way that looks like a Flutter bug. It is copied
+/// from `site/`, so the way to lose it is a copy that skips names beginning
+/// with an underscore.
+void _checkServingRules(Directory output) {
+  if (!File('${output.path}/_headers').existsSync()) {
+    throw StateError(
+      '_headers did not reach ${output.path}. Cloudflare reads it from the '
+      'root of the assets directory, and its absence is silent.',
+    );
+  }
 }
 
 /// Injects public push configuration and a complete, content-addressed cache.

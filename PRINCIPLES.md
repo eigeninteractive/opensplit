@@ -37,12 +37,17 @@ A hosted tier, a one-time purchase, sponsorship — all legitimate. A feature
 gate is not. The test is simple: does paying make something *easier*, or does
 not paying make something *impossible*? Only the first is allowed.
 
-### 6. Self-hosting is a first-class path, not a courtesy
+### 6. You can always leave, and take everything with you
 
-`docker compose up` gives you a working instance in under fifteen minutes. The
-backend is deliberately thin — it stores rows and enforces one invariant, and
-computes nothing — so that replacing it is a weekend's work rather than a
-reimplementation. Every release is tested against a self-hosted instance.
+The journal is yours and it is already on your device: plain SQLite, exported to
+CSV whenever you ask. The backend stores rows and enforces one invariant; every
+number you see is computed on your device from data you already hold. The client
+is generated from a published OpenAPI contract (`docs/openapi.json`), so a fork
+points at a different server by serving that contract and changing one URL.
+
+The backend itself runs on Cloudflare Durable Objects, D1 and KV, which you
+cannot run yourself. There is no self-host path and we will not imply one with a
+portability layer nobody tests.
 
 ### 7. The app survives this project being abandoned
 

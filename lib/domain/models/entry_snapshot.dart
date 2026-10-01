@@ -1,195 +1,28 @@
-import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:opensplit_api/opensplit_api.dart' as api;
 
-import '../split/splitter.dart';
+import '../calendar_date.dart';
 import 'entry.dart';
 
-part 'entry_snapshot.freezed.dart';
-
-/// One member's stake in a snapshot: what they put in, or what they owe.
-///
-/// Deliberately not [EntryPayer] or [EntryShare]. Those carry the live
-/// entry's structure -- a share knows the weight rule that produced it -- and a
-/// snapshot is a photograph, not a thing to recompute from. Reusing them would
-/// invite exactly that.
-@freezed
-abstract class MemberAmount with _$MemberAmount {
-  const factory MemberAmount({
-    required String memberId,
-    required int amountMinor,
-  }) = _MemberAmount;
-}
-
-/// What an expense looked like at one moment, and who had just changed it.
-///
-/// Written by the server, in the same transaction as the change, and never
-/// revised. The activity feed is the difference between consecutive snapshots,
-/// computed by whoever reads them -- see `describeSnapshot`.
-///
-/// The device writes its own [isProvisional] snapshot as well, so the feed
-/// works offline and as a guest. That one is never pushed and is dropped as
-/// soon as the server's account of the same expense arrives.
-///
-/// Nothing is ever rebuilt from these. Balances read entries, and only entries.
-@freezed
-abstract class EntrySnapshot with _$EntrySnapshot {
-  const factory EntrySnapshot({
-    required String id,
-    required String entryId,
-    required String groupId,
-
-    /// The member who made the change, not the account: authorship is
-    /// group-scoped, so a placeholder's edits survive them claiming an account.
-    ///
-    /// Null when the change came from something with no member row at all. A
-    /// change nobody can be named for still has to be on the record; silence
-    /// would be the worse answer.
-    required String? actorId,
-    required DateTime createdAt,
-    required String description,
-    required String currency,
-    required int amountMinor,
-    required DateTime entryDate,
-    required SplitKind splitKind,
-    String? categoryId,
-    String? notes,
-
-    /// Set once the expense is soft-deleted. What makes "deleted" and
-    /// "restored" readable off the chain without a column asserting them.
-    DateTime? deletedAt,
-    @Default(<MemberAmount>[]) List<MemberAmount> payers,
-    @Default(<MemberAmount>[]) List<MemberAmount> shares,
-
-    /// Written by this device and not yet replaced by the server's account of
-    /// the same expense. Local only; there is no such column on the server.
-    @Default(false) bool isProvisional,
-  }) = _EntrySnapshot;
-}
-
-/// The snapshot this device would record for [entry], right now.
-///
-/// Used only for the provisional row. The authoritative one is taken by the
-/// server, from the row it actually committed.
-EntrySnapshot snapshotOf(
-  Entry entry, {
-  required String id,
-  required String? actorId,
-  required DateTime at,
-}) => EntrySnapshot(
-  id: id,
-  entryId: entry.id,
-  groupId: entry.groupId,
-  actorId: actorId,
-  createdAt: at,
-  description: entry.description,
-  currency: entry.currency,
-  amountMinor: entry.amountMinor,
-  entryDate: entry.entryDate,
-  splitKind: entry.splitKind,
-  categoryId: entry.categoryId,
-  notes: entry.notes,
-  deletedAt: entry.deletedAt,
-  payers: [
+/// The after-image the server records for [entry], computed on the device.
+api.EntrySnapshot snapshotOf(Entry entry) => api.EntrySnapshot(
+  kind: entry.row.kind,
+  description: entry.row.description,
+  currency: entry.row.currency,
+  amountMinor: entry.row.amountMinor,
+  entryDate: calendarDate(entry.row.entryDate),
+  splitKind: entry.row.splitKind,
+  categoryId: entry.row.categoryId,
+  notes: entry.row.notes,
+  deletedAt: entry.row.deletedAt?.toUtc(),
+  payers: _sorted([
     for (final payer in entry.payers)
-      MemberAmount(memberId: payer.memberId, amountMinor: payer.amountMinor),
-  ]..sort((a, b) => a.memberId.compareTo(b.memberId)),
-  shares: [
+      api.MoneyRow(memberId: payer.memberId, amountMinor: payer.amountMinor),
+  ]),
+  shares: _sorted([
     for (final share in entry.shares)
-      MemberAmount(memberId: share.memberId, amountMinor: share.amountMinor),
-  ]..sort((a, b) => a.memberId.compareTo(b.memberId)),
-  isProvisional: true,
+      api.MoneyRow(memberId: share.memberId, amountMinor: share.amountMinor),
+  ]),
 );
 
-/// Reads an `entry` event's payload back into a snapshot.
-///
-/// The inverse of [snapshotPayload], and the two are deliberately adjacent: a
-/// field added to one and forgotten in the other is the bug this pairing exists
-/// to make obvious. The keys are the server's, spelled exactly as
-/// `snapshot_entry` builds them.
-EntrySnapshot snapshotFromPayload({
-  required String id,
-  required String entryId,
-  required String groupId,
-  required String? actorId,
-  required DateTime createdAt,
-  required Map<String, Object?> payload,
-  bool isProvisional = false,
-}) => EntrySnapshot(
-  id: id,
-  entryId: entryId,
-  groupId: groupId,
-  actorId: actorId,
-  createdAt: createdAt,
-  description: payload['description'] as String? ?? '',
-  currency: payload['currency'] as String? ?? '',
-  amountMinor: (payload['amount_minor'] as num?)?.toInt() ?? 0,
-  entryDate: DateTime.parse(payload['entry_date'] as String),
-  splitKind: SplitKind.values.byName(payload['split_kind'] as String),
-  categoryId: payload['category_id'] as String?,
-  notes: payload['notes'] as String?,
-  deletedAt: payload['deleted_at'] == null
-      ? null
-      : DateTime.parse(payload['deleted_at'] as String),
-  payers: _amounts(payload['payers']),
-  shares: _amounts(payload['shares']),
-  isProvisional: isProvisional,
-);
-
-/// The payload this device would write for [snapshot].
-///
-/// Used for the provisional row only. The authoritative one is built by
-/// `snapshot_entry` in the same transaction as the change, and this has to
-/// produce the identical shape — a provisional row and the server's account of
-/// the same change are compared by nothing, but they are rendered by the same
-/// code, and a key spelled differently here would surface as a feed line that
-/// changed its mind when the sync landed.
-///
-/// `deleted_at` is written in UTC with a trailing Z, matching what
-/// `snapshot_entry` renders. A local-time string would be the same instant said
-/// differently, which is exactly the ambiguity the server side canonicalises
-/// away.
-///
-/// `entry_date` is deliberately NOT converted: it is a calendar date rather
-/// than an instant, and pushing it through UTC would move it to the previous
-/// day for anybody east of Greenwich.
-Map<String, Object?> snapshotPayload(EntrySnapshot snapshot) => {
-  'description': snapshot.description,
-  'currency': snapshot.currency,
-  'amount_minor': snapshot.amountMinor,
-  'entry_date': _calendarDate(snapshot.entryDate),
-  'split_kind': snapshot.splitKind.name,
-  'category_id': snapshot.categoryId,
-  'notes': snapshot.notes,
-  'deleted_at': snapshot.deletedAt?.toUtc().toIso8601String(),
-  'payers': [
-    for (final row in snapshot.payers)
-      {'member_id': row.memberId, 'amount_minor': row.amountMinor},
-  ],
-  'shares': [
-    for (final row in snapshot.shares)
-      {'member_id': row.memberId, 'amount_minor': row.amountMinor},
-  ],
-};
-
-/// `YYYY-MM-DD`, from the date's own fields rather than from any timezone.
-String _calendarDate(DateTime date) =>
-    '${date.year.toString().padLeft(4, '0')}-'
-    '${date.month.toString().padLeft(2, '0')}-'
-    '${date.day.toString().padLeft(2, '0')}';
-
-/// `[{"member_id": "...", "amount_minor": 40000}, ...]`.
-///
-/// Sorted on the way in as well as out. The server orders by member id when it
-/// builds the array so two snapshots of an unchanged split compare equal there;
-/// sorting here too means a locally written provisional row and the server's
-/// account of the same change diff identically.
-List<MemberAmount> _amounts(Object? raw) {
-  if (raw is! List) return const [];
-  return [
-    for (final row in raw)
-      if (row is Map)
-        MemberAmount(
-          memberId: row['member_id'] as String,
-          amountMinor: (row['amount_minor'] as num).toInt(),
-        ),
-  ]..sort((a, b) => a.memberId.compareTo(b.memberId));
-}
+List<api.MoneyRow> _sorted(List<api.MoneyRow> rows) =>
+    rows..sort((a, b) => a.memberId.compareTo(b.memberId));

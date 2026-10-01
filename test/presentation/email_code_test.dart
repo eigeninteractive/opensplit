@@ -1,12 +1,13 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:opensplit/application/providers.dart';
-import 'package:opensplit/domain/repositories/auth_service.dart';
+import 'package:opensplit/application/session_providers.dart';
+import 'package:opensplit/domain/auth_service.dart';
 import 'package:opensplit/presentation/widgets/account_section.dart';
 import 'package:opensplit/presentation/widgets/identity_choices.dart';
+import 'package:opensplit_api/opensplit_api.dart' show Account, EmailFlow;
 
-const _guest = Account(id: 'guest', isAnonymous: true);
+final _guest = Account(id: 'guest', isAnonymous: true, email: null);
 
 void main() {
   for (final linking in [false, true]) {
@@ -63,12 +64,6 @@ void main() {
 }
 
 /// What [_EmailController] was asked to do, kept off the notifier itself.
-///
-/// A notifier's public surface is supposed to be `state` and nothing else, and
-/// a spy's recorded calls are the one thing that cannot go there — they are
-/// what the test asserts on, not what the app renders. Holding them in a plain
-/// object beside it satisfies both: the notifier exposes one final field, and
-/// the recording stays readable.
 class _Recorded {
   String? email;
   String? code;
@@ -94,6 +89,6 @@ class _EmailController extends AccountController {
       ..email = email
       ..code = code
       ..verifiedFlow = flow;
-    return const SessionKept(account: _guest);
+    return SessionKept(account: _guest);
   }
 }

@@ -6,7 +6,6 @@ import 'package:flutter/foundation.dart';
 
 import '../data/sync/sync_engine.dart';
 
-/// The freshness of this session's local view of the account.
 @immutable
 class SyncStatus {
   const SyncStatus({
@@ -17,78 +16,100 @@ class SyncStatus {
     this.retryAt,
   });
 
-  /// Whether an authenticated backend is available.
   final bool enabled;
-
-  /// Whether a foreground sync or its queued follow-up is running.
   final bool isSyncing;
-
-  /// Whether discovery and all group pulls succeeded during this session.
   final bool hasCompletedFullSync;
-
-  /// The most recent operation's result, including refused writes.
   final SyncReport? lastReport;
 
-  /// The next automatic attempt, if any.
+  /// When the next automatic attempt is due, if one is scheduled.
   final DateTime? retryAt;
 
-  /// The failure that prevents claiming the local view is current.
   Object? get error => lastReport?.error;
 }
 
-/// Coordinates foreground synchronization for one account.
-///
-/// Screens, lifecycle events and push wakes share this coordinator. Requests
-/// arriving during a run are coalesced into a follow-up, not dropped: a new
-/// local write may have missed that run's push phase. Database leases in the
-/// engine separately protect against background isolates and other tabs.
+/// Decides when to sync, runs one sync at a time, and reports status.
 class SyncCoordinator extends ChangeNotifier {
   SyncCoordinator({
     required this._syncAll,
     required this._syncGroup,
+    this._online = const Stream.empty(),
+    this._writes = const Stream.empty(),
     DateTime Function()? clock,
+    this.minimumGap = const Duration(minutes: 2),
+    this.writeDelay = const Duration(seconds: 1),
   }) : _clock = clock ?? DateTime.now;
 
   final Future<SyncReport> Function() _syncAll;
   final Future<SyncReport> Function(String) _syncGroup;
+  final Stream<bool> _online;
+  final Stream<void> _writes;
   final DateTime Function() _clock;
+  final Duration minimumGap;
+  final Duration writeDelay;
+
   final _pendingGroups = <String>{};
+  final _subscriptions = <StreamSubscription<Object?>>[];
   bool _allPending = false;
   bool _disposed = false;
   int _failures = 0;
+  DateTime? _lastStarted;
   Future<void>? _active;
   Timer? _retry;
+  Timer? _writeTimer;
   SyncStatus _status = const SyncStatus();
 
-  /// The current immutable snapshot observed by the UI.
   SyncStatus get status => _status;
 
-  /// Refreshes the account, including groups this device has never seen.
+  /// Listens for triggers and syncs what happened while the app was closed.
+  void start() {
+    if (_disposed || _subscriptions.isNotEmpty) return;
+    _subscriptions
+      ..add(
+        _online.listen((isOnline) {
+          if (isOnline) resumed();
+        }),
+      )
+      ..add(_writes.listen((_) => _writeQueued()));
+    unawaited(syncAll());
+  }
+
+  /// The app came back to the foreground, or the network came back.
+  void resumed() {
+    final last = _lastStarted;
+    if (last != null && _clock().difference(last) < minimumGap) return;
+    unawaited(syncAll());
+  }
+
   Future<void> syncAll() {
     if (_disposed) return Future.value();
     _allPending = true;
-    return _start();
+    return _begin();
   }
 
-  /// Refreshes a group, or the account if it has not synced or needs recovery.
+  /// One group, unless nothing has synced cleanly yet: then everything.
   Future<void> syncGroup(String groupId) {
     if (_disposed) return Future.value();
     if (!_status.hasCompletedFullSync || _status.error != null) {
       return syncAll();
     }
     _pendingGroups.add(groupId);
-    return _start();
+    return _begin();
   }
 
-  Future<void> _start() {
+  void _writeQueued() {
+    if (_disposed) return;
+    _writeTimer?.cancel();
+    _writeTimer = Timer(writeDelay, () => unawaited(syncAll()));
+  }
+
+  Future<void> _begin() {
     _retry?.cancel();
     final active = _active;
     if (active != null) return active;
     final completed = Completer<void>();
     _active = completed.future;
-    // Batch this event's triggers and publish status asynchronously. A screen
-    // opening can request sync during build; it must not mutate another
-    // widget's observed state while that frame is still being constructed.
+    // A screen can ask for a sync during build; status must not change
+    // underneath a frame that is still being built.
     scheduleMicrotask(() => unawaited(_drain(completed)));
     return completed.future;
   }
@@ -101,6 +122,7 @@ class SyncCoordinator extends ChangeNotifier {
       _allPending = false;
       if (full) {
         _pendingGroups.clear();
+        _lastStarted = _clock();
       } else {
         _pendingGroups.remove(groupId);
       }
@@ -126,6 +148,9 @@ class SyncCoordinator extends ChangeNotifier {
           error: report.error,
           stackTrace: report.stackTrace,
         );
+        // One failure ends this pass; the retry is a full sync.
+        _allPending = false;
+        _pendingGroups.clear();
       }
       _status = SyncStatus(
         isSyncing: true,
@@ -133,11 +158,6 @@ class SyncCoordinator extends ChangeNotifier {
             _status.hasCompletedFullSync || (full && report.error == null),
         lastReport: report,
       );
-      if (report.error != null) {
-        // One failure ends this sweep. A full retry covers queued group pulls.
-        _allPending = false;
-        _pendingGroups.clear();
-      }
     }
     _active = null;
     if (!_disposed) _scheduleRetry();
@@ -161,9 +181,7 @@ class SyncCoordinator extends ChangeNotifier {
         );
       }
     }
-    if (delay != null) {
-      _retry = Timer(delay, () => unawaited(syncAll()));
-    }
+    if (delay != null) _retry = Timer(delay, () => unawaited(syncAll()));
     _setStatus(
       isSyncing: false,
       retryAt: delay == null ? null : _clock().add(delay),
@@ -184,6 +202,10 @@ class SyncCoordinator extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _retry?.cancel();
+    _writeTimer?.cancel();
+    for (final subscription in _subscriptions) {
+      unawaited(subscription.cancel());
+    }
     super.dispose();
   }
 }

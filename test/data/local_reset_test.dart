@@ -2,24 +2,14 @@ import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/local/local_reset.dart';
+import 'package:opensplit/data/local/tables.dart';
 import 'package:opensplit/data/sync/outbox_queue.dart';
-import 'package:opensplit/domain/models/entry.dart';
-import 'package:opensplit/domain/split/splitter.dart';
+import 'package:opensplit_api/opensplit_api.dart' as api;
 import 'package:test/test.dart';
 
 import '../harness.dart';
 
 /// Signing out has to actually clear the device.
-///
-/// This exists because it did not. `entry_events` was missing from the list,
-/// its references declared no ON DELETE action, and so `delete from entries`
-/// failed on a foreign key — which meant sign-out threw, and account deletion
-/// threw *after* the server had already removed the account, leaving somebody
-/// told their deletion failed when it had not.
-///
-/// The device only holds activity rows once it has synced a group with an
-/// expense in it, which is why nothing caught this: every path that creates
-/// them is a server round trip.
 void main() {
   late AppDatabase db;
   final now = DateTime.utc(2026, 8, 26);
@@ -68,14 +58,13 @@ void main() {
           EntriesCompanion.insert(
             id: 'e1',
             groupId: 'g1',
-            kind: EntryKind.expense,
+            kind: api.EntryKind.expense,
             currency: 'INR',
             amountMinor: 40000,
             entryDate: now,
-            splitKind: SplitKind.equal,
+            splitKind: api.SplitKind.equal,
             createdBy: 'm1',
             createdAt: now,
-            updatedAt: now,
           ),
         );
     await db
@@ -104,20 +93,17 @@ void main() {
             groupId: 'g1',
             actorId: const Value('m1'),
             createdAt: now,
-            kind: 'entry',
+            kind: api.EventKind.groupRenamed,
             subjectId: const Value('e1'),
-            payload:
-                '{"description":"Dinner","currency":"INR",'
-                '"amount_minor":40000,"entry_date":"2026-08-21",'
-                '"split_kind":"equal",'
-                '"payers":[{"member_id":"m1","amount_minor":40000}],'
-                '"shares":[{"member_id":"m1","amount_minor":40000}]}',
+            group: Value(
+              api.GroupEventPayload(name: 'Goa', previousName: null),
+            ),
           ),
         );
     await db
-        .into(db.syncCursors)
+        .into(db.groupCursors)
         .insert(
-          SyncCursorsCompanion.insert(feed: 'entries:g1', cursor: Value(now)),
+          GroupCursorsCompanion.insert(groupId: 'g1', seq: const Value(7)),
         );
     await OutboxQueue(db).enqueue(OutboxTarget.entry, 'e1');
   }
@@ -140,7 +126,7 @@ void main() {
     );
     expect(await db.select(db.profiles).get(), isEmpty);
     expect(await db.select(db.outbox).get(), isEmpty);
-    expect(await db.select(db.syncCursors).get(), isEmpty);
+    expect(await db.select(db.groupCursors).get(), isEmpty);
   });
 
   test('reference data survives, because it belongs to no account', () async {

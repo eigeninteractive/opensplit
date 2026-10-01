@@ -4,7 +4,61 @@ updates:
     directory: /
     schedule:
       interval: weekly
+
   - package-ecosystem: bundler
     directory: /
     schedule:
       interval: weekly
+
+  # The Worker. Better Auth and Wrangler both move fast, and CI installs
+  # exactly what pnpm-lock.yaml says (`--frozen-lockfile`), so nothing notices a
+  # version going stale until something breaks. The `npm` ecosystem is also
+  # Dependabot's name for pnpm; it reads and updates pnpm-lock.yaml.
+  - package-ecosystem: npm
+    directory: /server
+    schedule:
+      interval: weekly
+    groups:
+      # Packages released in lockstep, each set one pull request so they never
+      # disagree: drizzle-kit 1.x generates for exactly its drizzle-orm, and
+      # the drizzle adapter is part of Better Auth's release, as is its CLI.
+      # Listed before `toolchain`, which would otherwise claim the dev halves.
+      drizzle:
+        patterns:
+          - drizzle-orm
+          - drizzle-kit
+      better-auth:
+        patterns:
+          - better-auth
+          - "@better-auth/*"
+          - auth
+      # One pull request for the toolchain, which moves constantly and whose
+      # updates are only ever interesting together: biome, vitest and the test
+      # pool have to agree with each other, and wrangler decides what the
+      # generated Env types look like.
+      toolchain:
+        dependency-type: development
+    # Every other runtime dependency is deliberately ungrouped and arrives on
+    # its own. Hono owns routing and Zod owns validation, and each is worth
+    # reading a changelog for on its own rather than in a batch of five --
+    # which is also why the two lockstep groups above are kept apart.
+
+  # The Flutter app. Separate from the Worker so a Dart bump and a Node bump
+  # are never the same pull request; they are reviewed by reading different
+  # things and break in different jobs.
+  - package-ecosystem: pub
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      codegen:
+        # build_runner and the generators it drives are version-locked to each
+        # other in practice: bumping freezed without build_runner produces an
+        # analyzer error in generated code rather than a clean failure.
+        patterns:
+          - build_runner
+          - build_*
+          - freezed*
+          - json_serializable
+          - riverpod_generator
+          - drift_dev

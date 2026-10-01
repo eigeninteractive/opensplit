@@ -4,18 +4,13 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../local/database.dart';
-import 'sync_gate_contract.dart';
+import 'sync_gate.dart';
 
 /// Creates a gate shared by native connections to [database].
 SyncGate createPlatformSyncGate(AppDatabase database) =>
     SqliteSyncGate(database);
 
 /// Serializes native isolates with an expiring SQLite lease.
-///
-/// Android background messages open a second connection and share no Dart
-/// memory with the foreground app. A persisted lease is therefore required,
-/// but renewal failure belongs to the current run only. A later run gets a
-/// clean attempt.
 class SqliteSyncGate implements SyncGate {
   SqliteSyncGate(
     this._database, {
@@ -79,7 +74,12 @@ class SqliteSyncGate implements SyncGate {
 
   Future<void> _renewWhileHeld(String owner, Completer<void> stop) async {
     while (!stop.isCompleted) {
-      await Future.any([Future<void>.delayed(renewalInterval), stop.future]);
+      // A sleep that can actually be cancelled.
+      final tick = Completer<void>();
+      final timer = Timer(renewalInterval, tick.complete);
+      await Future.any([tick.future, stop.future]);
+      timer.cancel();
+
       if (!stop.isCompleted) await _renew(owner);
     }
   }

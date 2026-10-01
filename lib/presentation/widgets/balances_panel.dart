@@ -1,17 +1,18 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:opensplit_api/opensplit_api.dart' show EntryKind;
 
-import '../../application/providers.dart';
-import 'pull_to_sync.dart';
+import '../../application/ledger_providers.dart';
+import '../../data/local/database.dart';
 import '../../domain/balance/member_balance.dart';
 import '../../domain/balance/simplify.dart';
-import '../../domain/models/currency.dart';
 import '../../domain/models/entry.dart';
-import '../format.dart';
+import '../../domain/money_format.dart';
 import '../theme.dart';
 import 'balance_arrow.dart';
+import 'pull_to_sync.dart';
 
 /// Per-currency balances and, when the group wants them, the payments that
 /// would settle it.
@@ -69,9 +70,7 @@ class BalancesPanel extends ConsumerWidget {
           // Above the numbers, because it is about whether to believe them.
           if (!ledger.isCoherent) _IncoherentLedgerCard(ledger: ledger),
           // The estimate leads, the exact per-currency figures follow directly
-          // beneath it. That is the "breakdown one tap away" requirement met
-          // without a tap: the authoritative numbers are never hidden behind the
-          // approximate one.
+          // beneath it.
           _EstimateCard(groupId: ledger.group.id),
           for (final code in ledger.activeCurrencies) ...[
             _CurrencySection(
@@ -110,17 +109,6 @@ class BalancesPanel extends ConsumerWidget {
 }
 
 /// Says plainly that these numbers do not add up.
-///
-/// Reachable only if an entry on this device has payers or shares that disagree
-/// with its own total, which nothing in the app can write — `composeEntry`
-/// cannot build one and `writeEntryInTransaction` refuses to store one.
-///
-/// It exists because of what the alternative looked like. The settlement plan
-/// is derived by matching debtors against creditors, so a journal that does not
-/// sum to zero yields a short plan or none at all — and the group rendered
-/// every member's position perfectly while simply offering no way to settle
-/// them, with nothing on screen or in a release log to say why. A number that
-/// is wrong is recoverable; a number that is wrong and says nothing is not.
 class _IncoherentLedgerCard extends StatelessWidget {
   const _IncoherentLedgerCard({required this.ledger});
 
@@ -175,9 +163,9 @@ class _IncoherentLedgerCard extends StatelessWidget {
                       onPressed: () =>
                           context.push('/g/${ledger.group.id}/e/${entry.id}'),
                       child: Text(
-                        entry.description.isEmpty
+                        entry.row.description.isEmpty
                             ? 'Untitled expense'
-                            : entry.description,
+                            : entry.row.description,
                       ),
                     ),
                 ],
@@ -218,12 +206,6 @@ class _CurrencySection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // "Indian Rupee · INR", not a Chip.
-        //
-        // This was a Chip with its padding zeroed and its density compacted,
-        // which is two overrides to make a component stop looking like itself.
-        // Chips are controls — they carry tap targets, selection and hover —
-        // and this one was never tappable. A section heading that reads as a
-        // button is a small lie; the code is just part of the name.
         Text.rich(
           TextSpan(
             children: [
@@ -303,18 +285,8 @@ class _TransferTile extends StatelessWidget {
         : '$from pays ${transfer.toMemberId == ledger.me?.id ? 'you' : to}';
 
     // One control in `trailing`, which is all a Material list item has room
-    // for. This used to hold a help IconButton and the Settle button side by
-    // side in a Wrap: two targets competing for a slot sized for one, which on
-    // a narrow phone wrapped to a second line and dragged the row out of
-    // alignment with every other row in the card.
-    //
-    // The explanation moves onto the row itself — tapping a list item to see
-    // more about it is the ordinary gesture, and it gives the reasoning a far
-    // bigger target than a 24dp icon. The icon stays as a hint that there is
-    // something to tap, but it is no longer a separate button.
+    // for.
     return Semantics(
-      // The tooltip that used to say this belonged to the help button, which
-      // is gone; the row carries the affordance now, so it carries the words.
       hint: 'Shows how this payment was worked out',
       child: ListTile(
         onTap: () => _explain(context),
@@ -364,11 +336,6 @@ class _TransferTile extends StatelessWidget {
 }
 
 /// Explains where a simplified payment came from.
-///
-/// Simplification can tell you to pay someone you never directly owed, because
-/// it routes the shortest set of payments that clears everyone at once. Left
-/// unexplained that is the single biggest complaint about apps that do this, so
-/// the debt is always traceable back to the individual expenses that built it.
 class _TransferExplanation extends StatelessWidget {
   const _TransferExplanation({
     required this.ledger,
@@ -390,7 +357,7 @@ class _TransferExplanation extends StatelessWidget {
     // amount it moved it by.
     final contributions = <({Entry entry, int delta})>[];
     for (final entry in ledger.entries) {
-      if (entry.currency != transfer.currency) continue;
+      if (entry.row.currency != transfer.currency) continue;
       var delta = 0;
       for (final payer in entry.payers) {
         if (payer.memberId == debtor) delta += payer.amountMinor;
@@ -404,9 +371,7 @@ class _TransferExplanation extends StatelessWidget {
     final name = ledger.nameOf(debtor);
     final isMe = debtor == ledger.me?.id;
 
-    // Lifted out of the widget tree rather than written inline. Down inside the
-    // slivers there are twenty columns of indent before the quote even opens,
-    // which leaves no room to say anything.
+    // Lifted out of the widget tree rather than written inline.
     final rest = transfer.amountMinor == net.abs()
         ? ''
         : ', plus the other suggested payments';
@@ -466,14 +431,14 @@ class _TransferExplanation extends StatelessWidget {
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: Text(
-                        item.entry.description.isEmpty
-                            ? (item.entry.kind == EntryKind.settlement
+                        item.entry.row.description.isEmpty
+                            ? (item.entry.row.kind == EntryKind.settlement
                                   ? 'Settlement'
                                   : 'Expense')
-                            : item.entry.description,
+                            : item.entry.row.description,
                       ),
                       subtitle: Text(
-                        DateFormat.yMMMd().format(item.entry.entryDate),
+                        DateFormat.yMMMd().format(item.entry.row.entryDate),
                       ),
                       trailing: BalanceAmount(
                         balanceMinor: item.delta,
@@ -523,10 +488,6 @@ class _TransferExplanation extends StatelessWidget {
 }
 
 /// One member's standing in one currency.
-///
-/// Its own widget so that the wording, which needs three pieces of the same
-/// balance, is assembled where there is room to read it rather than inside a
-/// list comprehension nested four containers deep.
 class _MemberBalanceRow extends StatelessWidget {
   const _MemberBalanceRow({
     required this.ledger,
@@ -560,17 +521,6 @@ class _MemberBalanceRow extends StatelessWidget {
 }
 
 /// One approximate figure for a group holding several currencies.
-///
-/// Renders nothing unless there is a real estimate to make. Everything about
-/// it is hedged on purpose — the tilde, the word "roughly", and the named
-/// currencies it could not convert — because this is the only number on the
-/// screen that is not exact, and it sits directly above ones that are.
-///
-/// It is the sum of the per-expense figures, each converted at the rate stamped
-/// on it. It deliberately does not answer "what would settling cost today":
-/// that question is already answered exactly, per currency, by the rows below,
-/// and answering it here too would put two numbers on one screen that cannot be
-/// reconciled.
 class _EstimateCard extends ConsumerWidget {
   const _EstimateCard({required this.groupId});
 

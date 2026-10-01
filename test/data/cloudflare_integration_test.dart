@@ -1,0 +1,1283 @@
+@Tags(['integration'])
+library;
+
+import 'dart:io';
+
+import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
+import 'package:drift/native.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:opensplit/data/auth/better_auth_service.dart';
+import 'package:opensplit/data/auth/session_store.dart';
+import 'package:opensplit/data/local/database.dart';
+import 'package:opensplit/data/push/device_tokens.dart';
+import 'package:opensplit/data/repositories/drift_activity_repository.dart';
+import 'package:opensplit/data/repositories/drift_entry_repository.dart';
+import 'package:opensplit/data/repositories/drift_group_repository.dart';
+import 'package:opensplit/data/repositories/drift_profile_repository.dart';
+import 'package:opensplit/data/sync/api_client.dart';
+import 'package:opensplit/data/sync/invites.dart';
+import 'package:opensplit/data/sync/outbox_queue.dart';
+import 'package:opensplit/data/sync/sync_engine.dart';
+import 'package:opensplit/data/sync/wire.dart';
+import 'package:opensplit/domain/auth_service.dart';
+import 'package:opensplit/domain/balance/balance_fold.dart';
+import 'package:opensplit/domain/entry_draft.dart';
+import 'package:opensplit/domain/models/entry.dart';
+import 'package:opensplit/domain/models/entry_event.dart';
+import 'package:opensplit/domain/models/entry_snapshot.dart';
+import 'package:opensplit/domain/models/group_event.dart';
+import 'package:opensplit/domain/split/splitter.dart';
+import 'package:opensplit_api/opensplit_api.dart' as api;
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../harness.dart';
+import 'live_backend.dart';
+
+/// The generated client and the app's services against a local Worker: what
+/// the sync suite does not touch (reference data, links, profiles, accounts,
+/// serving) plus the wire details of the ledger. See `live_backend.dart`.
+class _Device {
+  _Device._({required this.auth, required this.client});
+
+  /// A guest, signed in through the app's own [BetterAuthService], so the
+  /// token plumbing is under test too.
+  static Future<_Device> guest() async {
+    SharedPreferences.setMockInitialValues({});
+    final client = buildApiClient(baseUrl: backendOrigin);
+    final auth = BetterAuthService(
+      client: client,
+      sessions: await SessionStore.load(
+        await SharedPreferences.getInstance(),
+        vault: MemoryTokenVault(),
+      ),
+    );
+    await auth.signInAnonymously();
+    return _Device._(auth: auth, client: client);
+  }
+
+  final BetterAuthService auth;
+  final api.OpensplitApi client;
+
+  AuthService get account => auth;
+  Invites get invites => Invites(client);
+  DeviceTokens get devices => DeviceTokens(client);
+
+  String get profileId => auth.currentUser!.id;
+}
+
+void main() {
+  driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+  setUpBackend();
+
+  group('the generated client against a live Worker', () {
+    late String profileId;
+    late api.OpensplitApi client;
+
+    Future<api.Entry> push(Entry entry) => fetch(
+      client.getEntriesApi().putEntry(
+        groupId: entry.row.groupId,
+        entryId: entry.id,
+        entryInput: entry.toInput(),
+      ),
+    );
+    late AppDatabase db;
+    late OutboxQueue outbox;
+    late DriftGroupRepository groups;
+    late DriftEntryRepository entries;
+    late SyncEngine sync;
+
+    /// A second device for the same account, holding nothing.
+    ({AppDatabase db, SyncEngine sync}) otherDevice({int? pageSize}) {
+      final other = AppDatabase(NativeDatabase.memory());
+      addTearDown(other.close);
+      return (
+        db: other,
+        sync: SyncEngine(
+          db: other,
+          client: client,
+          outbox: OutboxQueue(other),
+          pageSize: pageSize ?? 100,
+        ),
+      );
+    }
+
+    setUp(() async {
+      if (!backendUp) return;
+
+      final device = await _Device.guest();
+      profileId = device.profileId;
+      client = device.client;
+
+      db = AppDatabase(NativeDatabase.memory());
+      // Reference data is phase 5's; until the Worker serves currencies, the
+      // device is given them the way a first sweep would.
+      await seedReferenceData(db);
+      outbox = OutboxQueue(db);
+      groups = DriftGroupRepository(db, outbox: outbox);
+      entries = DriftEntryRepository(db, outbox: outbox);
+      sync = SyncEngine(db: db, client: client, outbox: outbox);
+    });
+
+    tearDown(() async {
+      if (!backendUp) return;
+      sync.dispose();
+      await outbox.dispose();
+      await db.close();
+    });
+
+    /// A group with Ravi and a placeholder for Priya, pushed and confirmed.
+    Future<({String groupId, String ravi, String priya})> seeded() async {
+      final created = await groups.createGroup(
+        name: 'Goa ${DateTime.now().microsecondsSinceEpoch}',
+        defaultCurrency: 'INR',
+        creatorDisplayName: 'Ravi',
+        creatorProfileId: profileId,
+      );
+      final priya = await groups.addMember(
+        created.group.id,
+        displayName: 'Priya',
+      );
+      return (
+        groupId: created.group.id,
+        ravi: created.creator.id,
+        priya: priya.id,
+      );
+    }
+
+    test('a guest session is a session the ledger accepts', () async {
+      if (!backendUp) return;
+
+      final session = await fetch(client.getIdentityApi().getSession());
+      expect(session.account?.id, profileId);
+      expect(
+        session.account?.isAnonymous,
+        isTrue,
+        reason: 'what gates the destructive account actions',
+      );
+      expect(
+        (await fetch(client.getSyncApi().listGroups())).groupIds,
+        isEmpty,
+        reason: 'a brand-new account belongs to nothing',
+      );
+    });
+
+    test('a full round trip, and a second device reads it back', () async {
+      if (!backendUp) return;
+
+      final g = await seeded();
+      await entries.create(
+        EntryDraft(
+          groupId: g.groupId,
+          currency: 'INR',
+          amountMinor: 240000,
+          description: 'Dinner at Toit',
+          split: EqualSplit([g.ravi, g.priya]),
+          payerAmounts: {g.ravi: 240000},
+          // 1 a.m. in Bengaluru: the previous evening in UTC.
+          entryDate: DateTime.utc(2026, 9, 24),
+          occurredAt: DateTime.utc(2026, 9, 23, 19, 30),
+          timeZone: 'Asia/Kolkata',
+        ),
+        createdBy: g.ravi,
+      );
+
+      final report = await sync.syncGroup(g.groupId);
+      expect(report.isClean, isTrue, reason: '$report');
+      expect(
+        report.pushed,
+        4,
+        reason:
+            'the group, its creator, the added member and the expense. The '
+            'activity line is not among them: the server writes it from the '
+            'change it commits, and grants no client the right to',
+      );
+
+      // Discovery, which is the only way a second device learns this group
+      // exists -- and, underneath, the only proof that the Durable Object
+      // flushed its membership row into D1, since that index is what answers.
+      final other = otherDevice();
+      await seedReferenceData(other.db);
+      expect(await other.sync.discoverGroups(), contains(g.groupId));
+      await other.sync.syncGroup(g.groupId);
+
+      final pulled = await DriftEntryRepository(other.db).getEntries(g.groupId);
+      expect(pulled, hasLength(1));
+      expect(pulled.single.row.description, 'Dinner at Toit');
+      expect(pulled.single.isBalanced, isTrue);
+      expect(pulled.single.row.entryDate, DateTime.utc(2026, 9, 24));
+      expect(pulled.single.row.occurredAt, DateTime.utc(2026, 9, 23, 19, 30));
+      expect(pulled.single.row.timeZone, 'Asia/Kolkata');
+      expect(pulled.single.shares, hasLength(2));
+      expect(
+        pulled.single.shares.first.weightMicros,
+        1000000,
+        reason: 'the weight survives the round trip as integer micros',
+      );
+      expect(foldBalances(pulled).map((b) => b.balanceMinor).toList()..sort(), [
+        -120000,
+        120000,
+      ]);
+
+      // The record, and the half only a live server can prove: nothing on this
+      // device wrote it.
+      final feed = await DriftActivityRepository(
+        other.db,
+      ).watchGroup(g.groupId).first;
+
+      final expense = feed.whereType<EntryChanged>().single;
+      expect(expense.kind, EntryEventKind.created);
+      expect(
+        expense.isProvisional,
+        isFalse,
+        reason: 'this device wrote nothing; it only read',
+      );
+      expect(
+        expense.actorId,
+        g.ravi,
+        reason: 'authorship is the member row, not the account',
+      );
+
+      expect(
+        feed.whereType<MemberChanged>().map((event) => event.displayName),
+        contains('Priya'),
+        reason: 'a group that cannot see who arrived cannot remove them',
+      );
+    });
+
+    test('an edit crosses the wire as a field-level diff', () async {
+      if (!backendUp) return;
+
+      // Where a payload key spelled differently either side actually shows up.
+      final g = await seeded();
+      final entry = await entries.create(
+        EntryDraft(
+          groupId: g.groupId,
+          currency: 'INR',
+          amountMinor: 240000,
+          description: 'Dinner at Toit',
+          split: EqualSplit([g.ravi, g.priya]),
+          payerAmounts: {g.ravi: 240000},
+        ),
+        createdBy: g.ravi,
+      );
+      await sync.syncGroup(g.groupId);
+
+      await entries.update(
+        entry.id,
+        EntryDraft(
+          groupId: g.groupId,
+          currency: 'INR',
+          amountMinor: 300000,
+          description: 'Dinner at Toit',
+          split: EqualSplit([g.ravi, g.priya]),
+          payerAmounts: {g.ravi: 300000},
+        ),
+        actorId: g.ravi,
+      );
+      expect((await sync.syncGroup(g.groupId)).isClean, isTrue);
+
+      final other = otherDevice();
+      await seedReferenceData(other.db);
+      await other.sync.syncGroup(g.groupId);
+
+      final edited =
+          (await DriftActivityRepository(other.db).watchGroup(g.groupId).first)
+              .whereType<EntryChanged>()
+              .where((event) => event.kind == EntryEventKind.edited);
+      expect(edited, hasLength(1));
+
+      final amount = edited.single.changes.singleWhere(
+        (change) => change.field == 'amount_minor',
+      );
+      expect(amount.from, '240000');
+      expect(amount.to, '300000');
+      expect(
+        edited.single.changes.map((change) => change.field),
+        isNot(contains('description')),
+        reason: 'the description did not move, so it is not in the diff',
+      );
+    });
+
+    test('an expense that does not add up is refused outright', () async {
+      if (!backendUp) return;
+
+      final g = await seeded();
+      final entry = await entries.create(
+        EntryDraft(
+          groupId: g.groupId,
+          currency: 'INR',
+          amountMinor: 100000,
+          split: EqualSplit([g.ravi]),
+          payerAmounts: {g.ravi: 100000},
+        ),
+        createdBy: g.ravi,
+      );
+      await sync.syncGroup(g.groupId);
+
+      // Corrupted the way a client bug would, then pushed.
+      await expectLater(
+        push(
+          entry.copyWith(
+            shares: [
+              api.Share(
+                memberId: entry.shares.first.memberId,
+                amountMinor: 1,
+                weightMicros: entry.shares.first.weightMicros,
+              ),
+            ],
+          ),
+        ),
+        throwsA(
+          isA<ApiFailure>()
+              .having((e) => e.retry, 'retry', api.Retry.permanent)
+              .having((e) => e.code?.value, 'code', 'unbalanced'),
+        ),
+      );
+    });
+
+    test("the device's snapshot of an expense is the server's own", () async {
+      if (!backendUp) return;
+
+      // Provisional activity lines and parked conflicts are drawn from the
+      // device's snapshot, and diffed against the server's: the two
+      // derivations must agree field for field.
+      final g = await seeded();
+      final entry = await entries.create(
+        EntryDraft(
+          groupId: g.groupId,
+          currency: 'INR',
+          amountMinor: 90001,
+          description: 'Dinner',
+          split: EqualSplit([g.priya, g.ravi]),
+          payerAmounts: {g.ravi: 90001},
+        ),
+        createdBy: g.ravi,
+      );
+      await sync.syncGroup(g.groupId);
+
+      final page = await fetch(
+        client.getSyncApi().getChanges(groupId: g.groupId),
+      );
+      final recorded = page.events
+          .lastWhere((event) => event.subjectId == entry.id)
+          .entry;
+      final local = (await entries.getEntry(entry.id))!;
+      expect(snapshotOf(local).toJson(), recorded?.toJson());
+    });
+
+    test('a stale edit is refused only when it moves money', () async {
+      if (!backendUp) return;
+
+      final g = await seeded();
+      final entry = await entries.create(
+        EntryDraft(
+          groupId: g.groupId,
+          currency: 'INR',
+          amountMinor: 100000,
+          description: 'Dinner',
+          split: EqualSplit([g.ravi]),
+          payerAmounts: {g.ravi: 100000},
+        ),
+        createdBy: g.ravi,
+      );
+      await sync.syncGroup(g.groupId);
+
+      final base = (await entries.getEntry(entry.id))!;
+      expect(
+        base.row.seq,
+        isNotNull,
+        reason: 'the push adopted a sequence number',
+      );
+
+      Entry at(int amount) => Entry(
+        base.row.copyWith(amountMinor: amount),
+        payers: [
+          api.Payer(memberId: base.payers.first.memberId, amountMinor: amount),
+        ],
+        shares: [
+          api.Share(
+            memberId: base.shares.first.memberId,
+            amountMinor: amount,
+            weightMicros: base.shares.first.weightMicros,
+          ),
+        ],
+      );
+
+      // Somebody else's edit lands first, moving the amount and the share.
+      final theirs = await push(at(150000));
+      expect(theirs.amountMinor, 150000);
+      expect(theirs.seq, greaterThan(base.row.seq!));
+
+      // And now the edit composed against the version they replaced.
+      await expectLater(
+        push(at(200000)),
+        throwsA(
+          isA<ApiFailure>()
+              .having((e) => e.retry, 'retry', api.Retry.stale)
+              .having((e) => e.code?.value, 'code', 'stale_base'),
+        ),
+      );
+
+      // The same stale base, leaving the money exactly where the server has it,
+      // is not refused: arbitrating a typo would cost two people a decision for
+      // nothing.
+      final moved = at(150000);
+      final prose = await push(
+        moved.copyWith(
+          row: moved.row.copyWith(
+            description: 'Renamed',
+            seq: Value(base.row.seq),
+          ),
+        ),
+      );
+      expect(prose.description, 'Renamed');
+      expect(prose.amountMinor, 150000);
+    });
+
+    test('deleting carries the exact version, and propagates', () async {
+      if (!backendUp) return;
+
+      final g = await seeded();
+      final entry = await entries.create(
+        EntryDraft(
+          groupId: g.groupId,
+          currency: 'INR',
+          amountMinor: 60000,
+          description: 'Cancelled',
+          split: EqualSplit([g.ravi, g.priya]),
+          payerAmounts: {g.ravi: 60000},
+        ),
+        createdBy: g.ravi,
+      );
+      await sync.syncGroup(g.groupId);
+      final stored = (await entries.getEntry(entry.id))!;
+
+      // A deletion always moves money, so unlike a prose edit it must name the
+      // version the device last saw, and a wrong one is a refusal rather than a
+      // licence.
+      final gone = stored.copyWith(
+        row: stored.row.copyWith(deletedAt: Value(DateTime.now())),
+      );
+      await expectLater(
+        push(
+          gone.copyWith(
+            row: gone.row.copyWith(seq: Value(stored.row.seq! - 1)),
+          ),
+        ),
+        throwsA(
+          isA<ApiFailure>().having((e) => e.retry, 'retry', api.Retry.stale),
+        ),
+      );
+
+      final deleted = await push(gone);
+      expect(deleted.deletedAt, isNotNull);
+
+      // A soft delete, which is why it can propagate at all: a hard one would
+      // simply stop appearing in the page and live forever on every device that
+      // had already synced it.
+      final other = otherDevice();
+      await seedReferenceData(other.db);
+      await other.sync.syncGroup(g.groupId);
+
+      final theirs = await DriftEntryRepository(
+        other.db,
+      ).getEntries(g.groupId, includeDeleted: true);
+      expect(theirs.single.isDeleted, isTrue);
+      expect(
+        foldBalances(
+          await DriftEntryRepository(other.db).getEntries(g.groupId),
+        ),
+        isEmpty,
+        reason: 'a deleted expense owes nobody anything',
+      );
+    });
+
+    test('the cursor pages, and then pulls nothing', () async {
+      if (!backendUp) return;
+
+      final g = await seeded();
+      for (var i = 0; i < 6; i++) {
+        await entries.create(
+          EntryDraft(
+            groupId: g.groupId,
+            currency: 'INR',
+            amountMinor: 1000 * (i + 1),
+            description: 'Expense $i',
+            split: EqualSplit([g.ravi, g.priya]),
+            payerAmounts: {g.ravi: 1000 * (i + 1)},
+          ),
+          createdBy: g.ravi,
+        );
+      }
+      expect((await sync.syncGroup(g.groupId)).isClean, isTrue);
+
+      // A page size below the change count forces the cursor to actually page
+      // against the real object, which is where an off-by-one costs a row.
+      final other = otherDevice(pageSize: 2);
+      await seedReferenceData(other.db);
+
+      final first = await other.sync.syncGroup(g.groupId);
+      expect(first.isClean, isTrue, reason: '$first');
+      expect(first.pulled, 6);
+
+      final second = await other.sync.syncGroup(g.groupId);
+      expect(second.isClean, isTrue, reason: '$second');
+      expect(
+        second.pulled,
+        0,
+        reason: 'a second pass with no changes must pull nothing',
+      );
+    });
+
+    test('a member rename reaches the other device', () async {
+      if (!backendUp) return;
+
+      final g = await seeded();
+      await sync.syncGroup(g.groupId);
+
+      await groups.renameMember(g.priya, 'Priya S');
+      expect((await sync.syncGroup(g.groupId)).isClean, isTrue);
+
+      final other = otherDevice();
+      await seedReferenceData(other.db);
+      await other.sync.syncGroup(g.groupId);
+
+      final members = await DriftGroupRepository(
+        other.db,
+      ).watchMembers(g.groupId).first;
+      expect(members.firstWhere((m) => m.id == g.priya).displayName, 'Priya S');
+
+      // And the rename is on the record, carrying what it was before -- which
+      // is the payload shape a member event uses and an expense does not.
+      final renamed =
+          (await DriftActivityRepository(other.db).watchGroup(g.groupId).first)
+              .whereType<MemberChanged>()
+              .where((event) => event.kind == api.EventKind.memberRenamed);
+      expect(renamed.single.displayName, 'Priya S');
+      expect(renamed.single.previousName, 'Priya');
+    });
+  });
+
+  /// The two responses that are the same for everybody.
+  group('reference data and rates against a live Worker', () {
+    late api.OpensplitApi public;
+
+    setUp(() {
+      if (!backendUp) return;
+      public = buildApiClient(baseUrl: backendOrigin);
+    });
+
+    test('the reference lists arrive whole, with no session', () async {
+      if (!backendUp) return;
+
+      final reference = await fetch(public.getReferenceApi().getReference());
+
+      // The exponent is the one field here that is not decoration: every amount
+      // in this app is an integer of minor units, so a wrong exponent is a
+      // factor-of-a-thousand error in a balance rather than a formatting quirk.
+      final jpy = reference.currencies.firstWhere((c) => c.code == 'JPY');
+      expect(jpy.exponent, 0);
+      final kwd = reference.currencies.firstWhere((c) => c.code == 'KWD');
+      expect(kwd.exponent, 3);
+
+      // Category ids are written onto entries, so one invented by a device
+      // would point at a category the server has never heard of.
+      expect(reference.categories, isNotEmpty);
+      expect(
+        reference.categories.every((c) => c.id.isNotEmpty && c.icon.isNotEmpty),
+        isTrue,
+      );
+    });
+
+    test('a device learns currencies before it can make a group', () async {
+      if (!backendUp) return;
+
+      // The ordering this exists for: `groups.default_currency` references
+      // `currencies`, so a device that has not swept cannot create a group at
+      // all.
+      final device = AppDatabase(NativeDatabase.memory());
+      addTearDown(device.close);
+
+      final queue = OutboxQueue(device);
+      addTearDown(queue.dispose);
+      final engine = SyncEngine(db: device, client: public, outbox: queue);
+      addTearDown(engine.dispose);
+
+      expect(await device.select(device.currencies).get(), isEmpty);
+      await engine.shared.pullReferenceData();
+
+      final learned = await device.select(device.currencies).get();
+      expect(learned.map((row) => row.code), contains('INR'));
+      expect(await device.select(device.categories).get(), isNotEmpty);
+    });
+
+    test('rates arrive against USD, stamped with who published them', () async {
+      if (!backendUp) return;
+
+      // Needs the cron to have run against a live provider, which is not this
+      // test's business to arrange: an empty page is a correct answer for a
+      // Worker started a moment ago, and asserting on a number of rates would
+      // make this fail for a reason that is not about the client.
+      final rates = (await fetch(
+        public.getReferenceApi().getFxRates(since: '2020-01-01'),
+      )).rates;
+      if (rates.isEmpty) {
+        markTestSkipped('no rates published; run the 0 4 * * * trigger first');
+        return;
+      }
+
+      final usd = rates.where((rate) => rate.currency == 'USD');
+      expect(
+        usd.every((rate) => rate.rate == 1),
+        isTrue,
+        reason: 'the pivot is stored as exactly 1, so any pair is a division',
+      );
+
+      // The source is stamped onto any expense converted with this rate, so a
+      // converted amount can always say where its number came from.
+      expect(rates.every((rate) => rate.source_.isNotEmpty), isTrue);
+      expect(rates.every((rate) => rate.rate > 0), isTrue);
+      expect(
+        rates.every(
+          (rate) => RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(rate.asOf),
+        ),
+        isTrue,
+      );
+    });
+
+    test('a backfill is fire and forget, and does not refuse', () async {
+      if (!backendUp) return;
+      // Each one can send the server to its rate providers, so it needs a
+      // session, unlike reading the rates it produces.
+      final signedIn = (await _Device.guest()).client;
+
+      // The client cannot act on the answer either way — the rate arrives on a
+      // later sync or it does not — so what matters is that asking never throws
+      // into the editor that asked.
+      await fetch(
+        signedIn.getReferenceApi().requestFxBackfill(
+          fxBackfillRequest: api.FxBackfillRequest(
+            asOf: '2026-08-14',
+            currency: 'INR',
+          ),
+        ),
+      );
+      // Twice, because six devices in one group sync the same backdated
+      // expense within a second of each other.
+      await fetch(
+        signedIn.getReferenceApi().requestFxBackfill(
+          fxBackfillRequest: api.FxBackfillRequest(
+            asOf: '2026-08-14',
+            currency: 'INR',
+          ),
+        ),
+      );
+    });
+
+    test('a backfill without a session is refused', () async {
+      if (!backendUp) return;
+
+      await expectLater(
+        fetch(
+          public.getReferenceApi().requestFxBackfill(
+            fxBackfillRequest: api.FxBackfillRequest(
+              asOf: '2026-08-14',
+              currency: 'INR',
+            ),
+          ),
+        ),
+        throwsA(
+          isA<ApiFailure>().having(
+            (error) => error.code,
+            'code',
+            api.ErrorCode.noSession,
+          ),
+        ),
+      );
+    });
+
+    test('a malformed date is refused rather than guessed at', () async {
+      if (!backendUp) return;
+
+      await expectLater(
+        fetch(public.getReferenceApi().getFxRates(since: 'last-tuesday')),
+        throwsA(
+          isA<ApiFailure>().having(
+            (error) => error.retry,
+            'retry',
+            api.Retry.permanent,
+          ),
+        ),
+      );
+    });
+  });
+
+  /// Everything an account is, over the wire.
+  group('accounts, links and profiles against a live Worker', () {
+    late _Device ravi;
+
+    setUp(() async {
+      if (!backendUp) return;
+      ravi = await _Device.guest();
+    });
+
+    /// A group with Ravi in it and one placeholder waiting for a friend.
+    Future<({String groupId, String priya})> seededGroup(_Device host) async {
+      final groupId = 'g${DateTime.now().microsecondsSinceEpoch}';
+      await fetch(
+        host.client.getGroupsApi().putGroup(
+          groupId: groupId,
+          groupInput: api.GroupInput(
+            name: 'Goa trip',
+            defaultCurrency: 'INR',
+            isDirect: false,
+            simplifyDebts: true,
+            archivedAt: null,
+            creatorId: '$groupId-ravi',
+            creatorName: 'Ravi',
+          ),
+        ),
+      );
+
+      final priya = await fetch(
+        host.client.getGroupsApi().putMember(
+          groupId: groupId,
+          memberId: '$groupId-priya',
+          memberInput: api.MemberInput(
+            displayName: 'Priya',
+            upiVpa: null,
+            leftAt: null,
+          ),
+        ),
+      );
+      return (groupId: groupId, priya: priya.id);
+    }
+
+    test('an invite is previewable with no session, then spendable', () async {
+      if (!backendUp) return;
+
+      final g = await seededGroup(ravi);
+      final invite = await ravi.invites.create(g.groupId, g.priya);
+
+      // No session at all.
+      final anonymous = Invites(buildApiClient(baseUrl: backendOrigin));
+      final preview = await anonymous.preview(invite.token);
+      expect(preview, isNotNull);
+      expect(preview!.groupName, 'Goa trip');
+      expect(preview.memberName, 'Priya');
+      expect(preview.inviterName, 'Ravi');
+      expect(preview.isRedeemed || preview.isExpired, isFalse);
+
+      final priya = await _Device.guest();
+      final claimed = await priya.invites.join(invite.token);
+
+      // The place was claimed, not duplicated.
+      expect(claimed.member.id, g.priya);
+      expect(claimed.groupId, g.groupId, reason: 'the token said which group');
+      expect(claimed.member.profileId, priya.profileId);
+      expect(claimed.member.displayName, 'Priya');
+
+      // And the name travelled the other way: a guest has none of its own, so
+      // it adopts the one a friend typed on the placeholder. The group's own
+      // page carries it, since the place is what made it visible.
+      final page = await fetch(
+        ravi.client.getSyncApi().getChanges(groupId: g.groupId),
+      );
+      expect(
+        page.profiles.singleWhere((p) => p.id == priya.profileId).displayName,
+        'Priya',
+      );
+    });
+
+    test('a spent link says so rather than saying nothing', () async {
+      if (!backendUp) return;
+
+      final g = await seededGroup(ravi);
+      final invite = await ravi.invites.create(g.groupId, g.priya);
+      await (await _Device.guest()).invites.join(invite.token);
+
+      // Three different reasons a link does not work, and a screen that shows
+      // "invalid link" for all of them tells nobody what to do next.
+      final second = await _Device.guest();
+      await expectLater(
+        second.invites.join(invite.token),
+        throwsA(isA<ApiFailure>()),
+      );
+
+      final preview = await second.invites.preview(invite.token);
+      expect(preview!.isRedeemed, isTrue);
+    });
+
+    test('an open link offers the places already typed in', () async {
+      if (!backendUp) return;
+
+      final g = await seededGroup(ravi);
+      final link = await ravi.invites.createGroupLink(g.groupId);
+      expect(
+        (await ravi.invites.currentGroupLink(g.groupId))?.token,
+        link.token,
+      );
+
+      final arriving = await _Device.guest();
+      final target = await arriving.invites.preview(link.token);
+      expect(target?.isOpenLink, isTrue);
+
+      final places = await arriving.invites.placeholders(link.token);
+      expect(places.single.id, g.priya);
+      expect(places.single.displayName, 'Priya');
+
+      // Claiming one is what stops a group of six becoming a group of twelve
+      // when a single link is pasted into a chat.
+      final joined = await arriving.invites.join(link.token, memberId: g.priya);
+      expect(joined.member.id, g.priya);
+      expect(await arriving.invites.placeholders(link.token), isEmpty);
+    });
+
+    test('somebody nobody typed in arrives under their own name', () async {
+      if (!backendUp) return;
+
+      final g = await seededGroup(ravi);
+      final link = await ravi.invites.createGroupLink(g.groupId);
+
+      final stranger = await _Device.guest();
+      final joined = await stranger.invites.join(
+        link.token,
+        displayName: 'Zara',
+      );
+      expect(joined.member.displayName, 'Zara');
+      expect(
+        joined.member.id,
+        isNot(g.priya),
+        reason: 'a new place, not a claim',
+      );
+
+      // And it is a name, not a sentinel.
+      final nameless = await _Device.guest();
+      await expectLater(
+        nameless.invites.join(link.token),
+        throwsA(isA<ApiFailure>()),
+      );
+
+      // Whereas an account that already has a name needs no asking.
+      final named = await _Device.guest();
+      await fetch(
+        named.client.getSyncApi().updateProfile(
+          profileUpdate: api.ProfileUpdate(displayName: 'Meera', upiVpa: null),
+        ),
+      );
+      expect(
+        (await named.invites.join(link.token)).member.displayName,
+        'Meera',
+      );
+    });
+
+    test('revoking leaves the link able to explain itself', () async {
+      if (!backendUp) return;
+
+      final g = await seededGroup(ravi);
+      final link = await ravi.invites.createGroupLink(g.groupId);
+      await ravi.invites.revokeGroupLink(g.groupId);
+
+      expect(await ravi.invites.currentGroupLink(g.groupId), isNull);
+
+      // Turned off, not never valid.
+      final preview = await ravi.invites.preview(link.token);
+      expect(preview?.isRevoked, isTrue);
+
+      final arriving = await _Device.guest();
+      await expectLater(
+        arriving.invites.join(link.token),
+        throwsA(isA<ApiFailure>()),
+      );
+    });
+
+    test('a token that names nothing is not a link', () async {
+      if (!backendUp) return;
+
+      expect(await ravi.invites.preview('not-a-token-at-all'), isNull);
+    });
+
+    test('a profile is visible to a co-member and to nobody else', () async {
+      if (!backendUp) return;
+
+      final g = await seededGroup(ravi);
+      await fetch(
+        ravi.client.getSyncApi().updateProfile(
+          profileUpdate: api.ProfileUpdate(
+            displayName: 'Ravi',
+            upiVpa: 'ravi@okhdfcbank',
+          ),
+        ),
+      );
+
+      final stranger = await _Device.guest();
+      expect(
+        (await fetch(
+          stranger.client.getSyncApi().getProfiles(limit: 50),
+        )).profiles.map((row) => row.id),
+        isNot(contains(ravi.profileId)),
+        reason: 'a payment handle is not public',
+      );
+
+      final invite = await ravi.invites.create(g.groupId, g.priya);
+      await stranger.invites.join(invite.token);
+
+      // Sharing a group is the whole of the rule, and it is symmetric: a
+      // settle-up needs Ravi's handle exactly as much as it needs Priya's.
+      final seen = (await fetch(
+        stranger.client.getSyncApi().getChanges(groupId: g.groupId),
+      )).profiles;
+      expect(
+        seen.singleWhere((p) => p.id == ravi.profileId).upiVpa,
+        'ravi@okhdfcbank',
+      );
+
+      final feed = await fetch(
+        stranger.client.getSyncApi().getProfiles(limit: 50),
+      );
+      expect(
+        feed.profiles.map((row) => row.id),
+        containsAll([ravi.profileId, stranger.profileId]),
+      );
+    });
+
+    test('restoring a group and clearing a handle reach the server', () async {
+      if (!backendUp) return;
+
+      // Null is a value in both updates: restore, rejoin, clear.
+      final g = await seededGroup(ravi);
+      await fetch(
+        ravi.client.getGroupsApi().putGroup(
+          groupId: g.groupId,
+          groupInput: api.GroupInput(
+            name: 'Goa',
+            defaultCurrency: 'INR',
+            isDirect: false,
+            simplifyDebts: true,
+            archivedAt: DateTime.now().toUtc(),
+            creatorId: '${g.groupId}-ravi',
+            creatorName: 'Ravi',
+          ),
+        ),
+      );
+      final restored = await fetch(
+        ravi.client.getGroupsApi().putGroup(
+          groupId: g.groupId,
+          groupInput: api.GroupInput(
+            name: 'Goa',
+            defaultCurrency: 'INR',
+            isDirect: false,
+            simplifyDebts: true,
+            archivedAt: null,
+            creatorId: '${g.groupId}-ravi',
+            creatorName: 'Ravi',
+          ),
+        ),
+      );
+      expect(restored.archivedAt, isNull);
+
+      await fetch(
+        ravi.client.getGroupsApi().putMember(
+          groupId: g.groupId,
+          memberId: g.priya,
+          memberInput: api.MemberInput(
+            displayName: 'Priya',
+            upiVpa: 'priya@okaxis',
+            leftAt: null,
+          ),
+        ),
+      );
+      final cleared = await fetch(
+        ravi.client.getGroupsApi().putMember(
+          groupId: g.groupId,
+          memberId: g.priya,
+          memberInput: api.MemberInput(
+            displayName: 'Priya',
+            upiVpa: null,
+            leftAt: null,
+          ),
+        ),
+      );
+      expect(cleared.upiVpa, isNull);
+    });
+
+    test('a payment handle can be cleared, not only added', () async {
+      if (!backendUp) return;
+
+      await fetch(
+        ravi.client.getSyncApi().updateProfile(
+          profileUpdate: api.ProfileUpdate(
+            displayName: 'Ravi',
+            upiVpa: 'ravi@oksbi',
+          ),
+        ),
+      );
+
+      // Bank accounts close.
+      final cleared = await fetch(
+        ravi.client.getSyncApi().updateProfile(
+          profileUpdate: api.ProfileUpdate(displayName: 'Ravi K', upiVpa: null),
+        ),
+      );
+      expect(cleared.upiVpa, isNull);
+      expect(cleared.displayName, 'Ravi K');
+      expect(cleared.updatedAt, isNotNull, reason: 'the feed cursors on it');
+    });
+
+    test('the profile feed pages on the pair, not the timestamp', () async {
+      if (!backendUp) return;
+
+      final g = await seededGroup(ravi);
+      await fetch(
+        ravi.client.getSyncApi().updateProfile(
+          profileUpdate: api.ProfileUpdate(displayName: 'Ravi', upiVpa: null),
+        ),
+      );
+
+      final invite = await ravi.invites.create(g.groupId, g.priya);
+      await (await _Device.guest()).invites.join(invite.token);
+
+      final collected = <String>{};
+      var page = await fetch(ravi.client.getSyncApi().getProfiles(limit: 1));
+      collected.addAll(page.profiles.map((row) => row.id));
+
+      var guard = 0;
+      while (page.hasMore && guard++ < 10) {
+        page = await fetch(
+          ravi.client.getSyncApi().getProfiles(after: page.cursor, limit: 1),
+        );
+        collected.addAll(page.profiles.map((row) => row.id));
+      }
+
+      expect(page.hasMore, isFalse);
+      expect(collected.length, 2, reason: 'Ravi and whoever claimed the place');
+    });
+
+    test(
+      'the sync engine pushes a profile and pulls a co-member back',
+      () async {
+        if (!backendUp) return;
+
+        // The whole engine path, not the adapter: a local write goes through
+        // the outbox, and a co-member's profile arrives through the cursored
+        // feed and lands in the device's own table.
+        final g = await seededGroup(ravi);
+        final invite = await ravi.invites.create(g.groupId, g.priya);
+        final priya = await _Device.guest();
+        await priya.invites.join(invite.token);
+
+        final device = AppDatabase(NativeDatabase.memory());
+        addTearDown(device.close);
+        await seedReferenceData(device);
+
+        final queue = OutboxQueue(device);
+        addTearDown(queue.dispose);
+        final engine = SyncEngine(
+          db: device,
+          client: ravi.client,
+          outbox: queue,
+        );
+        addTearDown(engine.dispose);
+
+        final profiles = DriftProfileRepository(device, outbox: queue);
+        await profiles.upsert(
+          Profile(
+            id: ravi.profileId,
+            displayName: 'Ravi',
+            upiVpa: 'ravi@okhdfcbank',
+          ),
+        );
+
+        final report = await engine.syncEverything();
+        expect(report.isClean, isTrue, reason: '${report.error}');
+
+        // Mine, pushed and read back with the server's timestamp on it — which
+        // is the value the feed cursors on, so a null here would mean the next
+        // sweep started from the beginning forever.
+        final mine = await profiles.byId(ravi.profileId);
+        expect(mine?.upiVpa, 'ravi@okhdfcbank');
+        expect(mine?.updatedAt, isNotNull);
+
+        // And theirs, which this device never wrote. It arrived because they
+        // share a group, which is the whole of the visibility rule.
+        final theirs = await profiles.byId(priya.profileId);
+        expect(theirs?.displayName, 'Priya');
+
+        // A second sweep finds nothing, because the cursor was kept.
+        expect((await engine.syncEverything()).pulled, 0);
+      },
+    );
+
+    test('a device token registers, transfers and is forgotten', () async {
+      if (!backendUp) return;
+
+      final token = 'fcm-${DateTime.now().microsecondsSinceEpoch}';
+      await ravi.devices.register(token: token, platform: api.Platform.android);
+      // Re-registered on every launch, so it has to be idempotent.
+      await ravi.devices.register(token: token, platform: api.Platform.android);
+
+      // A phone that changes hands keeps its registration token, so the claim
+      // transfers rather than being refused — otherwise the previous owner's
+      // notifications would follow the new one.
+      final next = await _Device.guest();
+      await next.devices.register(token: token, platform: api.Platform.android);
+
+      // Which also means signing out on one phone cannot silence another's.
+      await ravi.devices.unregister(token);
+      await next.devices.unregister(token);
+    });
+
+    test('deleting an account leaves a shared group intact', () async {
+      if (!backendUp) return;
+
+      final g = await seededGroup(ravi);
+      final invite = await ravi.invites.create(g.groupId, g.priya);
+      final priya = await _Device.guest();
+      await priya.invites.join(invite.token);
+
+      await priya.account.deleteAccount();
+
+      // Money Priya paid is a fact about Ravi's group as much as hers, so the
+      // member row keeps its name and loses its account — exactly the state of
+      // somebody a friend added who never signed up.
+      final page = await fetch(
+        ravi.client.getSyncApi().getChanges(
+          groupId: g.groupId,
+          since: 0,
+          limit: 200,
+        ),
+      );
+      final row = page.members.firstWhere((member) => member.id == g.priya);
+      expect(row.displayName, 'Priya');
+      expect(row.profileId, isNull);
+
+      // And the session went with it, rather than lingering until something
+      // else happened to fail.
+      expect(priya.auth.currentUser, isNull);
+      await expectLater(
+        fetch(priya.client.getSyncApi().listGroups()),
+        throwsA(isA<ApiFailure>()),
+      );
+    });
+
+    test('a group nobody left could read is collected outright', () async {
+      if (!backendUp) return;
+
+      final solo = await _Device.guest();
+      final g = await seededGroup(solo);
+
+      await solo.account.deleteAccount();
+
+      // Holding somebody's expense descriptions forever in a group with no
+      // living reader is the opposite of what deleting an account asks for.
+      final onlooker = await _Device.guest();
+      final grave = await fetch(
+        onlooker.client.getSyncApi().getChanges(
+          groupId: g.groupId,
+          since: 0,
+          limit: 200,
+        ),
+      );
+      expect(grave.purgedAt, isNotNull);
+      expect(grave.group, isNull);
+      expect(grave.members, isEmpty);
+    });
+  });
+
+  group('the origin serves the front end as well as the API', _serving);
+}
+
+/// The serving layer, against the Worker that will serve it.
+void _serving() {
+  late HttpClient http;
+
+  setUp(() {
+    if (!backendUp) return;
+    http = HttpClient();
+  });
+
+  tearDown(() => backendUp ? http.close(force: true) : null);
+
+  Future<HttpClientResponse> get(String path) async {
+    final request = await http.getUrl(Uri.parse('$backendOrigin$path'));
+    request.followRedirects = false;
+    return request.close();
+  }
+
+  test('a cold deep link arrives cross-origin isolated', () async {
+    if (!backendUp) return;
+
+    // The invite link, in other words: somebody taps it and the browser asks
+    // for a path no asset matches.
+    final response = await get('/app/join/a-token-nobody-minted');
+    await response.drain<void>();
+
+    expect(response.statusCode, 200);
+    expect(response.headers.value('content-type'), contains('text/html'));
+    expect(response.headers.value('cross-origin-opener-policy'), 'same-origin');
+    expect(
+      response.headers.value('cross-origin-embedder-policy'),
+      'credentialless',
+    );
+    // The app's buttons must not be pressable from inside another site.
+    expect(
+      response.headers.value('content-security-policy'),
+      "frame-ancestors 'none'",
+    );
+    expect(response.headers.value('x-frame-options'), 'DENY');
+  });
+
+  test('the static root is not isolated, and says so by omission', () async {
+    if (!backendUp) return;
+
+    // Scoped to the client deliberately.
+    final response = await get('/');
+    await response.drain<void>();
+
+    expect(response.statusCode, 200);
+    expect(response.headers.value('cross-origin-embedder-policy'), isNull);
+    expect(response.headers.value('x-content-type-options'), 'nosniff');
+  });
+
+  test('a document page answers at its own address', () async {
+    if (!backendUp) return;
+
+    for (final page in ['/privacy', '/terms', '/delete-account']) {
+      final response = await get(page);
+      await response.drain<void>();
+
+      // 200 and not 307.
+      expect(response.statusCode, 200, reason: '$page did not serve directly');
+      expect(response.headers.value('content-type'), contains('text/html'));
+    }
+  });
+
+  test(
+    'a missing page is a 404, not the app and not the landing page',
+    () async {
+      if (!backendUp) return;
+
+      final response = await get('/no-such-page');
+      final body = await response
+          .transform(const SystemEncoding().decoder)
+          .join();
+
+      expect(response.statusCode, 404);
+      expect(body, contains('That page is not here'));
+    },
+  );
+
+  test('assetlinks.json is served the one way Android accepts', () async {
+    if (!backendUp) return;
+
+    // JSON, over one request, with no redirect.
+    final response = await get('/.well-known/assetlinks.json');
+    await response.drain<void>();
+
+    expect(response.statusCode, 200);
+    expect(
+      response.headers.value('content-type'),
+      contains('application/json'),
+    );
+  });
+}

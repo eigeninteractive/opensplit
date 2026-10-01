@@ -9,4 +9,4 @@ Allow: /
 # a page this one links to twice would then be eligible for listing with no
 # snippet, which is the outcome the rule was meant to prevent.
 
-Sitemap: https://opensplit.web.app/sitemap.xml
+Sitemap: https://opensplit.eigeninteractive.com/sitemap.xml

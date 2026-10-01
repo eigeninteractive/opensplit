@@ -1,7 +1,7 @@
 {
   "_": "Every build. All public identifiers; nothing here is a secret.",
-  "SUPABASE_URL": "<your supabase_url>",
-  "SUPABASE_PUBLISHABLE_KEY": "<your supabase_publishable_key>",
+  "__api": "One origin serving the site, the app bundle and the API.",
+  "API_BASE_URL": "https://<your link_host>",
   "LINK_HOST": "<your link_host>",
   "__google": "The WEB OAuth client id, used on both platforms. See README.",
   "GOOGLE_WEB_CLIENT_ID": "<web client id>.apps.googleusercontent.com",

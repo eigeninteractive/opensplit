@@ -1,21 +1,17 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../application/providers.dart';
-import '../../domain/models/member.dart';
-import '../format.dart';
+import '../../application/ledger_providers.dart';
+import '../../application/local_providers.dart';
+import '../../application/sync_providers.dart';
+import '../../data/local/database.dart';
+import '../../domain/money_format.dart';
 import '../feedback.dart';
 import '../navigation.dart';
 import '../widgets/export_button.dart';
 import '../widgets/page_body.dart';
 
 /// Renaming, archiving and leaving.
-///
-/// Everything here was reachable in the repository and from nowhere in the app,
-/// which is the same as not existing. Changing the group's default currency is
-/// still absent, and on purpose: every entry carries an fx snapshot taken
-/// against the default of the day, so changing it later would restate every one
-/// of those numbers against a currency they were never converted to.
 class GroupSettingsScreen extends ConsumerStatefulWidget {
   const GroupSettingsScreen({super.key, required this.groupId});
 
@@ -77,10 +73,6 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
   }
 
   /// What this member still owes or is owed, per currency, in words.
-  ///
-  /// Leaving with a balance outstanding is how a group's arithmetic stops
-  /// making sense to everyone still in it, so it is named rather than hinted
-  /// at.
   List<String> _outstanding(GroupLedger ledger, Member me) {
     // read, not watch: this is called from a button handler, not from build,
     // and watching outside build subscribes a widget that is not rebuilding.
@@ -96,11 +88,8 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
     ];
   }
 
-  /// Leaving is always available, settled or not.
-  ///
-  /// There used to be a check here refusing to let the last owner leave until
-  /// they had promoted somebody. With no roles there is nothing to hand over
-  /// and nothing to strand — which is most of the reason the role went.
+  /// Leaving is always available, settled or not. There are no roles, so there
+  /// is nothing to hand over first.
   Future<void> _leave(GroupLedger ledger, Member me) async {
     final debts = _outstanding(ledger, me);
     final confirmed = await showDialog<bool>(

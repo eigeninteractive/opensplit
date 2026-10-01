@@ -4,27 +4,30 @@ import 'package:drift/native.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:opensplit/application/providers.dart';
+import 'package:opensplit/application/backend_providers.dart';
+import 'package:opensplit/application/local_providers.dart';
+import 'package:opensplit/application/preferences_providers.dart';
+import 'package:opensplit/application/session_providers.dart';
+import 'package:opensplit/data/auth/session_store.dart';
 import 'package:opensplit/data/local/database.dart';
-import 'package:opensplit/domain/repositories/auth_service.dart';
+import 'package:opensplit/domain/auth_service.dart';
 import 'package:opensplit/presentation/app.dart';
+import 'package:opensplit_api/opensplit_api.dart' show Account;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../harness.dart';
 
 /// What a reload shows somebody who is already signed in.
-///
-/// The answer has to be "their groups", on the first frame and every frame
-/// after it. Anything else is a flash of the sign-in screen at somebody who
-/// signed in weeks ago, and on the web it is worse than cosmetic: the static
-/// boot skeleton has already painted a signed-in layout, so the app contradicts
-/// the page it is replacing.
 void main() {
   testWidgets('a restored session never shows the welcome screen', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
+    final sessions = await SessionStore.load(
+      preferences,
+      vault: MemoryTokenVault(),
+    );
     final db = AppDatabase(NativeDatabase.memory());
     await seedReferenceData(db);
     addTearDown(() => tester.runAsync(db.close));
@@ -33,6 +36,7 @@ void main() {
       ProviderScope(
         overrides: [
           sharedPreferencesProvider.overrideWithValue(preferences),
+          sessionStoreProvider.overrideWithValue(sessions),
           authServiceProvider.overrideWithValue(_SignedIn()),
           appDatabaseProvider.overrideWithValue(db),
         ],
@@ -40,9 +44,7 @@ void main() {
       ),
     );
 
-    // Deliberately not pumpAndSettle. The bug is a frame, and settling is what
-    // hides it: by the time everything has come to rest the redirect has
-    // already corrected itself and the flash has been and gone.
+    // Deliberately not pumpAndSettle.
     for (var frame = 0; frame < 5; frame++) {
       expect(
         find.text('Continue as guest'),
@@ -73,10 +75,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // The other half of the same mapping. Deciding that "not known yet" means
-    // signed in would fix the flash by breaking arrival, which is the more
-    // expensive of the two: somebody who has never opened the app would land
-    // on an empty group list with no way to say who they are.
+    // The other half of the same mapping.
     expect(find.text('Continue as guest'), findsOneWidget);
   });
 
@@ -112,7 +111,7 @@ class _ChangingAuth implements AuthService {
       );
 
   @override
-  Account? currentUser = const Account(id: 'user-1', isAnonymous: false);
+  Account? currentUser = Account(id: 'user-1', isAnonymous: false, email: null);
 
   @override
   Stream<Account?> authStateChanges() => events.stream;
@@ -137,7 +136,11 @@ class _SignedOut implements AuthService {
 
 /// An auth service holding a session, the way one does after a reload.
 class _SignedIn implements AuthService {
-  static const _account = Account(id: 'user-1', isAnonymous: false);
+  static final _account = Account(
+    id: 'user-1',
+    isAnonymous: false,
+    email: null,
+  );
 
   @override
   Account? get currentUser => _account;

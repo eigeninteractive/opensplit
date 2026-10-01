@@ -1,0 +1,20 @@
+# Hand-written, and listed in .openapi-generator-ignore so regeneration does
+# not overwrite it.
+#
+# Every Dart file beside this one is generated from docs/openapi.json. Analysis
+# here is a COMPILE CHECK rather than a style gate: it exists to catch the
+# generator emitting Dart that does not typecheck, which is a real failure mode
+# and one worth catching in CI. It does not hold generated code to the app's
+# lint standards — holding a template to a hand-written project's posture is a
+# fight with a template, and silencing the app's own lints to suit it would be
+# the wrong trade. This is why the client is a path package rather than a
+# folder under lib/.
+
+analyzer:
+  errors:
+    # The templates import types into files that do not always use them, and
+    # json_serializable emits casts the analyzer judges redundant. Neither is
+    # ours to fix: the next generation overwrites any edit.
+    unused_import: ignore
+    unnecessary_cast: ignore
+    unused_element: ignore

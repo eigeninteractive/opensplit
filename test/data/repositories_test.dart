@@ -3,10 +3,11 @@ import 'package:drift/native.dart';
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';
-import 'package:opensplit/data/repositories/mappers.dart';
 import 'package:opensplit/domain/balance/balance_fold.dart';
+import 'package:opensplit/domain/balance/member_balance.dart';
 import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/split/splitter.dart';
+import 'package:opensplit_api/opensplit_api.dart' show SplitKind;
 import 'package:test/test.dart';
 
 import '../harness.dart';
@@ -131,7 +132,6 @@ void main() {
 
       expect(entry.isBalanced, isTrue);
       expect(entry.shares.map((s) => s.amountMinor), [80000, 80000, 80000]);
-      expect(entry.clientKey, entry.id, reason: 'retries must be idempotent');
     });
 
     test('multiple payers on one bill round-trip through storage', () async {
@@ -174,6 +174,26 @@ void main() {
       expect(await entries.getEntries(groupId), isEmpty);
     });
 
+    test('editing a deleted entry does not undelete it', () async {
+      EntryDraft draft(int amount) => EntryDraft(
+        groupId: groupId,
+        currency: 'INR',
+        amountMinor: amount,
+        split: EqualSplit([ravi, priya]),
+        payerAmounts: {ravi: amount},
+      );
+      final original = await entries.create(draft(1000), createdBy: ravi);
+      await entries.delete(original.id, actorId: ravi);
+
+      final edited = await entries.update(
+        original.id,
+        draft(1000),
+        actorId: ravi,
+      );
+
+      expect(edited.isDeleted, isTrue);
+    });
+
     test('editing replaces shares and keeps creation metadata', () async {
       final original = await entries.create(
         EntryDraft(
@@ -199,10 +219,10 @@ void main() {
       );
 
       expect(edited.id, original.id);
-      expect(edited.createdAt, original.createdAt);
-      expect(edited.clientKey, original.clientKey);
-      expect(edited.updatedAt.isAfter(original.updatedAt), isTrue);
-      expect(edited.splitKind, SplitKind.shares);
+      expect(edited.row.createdAt, original.row.createdAt);
+      // A local edit moves no version.
+      expect(edited.row.seq, original.row.seq);
+      expect(edited.row.splitKind, SplitKind.shares);
 
       final loaded = (await entries.getEntries(groupId)).single;
       expect(loaded.shares, hasLength(3));
@@ -234,11 +254,10 @@ void main() {
       );
       expect(withDeleted, hasLength(1));
       expect(withDeleted.single.isDeleted, isTrue);
-      expect(
-        withDeleted.single.updatedAt.isAfter(entry.updatedAt),
-        isTrue,
-        reason: 'other devices find the deletion by its updated_at cursor',
-      );
+      // Likewise for a soft delete: the base has to survive it, because
+      // deleting always moves money and the server refuses one composed against
+      // a version it no longer holds.
+      expect(withDeleted.single.row.seq, entry.row.seq);
       expect(foldBalances(withDeleted), isEmpty);
     });
 
@@ -326,4 +345,13 @@ void main() {
       expect(emissions.last, 1);
     });
   });
+}
+
+extension on List<MemberBalance> {
+  /// This member's balance in [currency], or zero if they are settled.
+  int minorFor(String memberId, String currency) => firstWhere(
+    (balance) => balance.memberId == memberId && balance.currency == currency,
+    orElse: () =>
+        const MemberBalance(memberId: '', currency: '', balanceMinor: 0),
+  ).balanceMinor;
 }

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12 and later. Everything is backed up except the file holding the
+     session token: it is encrypted with a Keystore key that never leaves this
+     device, so a restored copy could not be read anyway. The ledger itself is
+     still backed up. See lib/data/auth/session_store.dart. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="FlutterSecureStorage.xml"/>
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="FlutterSecureStorage.xml"/>
+    </device-transfer>
+</data-extraction-rules>

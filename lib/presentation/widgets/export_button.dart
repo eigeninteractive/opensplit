@@ -1,22 +1,16 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../../application/providers.dart';
+import '../../application/ledger_providers.dart';
+import '../../application/local_providers.dart';
+import '../../domain/calendar_date.dart';
 import '../../domain/export/csv_export.dart';
 import '../../domain/export/json_export.dart';
 
 /// Exports the group, in whichever of the two formats is wanted.
-///
-/// They are not the same file in different clothes. **CSV** is the filtered
-/// view for a person with a spreadsheet: flat, one row per expense, honouring
-/// whatever the analytics filter currently selects, because the useful export
-/// is usually a slice — one trip, one category, one person. **JSON** ignores
-/// the filter and takes everything: members who never claimed an account, the
-/// weights behind each split, the fx snapshot each entry was recorded against,
-/// and the activity log. It is the copy you keep.
 class ExportButton extends ConsumerStatefulWidget {
   const ExportButton({super.key, required this.groupId});
 
@@ -136,7 +130,7 @@ class _ExportButtonState extends ConsumerState<ExportButton> {
     final slug = (ledger?.group.name ?? 'opensplit')
         .replaceAll(RegExp(r'[^\w]+'), '-')
         .toLowerCase();
-    final day = DateTime.now().toIso8601String().split('T').first;
+    final day = calendarDate(DateTime.now());
     final name = '$slug-$day.$extension';
 
     await SharePlus.instance.share(

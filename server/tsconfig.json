@@ -1,0 +1,25 @@
+{
+  // The Worker, checked against workerd types only (no @types/node). Node-run files use
+  // tsconfig.node.json; tests use test/tsconfig.json.
+  "compilerOptions": {
+    "target": "es2024",
+    "lib": ["es2024"],
+    "module": "es2022",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    // For drizzle-kit's generated migrations.js; `src/sql.d.ts` types its `.sql` imports.
+    "allowJs": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    // Better Auth's declarations reference `bun:sqlite`.
+    "skipLibCheck": true,
+    "types": ["./worker-configuration.d.ts"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.js", "worker-configuration.d.ts"]
+}
