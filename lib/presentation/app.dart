@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:developer' as developer;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:in_app_update/in_app_update.dart';
 
@@ -169,7 +169,13 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
     return MaterialApp.router(
       onGenerateTitle: (context) => AppLocalizations.of(context).appTitle,
       debugShowCheckedModeBanner: false,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      // Not the generated `AppLocalizations.localizationsDelegates`: that
+      // names flutter_localizations' Material delegates, which material_ui's
+      // widgets never read, so they would fall back to hard-coded defaults.
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        ...GlobalMaterialLocalizations.delegates,
+      ],
       supportedLocales: AppLocalizations.supportedLocales,
       scaffoldMessengerKey: _messengerKey,
       theme: buildTheme(Brightness.light, wallpaper?.light),

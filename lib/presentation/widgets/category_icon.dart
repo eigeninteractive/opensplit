@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Resolves a category's stored icon name to a Material icon.
 const Map<String, IconData> _icons = {
