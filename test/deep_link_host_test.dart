@@ -75,7 +75,7 @@ void main() {
       r'android:pathPrefix="([^"]+)"',
     ).allMatches(manifest).map((m) => m.group(1)!).toList();
 
-    final invite = joinUrl(linkHost, 'tok');
+    final invite = joinUrl(linkOrigin, 'tok');
 
     expect(prefixes, hasLength(1), reason: 'one prefix, matching one split');
     expect(

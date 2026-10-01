@@ -98,7 +98,7 @@ class _GroupLinkSheetState extends ConsumerState<_GroupLinkSheet> {
     }
   }
 
-  String get _url => joinUrl(linkHost, _link!.token);
+  String get _url => joinUrl(linkOrigin, _link!.token);
 
   Future<void> _share() async {
     final name = ref.read(groupLedgerProvider(widget.groupId))?.group.name;

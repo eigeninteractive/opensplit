@@ -11,9 +11,9 @@
     // `migrations/` trees by drizzle-kit — including `migrations.js`, which it rewrites
     // on every generate. All are regenerated in CI and diffed, so formatting any of them
     // would turn a regeneration into a drift failure. `worker-configuration.d.ts` is
-    // wrangler's. `package.json` is npm's — it rewrites it with two-space indent on every
-    // install, which is a fight with no winner.
-    "includes": ["**", "!**/worker-configuration.d.ts", "!migrations/meta", "!src/do/*/migrations", "!src/auth-schema.ts", "!package.json", "!package-lock.json"]
+    // wrangler's. `package.json` is pnpm's — it rewrites it with two-space indent whenever it
+    // edits it, which is a fight with no winner.
+    "includes": ["**", "!**/worker-configuration.d.ts", "!migrations/meta", "!src/do/*/migrations", "!src/auth-schema.ts", "!package.json", "!pnpm-lock.yaml"]
   },
   "formatter": {
     "enabled": true,

@@ -43,7 +43,8 @@ roughly 50:1, so putting reads on devices people already own is what makes
 
 ## Development
 
-Requires the Flutter SDK and Node.
+Requires the Flutter SDK, Node and pnpm (the version `server/package.json` pins under
+`packageManager`; `corepack enable` installs it).
 
 ```bash
 flutter pub get
@@ -57,23 +58,23 @@ The local backend:
 ```bash
 dart run tool/build_web.dart --site-only   # the Worker serves a front end too
 cd server
-npm ci
-npm run db:migrate:local           # applies server/migrations to local D1
-npm run dev                        # the real Worker, on 127.0.0.1:8787
-npm test                           # the Durable Object and the routes
+pnpm install
+pnpm db:migrate:local      # applies server/migrations to local D1
+pnpm dev                   # the real Worker, on localhost:8787
+pnpm test                  # the Durable Object and the routes
 ```
 
 `wrangler dev` runs the real Worker over local D1, KV and Durable Object
 storage. Nothing it does touches a Cloudflare account, and it needs no
-credentials beyond `cp .dev.vars.example .dev.vars`. The npm scripts run it as
+credentials beyond `cp .dev.vars.example .dev.vars`. The package scripts run it as
 `--env test`, which is production's config with the rate limits raised out of
-the way; run `wrangler` by hand with the same flag. `npm test` does not use it,
+the way; run `wrangler` by hand with the same flag. `pnpm test` does not use it,
 so the server's own suite runs against the real limits.
 
 The first line is there because the Worker serves the site and the client as
 well as the API, and it refuses to start at all without an assets directory.
 `--site-only` builds the static root in about a second and skips the Flutter
-client; drop the flag when you want `/app` too. `npm test` needs neither — the
+client; drop the flag when you want `/app` too. `pnpm test` needs neither — the
 server suite serves a three-file fixture it owns, so it never depends on which
 build ran last.
 
@@ -106,7 +107,7 @@ lookup to answer "is this person a member".
 
 ```bash
 dart run tool/build_web.dart                           # the whole front end
-cd server && npm run db:migrate:local && npm run dev   # in one terminal
+cd server && pnpm db:migrate:local && pnpm dev   # in one terminal
 flutter test --tags integration
 ```
 
@@ -120,7 +121,7 @@ the rules they exercise are the server's own. Nothing touches a Cloudflare
 account and no credentials are needed.
 
 They skip themselves unless an OpenSplit Worker answers `/api/health`, so
-`flutter test` stays green without one. To use another port (`npx wrangler dev
+`flutter test` stays green without one. To use another port (`pnpm exec wrangler dev
 --env test --port 8797`), pass `--dart-define=API_BASE_URL=http://127.0.0.1:8797`. CI runs
 them in the `backend` job with `--dart-define=REQUIRE_BACKEND=true`, so a
 missing Worker there fails rather than skips.
@@ -301,7 +302,7 @@ supported *pair*.
 
 ```bash
 # Optional, and only for full coverage — see the table below.
-cd server && npx wrangler secret put EXCHANGERATE_API_KEY
+cd server && pnpm exec wrangler secret put EXCHANGERATE_API_KEY
 ```
 
 A daily cron (`0 4 * * *`, after ECB publishes) calls the `Fx` Durable Object,
@@ -535,8 +536,8 @@ JSON; unlike everything above, **it is a real secret**:
 
 ```bash
 cd server
-npx wrangler secret put FCM_PROJECT_ID
-npx wrangler secret put FCM_SERVICE_ACCOUNT   # paste the whole JSON
+pnpm exec wrangler secret put FCM_PROJECT_ID
+pnpm exec wrangler secret put FCM_SERVICE_ACCOUNT   # paste the whole JSON
 ```
 
 There is no webhook, no shared secret and no trigger. The group's Durable
@@ -597,52 +598,55 @@ wakes an open tab. Tapping any of these opens the entry it was about rather
 than the app's front door, on all three paths: foreground, backgrounded, and
 launched from cold.
 
-## Developing against a local Worker with the real Firebase
+## Developing against a local Worker
 
-The usual working setup: the API, the database and auth all local, but push
-going through the real FCM project, because there is no local FCM.
+Everything local: the API, D1, KV, the Durable Objects and auth all run inside
+`wrangler dev`, which keeps their data under `server/.wrangler/state` and never
+reaches a Cloudflare account. With `server/.dev.vars` copied from the example
+nothing leaves the machine either: no Google credentials (sign in as a guest or
+by email code), no email provider (the code is printed in the Worker's
+terminal), and no FCM credentials (push is skipped). The step-by-step version,
+including a phone, is in [docs/runbook.md](docs/runbook.md) under *Testing a
+branch locally*.
+
+**The web client** is served by the Worker it talks to, exactly as in
+production, and on the web it uses its page's origin as the API: the same
+bundle works on `localhost:8787` and on the real domain. So build it once and
+open it through the Worker:
 
 ```bash
-dart run tool/build_web.dart --site-only
-cd server && npm run db:migrate:local && npm run dev
+dart run tool/build_web.dart     # the whole front end, into build/web
+cd server && pnpm db:migrate:local && pnpm dev
+# then open http://localhost:8787/app
 ```
 
-`wrangler dev` runs the real Worker over local D1, KV and Durable Object
-storage. Nothing it does touches a Cloudflare account and it needs no
-credentials. It does need an assets directory to exist, which is what the first
-line is for.
+`localhost`, not `127.0.0.1`: the session cookie and Better Auth's
+`APP_ORIGIN` in `.dev.vars` are both for `localhost`. Rebuild after changing
+Dart code; there is no hot reload on this path. `flutter run -d chrome` still
+works for layout work, but it serves the app from its own origin, so it has no
+backend there and no cross-origin isolation for the local database.
 
-Config files are merged in order and **later files win**, so a local override
-goes last:
+**Android** has no page to take an origin from, so it is told where the Worker
+is, and the override goes last because later files win:
 
 ```bash
-cp env/local.example.json env/local.json
+cp env/local.example.json env/local.json   # API_BASE_URL for the emulator
 
-flutter run -d chrome \
+flutter run \
   --dart-define-from-file=env/app.json \
   --dart-define-from-file=env/local.json
 ```
 
-`env/local.json` only needs to override `API_BASE_URL`. Later files win, so it
-goes last. `http://127.0.0.1:8787` is already the default in `lib/config.dart`,
-so a bare `flutter run` against a local `wrangler dev` needs no defines at all —
-just no Firebase.
-
-There is no key to set alongside it. The backend is one origin serving the site,
-the app bundle and the API, and a request carries a session or it carries
-nothing, so there is no anonymous public identifier to configure.
-
 **The URL depends on where the app runs**, and this is the step that wastes an
 afternoon:
 
-| Running on | `API_BASE_URL` |
+| Running on | `API_BASE_URL` in `env/local.json` |
 |---|---|
-| Chrome, on this machine | `http://127.0.0.1:8787` |
 | Android emulator | `http://10.0.2.2:8787` — the emulator's own 127.0.0.1 is the emulator |
 | Physical Android device | `http://<this machine's LAN address>:8787`, same Wi-Fi |
 
-For the last two, start the Worker with `npx wrangler dev --env test --ip 0.0.0.0`, which
-it does not do by default.
+For a physical phone, start the Worker with `pnpm dev --ip 0.0.0.0`, which it
+does not do by default.
 
 Android has blocked cleartext HTTP since API 28, so a debug build also needs
 `android/app/src/debug/res/xml/network_security_config.xml` — already committed,
@@ -656,7 +660,7 @@ One terminal. Both live inside the Worker now, so there is nothing separate to
 serve and no trigger to point anywhere:
 
 ```bash
-cd server && npm run dev
+cd server && pnpm dev
 ```
 
 Put `FCM_PROJECT_ID` and `FCM_SERVICE_ACCOUNT` in `.dev.vars` if you want a
@@ -668,7 +672,7 @@ The rate cron can be driven by hand, which is also what CI does before the
 adapter tests:
 
 ```bash
-npx wrangler dev --env test --test-scheduled   # exposes the handler
+pnpm dev --test-scheduled   # exposes the handler
 curl 'http://127.0.0.1:8787/cdn-cgi/handler/scheduled?cron=0+4+*+*+*'
 curl 'http://127.0.0.1:8787/api/fx?since=2026-01-01'
 ```
@@ -704,8 +708,8 @@ its session in a first-party `HttpOnly` cookie rather than a token JavaScript
 can read.
 
 ```bash
-dart run tool/build_web.dart          # builds /app/, then copies site/ over the root
-cd server && npx wrangler deploy      # script and bundle, one version
+dart run tool/build_web.dart             # builds /app/, then copies site/ over the root
+cd server && pnpm exec wrangler deploy   # script and bundle, one version
 ```
 
 `build/web` is the Worker's `assets.directory`, so those two commands are one
@@ -733,8 +737,10 @@ refuses to start without an assets directory, and a two-minute Flutter build is
 a strange price for editing a route handler.
 
 `opensplit.eigeninteractive.com` is the official domain, and the only one. It
-hosts the web app, it is the host written into every invite link (`LINK_HOST` in
-`lib/config.dart`), and it is the single entry in the App Links intent filter.
+hosts the web app, it is the host in every invite link (`LINK_HOST` in
+`lib/config.dart` for Android; the web mints links under the origin that served
+it, which in production is this one), and it is the single entry in the App
+Links intent filter.
 `workers.dev` is switched off so that there is no second address at all.
 
 That is a deliberate commitment rather than a default. Every host the app has

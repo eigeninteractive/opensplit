@@ -26,7 +26,7 @@ const isPlaceholder = (id: string | undefined) => id === undefined || /^0+f?$/.t
 const unset = bindings.filter((binding) => isPlaceholder(binding.database_id ?? binding.id)).map((binding) => binding.binding);
 
 if (unset.length > 0) {
-  console.error(`wrangler.jsonc still names placeholder resources for ${unset.join(", ")}. Create them and commit their ids; see docs/runbook.md, steps 1 and 2.`);
+  console.error(`wrangler.jsonc still names placeholder resources for ${unset.join(", ")}. Create them and commit their ids; see "Production setup, once", step 1, in docs/runbook.md.`);
   process.exit(1);
 }
 console.log(`Deploying to real resources: ${bindings.map((binding) => binding.binding).join(", ")}.`);

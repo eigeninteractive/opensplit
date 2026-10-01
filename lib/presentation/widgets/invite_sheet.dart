@@ -65,7 +65,7 @@ class _InviteSheetState extends ConsumerState<_InviteSheet> {
       );
       if (mounted) {
         setState(() {
-          _url = joinUrl(linkHost, invite.token);
+          _url = joinUrl(linkOrigin, invite.token);
           _expires = invite.expiresAt;
         });
       }

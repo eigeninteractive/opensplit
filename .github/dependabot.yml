@@ -10,10 +10,10 @@ updates:
     schedule:
       interval: weekly
 
-  # The Worker. Better Auth and Wrangler both move fast, and this is the half
-  # of the project with no lockfile-enforcing CI step of its own -- `npm ci`
-  # takes whatever package-lock.json says, so nothing notices a version going
-  # stale until something breaks.
+  # The Worker. Better Auth and Wrangler both move fast, and CI installs
+  # exactly what pnpm-lock.yaml says (`--frozen-lockfile`), so nothing notices a
+  # version going stale until something breaks. The `npm` ecosystem is also
+  # Dependabot's name for pnpm; it reads and updates pnpm-lock.yaml.
   - package-ecosystem: npm
     directory: /server
     schedule:

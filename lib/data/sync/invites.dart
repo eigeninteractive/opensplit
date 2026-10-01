@@ -2,8 +2,8 @@ import 'package:opensplit_api/opensplit_api.dart' as api;
 
 import 'api_client.dart';
 
-/// The URL a link token is shared as.
-String joinUrl(String host, String token) => 'https://$host/app/join/$token';
+/// The URL a link token is shared as, under [origin] (`linkOrigin`).
+String joinUrl(String origin, String token) => '$origin/app/join/$token';
 
 /// Invites and open links, over the generated client. Throws [ApiFailure].
 class Invites {

@@ -29,7 +29,7 @@ only honest answer, and it is cheap only while nobody's records matter.
 
 ```sh
 cd server
-npx wrangler d1 export opensplit --remote --output backup.sql
+pnpm exec wrangler d1 export opensplit --remote --output backup.sql
 ```
 
 Insurance, not an input. Nothing below reads it; it exists so that "it turned
@@ -44,8 +44,8 @@ D1 also has Time Travel, which is a better answer than a file for the thirty
 days it covers:
 
 ```sh
-npx wrangler d1 time-travel info opensplit
-npx wrangler d1 time-travel restore opensplit --timestamp <iso8601>
+pnpm exec wrangler d1 time-travel info opensplit
+pnpm exec wrangler d1 time-travel restore opensplit --timestamp <iso8601>
 ```
 
 ---
@@ -71,7 +71,7 @@ deploys, with the tree temporarily missing a class:
 with `export { Group }` commented out of `src/index.ts`, then:
 
 ```sh
-npx wrangler deploy      # the namespace and every group in it are gone
+pnpm exec wrangler deploy      # the namespace and every group in it are gone
 ```
 
 Then put both back as they were — `"Group": { "type": "durable-object",
@@ -89,7 +89,7 @@ Three things worth knowing before you do it:
 - **Lifecycle changes cannot be part of a gradual rollout**, and a version
   containing one cannot be rolled back past. Deploy it on its own.
 
-`npx wrangler delete` is the blunter alternative: it removes the whole Worker
+`pnpm exec wrangler delete` is the blunter alternative: it removes the whole Worker
 and its namespaces in one command. It also removes the secrets and detaches the
 custom domain, so the way back is most of the runbook. Prefer the tombstone.
 
@@ -98,15 +98,15 @@ custom domain, so the way back is most of the runbook. Prefer the tombstone.
 ## 3. Rebuild D1
 
 ```sh
-npx wrangler d1 delete opensplit
-npx wrangler d1 create opensplit          # prints a NEW database_id
+pnpm exec wrangler d1 delete opensplit
+pnpm exec wrangler d1 create opensplit          # prints a NEW database_id
 ```
 
 Put the new id in `server/wrangler.jsonc` and commit it, then:
 
 ```sh
-npx wrangler d1 migrations apply opensplit --remote
-npx wrangler deploy
+pnpm exec wrangler d1 migrations apply opensplit --remote
+pnpm exec wrangler deploy
 ```
 
 Recreating rather than dropping tables by hand, because the migration state
@@ -130,7 +130,7 @@ So: **objects first, then D1** — or neither.
 ## 4. Put back what migrations cannot carry
 
 Secrets survive a D1 reset, because they belong to the Worker. They do **not**
-survive `wrangler delete`. After one of those, all of step 4 in
+survive `wrangler delete`. After one of those, all of step 6 ("Secrets") in
 [the runbook](runbook.md) again.
 
 KV needs nothing. The rate blobs and the FCM token rebuild themselves — the
@@ -157,7 +157,7 @@ curl -s $base/api/reference | head -c 120
 curl -s -X POST $base/api/identity/guest
 
 # A group object can be created and reached at all.
-npx wrangler tail --format pretty
+pnpm exec wrangler tail --format pretty
 ```
 
 ---

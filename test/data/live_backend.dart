@@ -1,4 +1,4 @@
-/// Devices talking to a real local Worker: `cd server && npm run dev`.
+/// Devices talking to a real local Worker: `cd server && pnpm dev`.
 ///
 /// There is no fake server. Every rule the server enforces is enforced here by
 /// the server itself; tests only observe, pause or fail requests on the way
@@ -52,7 +52,7 @@ void setUpBackend() {
       _backendUp = false;
     }
     if (!_backendUp && const bool.fromEnvironment('REQUIRE_BACKEND')) {
-      fail('No OpenSplit Worker at $backendOrigin. Run `npm run dev`.');
+      fail('No OpenSplit Worker at $backendOrigin. Run `pnpm dev`.');
     }
   });
 }

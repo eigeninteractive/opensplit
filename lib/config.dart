@@ -3,17 +3,31 @@ library;
 
 import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 
-/// Where the OpenSplit backend lives.
-const String apiBaseUrl = String.fromEnvironment(
+/// The backend an Android build was pointed at.
+const String _definedApiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
   defaultValue: 'http://localhost:8787',
 );
 
-/// The one host this app is served from and generates links for.
+/// Where the OpenSplit backend lives.
+///
+/// On the web, always the origin that served this page: the Worker serves the
+/// app and the API together, so the bundle needs no URL of its own and runs
+/// unchanged on a local `wrangler dev` and in production. Only Android, which
+/// has no page, is told where to go.
+String get apiBaseUrl => kIsWeb ? Uri.base.origin : _definedApiBaseUrl;
+
+/// The one host this app is served from in production, and the one Android's
+/// App Links claim.
 const String linkHost = String.fromEnvironment(
   'LINK_HOST',
   defaultValue: 'opensplit.eigeninteractive.com',
 );
+
+/// The origin invite links are minted under: the page's own on the web, for
+/// the same reason as [apiBaseUrl], so a link made on a local Worker opens on
+/// that Worker.
+String get linkOrigin => kIsWeb ? Uri.base.origin : 'https://$linkHost';
 
 /// The public policy pages, served from the same host as the web app.
 String get privacyPolicyUrl => 'https://$linkHost/privacy';
@@ -38,9 +52,10 @@ bool get isLocalBackend =>
     apiBaseUrl.contains('localhost') ||
     apiBaseUrl.contains('10.0.2.2');
 
-/// What is wrong with this build's configuration, if anything.
+/// What is wrong with this build's configuration, if anything. Never on the
+/// web, whose backend is wherever the page came from.
 String? get configurationProblem {
-  if (kDebugMode || !isLocalBackend) return null;
+  if (kIsWeb || kDebugMode || !isLocalBackend) return null;
   return 'This build points at $apiBaseUrl, which is a developer machine and '
       'is not reachable from a phone or a browser. It was almost certainly '
       'built without --dart-define-from-file=env/app.json.';

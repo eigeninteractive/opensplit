@@ -18,8 +18,8 @@
 // step has succeeded. The committed client is never left half-written by a
 // generator that failed in the middle.
 //
-// Toolchain: Node (the generator ships as a Java program with an npm launcher),
-// a JDK on PATH, and Dart. The JDK comes from the environment — CI's
+// Toolchain: Node and pnpm (the generator ships as a Java program with an npm
+// launcher, run through `pnpm dlx`), a JDK on PATH, and Dart. The JDK comes from the environment — CI's
 // setup-java, or a local install; nothing here installs one.
 
 import 'dart:io';
@@ -63,8 +63,8 @@ Future<void> main(List<String> args) async {
     source.copySync('$stage/$name');
   }
 
-  await _run('npx', [
-    '--yes',
+  await _run('pnpm', [
+    'dlx',
     '@openapitools/openapi-generator-cli',
     'generate',
     '-c',
@@ -126,12 +126,12 @@ Future<void> main(List<String> args) async {
 Future<void> _emitSpec() async {
   if (!Directory('server/node_modules').existsSync()) {
     _fail(
-      'server/node_modules is missing. Run `npm ci` in server/ first — the contract is generated from the Zod schemas there.',
+      'server/node_modules is missing. Run `pnpm install` in server/ first — the contract is generated from the Zod schemas there.',
     );
   }
   await _run(
-    'npm',
-    ['run', '--silent', 'openapi'],
+    'pnpm',
+    ['--silent', 'run', 'openapi'],
     workingDirectory: 'server',
     what: 'OpenAPI emission',
   );
