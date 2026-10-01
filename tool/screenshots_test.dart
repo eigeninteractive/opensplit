@@ -324,7 +324,9 @@ Future<String> _seed(AppDatabase db) async {
     _Category.flights,
     'GBP',
     41280,
-    paidBy: you,
+    // Arjun booked them, so the trip owes you euros while you owe him pounds:
+    // the group list shows both directions, each on its own line.
+    paidBy: arjun,
     splitBetween: everyone,
     daysAgo: 6,
     fxRate: 1.1712,

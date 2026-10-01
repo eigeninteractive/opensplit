@@ -102,6 +102,31 @@ void main() {
     }
   });
 
+  test('the FAQ that search engines read is the one people read', () {
+    // The questions are written twice, once as <details> and once as JSON-LD
+    // for rich results. Malformed JSON is dropped by crawlers without a word,
+    // and a question in only one of the two is an answer the other cannot see.
+    final structured = [
+      for (final match in RegExp(
+        r'<script type="application/ld\+json">(.*?)</script>',
+        dotAll: true,
+      ).allMatches(landing))
+        jsonDecode(match.group(1)!) as Map<String, dynamic>,
+    ];
+    final faq = structured.singleWhere((data) => data['@type'] == 'FAQPage');
+    final questions = [
+      for (final entry in faq['mainEntity'] as List)
+        (entry as Map<String, dynamic>)['name'],
+    ];
+
+    expect(
+      questions,
+      RegExp(
+        '<summary>([^<]*)</summary>',
+      ).allMatches(landing).map((match) => match.group(1)).toList(),
+    );
+  });
+
   test('the declared dimensions match the file', () {
     final card = decodePng(File('site/store/og-card.png').readAsBytesSync())!;
 
