@@ -25,6 +25,12 @@ Future<void> main(List<String> args) async {
   final parser = ArgParser()
     ..addOption('config', defaultsTo: 'env/app.json')
     ..addOption('build-id')
+    ..addOption(
+      'build-number',
+      help:
+          "The release's build number, which About shows. The release "
+          'workflow passes the one the Android bundle gets.',
+    )
     ..addFlag(
       'site-only',
       negatable: false,
@@ -46,6 +52,7 @@ Future<void> main(List<String> args) async {
     await _build(
       options.option('config')!,
       options.option('build-id'),
+      buildNumber: _buildNumber(options.option('build-number')),
       siteOnly: options.flag('site-only'),
     );
   } on FormatException catch (error) {
@@ -72,6 +79,7 @@ Future<void> main(List<String> args) async {
 Future<void> _build(
   String configPath,
   String? requestedBuildId, {
+  int? buildNumber,
   bool siteOnly = false,
 }) async {
   final buildId = await _buildId(requestedBuildId);
@@ -100,6 +108,9 @@ Future<void> _build(
       // Absolute, which is what --output requires.
       '--output=${Directory.current.path}/build/web/app',
       '--dart-define-from-file=$configPath',
+      // Into version.json, which is where package_info_plus reads it on the
+      // web. Without it a release would show pubspec.yaml's version alone.
+      if (buildNumber != null) '--build-number=$buildNumber',
     ]);
   }
 
@@ -242,6 +253,15 @@ Future<String> _buildId(String? requested) async {
     exit(result.exitCode);
   }
   return _validateId('${result.stdout}'.trim());
+}
+
+int? _buildNumber(String? value) {
+  if (value == null) return null;
+  final number = int.tryParse(value);
+  if (number == null || number < 1) {
+    throw FormatException('Invalid build number: $value');
+  }
+  return number;
 }
 
 String _validateId(String value) {

@@ -32,7 +32,10 @@
       "!web/flutter_bootstrap.js",
       // The skills and openapi-generator CLIs'.
       "!skills-lock.json",
-      "!openapitools.json"
+      "!openapitools.json",
+      // The designer's canvases and their tool's runtime, kept as written.
+      "!docs/brand/*.dc.html",
+      "!docs/brand/support.js"
     ]
   },
   "formatter": {

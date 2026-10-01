@@ -71,6 +71,15 @@ platform :android do
     )
     UI.user_error!("Build the signed release AAB first") unless File.file?(bundle)
 
+    # Testers' "What's new", from CHANGELOG.md: a directory in supply's
+    # metadata layout, holding <language>/changelogs/default.txt and nothing
+    # else, which the release workflow writes with tool/release_notes.dart.
+    # Unset, a release goes up without notes, as one from a laptop would.
+    notes = ENV["PLAY_RELEASE_NOTES_DIR"].to_s
+    unless notes.empty? || Dir.glob(File.join(notes, "*", "changelogs", "default.txt")).any?
+      UI.user_error!("PLAY_RELEASE_NOTES_DIR has no <language>/changelogs/default.txt")
+    end
+
     if priority >= 4
       UI.important(
         "in-app update priority #{priority}: this release will interrupt " \
@@ -86,8 +95,9 @@ platform :android do
       json_key: credentials,
       aab: bundle,
       skip_upload_apk: true,
+      metadata_path: notes.empty? ? nil : notes,
       skip_upload_metadata: true,
-      skip_upload_changelogs: true,
+      skip_upload_changelogs: notes.empty?,
       skip_upload_images: true,
       skip_upload_screenshots: true,
       # Fail visibly rather than silently changing review semantics on retry.

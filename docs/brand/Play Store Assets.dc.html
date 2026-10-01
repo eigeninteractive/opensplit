@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>body{margin:0;background:#EFEDF4;}</style>
+</helmet>
+
+<div style="font-family:'Instrument Sans',Helvetica,sans-serif; padding:40px; display:flex; flex-direction:column; gap:36px;">
+
+  <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#5D5C71;">Play Store assets — exact export size, no scaling. Feature graphics 1024×500, screenshots 1080×1920.</div>
+
+  <!-- ============ FEATURE GRAPHIC — LIGHT ============ -->
+  <div id="fg-light" style="width:1024px; height:500px; background:#FBF8FF; position:relative; overflow:hidden; display:flex; align-items:center;">
+    <div style="position:absolute; right:-120px; top:-160px; width:480px; height:480px; border-radius:50%; background:#E3DFFF;"></div>
+    <div style="position:relative; z-index:1; display:flex; align-items:center; justify-content:space-between; width:100%; padding:0 72px;">
+      <div style="display:flex; flex-direction:column; gap:22px; max-width:520px;">
+        <div style="display:flex; align-items:center; gap:16px;">
+          <svg width="64" height="64" viewBox="0 0 48 48"><defs><mask id="s1"><rect width="48" height="48" fill="#fff"/><rect x="20.75" y="-4" width="6.5" height="56" fill="#000" transform="rotate(24 24 24)"/></mask></defs><circle cx="24" cy="24" r="17" fill="none" stroke="#5B5891" stroke-width="6.5" mask="url(#s1)"/></svg>
+          <div style="font-size:46px; letter-spacing:-.035em; color:#1B1B21;"><span style="font-weight:400;">Open</span><span style="font-weight:700;">Split</span></div>
+        </div>
+        <div style="font-size:26px; font-weight:600; line-height:1.3; color:#1B1B21; text-wrap:pretty;">Open source. No fees. No ads.</div>
+        <div style="font-size:16px; color:#47464F; line-height:1.5;">Split bills with friends and roommates — free forever, self-hostable.</div>
+      </div>
+      <div style="width:230px; height:462px; margin-top:38px; border-radius:34px; background:#1B1B21; padding:8px; box-shadow:0 30px 60px -20px rgba(30,20,60,.35);">
+        <div style="width:100%; height:100%; border-radius:27px; background:#FBF8FF; overflow:hidden; display:flex; flex-direction:column;">
+          <div style="padding:20px 16px 10px; display:flex; flex-direction:column; gap:2px;">
+            <div style="font-size:11px; color:#47464F;">Overall, you're owed</div>
+            <div style="font-family:'JetBrains Mono',monospace; font-size:28px; font-weight:700; color:#5B5891;">₹1,240</div>
+          </div>
+          <div style="flex:1; display:flex; flex-direction:column; gap:8px; padding:6px 12px;">
+            <div style="background:#FFFFFF; border-radius:14px; padding:10px 12px; display:flex; justify-content:space-between; align-items:center;"><div style="font-size:12px; font-weight:600; color:#1B1B21;">Goa trip</div><div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#5B5891;">+820</div></div>
+            <div style="background:#FFFFFF; border-radius:14px; padding:10px 12px; display:flex; justify-content:space-between; align-items:center;"><div style="font-size:12px; font-weight:600; color:#1B1B21;">Flat 402</div><div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#BA1A1A;">−310</div></div>
+            <div style="background:#FFFFFF; border-radius:14px; padding:10px 12px; display:flex; justify-content:space-between; align-items:center;"><div style="font-size:12px; font-weight:600; color:#1B1B21;">Football</div><div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#5B5891;">+730</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ FEATURE GRAPHIC — DARK ============ -->
+  <div id="fg-dark" style="width:1024px; height:500px; background:#131318; position:relative; overflow:hidden; display:flex; align-items:center;">
+    <div style="position:absolute; right:-120px; top:-160px; width:480px; height:480px; border-radius:50%; background:#1F1F25;"></div>
+    <div style="position:relative; z-index:1; display:flex; align-items:center; justify-content:space-between; width:100%; padding:0 72px;">
+      <div style="display:flex; flex-direction:column; gap:22px; max-width:520px;">
+        <div style="display:flex; align-items:center; gap:16px;">
+          <svg width="64" height="64" viewBox="0 0 48 48"><defs><mask id="s2"><rect width="48" height="48" fill="#fff"/><rect x="20.75" y="-4" width="6.5" height="56" fill="#000" transform="rotate(24 24 24)"/></mask></defs><circle cx="24" cy="24" r="17" fill="none" stroke="#C4C0FF" stroke-width="6.5" mask="url(#s2)"/></svg>
+          <div style="font-size:46px; letter-spacing:-.035em; color:#E4E1E9;"><span style="font-weight:400;">Open</span><span style="font-weight:700;">Split</span></div>
+        </div>
+        <div style="font-size:26px; font-weight:600; line-height:1.3; color:#E4E1E9; text-wrap:pretty;">Open source. No fees. No ads.</div>
+        <div style="font-size:16px; color:#C9C5D0; line-height:1.5;">Split bills with friends and roommates — free forever, self-hostable.</div>
+      </div>
+      <div style="width:230px; height:462px; margin-top:38px; border-radius:34px; background:#000000; padding:8px; box-shadow:0 30px 60px -20px rgba(0,0,0,.5);">
+        <div style="width:100%; height:100%; border-radius:27px; background:#131318; overflow:hidden; display:flex; flex-direction:column;">
+          <div style="padding:20px 16px 10px; display:flex; flex-direction:column; gap:2px;">
+            <div style="font-size:11px; color:#918F9A;">Overall, you're owed</div>
+            <div style="font-family:'JetBrains Mono',monospace; font-size:28px; font-weight:700; color:#C4C0FF;">₹1,240</div>
+          </div>
+          <div style="flex:1; display:flex; flex-direction:column; gap:8px; padding:6px 12px;">
+            <div style="background:#1F1F25; border-radius:14px; padding:10px 12px; display:flex; justify-content:space-between; align-items:center;"><div style="font-size:12px; font-weight:600; color:#E4E1E9;">Goa trip</div><div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#C4C0FF;">+820</div></div>
+            <div style="background:#1F1F25; border-radius:14px; padding:10px 12px; display:flex; justify-content:space-between; align-items:center;"><div style="font-size:12px; font-weight:600; color:#E4E1E9;">Flat 402</div><div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#FFB4AB;">−310</div></div>
+            <div style="background:#1F1F25; border-radius:14px; padding:10px 12px; display:flex; justify-content:space-between; align-items:center;"><div style="font-size:12px; font-weight:600; color:#E4E1E9;">Football</div><div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#C4C0FF;">+730</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SCREENSHOT 1 — GROUPS OVERVIEW ============ -->
+  <div id="shot-1" style="width:1080px; height:1920px; background:#FBF8FF; display:flex; flex-direction:column; overflow:hidden;">
+    <div style="background:#5B5891; padding:130px 64px 56px; display:flex; flex-direction:column; gap:18px;">
+      <div style="font-size:48px; font-weight:800; color:#FFFFFF; line-height:1.15; text-wrap:pretty;">See who owes what, at a glance</div>
+    </div>
+    <div style="flex:1; padding:44px 48px; display:flex; flex-direction:column; gap:20px;">
+      <div style="display:flex; align-items:center; gap:14px;">
+        <svg width="40" height="40" viewBox="0 0 48 48"><defs><mask id="s3"><rect width="48" height="48" fill="#fff"/><rect x="20.75" y="-4" width="6.5" height="56" fill="#000" transform="rotate(24 24 24)"/></mask></defs><circle cx="24" cy="24" r="17" fill="none" stroke="#5B5891" stroke-width="6.5" mask="url(#s3)"/></svg>
+        <div style="font-size:26px; font-weight:600; color:#1B1B21;"><span style="font-weight:400;">Open</span><span style="font-weight:700;">Split</span></div>
+      </div>
+      <div style="background:#FFFFFF; border-radius:28px; padding:32px; display:flex; flex-direction:column; gap:6px; box-shadow:0 2px 10px rgba(30,20,60,.08);">
+        <div style="font-size:18px; color:#47464F;">Overall, you're owed</div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:64px; font-weight:700; color:#5B5891; letter-spacing:-.02em;">₹1,240</div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:16px; margin-top:12px;">
+        <div style="background:#FFFFFF; border-radius:24px; padding:26px 28px; display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; flex-direction:column; gap:4px;"><div style="font-size:24px; font-weight:700; color:#1B1B21;">Goa trip</div><div style="font-size:17px; color:#78767F;">4 members</div></div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:24px; color:#5B5891;">+820.00</div>
+        </div>
+        <div style="background:#FFFFFF; border-radius:24px; padding:26px 28px; display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; flex-direction:column; gap:4px;"><div style="font-size:24px; font-weight:700; color:#1B1B21;">Flat 402</div><div style="font-size:17px; color:#78767F;">3 members</div></div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:24px; color:#BA1A1A;">−310.00</div>
+        </div>
+        <div style="background:#FFFFFF; border-radius:24px; padding:26px 28px; display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; flex-direction:column; gap:4px;"><div style="font-size:24px; font-weight:700; color:#1B1B21;">Sunday football</div><div style="font-size:17px; color:#78767F;">7 members</div></div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:24px; color:#5B5891;">+730.00</div>
+        </div>
+        <div style="background:#F5F2FA; border-radius:24px; padding:26px 28px; display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; flex-direction:column; gap:4px;"><div style="font-size:24px; font-weight:700; color:#78767F;">Office lunch</div><div style="font-size:17px; color:#918F9A;">settled</div></div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:24px; color:#918F9A;">0.00</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SCREENSHOT 2 — ADD EXPENSE ============ -->
+  <div id="shot-2" style="width:1080px; height:1920px; background:#FBF8FF; display:flex; flex-direction:column; overflow:hidden;">
+    <div style="background:#5B5891; padding:130px 64px 56px; display:flex; flex-direction:column; gap:18px;">
+      <div style="font-size:48px; font-weight:800; color:#FFFFFF; line-height:1.15; text-wrap:pretty;">Add an expense in seconds</div>
+    </div>
+    <div style="flex:1; padding:44px 48px; display:flex; flex-direction:column; gap:24px;">
+      <div style="display:flex; align-items:center; justify-content:space-between;">
+        <div style="font-size:26px; font-weight:700; color:#1B1B21;">Goa trip</div>
+        <div style="width:56px; height:56px; border-radius:16px; background:#E3DFFF; display:flex; align-items:center; justify-content:center; font-size:30px; font-weight:300; color:#14134A;">+</div>
+      </div>
+      <div style="background:#FFFFFF; border-radius:28px; padding:32px; display:flex; flex-direction:column; gap:22px;">
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <div style="font-size:16px; color:#78767F;">Description</div>
+          <div style="font-size:26px; font-weight:600; color:#1B1B21;">Dinner at Kōan</div>
+        </div>
+        <div style="height:1px; background:#E3E0EA;"></div>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <div style="font-size:16px; color:#78767F;">Amount</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:44px; font-weight:700; color:#5B5891;">₹1,720.00</div>
+        </div>
+        <div style="height:1px; background:#E3E0EA;"></div>
+        <div style="display:flex; flex-direction:column; gap:12px;">
+          <div style="font-size:16px; color:#78767F;">Split equally between</div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <div style="padding:10px 20px; border-radius:20px; background:#E3DFFF; font-size:18px; font-weight:600; color:#14134A;">You</div>
+            <div style="padding:10px 20px; border-radius:20px; background:#E3DFFF; font-size:18px; font-weight:600; color:#14134A;">Sam</div>
+            <div style="padding:10px 20px; border-radius:20px; background:#E3DFFF; font-size:18px; font-weight:600; color:#14134A;">Priya</div>
+            <div style="padding:10px 20px; border-radius:20px; background:#E3DFFF; font-size:18px; font-weight:600; color:#14134A;">Rahul</div>
+          </div>
+        </div>
+      </div>
+      <div style="height:76px; border-radius:38px; background:#5B5891; color:#FFFFFF; display:flex; align-items:center; justify-content:center; font-size:24px; font-weight:700; margin-top:8px;">Save expense</div>
+    </div>
+  </div>
+
+  <!-- ============ SCREENSHOT 3 — ACTIVITY FEED ============ -->
+  <div id="shot-3" style="width:1080px; height:1920px; background:#FBF8FF; display:flex; flex-direction:column; overflow:hidden;">
+    <div style="background:#5B5891; padding:130px 64px 56px; display:flex; flex-direction:column; gap:18px;">
+      <div style="font-size:48px; font-weight:800; color:#FFFFFF; line-height:1.15; text-wrap:pretty;">Stay on top of every split</div>
+    </div>
+    <div style="flex:1; padding:44px 48px; display:flex; flex-direction:column; gap:18px;">
+      <div style="font-size:26px; font-weight:700; color:#1B1B21;">Activity</div>
+      <div style="display:flex; flex-direction:column; gap:14px;">
+        <div style="background:#FFFFFF; border-radius:22px; padding:24px 26px; display:flex; flex-direction:column; gap:6px;">
+          <div style="font-size:20px; font-weight:600; color:#1B1B21;">Sam paid ₹1,720 for Dinner at Kōan</div>
+          <div style="font-size:16px; color:#78767F;">Goa trip · 2 hours ago</div>
+        </div>
+        <div style="background:#FFFFFF; border-radius:22px; padding:24px 26px; display:flex; flex-direction:column; gap:6px;">
+          <div style="font-size:20px; font-weight:600; color:#1B1B21;">You settled up with Priya</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:18px; color:#5B5891;">+310.00 · yesterday</div>
+        </div>
+        <div style="background:#F5F2FA; border-radius:22px; padding:24px 26px; display:flex; flex-direction:column; gap:6px;">
+          <div style="font-size:20px; font-weight:600; color:#1B1B21;">Debts simplified</div>
+          <div style="font-size:16px; color:#79536A;">4 transfers reduced to 2 · Sunday football</div>
+        </div>
+        <div style="background:#FFFFFF; border-radius:22px; padding:24px 26px; display:flex; flex-direction:column; gap:6px;">
+          <div style="font-size:20px; font-weight:600; color:#1B1B21;">Rahul added Groceries</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:18px; color:#BA1A1A;">−480.00 · Flat 402 · 2 days ago</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SCREENSHOT 4 — INVITE FRIEND ============ -->
+  <div id="shot-4" style="width:1080px; height:1920px; background:#FBF8FF; display:flex; flex-direction:column; overflow:hidden;">
+    <div style="background:#5B5891; padding:130px 64px 56px; display:flex; flex-direction:column; gap:18px;">
+      <div style="font-size:48px; font-weight:800; color:#FFFFFF; line-height:1.15; text-wrap:pretty;">Invite friends — free, forever</div>
+    </div>
+    <div style="flex:1; padding:44px 48px; display:flex; flex-direction:column; gap:24px; align-items:center; text-align:center;">
+      <div style="width:130px; height:130px; border-radius:50%; background:#E3DFFF; display:flex; align-items:center; justify-content:center; margin-top:20px;">
+        <svg width="66" height="66" viewBox="0 0 48 48"><defs><mask id="s4"><rect width="48" height="48" fill="#fff"/><rect x="20.75" y="-4" width="6.5" height="56" fill="#000" transform="rotate(24 24 24)"/></mask></defs><circle cx="24" cy="24" r="17" fill="none" stroke="#5B5891" stroke-width="6.5" mask="url(#s4)"/></svg>
+      </div>
+      <div style="font-size:30px; font-weight:700; color:#1B1B21;">No account needed to split</div>
+      <div style="font-size:19px; color:#47464F; line-height:1.5; max-width:760px;">Share a link, they join the group, and every split is tracked automatically. No fees, no ads, no lock-in — the source is open.</div>
+      <div style="width:100%; max-width:820px; background:#FFFFFF; border-radius:28px; padding:30px 34px; display:flex; flex-direction:column; gap:16px; margin-top:12px; text-align:left;">
+        <div style="display:flex; justify-content:space-between; align-items:center;"><div style="font-size:22px; font-weight:600; color:#1B1B21;">Sam</div><div style="font-size:17px; color:#5B5891; font-weight:600;">Joined</div></div>
+        <div style="height:1px; background:#E3E0EA;"></div>
+        <div style="display:flex; justify-content:space-between; align-items:center;"><div style="font-size:22px; font-weight:600; color:#1B1B21;">Priya</div><div style="font-size:17px; color:#5B5891; font-weight:600;">Joined</div></div>
+        <div style="height:1px; background:#E3E0EA;"></div>
+        <div style="display:flex; justify-content:space-between; align-items:center;"><div style="font-size:22px; font-weight:600; color:#1B1B21;">Rahul</div><div style="font-size:17px; color:#78767F;">Invited</div></div>
+      </div>
+      <div style="height:76px; width:100%; max-width:820px; border-radius:38px; background:#5B5891; color:#FFFFFF; display:flex; align-items:center; justify-content:center; font-size:24px; font-weight:700; margin-top:8px;">Copy invite link</div>
+    </div>
+  </div>
+
+</div>
+
+</x-dc>
+</body>
+</html>

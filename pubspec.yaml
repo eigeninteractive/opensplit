@@ -3,7 +3,11 @@ description: "Split expenses with friends. Free forever, no ads, works offline, 
 repository: https://github.com/eigeninteractive/opensplit
 issue_tracker: https://github.com/eigeninteractive/opensplit/issues
 publish_to: "none"
-version: 1.0.0+3
+# The version people see, and only that: change it with `dart run cider bump`,
+# never by hand (see "Versions" in docs/runbook.md). There is no `+build`
+# here on purpose. The release workflow numbers every build itself, and a
+# number written here would only be a second, stale answer.
+version: 2.0.0
 
 environment:
   sdk: ^3.12.2
@@ -93,6 +97,10 @@ dev_dependencies:
   flutter_launcher_icons: ^0.14.4
   flutter_native_splash: ^2.4.8
   image: ^4.10.1
+  # Keeps `version` above and CHANGELOG.md in step: `dart run cider log`,
+  # `bump` and `release`. Here rather than globally activated, so everyone
+  # runs the version pubspec.lock pins.
+  cider: ^0.2.10
 
 flutter:
   generate: true
@@ -144,3 +152,11 @@ flutter:
       fonts:
         - asset: assets/google_fonts/InstrumentSans-Regular.ttf
           weight: 400
+
+# cider's links in CHANGELOG.md. The release workflow tags each version as
+# `v<version>` the first time a build of it ships.
+cider:
+  link_template:
+    tag: https://github.com/eigeninteractive/opensplit/releases/tag/%tag%
+    diff: https://github.com/eigeninteractive/opensplit/compare/%from%...%to%
+    version: v%version%

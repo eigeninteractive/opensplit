@@ -1,8 +1,8 @@
 # The old addresses
 
 `opensplit.web.app` and `opensplit-app.web.app`, and the `.firebaseapp.com`
-twin of each, are Firebase Hosting sites in the `opensplit-app` project from
-before the move to Cloudflare. They stay, as permanent (301) redirects to
+twin of each, are Firebase Hosting sites in the `opensplit-app` project, where
+earlier builds were served. They stay, as permanent (301) redirects to
 `https://opensplit.eigeninteractive.com`, keeping the path and the query
 string: an old link to `/app/join/…` lands on the same page at the new
 address.
@@ -21,8 +21,8 @@ pnpm dlx firebase-tools@15.26.0 deploy --only hosting --project opensplit-app
 ```
 
 `--project` and not only `.firebaserc`: a `firebase use` run anywhere in this
-repository is remembered per machine and outranks `.firebaserc`, and the
-Supabase era left the alias `prod` behind that way, which names no project.
+repository is remembered per machine and outranks `.firebaserc`, so a stale
+alias would otherwise decide where this goes.
 
 Before a deploy, the Hosting emulator shows exactly what each site will do:
 

@@ -46,6 +46,8 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    outputs:
+      version: ${{ steps.build.outputs.version }}
     env:
       BUNDLE_FROZEN: "true"
       FASTLANE_SKIP_UPDATE_CHECK: "true"
@@ -98,8 +100,40 @@ jobs:
             WEB_FCM_API_KEY, WEB_FCM_APP_ID
           }' > env/app.json
       - run: flutter pub get --enforce-lockfile
+      # One number for the whole release, given to the web bundle and the
+      # Android bundle alike, so About shows the same "1.2.0 (1701)" on both.
+      # The version name is pubspec.yaml's, set with cider; see "Versions" in
+      # docs/runbook.md.
+      - name: Number this build
+        id: build
+        run: |
+          # Run number times 100, plus the attempt: it only ever goes up, and a
+          # retry gets a new number, which Play insists on. GitHub numbers runs
+          # per workflow file, so renaming this file starts again from 1, below
+          # codes Play has already seen; see the runbook before doing that.
+          number=$((GITHUB_RUN_NUMBER * 100 + GITHUB_RUN_ATTEMPT))
+          if (( GITHUB_RUN_ATTEMPT > 99 || number > 2100000000 )); then
+            echo 'Android version code or retry limit exceeded.' >&2
+            exit 1
+          fi
+          version="$(dart run cider version)"
+          test -n "$version"
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Building $version ($number)."
+      # Before the slow build, so a changelog Play would refuse fails in
+      # seconds. Into the runner's temporary directory, not the checkout.
+      - name: Write the Play release notes
+        run: |
+          notes="$RUNNER_TEMP/play-release-notes/en-US/changelogs"
+          mkdir -p "$notes"
+          dart run tool/release_notes.dart > "$notes/default.txt"
+          cat "$notes/default.txt"
       - run: dart run build_runner build
-      - run: dart run tool/build_web.dart
+      - name: Build the web bundle
+        env:
+          BUILD_NUMBER: ${{ steps.build.outputs.number }}
+        run: dart run tool/build_web.dart --build-number="$BUILD_NUMBER"
       - name: Install Android upload key
         env:
           ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
@@ -114,15 +148,10 @@ jobs:
           ANDROID_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_STORE_PASSWORD }}
           ANDROID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
           ANDROID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+          BUILD_NUMBER: ${{ steps.build.outputs.number }}
         run: |
-          # Reserve two digits for retries so every attempt gets a new code.
-          version_code=$((GITHUB_RUN_NUMBER * 100 + GITHUB_RUN_ATTEMPT))
-          if (( GITHUB_RUN_ATTEMPT > 99 || version_code > 2100000000 )); then
-            echo 'Android version code or retry limit exceeded.' >&2
-            exit 1
-          fi
           flutter build appbundle --release --dart-define-from-file=env/app.json \
-            --build-number="$version_code" --split-debug-info=build/debug-info/android
+            --build-number="$BUILD_NUMBER" --split-debug-info=build/debug-info/android
           jarsigner -verify build/app/outputs/bundle/release/app-release.aab
       - name: Check packaging did not mutate source
         run: |
@@ -215,7 +244,38 @@ jobs:
           # update; 4 and up interrupt testers with a blocking flow, which is
           # for a build the server can no longer talk to an older client from.
           PLAY_UPDATE_PRIORITY: ${{ inputs.update_priority || vars.PLAY_UPDATE_PRIORITY || '0' }}
+          # Written above, from CHANGELOG.md. en-US is the store listing's
+          # language; Play refuses notes in one the listing does not have.
+          PLAY_RELEASE_NOTES_DIR: ${{ runner.temp }}/play-release-notes
         run: bundle exec fastlane android closed
       - name: Remove temporary upload key
         if: always()
         run: rm -f -- "${RUNNER_TEMP:?}/opensplit-upload.jks"
+
+  # Its own job so that only this step can write to the repository: the job
+  # that builds and deploys keeps read-only contents.
+  tag:
+    name: Tag the version
+    needs: publish
+    if: github.event_name == 'push' || inputs.deploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      # The first build of each version tags its commit, and later builds of the
+      # same version leave the tag where it is. Those are the tags cider links
+      # CHANGELOG.md's versions to. Through the API, so nothing is checked out
+      # with credentials.
+      - name: Tag the first build of this version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v${{ needs.publish.outputs.version }}
+        run: |
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --silent 2>/dev/null; then
+            echo "$TAG already marks an earlier build of this version."
+          else
+            gh api "repos/$GITHUB_REPOSITORY/git/refs" --silent \
+              -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA"
+            echo "Tagged $GITHUB_SHA as $TAG."
+          fi

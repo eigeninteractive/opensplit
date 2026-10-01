@@ -1,9 +1,8 @@
-# Running OpenSplit: locally, in production, and the cutover
+# Running OpenSplit: locally and in production
 
 This file is the operational side of the project: how a branch is tested on
-your own machine, how the production backend is stood up once, how `main`
-moves from the old Supabase and Firebase Hosting stack to the Worker, and what
-every release after that does.
+your own machine, how the production backend is stood up once, and what every
+release after that does.
 
 Commands that change something in a Cloudflare, Google, Resend, GitHub or Play
 account are in the production sections, and only there. Nothing in the
@@ -190,12 +189,13 @@ and the FCM access token. Losing it costs one cron run.
 In the **Google Cloud Console** for the project behind `FCM_PROJECT_ID`, under
 *APIs & Services → Credentials*:
 
-**The Web client** already exists from the Supabase era: keep it, since its id
-is already in every build. Google never shows a client secret again after
-creating it, so *Add secret* on the client for a new one, and disable the old
-one after the cutover. Its id and secret are the `GOOGLE_CLIENT_ID` and
-`GOOGLE_CLIENT_SECRET` secrets below, and its id is also `GOOGLE_WEB_CLIENT_ID`
-in `env/app.json`. Add exactly one authorized redirect URI, and the origin:
+**The Web client**, an OAuth client of type *Web application*. Its id and
+secret are the `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` secrets below, and
+its id is also `GOOGLE_WEB_CLIENT_ID` in `env/app.json`, so it is in every
+build: replace the secret, never the client. Google shows a secret only when it
+is made, so a lost one is replaced by *Add secret* on the client, put in with
+`wrangler secret put`, and then the old one disabled. Add exactly one
+authorized redirect URI, and the origin:
 
 ```
 https://opensplit.eigeninteractive.com/api/auth/callback/google
@@ -226,9 +226,9 @@ The group's Durable Object calls the FCM v1 HTTP API directly, so what is
 needed is a service account with the **Firebase Cloud Messaging API** enabled:
 *Firebase console → Project settings → Service accounts → Generate new private
 key.* The whole JSON file becomes `FCM_SERVICE_ACCOUNT`, and the `project_id`
-inside it becomes `FCM_PROJECT_ID`. The Supabase era's key cannot be downloaded again; make a
-new one, and delete the old one in *Google Cloud → IAM → Service accounts →
-Keys* once the old stack is gone.
+inside it becomes `FCM_PROJECT_ID`. A key cannot be downloaded again, so a lost
+one is replaced the same way: generate another, put it in, and delete the old
+one in *Google Cloud → IAM → Service accounts → Keys*.
 
 ### 5. Exchange rates
 
@@ -254,11 +254,38 @@ steps above:
 | `EXCHANGERATE_API_KEY` | step 5 | The second rate provider fails; those six currencies get no rate that day. |
 
 The Worker does not exist until its first deploy, and `wrangler secret put`
-needs one to exist, so the first deploy carries all seven in a file (cutover
-step 3). After that, change one at a time with `wrangler secret put`; see
-*Rotating a secret*.
+needs one to exist, so the first deploy carries all seven in a file (step 7).
+After that, change one at a time with `wrangler secret put`; see *Rotating a
+secret*.
 
-### 7. GitHub
+### 7. The first deploy
+
+`opensplit.eigeninteractive.com` must have no DNS record yet: a Custom Domain
+cannot be attached over an existing one, and the deploy says so.
+
+The first deploy is by hand, because it creates the Worker, its two cron
+triggers and the Custom Domain, which needs more permission than the CI token
+has; `wrangler login` has it. The secrets go in with it (step 6), from a file
+outside the repository that only you can read and that is deleted straight
+after.
+
+```sh
+dart run tool/build_web.dart                       # with the production env/app.json
+cd server
+pnpm exec wrangler d1 migrations apply opensplit --remote
+umask 077 && secrets="$(mktemp)"
+"${EDITOR:-vi}" "$secrets"                         # NAME=value, one line for each secret in step 6
+pnpm exec wrangler deploy --env="" --secrets-file "$secrets"
+rm "$secrets"
+```
+
+`FCM_SERVICE_ACCOUNT` is a whole JSON file, so put it on one line in single
+quotes, which keep the private key's `\n` escapes as they are:
+`FCM_SERVICE_ACCOUNT='<the output of jq -c . service-account.json>'`.
+
+Then *Verify* (below).
+
+### 8. GitHub
 
 In *Settings → Environments → `production`*:
 
@@ -268,7 +295,7 @@ In *Settings → Environments → `production`*:
 |---|---|
 | `CLOUDFLARE_API_TOKEN` | *My Profile → API Tokens → Create Token*, from the **Edit Cloudflare Workers** template, plus *Account → D1 → Edit* (the release applies migrations), scoped to this account and the `eigeninteractive.com` zone |
 | `CLOUDFLARE_ACCOUNT_ID` | *Workers & Pages → Overview*, in the right-hand column |
-| `ANDROID_UPLOAD_*` | already set |
+| `ANDROID_UPLOAD_KEYSTORE_BASE64`, `_STORE_PASSWORD`, `_KEY_ALIAS`, `_KEY_PASSWORD` | the upload keystore, base64-encoded, and its passwords and alias |
 
 **Variables.** They become `env/app.json` at build time and are all public:
 
@@ -281,91 +308,28 @@ ANDROID_FCM_API_KEY     ANDROID_FCM_APP_ID
 WEB_FCM_API_KEY         WEB_FCM_APP_ID
 ```
 
-plus the Play ones that are already there (`PLAY_*`, `GCP_WORKLOAD_IDENTITY_PROVIDER`,
-and `FIREBASE_PROJECT_ID`, which the Play step authenticates against).
+plus the Play ones (`PLAY_*`, `GCP_WORKLOAD_IDENTITY_PROVIDER`, and
+`FIREBASE_PROJECT_ID`, which the Play step authenticates against).
 `dart run tool/verify_config.dart` checks the shape of every value.
 
----
-
-## The cutover: merging `cloudflare` into `main`
-
-`main` still runs the Supabase backend and serves the site from Firebase
-Hosting. There are no real users and no data to keep, so this is a replacement,
-not a migration: nothing runs side by side, and nothing needs to stay
-compatible.
-
-1. **Do the production setup above**, steps 0 to 5, and push the commit with
-   the real ids to the `cloudflare` branch.
-2. **Free the domain.** In the Firebase console, *Hosting → the site → Custom
-   domains*, remove `opensplit.eigeninteractive.com`. In Cloudflare, *DNS*,
-   delete every record for `opensplit` that pointed at Firebase. A Custom
-   Domain cannot be attached over an existing record, and the deploy says so.
-3. **Deploy once by hand, from the branch, with the secrets.** This creates
-   the Worker, its two cron triggers and the Custom Domain, which needs more
-   permission than the CI token has; `wrangler login` has it. The secrets go
-   in with it (step 6), from a file outside the repository that only you can
-   read and that is deleted straight after.
-
-   ```sh
-   dart run tool/build_web.dart                       # with the production env/app.json
-   cd server
-   pnpm exec wrangler d1 migrations apply opensplit --remote
-   umask 077 && secrets="$(mktemp)"
-   "${EDITOR:-vi}" "$secrets"                         # NAME=value, one line for each secret in step 6
-   pnpm exec wrangler deploy --env="" --secrets-file "$secrets"
-   rm "$secrets"
-   ```
-
-   `FCM_SERVICE_ACCOUNT` is a whole JSON file, so put it on one line in single
-   quotes, which keep the private key's `\n` escapes as they are:
-   `FCM_SERVICE_ACCOUNT='<the output of jq -c . service-account.json>'`.
-
-4. **Verify** (below). Production now works, and `main` has not changed yet.
-5. **Configure GitHub** (step 7), and delete what belonged to the old stack:
-   the `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`,
-   `FIREBASE_DEPLOY_SERVICE_ACCOUNT` and `FIREBASE_HOSTING_SITE` variables.
-6. **Open the pull request** from `cloudflare` to `main` and wait for CI: the
-   analyse-and-test, backend, release-tooling and web-bundle jobs.
-7. **Merge it** with a merge commit, as the history does. The release workflow
-   then runs CI again, checks the resource ids, builds the web bundle and the
-   signed Android bundle, applies D1 migrations (none pending after step 3),
-   deploys the same code again, waits for `/api/health`, and sends the Android
-   build to Play closed testing.
-8. **Verify again**, then check Android App Links on a phone with the Play
-   build (below). Testers who had the Supabase-era build installed get a fresh
-   local database and sign in again; nothing from the old backend carries over.
-9. **Point the old addresses here.** The two Firebase Hosting sites,
-   `opensplit.web.app` and `opensplit-app.web.app` (and their
-   `.firebaseapp.com` twins), are kept rather than deleted, and turned into
-   permanent redirects to this domain, path and query intact. This waits
-   until now because a 301 is cached by browsers: redirecting to a domain
-   that is not serving yet would strand visitors on a dead address, and
-   before the merge, `main`'s old release workflow would deploy over it.
-
-   ```sh
-   cd legacy-domains
-   pnpm dlx firebase-tools@15.26.0 login               # once, if not logged in
-   pnpm dlx firebase-tools@15.26.0 deploy --only hosting --project opensplit-app
-   curl -sI https://opensplit.web.app/app/welcome      # 301, location: https://opensplit.eigeninteractive.com/app/welcome
-   ```
-
-   Nothing in CI deploys it; see `legacy-domains/README.md`.
-10. **Decommission the old stack**: delete the Supabase project from its
-    dashboard. Keep the Firebase project itself: FCM, the Google OAuth clients
-    and the two redirecting sites live in it.
+From here on, a push to `main` releases.
 
 ---
 
-## Every release after that
+## Every release
 
 A push to `main` runs `.github/workflows/release.yml`:
 
 1. CI, the same jobs as on a pull request.
 2. The resource-id check, before anything slow.
-3. The web bundle and the signed Android bundle, uploaded as artifacts.
-4. `wrangler d1 migrations apply opensplit --remote`: whatever is pending.
-5. `wrangler deploy`: the script and the bundle, together, as one version.
-6. A wait for `/api/health`, then Play closed testing.
+3. The build number, and Play's release notes from `CHANGELOG.md` (see
+   *Versions*).
+4. The web bundle and the signed Android bundle, both carrying that number,
+   uploaded as artifacts.
+5. `wrangler d1 migrations apply opensplit --remote`: whatever is pending.
+6. `wrangler deploy`: the script and the bundle, together, as one version.
+7. A wait for `/api/health`, then Play closed testing, with the notes.
+8. A `v<version>` tag, the first time a build of that version ships.
 
 D1 migrations are applied before the Worker that needs them goes live.
 Before launch, a schema change needs no compatibility period; if one is
@@ -375,6 +339,92 @@ opened after a deploy.
 
 A manual run (*Actions → Release → Run workflow*) with **deploy** unchecked
 builds the artifacts without deploying anything.
+
+---
+
+## Versions
+
+A build has two numbers, and only one of them is written down.
+
+- **The version**, `1.2.0`: what people see, and what the changelog is
+  organised by. It is `version:` in `pubspec.yaml`, changed only through
+  [cider](https://pub.dev/packages/cider), which keeps `CHANGELOG.md` in step.
+- **The build number**, `1701`: what Play orders builds by, Android's
+  `versionCode`. It is never written down. The release workflow works it out
+  and gives the same number to the web bundle and the Android bundle, so About
+  reads "Version 1.2.0 (1701)" on both, and a bug report names one build.
+
+cider is a dev dependency, so `dart run cider` is the version `pubspec.lock`
+pins, the same everywhere.
+
+### In every pull request
+
+A change someone using the app would notice gets a line under *Unreleased*:
+
+```sh
+dart run cider log fixed 'Totals no longer round twice.'
+# or added, changed, deprecated, removed, security
+```
+
+Write it for a tester rather than for a reviewer: the lines become the build's
+notes in Play. Refactors, tests and tooling get none.
+
+### Cutting a version
+
+When what is under *Unreleased* deserves a version of its own, and at the
+latest before a build goes beyond closed testing:
+
+```sh
+dart run cider bump minor      # or patch, or major
+dart run cider release         # Unreleased becomes this version's section, dated today
+```
+
+Both files go in one pull request. A bump without the release leaves
+`pubspec.yaml` naming a version the changelog does not have, and
+`test/tool/release_notes_test.dart` fails the pull request for it.
+
+Which part to bump: patch when a version only fixes things, minor when it adds
+anything, and major when it leaves older clients behind, such as a server change
+they can no longer talk to. A major one is also the release to send with update
+priority 4, so those clients are made to update.
+
+Merges between versions keep the version's name and differ by build number;
+"1.2.0 (1701)" and "1.2.0 (1804)" are two builds of 1.2.0.
+
+### What a release does with them
+
+**Play's notes.** `tool/release_notes.dart` takes the *Unreleased* entries,
+since they are what this build has that the last version did not. Straight
+after a version is cut there are none, and it takes that version's section
+instead. It drops the headings and the Markdown, which Play would show
+literally, and keeps whole entries up to Play's 500 characters, counting the
+rest on a last line. The notes are in `en-US`, the store listing's language,
+because Play refuses notes in a language the listing lacks. Add a language to
+the listing, and the workflow has to write that language too.
+
+**Tags.** The first build of each version tags its commit `v1.2.0`, and later
+builds leave the tag where it was. The compare links at the foot of
+`CHANGELOG.md` point at those tags. `v1.0.0` marks the first build that reached
+Play.
+
+### The build number
+
+Run number × 100, plus the attempt: release run 17 is build 1701, and its
+retry is 1702. Numbering builds in CI rather than in the repository is the
+usual arrangement. A number in `pubspec.yaml` has to be raised by a commit,
+and two pull requests then race for it. The run number only goes up, and the
+attempt gives a retry a new number, which Play insists on even for the same
+commit. Play's ceiling, 2,100,000,000, is twenty-one million runs away.
+
+Two other schemes were passed over. The commit count needs the whole history
+in every checkout, and a retry would reuse the number. Asking Play for the
+highest code so far couples every build to the API being reachable.
+
+**What would break it:** GitHub numbers runs per workflow file. Rename or
+recreate `release.yml` and the count starts again at 1, below every code Play
+has seen, so every upload is refused. If it ever has to be renamed, add an
+offset above the last run number to the formula in the *Number this build*
+step.
 
 ---
 
@@ -454,6 +504,18 @@ https://opensplit.eigeninteractive.com/privacy
 https://opensplit.eigeninteractive.com/terms
 https://opensplit.eigeninteractive.com/delete-account
 ```
+
+---
+
+## The old addresses
+
+`opensplit.web.app` and `opensplit-app.web.app` are Firebase Hosting sites that
+301 to this domain, path and query intact, for the links and App Links that
+earlier builds minted under them. Their configuration and the command that
+redeploys them are in `legacy-domains/README.md`; nothing in CI touches them.
+
+Keep the Firebase project, then, though the app is no longer hosted there:
+FCM, the Google OAuth clients and those two sites all live in it.
 
 ---
 

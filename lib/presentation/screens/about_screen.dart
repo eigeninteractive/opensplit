@@ -7,6 +7,16 @@ import '../navigation.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/page_body.dart';
 
+/// The version line, as a bug report should quote it.
+///
+/// [buildNumber] is the release workflow's, the same on Android and the web for
+/// one release, and is what tells two builds of one version apart. A build made
+/// from a checkout has none on the web, so it shows the version alone rather
+/// than an empty pair of brackets.
+String versionLabel(String version, String buildNumber) => buildNumber.isEmpty
+    ? 'Version $version'
+    : 'Version $version ($buildNumber)';
+
 /// What this app is, who can change it, and where to say something is wrong.
 class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
@@ -105,7 +115,7 @@ class _Version extends StatelessWidget {
         // below do not jump once it does.
         final text = info == null
             ? ''
-            : 'Version ${info.version} (${info.buildNumber})';
+            : versionLabel(info.version, info.buildNumber);
 
         return SizedBox(
           height: 24,
