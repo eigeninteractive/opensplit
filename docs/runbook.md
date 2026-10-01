@@ -164,11 +164,12 @@ These create real, empty resources in the account:
 
 ```sh
 pnpm exec wrangler d1 create opensplit                # prints a database_id
-pnpm exec wrangler kv namespace create CACHE          # prints an id
+pnpm exec wrangler kv namespace create opensplit-cache  # prints an id
 ```
 
-Put both ids into the **top level** of `server/wrangler.jsonc`, replacing the
-placeholders, and commit them. They are not secrets: an id is useless without a
+The names are account-wide, unlike the `DB` and `CACHE` bindings the Worker
+sees, so both carry the project's name. Put both ids into the **top level** of
+`server/wrangler.jsonc`, replacing the placeholders, and commit them. They are not secrets: an id is useless without a
 token for the account. Leave the `env.test` block's placeholders alone; they
 are what keeps local runs from reaching these resources.
 

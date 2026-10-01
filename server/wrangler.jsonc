@@ -57,7 +57,8 @@
     }
   ],
 
-  // Derived, rebuildable data: month blobs of rates and the cached FCM token. Placeholder id.
+  // Derived, rebuildable data: month blobs of rates and the cached FCM token.
+  // Placeholder id: a deploy needs `wrangler kv namespace create opensplit-cache`'s.
   "kv_namespaces": [{ "binding": "CACHE", "id": "0000000000000000000000000000000f" }],
 
   // No dormancy sweep: each group object arms its own alarm.
