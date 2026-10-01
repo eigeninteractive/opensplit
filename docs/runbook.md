@@ -126,7 +126,7 @@ Debug builds allow plain HTTP; release builds never do.
 ### The automated suites
 
 ```sh
-cd server && pnpm lint && pnpm typecheck && pnpm test   # the Worker, in workerd
+cd server && pnpm lint && pnpm typecheck && pnpm test   # Biome over the repo, then the Worker in workerd
 cd .. && flutter test                                   # the client
 ```
 

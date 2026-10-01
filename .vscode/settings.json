@@ -1,21 +1,29 @@
 {
-	// Biome lives in server/node_modules, but the editor is rooted at the repo.
-	// Without this the extension falls back to its own bundled binary, which can
-	// be older than the one the CLI and CI run — and then it reports config keys
-	// as unknown that are simply newer than it is. One binary, one answer.
-	"biome.lsp.bin": "./server/node_modules/@biomejs/biome/bin/biome",
+  // Biome lives in server/node_modules, but the editor is rooted at the repo.
+  // Without this the extension falls back to its own bundled binary, which can
+  // be older than the one the CLI and CI run — and then it reports config keys
+  // as unknown that are simply newer than it is. One binary, one answer.
+  "biome.lsp.bin": "./server/node_modules/@biomejs/biome/bin/biome",
 
-	// Biome, so a save formats exactly as `pnpm lint` checks. A workspace
-	// setting outranks a user one, which may name VS Code's own JSON formatter.
-	// Outside server/ Biome is switched off, so a save there leaves files as
-	// written.
-	"[javascript]": { "editor.defaultFormatter": "biomejs.biome" },
-	"[typescript]": { "editor.defaultFormatter": "biomejs.biome" },
-	"[json]": { "editor.defaultFormatter": "biomejs.biome" },
-	"[jsonc]": { "editor.defaultFormatter": "biomejs.biome" },
+  // Each language to the tool CI checks it with: Dart to the Dart extension,
+  // everything Biome understands to Biome. Workspace settings outrank user
+  // ones, so a personal default formatter cannot quietly take over here.
+  // `xml` is how VS Code files SVG; Biome formats .svg and leaves other XML as
+  // written.
+  "editor.formatOnSave": true,
+  "[dart]": { "editor.defaultFormatter": "Dart-Code.dart-code" },
+  "[javascript]": { "editor.defaultFormatter": "biomejs.biome" },
+  "[typescript]": { "editor.defaultFormatter": "biomejs.biome" },
+  "[json]": { "editor.defaultFormatter": "biomejs.biome" },
+  "[jsonc]": { "editor.defaultFormatter": "biomejs.biome" },
+  "[css]": { "editor.defaultFormatter": "biomejs.biome" },
+  "[html]": { "editor.defaultFormatter": "biomejs.biome" },
+  "[xml]": { "editor.defaultFormatter": "biomejs.biome" },
+  // `pnpm lint` fails on unsorted imports, so sort them on save as well.
+  "editor.codeActionsOnSave": { "source.organizeImports.biome": "explicit" },
 
-	// Wrangler's config is JSONC: comments and trailing commas are valid.
-	"files.associations": {
-		"wrangler.json": "jsonc"
-	}
+  // Wrangler's config is JSONC: comments and trailing commas are valid.
+  "files.associations": {
+    "wrangler.json": "jsonc"
+  }
 }

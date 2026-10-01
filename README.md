@@ -87,6 +87,20 @@ Dart client (CI fails if they differ from what is committed):
 dart run tool/generate_api_client.dart
 ```
 
+Formatting and linting are split by language. Dart is `dart format` and
+`dart analyze`. Everything Biome understands is Biome, from the one
+`biome.jsonc` at the root: the Worker's TypeScript, the HTML, CSS and
+JavaScript of `site/` and `web/`, the SVGs and the JSON. Files a tool writes
+are excluded there, because CI regenerates them and diffs.
+
+```bash
+dart format lib test tool && dart analyze
+cd server && pnpm format     # Biome, across the whole repository; CI runs `pnpm lint`
+```
+
+`.vscode/settings.json` sends each language to the same tool on save, and
+outranks a personal default formatter.
+
 The server tests are not optional decoration. They cover the balance invariant
 rejecting an expense that does not add up, that a stale edit is refused only
 when applying it would move money, that entries cannot be hard-deleted, that an

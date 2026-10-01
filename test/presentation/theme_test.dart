@@ -177,9 +177,9 @@ void main() {
     test('agrees with the app on every boot-hint key', () {
       // The loader decides which shape to draw, and whether to fill it, by
       // reading keys the Dart side writes.
-      final keys = RegExp(r"localStorage\.getItem\('([^']+)'\)")
+      final keys = RegExp(r"""localStorage\.getItem\((['"])(.+?)\1\)""")
           .allMatches(File('web/index.html').readAsStringSync())
-          .map((match) => match.group(1)!)
+          .map((match) => match.group(2)!)
           .toSet();
 
       expect(

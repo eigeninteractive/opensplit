@@ -12,7 +12,12 @@ void main() {
 
     expect(shellWorker, contains('__OPEN_SPLIT_BUILD_ID__'));
     expect(shellWorker, contains('__OPEN_SPLIT_RESOURCES__'));
-    expect(shellWorker, contains("importScripts('firebase-messaging-sw.js')"));
+    expect(
+      shellWorker,
+      matches(
+        RegExp(r"""importScripts\((['"])firebase-messaging-sw\.js\1\)"""),
+      ),
+    );
     expect(
       File('lib/data/push/push_service.dart').readAsStringSync(),
       contains("serviceWorkerScriptPath: kIsWeb ? 'sw.js' : null"),
