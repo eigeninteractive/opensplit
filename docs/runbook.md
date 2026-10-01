@@ -18,7 +18,7 @@ repository runs them for you, apart from the release workflow on a push to
 |---|---|---|
 | Worker configuration | the `env.test` block of `server/wrangler.jsonc` | the top level of `server/wrangler.jsonc` |
 | D1, KV, Durable Objects | files under `server/.wrangler/state` | your Cloudflare account |
-| Secrets | `server/.dev.vars` (gitignored) | `wrangler secret put` |
+| Secrets | `server/.dev.vars` (gitignored) | stored against the Worker; the first deploy, then `wrangler secret put` |
 | Google sign-in | off: no client in `.dev.vars` | the Google OAuth web client |
 | Sign-in codes | printed in the Worker's terminal | emailed by Resend |
 | Push | skipped: no FCM credentials | sent through FCM |
@@ -224,38 +224,33 @@ needed is a service account with the **Firebase Cloud Messaging API** enabled:
 key.* The whole JSON file becomes `FCM_SERVICE_ACCOUNT`, and the `project_id`
 inside it becomes `FCM_PROJECT_ID`.
 
-### 5. Exchange rates (optional)
+### 5. Exchange rates
 
 The daily job runs Frankfurter (no key, the ECB's set) and then
-exchangerate-api.com, which needs a free key and covers what the ECB does not:
-in practice AED, VND, LKR, NPR, KWD and BHD. Without the key those six have no
-rate; amounts in them are still recorded exactly.
+exchangerate-api.com, which covers what the ECB does not: in practice AED,
+VND, LKR, NPR, KWD and BHD. Its key is free; sign up at exchangerate-api.com
+and keep the key for step 6. It is required like every other secret, so those
+six currencies can never quietly go without rates.
 
 ### 6. Secrets
 
-Set after the Worker exists, which is the first deploy in the cutover below.
-Each command prompts for the value and stores it encrypted against the Worker;
-none appears in any file.
+`secrets.required` in `server/wrangler.jsonc` names all seven, and every deploy
+checks them: it refuses to go out while any is unset, so a forgotten one is a
+failed release rather than a quietly broken feature. The values come from the
+steps above:
 
-```sh
-pnpm exec wrangler secret put BETTER_AUTH_SECRET     # openssl rand -base64 32
-pnpm exec wrangler secret put GOOGLE_CLIENT_ID       # step 2
-pnpm exec wrangler secret put GOOGLE_CLIENT_SECRET   # step 2
-pnpm exec wrangler secret put RESEND_API_KEY         # step 3
-pnpm exec wrangler secret put FCM_PROJECT_ID         # step 4
-pnpm exec wrangler secret put FCM_SERVICE_ACCOUNT    # step 4, the whole JSON; paste it, do not echo it
-pnpm exec wrangler secret put EXCHANGERATE_API_KEY   # step 5, optional
-```
+| Secret | Value | If the value is wrong |
+|---|---|---|
+| `BETTER_AUTH_SECRET` | `openssl rand -base64 32` | Better Auth refuses to construct. Every request 500s. |
+| `GOOGLE_CLIENT_ID` / `_SECRET` | step 2, the web client's pair | Google sign-in fails. Email codes and guests still work. |
+| `RESEND_API_KEY` | step 3 | Resend rejects the send, so the code never arrives. |
+| `FCM_PROJECT_ID` / `FCM_SERVICE_ACCOUNT` | step 4; the account is the whole JSON | Pushes fail and are logged. Deliberate: a notification must never stop an expense. |
+| `EXCHANGERATE_API_KEY` | step 5 | The second rate provider fails; those six currencies get no rate that day. |
 
-`server/.env.types` lists exactly these names. What a missing one does:
-
-| Missing | What happens |
-|---|---|
-| `BETTER_AUTH_SECRET` | Better Auth refuses to construct. Every request 500s. |
-| `GOOGLE_CLIENT_ID` / `_SECRET` | Google sign-in fails. Email codes and guests still work. |
-| `RESEND_API_KEY` | **Codes are logged instead of emailed.** Email sign-in looks broken to the user. |
-| `FCM_PROJECT_ID` / `FCM_SERVICE_ACCOUNT` | **Push is skipped silently.** Deliberate: a notification must never stop an expense. |
-| `EXCHANGERATE_API_KEY` | The second rate provider skips itself. |
+The Worker does not exist until its first deploy, and `wrangler secret put`
+needs one to exist, so the first deploy carries all seven in a file (cutover
+step 3). After that, change one at a time with `wrangler secret put`; see
+*Rotating a secret*.
 
 ### 7. GitHub
 
@@ -299,19 +294,23 @@ compatible.
    domains*, remove `opensplit.eigeninteractive.com`. In Cloudflare, *DNS*,
    delete every record for `opensplit` that pointed at Firebase. A Custom
    Domain cannot be attached over an existing record, and the deploy says so.
-3. **Deploy once by hand, from the branch.** This creates the Worker, its two
-   cron triggers and the Custom Domain, which needs more permission than the CI
-   token has; `wrangler login` has it.
+3. **Deploy once by hand, from the branch, with the secrets.** This creates
+   the Worker, its two cron triggers and the Custom Domain, which needs more
+   permission than the CI token has; `wrangler login` has it. The secrets go
+   in with it (step 6), from a file outside the repository that only you can
+   read and that is deleted straight after.
 
    ```sh
    dart run tool/build_web.dart                       # with the production env/app.json
    cd server
    pnpm exec wrangler d1 migrations apply opensplit --remote
-   pnpm exec wrangler deploy
+   umask 077 && secrets="$(mktemp)"
+   "${EDITOR:-vi}" "$secrets"                         # NAME=value, one line for each secret in step 6
+   pnpm exec wrangler deploy --secrets-file "$secrets"
+   rm "$secrets"
    ```
 
-4. **Set the secrets** (step 6), then **verify** (below). Production now works,
-   and `main` has not changed yet.
+4. **Verify** (below). Production now works, and `main` has not changed yet.
 5. **Configure GitHub** (step 7), and delete what belonged to the old stack:
    the `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`,
    `FIREBASE_DEPLOY_SERVICE_ACCOUNT` and `FIREBASE_HOSTING_SITE` variables.

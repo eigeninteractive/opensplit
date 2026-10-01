@@ -305,7 +305,7 @@ per currency per day, so any pair is a division and there is no such thing as a
 supported *pair*.
 
 ```bash
-# Optional, and only for full coverage — see the table below.
+# Required for a deploy, like every secret in wrangler.jsonc — see the table below.
 cd server && pnpm exec wrangler secret put EXCHANGERATE_API_KEY
 ```
 
@@ -328,10 +328,10 @@ Two providers run in order, the second filling what the first could not:
 | Frankfurter (ECB) | ~30 currencies | yes, free |
 | ExchangeRate-API | 166 currencies | no — free plan is latest only |
 
-The ExchangeRate-API key is required for full coverage: without it only
-Frankfurter runs, and AED, KWD, BHD, LKR, NPR and VND get no rate at all. An
-unconfigured provider skips itself rather than failing the run, which is how a
-fork runs on Frankfurter alone. The free tier is 1,500 requests a month and the
+The ExchangeRate-API key is what covers AED, KWD, BHD, LKR, NPR and VND, which
+Frankfurter does not publish, so a deploy refuses to go out without it. Locally
+it is empty, and an unconfigured provider skips itself rather than failing the
+run, so `wrangler dev` runs on Frankfurter alone. The free tier is 1,500 requests a month and the
 cron uses about 30.
 
 **Fetch once, keep forever.** A rate is immutable once published, so nothing

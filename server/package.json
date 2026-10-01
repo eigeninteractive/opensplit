@@ -19,7 +19,7 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p test/tsconfig.json",
     "check": "wrangler deploy --dry-run",
     "deploy": "wrangler deploy",
-    "cf-typegen": "wrangler types --env-file .env.types --strict-vars false",
+    "cf-typegen": "wrangler types --strict-vars false",
     "db:migrate:local": "wrangler d1 migrations apply opensplit --local --env test",
     "db:migrate:remote": "wrangler d1 migrations apply opensplit --remote",
     "auth:generate": "auth generate --config src/auth.cli.ts --output src/auth-schema.ts --yes",

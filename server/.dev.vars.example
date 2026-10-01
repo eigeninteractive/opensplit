@@ -1,5 +1,7 @@
 # Local secrets for `wrangler dev`. Copy to .dev.vars, which is gitignored.
-# In production these are set with `wrangler secret put` — see the runbook.
+# The names are the ones `secrets.required` lists in wrangler.jsonc: dev loads
+# only those (plus overrides of `vars`, like APP_ORIGIN below) and warns about
+# any that are missing. Empty is fine locally; production sets real values.
 
 BETTER_AUTH_SECRET="a-long-random-string-for-local-development-only"
 GOOGLE_CLIENT_ID=""

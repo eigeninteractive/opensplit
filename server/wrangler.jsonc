@@ -68,10 +68,21 @@
     ]
   },
 
-  // Better Auth's baseURL and sole trusted origin. Local runs override it in .dev.vars, tests in vitest.config.ts.
+  // Better Auth's baseURL and sole trusted origin. Local runs override it in .dev.vars, tests in vitest.config.ts,
+  // which is why `cf-typegen` passes `--strict-vars false`: typed as `string`, not as a union of the two origins
+  // written here, since an override can be any origin.
   "vars": {
     "APP_ORIGIN": "https://opensplit.eigeninteractive.com"
   },
+
+  /**
+   * Every secret the Worker reads, by name; values are set with `wrangler
+   * secret put` and never appear here. A deploy refuses to go out while any is
+   * unset, so a missing key is a failed release rather than email codes that
+   * are only logged or pushes that are silently skipped. The same list types
+   * `Env` and decides what `wrangler dev` loads from .dev.vars.
+   */
+  "secrets": { "required": ["BETTER_AUTH_SECRET", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "RESEND_API_KEY", "FCM_PROJECT_ID", "FCM_SERVICE_ACCOUNT", "EXCHANGERATE_API_KEY"] },
 
   /**
    * Brakes on the unauthenticated doors and on anything that costs money per
@@ -115,6 +126,7 @@
       "vars": {
         "APP_ORIGIN": "http://localhost:8787"
       },
+      "secrets": { "required": ["BETTER_AUTH_SECRET", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "RESEND_API_KEY", "FCM_PROJECT_ID", "FCM_SERVICE_ACCOUNT", "EXCHANGERATE_API_KEY"] },
       "ratelimits": [
         { "name": "GUEST_LIMIT", "namespace_id": "1001", "simple": { "limit": 10000, "period": 60 } },
         { "name": "EMAIL_IP_LIMIT", "namespace_id": "1002", "simple": { "limit": 10000, "period": 60 } },
