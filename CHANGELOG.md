@@ -7,6 +7,7 @@ What changed in each version of the app, newest first. The format is
 ## [Unreleased]
 ### Fixed
 - A group where you're owed one currency and owe another now says both on the groups list, instead of calling it all owed to you.
+- Signing in with Google on Android works again.
 
 ## [2.0.0] - 2026-10-01
 ### Changed
