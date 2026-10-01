@@ -18,7 +18,8 @@ the wallpaper too.
 
 Hex values are written out only where a build config cannot call Dart: the
 adaptive icon background (`#E3DFFF`, light `primaryContainer`), the splash and
-web loader backgrounds, and the web `theme-color`. Each is the generated value,
+web loader backgrounds, the web `theme-color`, the static site's tokens at the
+top of `site/site.css`, and `tool/store_graphics.py`. Each is the generated value,
 not the kit's: the kit quotes the light surface as `#FBF8FF`, where
 `fromSeed` produces `#FCF8FF`, and the generated one wins.
 
@@ -31,7 +32,8 @@ is a green harmonised toward the seed, and you owe is the scheme's `error`.
 - Every amount is **JetBrains Mono** with tabular figures, through `moneyStyle`.
 
 Both faces are bundled under `assets/google_fonts/` rather than fetched; see the
-comments in `pubspec.yaml`.
+comments in `pubspec.yaml`. The static site serves the same files from `/fonts`,
+so the pages and the app cannot drift onto different cuts of either face.
 
 ## The mark
 
@@ -46,7 +48,7 @@ shows through it.
 | `assets/brand/mark-neutral.svg` | pre-stroked `#E4E1E9`, a light neutral |
 | `assets/brand/mark-on-dark.svg` | pre-stroked `#C4C0FF`, for dark surfaces |
 | `assets/brand/mark-on-primary-container.svg` | pre-stroked `#E3DFFF` |
-| `assets/brand/mark-1024-light.png`, `-dark.png` | rasters for generators; `tool/og_image.py` reads the light one |
+| `assets/brand/mark-1024-light.png`, `-dark.png` | rasters for the icon and splash generators |
 | `assets/brand/lockup-horizontal.svg`, `lockup-vertical.svg` | mark and wordmark: "Open" regular, "Split" semibold |
 | `site/favicon.svg` | the browser tab |
 
@@ -67,7 +69,8 @@ Generated, never edited by hand:
 | `dart run flutter_launcher_icons` | Android, iOS and web icons | `assets/icon/`, configured in `flutter_launcher_icons.yaml` |
 | `dart run tool/brand_icons.dart` | the favicon and the notification icon, after the command above | the transparent artwork in `assets/icon/` |
 | `dart run flutter_native_splash:create` | the native splash screens | `assets/splash/`, configured in `flutter_native_splash.yaml` |
-| `python3 tool/og_image.py` | `site/store/og-card.png`, the social card | the mark and the bundled font |
+| `flutter test tool/screenshots_test.dart` | `site/store/screenshot-*.png` and `web-app.png` | the real screens over demo data |
+| `python3 tool/store_graphics.py` | `site/store/og-card.png` and `feature-graphic.jpg` | the balances screenshot, the mark's geometry and the bundled font |
 
 `assets/icon/icon.png` is opaque because iOS and legacy Android icons cannot
 carry alpha. The adaptive foreground keeps the mark inside the circle a
@@ -80,27 +83,36 @@ splash for the same reason.
 | Asset | Size | File |
 |---|---|---|
 | Hi-res icon | 512 × 512, opaque | `assets/icon/icon.png`, resized |
-| Feature graphic | 1024 × 500, JPEG | `site/store/feature-graphic-light.jpg`; `feature-graphic-dark.jpg` here is the unused alternative, since Play takes one |
-| Phone screenshots | 1080 × 1920, PNG | `site/store/screenshot-*.png` |
+| Feature graphic | 1024 × 500, JPEG | `site/store/feature-graphic.jpg` |
+| Phone screenshots | 1080 × 1920, PNG | `site/store/screenshot-1-groups.png` to `-5-insights.png`, in that order |
 
-Feature graphics are JPEG because Play rejects a PNG with an alpha channel, even
-a fully opaque one. The screenshots are mockups drawn from the theme, not
-captures, and Play requires screenshots that show the real UI: replace them
-with device captures, and the landing page's copies with them.
+All of it is generated (above), and the listing is uploaded by hand: the release
+lane sends the bundle and its notes, never images. Feature graphics are JPEG
+because Play rejects a PNG with an alpha channel, even a fully opaque one.
+
+The screenshots are the app itself, rendered by a widget test with the bundled
+fonts, so a UI change is a rerun rather than a redesign. The demo data is a
+London-based Ana with a trip to Lisbon in euros and pounds, a flat in pounds
+and a family trip in rupees: several currencies, because keeping them apart is
+the point.
 
 ## The design canvases
 
 The `.dc.html` files are the designer's working documents, as their authoring
 tool wrote them, with `support.js` as that tool's runtime. Their image paths
-point at the committed assets above, so they show the artwork as it ships.
+point at the committed assets above.
+
+They are where the brand started, not where the site is now: the landing page,
+the document pages and the store images have since been redesigned in code, in
+`site/` and the two generators above. The mark, colours and type they set out
+are unchanged.
 
 | File | What it is |
 |---|---|
 | `Brand Directions.dc.html` | the directions explored before this one was chosen |
 | `OpenSplit Brand Kit.dc.html` | this document's visual form: the mark, colours, icons and splash |
-| `Landing Page.dc.html` | the design `site/index.html` was built from |
-| `Terms.dc.html` | the design of the document pages |
-| `Play Store Assets.dc.html` | the source of the feature graphics and screenshots |
+| `Terms.dc.html` | the first design of the document pages |
+| `Play Store Assets.dc.html` | the first feature graphics and mockup screenshots, before both were generated |
 
 To view one, serve the repository root and open it from there, since the tool's
 runtime fetches the page it is on and a `file://` page cannot:

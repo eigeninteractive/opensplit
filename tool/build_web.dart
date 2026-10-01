@@ -115,6 +115,13 @@ Future<void> _build(
   }
 
   _copyInto(Directory('site'), output);
+  // The faces the app bundles, served to the static pages from this origin
+  // (see site/site.css) rather than fetched from Google for every visitor. The
+  // licence goes with them, as the OFL asks.
+  _copyInto(
+    Directory('assets/google_fonts'),
+    Directory('${output.path}/fonts'),
+  );
   _checkServingRules(output);
 
   if (siteOnly) {
