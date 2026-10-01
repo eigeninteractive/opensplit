@@ -190,7 +190,10 @@ and the FCM access token. Losing it costs one cron run.
 In the **Google Cloud Console** for the project behind `FCM_PROJECT_ID`, under
 *APIs & Services → Credentials*:
 
-**The Web client.** Its id and secret are the `GOOGLE_CLIENT_ID` and
+**The Web client** already exists from the Supabase era: keep it, since its id
+is already in every build. Google never shows a client secret again after
+creating it, so *Add secret* on the client for a new one, and disable the old
+one after the cutover. Its id and secret are the `GOOGLE_CLIENT_ID` and
 `GOOGLE_CLIENT_SECRET` secrets below, and its id is also `GOOGLE_WEB_CLIENT_ID`
 in `env/app.json`. Add exactly one authorized redirect URI, and the origin:
 
@@ -223,7 +226,9 @@ The group's Durable Object calls the FCM v1 HTTP API directly, so what is
 needed is a service account with the **Firebase Cloud Messaging API** enabled:
 *Firebase console → Project settings → Service accounts → Generate new private
 key.* The whole JSON file becomes `FCM_SERVICE_ACCOUNT`, and the `project_id`
-inside it becomes `FCM_PROJECT_ID`.
+inside it becomes `FCM_PROJECT_ID`. The Supabase era's key cannot be downloaded again; make a
+new one, and delete the old one in *Google Cloud → IAM → Service accounts →
+Keys* once the old stack is gone.
 
 ### 5. Exchange rates
 
@@ -310,6 +315,10 @@ compatible.
    pnpm exec wrangler deploy --secrets-file "$secrets"
    rm "$secrets"
    ```
+
+   `FCM_SERVICE_ACCOUNT` is a whole JSON file, so put it on one line in single
+   quotes, which keep the private key's `\n` escapes as they are:
+   `FCM_SERVICE_ACCOUNT='<the output of jq -c . service-account.json>'`.
 
 4. **Verify** (below). Production now works, and `main` has not changed yet.
 5. **Configure GitHub** (step 7), and delete what belonged to the old stack:
