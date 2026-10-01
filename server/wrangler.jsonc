@@ -46,20 +46,20 @@
     "Fx": { "type": "durable-object", "storage": "sqlite" }
   },
 
-  // Placeholder id: local runs ignore it; a deploy needs `wrangler d1 create opensplit`'s.
+  // Production's. Local runs ignore the id and use local storage under .wrangler/.
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "opensplit",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "482a8a45-b638-4143-9873-e746df38495c",
       "migrations_dir": "migrations",
       "migrations_pattern": "migrations/*/migration.sql"
     }
   ],
 
   // Derived, rebuildable data: month blobs of rates and the cached FCM token.
-  // Placeholder id: a deploy needs `wrangler kv namespace create opensplit-cache`'s.
-  "kv_namespaces": [{ "binding": "CACHE", "id": "0000000000000000000000000000000f" }],
+  // Production's `opensplit-cache` namespace; local runs ignore the id too.
+  "kv_namespaces": [{ "binding": "CACHE", "id": "791356628add46dcba93cbd86c75c9ac" }],
 
   // No dormancy sweep: each group object arms its own alarm.
   "triggers": {
