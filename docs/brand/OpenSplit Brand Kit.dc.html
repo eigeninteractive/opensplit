@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Instrument+Serif&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #EFEDF4; }
+  a { color: #5B5891; text-decoration: underline; text-underline-offset: 2px; }
+  a:hover { color: #434078; }
+</style>
+</helmet>
+
+<div style="font-family:'Instrument Sans',Helvetica,sans-serif; max-width:1180px; margin:0 auto; padding:56px 40px 80px; display:flex; flex-direction:column; gap:26px;">
+
+  <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:32px; flex-wrap:wrap;">
+    <div style="display:flex; flex-direction:column; gap:8px; max-width:640px;">
+      <div style="display:flex; align-items:center; gap:14px;">
+        <img src="../../assets/brand/mark.svg" alt="OpenSplit" style="width:44px; height:44px; display:block;">
+        <div style="font-size:38px; letter-spacing:-.035em; color:#1B1B21;"><span style="font-weight:400;">Open</span><span style="font-weight:600;">Split</span></div>
+      </div>
+      <div style="font-family:'Instrument Serif',serif; font-size:34px; line-height:1.1; color:#1B1B21;">Brand kit — exported.</div>
+      <div style="font-size:15px; line-height:1.55; color:#47464F; text-wrap:pretty;">Violet seed, slashed-O mark, Material 3 throughout with no component overridden. Everything on this page is a real file in the project — the previews below load the exported assets directly. Full written spec in <a href="README.md">BRAND.md</a>.</div>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:8px; background:#FFFFFF; border-radius:16px; padding:18px 20px; min-width:230px;">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.14em; color:#78767F;">SEED</div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="width:34px; height:34px; border-radius:9px; background:#5B5891;"></div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:16px; color:#1B1B21;">0xFF5B5891</div>
+      </div>
+      <div style="font-size:13px; color:#47464F; line-height:1.45;">The only colour decision. Every role, both brightnesses and all three contrast levels generate from it.</div>
+    </div>
+  </div>
+
+  <!-- SCHEME -->
+  <div style="background:#FFFFFF; border-radius:20px; padding:26px 28px 30px; display:flex; flex-direction:column; gap:14px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.16em; color:#78767F;">COLORSCHEME.FROMSEED — LIGHT</div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px;">
+      <div style="height:66px; border-radius:12px; background:#5B5891; padding:10px; display:flex; flex-direction:column; justify-content:space-between; font-family:'JetBrains Mono',monospace; font-size:9px; color:#FFFFFF;"><span>primary</span><span>5B5891</span></div>
+      <div style="height:66px; border-radius:12px; background:#E3DFFF; padding:10px; display:flex; flex-direction:column; justify-content:space-between; font-family:'JetBrains Mono',monospace; font-size:9px; color:#14134A;"><span>primaryContainer</span><span>E3DFFF</span></div>
+      <div style="height:66px; border-radius:12px; background:#5D5C71; padding:10px; display:flex; flex-direction:column; justify-content:space-between; font-family:'JetBrains Mono',monospace; font-size:9px; color:#FFFFFF;"><span>secondary</span><span>5D5C71</span></div>
+      <div style="height:66px; border-radius:12px; background:#79536A; padding:10px; display:flex; flex-direction:column; justify-content:space-between; font-family:'JetBrains Mono',monospace; font-size:9px; color:#FFFFFF;"><span>tertiary</span><span>79536A</span></div>
+      <div style="height:66px; border-radius:12px; background:#BA1A1A; padding:10px; display:flex; flex-direction:column; justify-content:space-between; font-family:'JetBrains Mono',monospace; font-size:9px; color:#FFFFFF;"><span>error</span><span>BA1A1A</span></div>
+      <div style="height:66px; border-radius:12px; background:#EFEDF4; padding:10px; display:flex; flex-direction:column; justify-content:space-between; font-family:'JetBrains Mono',monospace; font-size:9px; color:#1B1B21;"><span>surfaceContainer</span><span>EFEDF4</span></div>
+      <div style="height:66px; border-radius:12px; background:#FBF8FF; border:1px solid #C9C5D0; box-sizing:border-box; padding:10px; display:flex; flex-direction:column; justify-content:space-between; font-family:'JetBrains Mono',monospace; font-size:9px; color:#1B1B21;"><span>surface</span><span>FBF8FF</span></div>
+      <div style="height:66px; border-radius:12px; background:#1B1B21; padding:10px; display:flex; flex-direction:column; justify-content:space-between; font-family:'JetBrains Mono',monospace; font-size:9px; color:#FBF8FF;"><span>onSurface</span><span>1B1B21</span></div>
+    </div>
+    <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.16em; color:#78767F; margin-top:6px;">DARK</div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px;">
+      <div style="height:52px; border-radius:12px; background:#C4C0FF; padding:9px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#2C2A60;">C4C0FF</div>
+      <div style="height:52px; border-radius:12px; background:#434078; padding:9px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#E3DFFF;">434078</div>
+      <div style="height:52px; border-radius:12px; background:#C6C2DA; padding:9px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#302D41;">C6C2DA</div>
+      <div style="height:52px; border-radius:12px; background:#E9B9D3; padding:9px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#482537;">E9B9D3</div>
+      <div style="height:52px; border-radius:12px; background:#FFB4AB; padding:9px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#690005;">FFB4AB</div>
+      <div style="height:52px; border-radius:12px; background:#1F1F25; padding:9px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#E4E1E9;">1F1F25</div>
+      <div style="height:52px; border-radius:12px; background:#131318; padding:9px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#E4E1E9;">131318</div>
+      <div style="height:52px; border-radius:12px; background:#E4E1E9; padding:9px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#131318;">E4E1E9</div>
+    </div>
+    <div style="display:flex; gap:20px; flex-wrap:wrap; margin-top:8px; padding-top:16px; border-top:1px solid #EEE8F2;">
+      <div style="display:flex; align-items:center; gap:9px;"><div style="width:14px; height:14px; border-radius:4px; background:#5B5891;"></div><div style="font-size:13px; color:#47464F;"><strong style="color:#1B1B21;">primary</strong> — owed to you</div></div>
+      <div style="display:flex; align-items:center; gap:9px;"><div style="width:14px; height:14px; border-radius:4px; background:#BA1A1A;"></div><div style="font-size:13px; color:#47464F;"><strong style="color:#1B1B21;">error</strong> — you owe</div></div>
+      <div style="display:flex; align-items:center; gap:9px;"><div style="width:14px; height:14px; border-radius:4px; background:#79536A;"></div><div style="font-size:13px; color:#47464F;"><strong style="color:#1B1B21;">tertiary</strong> — computed by the app</div></div>
+      <div style="display:flex; align-items:center; gap:9px;"><div style="width:14px; height:14px; border-radius:4px; background:#47464F;"></div><div style="font-size:13px; color:#47464F;"><strong style="color:#1B1B21;">onSurfaceVariant</strong> — settled</div></div>
+    </div>
+  </div>
+
+  <!-- MARK -->
+  <div style="display:flex; gap:20px; flex-wrap:wrap;">
+    <div style="flex:1 1 380px; background:#FFFFFF; border-radius:20px; padding:26px 28px 30px; display:flex flex-direction:column; gap:18px; display:flex; flex-direction:column;">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.16em; color:#78767F;">THE MARK — SLASHED O</div>
+      <div style="display:flex; align-items:center; gap:28px; padding:14px 0;">
+        <img src="../../assets/brand/mark.svg" alt="mark" style="width:104px; height:104px; display:block;">
+        <div style="display:flex; align-items:flex-end; gap:16px;">
+          <img src="../../assets/brand/mark.svg" alt="48" style="width:48px; height:48px; display:block;">
+          <img src="../../assets/brand/mark.svg" alt="32" style="width:32px; height:32px; display:block;">
+          <img src="../../assets/brand/mark.svg" alt="24" style="width:24px; height:24px; display:block;">
+          <img src="../../assets/brand/mark.svg" alt="16" style="width:16px; height:16px; display:block;">
+        </div>
+      </div>
+      <div style="font-size:14px; line-height:1.6; color:#47464F; text-wrap:pretty;">A ring with one diagonal cut — the O of the name, split once. The cut is a knockout, so on a coloured surface it shows that surface through. Clear space is one stroke width on all sides; minimum size 16px.</div>
+      <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:center; padding-top:6px;">
+        <img src="../../assets/brand/lockup-horizontal.svg" alt="horizontal lockup" style="height:40px; display:block;">
+        <img src="../../assets/brand/lockup-vertical.svg" alt="vertical lockup" style="height:88px; display:block;">
+      </div>
+    </div>
+
+    <div style="flex:1 1 300px; background:#131318; border-radius:20px; padding:26px 28px 30px; display:flex; flex-direction:column; gap:18px;">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.16em; color:#918F9A;">THE MARK ON DARK</div>
+      <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:14px;">
+        <div style="display:flex; flex-direction:column; gap:9px; align-items:center;">
+          <div style="width:100%; aspect-ratio:1; border-radius:18px; background:#1F1F25; display:flex; align-items:center; justify-content:center;">
+            <img src="../../assets/brand/mark-on-dark.svg" alt="mark on dark surface" style="width:46px; height:46px; display:block;">
+          </div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#918F9A; text-align:center;">ON SURFACE</div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:9px; align-items:center;">
+          <div style="width:100%; aspect-ratio:1; border-radius:18px; background:#434078; display:flex; align-items:center; justify-content:center;">
+            <img src="../../assets/brand/mark-on-primary-container.svg" alt="mark on primary container" style="width:46px; height:46px; display:block;">
+          </div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#918F9A; text-align:center;">ON CONTAINER</div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:9px; align-items:center;">
+          <div style="width:100%; aspect-ratio:1; border-radius:18px; background:#47464F; display:flex; align-items:center; justify-content:center;">
+            <img src="../../assets/brand/mark-neutral.svg" alt="themed tint" style="width:46px; height:46px; display:block;">
+          </div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#918F9A; text-align:center;">THEMED · TINTED</div>
+        </div>
+      </div>
+      <div style="font-size:14px; line-height:1.6; color:#C9C5D0; text-wrap:pretty;">One shape, three tints — never a different drawing. <span style="font-family:'JetBrains Mono',monospace; font-size:13px; color:#C4C0FF;">mark-mono.svg</span> strokes with <span style="font-family:'JetBrains Mono',monospace; font-size:13px; color:#C4C0FF;">currentColor</span> for inlined use (Flutter’s <span style="font-family:'JetBrains Mono',monospace; font-size:13px; color:#C4C0FF;">SvgPicture</span>, Android’s themed icon); the pre-stroked <span style="font-family:'JetBrains Mono',monospace; font-size:13px; color:#C4C0FF;">mark-on-dark.svg</span> covers contexts that can’t tint.</div>
+      <div style="background:#1F1F25; border-radius:14px; padding:14px 16px; display:flex; flex-direction:column; gap:10px;">
+        <div style="display:flex; align-items:center; gap:9px;">
+          <img src="../../assets/brand/mark-on-dark.svg" alt="" style="width:20px; height:20px; display:block;">
+          <div style="font-size:14px; font-weight:600; color:#E4E1E9;">OpenSplit</div>
+        </div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:22px; color:#C4C0FF; letter-spacing:-.02em;">+1,240.00</div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:14px; color:#FFB4AB;">−310.00</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LAUNCHER -->
+  <div style="background:#FFFFFF; border-radius:20px; padding:26px 28px 30px; display:flex; flex-direction:column; gap:18px;">
+    <div style="display:flex; flex-direction:column; gap:4px;">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.16em; color:#78767F;">LAUNCHER ICONS — flutter_launcher_icons</div>
+      <div style="font-size:14px; color:#47464F; line-height:1.5;">Foreground mark is 470px inside the 1024px canvas, comfortably within the 676px safe circle, so no mask clips it.</div>
+    </div>
+    <div style="display:flex; gap:22px; flex-wrap:wrap; align-items:flex-start;">
+      <div style="display:flex; flex-direction:column; gap:9px; align-items:center;">
+        <div style="width:96px; height:96px; background:#E3DFFF; border-radius:4px; position:relative; display:flex; align-items:center; justify-content:center;">
+          <div style="position:absolute; inset:15px; border:1px dashed #A7A3C9; border-radius:50%;"></div>
+          <img src="../../assets/icon/icon-foreground.png" alt="foreground" style="width:96px; height:96px; display:block; position:absolute; inset:0;">
+        </div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#78767F;">FG + BG · SAFE ZONE</div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:9px; align-items:center;">
+        <div style="width:88px; height:88px; border-radius:50%; overflow:hidden; background:#E3DFFF;"><img src="../../assets/icon/icon-foreground.png" alt="circle mask" style="width:88px; height:88px; display:block;"></div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#78767F;">CIRCLE</div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:9px; align-items:center;">
+        <div style="width:88px; height:88px; border-radius:26px; overflow:hidden; background:#E3DFFF;"><img src="../../assets/icon/icon-foreground.png" alt="squircle mask" style="width:88px; height:88px; display:block;"></div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#78767F;">SQUIRCLE</div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:9px; align-items:center;">
+        <div style="width:88px; height:88px; border-radius:14px; overflow:hidden; background:#E3DFFF;"><img src="../../assets/icon/icon-foreground.png" alt="rounded mask" style="width:88px; height:88px; display:block;"></div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#78767F;">ROUNDED SQUARE</div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:9px; align-items:center;">
+        <div style="width:88px; height:88px; border-radius:26px; overflow:hidden; background:#47464F; display:flex; align-items:center; justify-content:center;">
+          <img src="../../assets/icon/icon-monochrome.png" alt="monochrome" style="width:88px; height:88px; display:block; filter:invert(1) brightness(1.6);">
+        </div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#78767F;">THEMED · ANDROID 13+</div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:9px; align-items:center;">
+        <div style="width:88px; height:88px; border-radius:20px; overflow:hidden;"><img src="../../assets/icon/icon.png" alt="ios icon" style="width:88px; height:88px; display:block;"></div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#78767F;">iOS · OPAQUE</div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:9px; align-items:center;">
+        <div style="display:flex; align-items:flex-end; gap:10px;">
+          <img src="../../site/icons/Icon-192.png" alt="192" style="width:48px; height:48px; display:block; border-radius:10px;">
+          <img src="../../site/favicon.png" alt="32" style="width:32px; height:32px; display:block; border-radius:6px;">
+          <img src="../../site/favicon.svg" alt="16" style="width:16px; height:16px; display:block;">
+        </div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#78767F;">WEB · 192 / 32 / 16</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SPLASH -->
+  <div style="display:flex; gap:20px; flex-wrap:wrap;">
+    <div style="flex:1 1 460px; background:#FFFFFF; border-radius:20px; padding:26px 28px 30px; display:flex; flex-direction:column; gap:18px;">
+      <div style="display:flex; flex-direction:column; gap:4px;">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.16em; color:#78767F;">SPLASH — flutter_native_splash</div>
+        <div style="font-size:14px; color:#47464F; line-height:1.5;">No wordmark: Android 12+ crops the splash to a circle. The “free &amp; open source” line lives on the first in-app screen instead.</div>
+      </div>
+      <div style="display:flex; gap:16px; flex-wrap:wrap;">
+        <div style="display:flex; flex-direction:column; gap:9px; align-items:center;">
+          <div style="width:170px; height:340px; border-radius:24px; background:#FBF8FF; border:1px solid #E3E0EA; box-sizing:border-box; display:flex; align-items:center; justify-content:center;">
+            <div style="width:88px; height:88px; border-radius:50%; background:#E3DFFF; display:flex; align-items:center; justify-content:center;">
+              <img src="../../assets/splash/splash-icon.png" alt="splash light" style="width:88px; height:88px; display:block;">
+            </div>
+          </div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#78767F;">LIGHT · #FBF8FF</div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:9px; align-items:center;">
+          <div style="width:170px; height:340px; border-radius:24px; background:#131318; display:flex; align-items:center; justify-content:center;">
+            <div style="width:88px; height:88px; border-radius:50%; background:#1F1F25; display:flex; align-items:center; justify-content:center;">
+              <img src="../../assets/splash/splash-icon-dark.png" alt="splash dark" style="width:88px; height:88px; display:block;">
+            </div>
+          </div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#78767F;">DARK · #131318</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex:1 1 380px; background:#1B1B21; border-radius:20px; padding:26px 28px 30px; display:flex; flex-direction:column; gap:16px;">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.16em; color:#918F9A;">GENERATE</div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:12.5px; line-height:1.9; color:#E4E1E9;">flutter pub add dev:flutter_launcher_icons<br>flutter pub add dev:flutter_native_splash<br>flutter pub add dynamic_color google_fonts<br><br><span style="color:#C4C0FF;">dart run flutter_launcher_icons</span><br><span style="color:#C4C0FF;">dart run flutter_native_splash:create</span></div>
+      <div style="height:1px; background:#32313A;"></div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.16em; color:#918F9A;">HARDCODED HEX — THE ONLY THREE</div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:12.5px; line-height:1.9; color:#C9C5D0;">adaptive_icon_background&nbsp;<span style="color:#C4C0FF;">#E3DFFF</span><br>splash color / _dark&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#C4C0FF;">#FBF8FF / #131318</span><br>manifest theme_color&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#C4C0FF;">#5B5891</span></div>
+      <div style="font-size:13px; color:#918F9A; line-height:1.5;">Build configs can’t call Dart. Everywhere inside the app, read the runtime <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#C9C5D0;">ColorScheme</span> — never a literal.</div>
+    </div>
+  </div>
+
+  <!-- FILES -->
+  <div style="background:#FFFFFF; border-radius:20px; padding:26px 28px 30px; display:flex; flex-direction:column; gap:16px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.16em; color:#78767F;">EVERY FILE EXPORTED</div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(270px,1fr)); gap:14px;">
+      <div style="background:#F5F2FA; border-radius:14px; padding:16px 18px; display:flex; flex-direction:column; gap:7px;">
+        <div style="font-size:14px; font-weight:600; color:#1B1B21;">Vector</div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:11.5px; line-height:1.85; color:#47464F;">assets/brand/mark.svg<br>assets/brand/mark-mono.svg<br>assets/brand/mark-on-dark.svg<br>assets/brand/lockup-horizontal.svg<br>assets/brand/lockup-vertical.svg<br>assets/icon/icon-foreground.svg<br>web/favicon.svg</div>
+      </div>
+      <div style="background:#F5F2FA; border-radius:14px; padding:16px 18px; display:flex; flex-direction:column; gap:7px;">
+        <div style="font-size:14px; font-weight:600; color:#1B1B21;">Launcher &amp; splash</div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:11.5px; line-height:1.85; color:#47464F;">assets/icon/icon.png<br>assets/icon/icon-foreground.png<br>assets/icon/icon-monochrome.png<br>assets/icon/icon-dark.png<br>assets/splash/splash-icon.png<br>assets/splash/splash-icon-dark.png</div>
+      </div>
+      <div style="background:#F5F2FA; border-radius:14px; padding:16px 18px; display:flex; flex-direction:column; gap:7px;">
+        <div style="font-size:14px; font-weight:600; color:#1B1B21;">Web</div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:11.5px; line-height:1.85; color:#47464F;">web/manifest.json<br>web/index-head-snippet.html<br>web/favicon.png<br>web/icons/Icon-192.png<br>web/icons/Icon-512.png<br>web/icons/Icon-maskable-{192,512}.png</div>
+      </div>
+      <div style="background:#F5F2FA; border-radius:14px; padding:16px 18px; display:flex; flex-direction:column; gap:7px;">
+        <div style="font-size:14px; font-weight:600; color:#1B1B21;">Code &amp; config</div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:11.5px; line-height:1.85; color:#47464F;">lib/theme/app_theme.dart<br>lib/theme/money_semantics.dart<br>flutter_launcher_icons.yaml<br>flutter_native_splash.yaml<br>BRAND.md<br>assets/brand/mark-1024-{light,dark}.png</div>
+      </div>
+    </div>
+    <div style="font-size:14px; color:#47464F; line-height:1.55; text-wrap:pretty; padding-top:4px;">Two things to know before shipping: the lockup SVGs reference Instrument Sans by name, so convert their <span style="font-family:'JetBrains Mono',monospace; font-size:13px;">&lt;text&gt;</span> to outlines for store listings and the GitHub social preview; and Android adaptive icons have no dark variant — <span style="font-family:'JetBrains Mono',monospace; font-size:13px;">icon-dark.png</span> is there for store assets only.</div>
+  </div>
+
+</div>
+
+</x-dc>
+</body>
+</html>

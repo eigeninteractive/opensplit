@@ -837,8 +837,8 @@ drift_schemas/      a snapshot of every shipped local schema, so a future
 docs/               the design (architecture.md: stores, sync, and how
                     types flow from the tables to the app), procedures that
                     have to be followed exactly (standing the backend up,
-                    rebuilding it), and what to know before changing the
-                    local database.
+                    rebuilding it), what to know before changing the
+                    local database, and the brand kit (brand/).
 ```
 
 Migrations are never edited in place, on either side. `drizzle-kit generate`
@@ -873,8 +873,8 @@ and the licence text in [assets/google_fonts/LICENSE](assets/google_fonts/LICENS
 ### The name and the mark
 
 AGPL-3.0 covers the code. The name *OpenSplit* and the brand assets in
-`assets/brand/`, `assets/icon/` and `brand/` stay with EigenInteractive, so a
-fork will want its own name and its own mark. That is the usual arrangement —
+`assets/brand/`, `assets/icon/`, `assets/splash/` and `docs/brand/` stay with
+EigenInteractive, so a fork will want its own name and its own mark. That is the usual arrangement —
 GPLv3 §7(e), which AGPL-3.0 incorporates, exists so that a copyright licence
 need not hand over a trademark — and the code, which is the part worth taking,
 is yours to take.

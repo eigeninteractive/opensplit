@@ -6,7 +6,7 @@
  * restyle. The landing page keeps its own inline styles — it is one page, it
  * arrived that way, and nothing shares them.
  *
- * Values are the ones in brand/static_site_designer/Terms.dc.html.
+ * Values are the ones in docs/brand/Terms.dc.html.
  */
 :root {
   --bg: #fbf8ff;

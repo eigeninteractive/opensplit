@@ -1,9 +1,8 @@
-# Running OpenSplit: locally, in production, and the cutover
+# Running OpenSplit: locally and in production
 
 This file is the operational side of the project: how a branch is tested on
-your own machine, how the production backend is stood up once, how `main`
-moves from the old Supabase and Firebase Hosting stack to the Worker, and what
-every release after that does.
+your own machine, how the production backend is stood up once, and what every
+release after that does.
 
 Commands that change something in a Cloudflare, Google, Resend, GitHub or Play
 account are in the production sections, and only there. Nothing in the
@@ -190,12 +189,13 @@ and the FCM access token. Losing it costs one cron run.
 In the **Google Cloud Console** for the project behind `FCM_PROJECT_ID`, under
 *APIs & Services → Credentials*:
 
-**The Web client** already exists from the Supabase era: keep it, since its id
-is already in every build. Google never shows a client secret again after
-creating it, so *Add secret* on the client for a new one, and disable the old
-one after the cutover. Its id and secret are the `GOOGLE_CLIENT_ID` and
-`GOOGLE_CLIENT_SECRET` secrets below, and its id is also `GOOGLE_WEB_CLIENT_ID`
-in `env/app.json`. Add exactly one authorized redirect URI, and the origin:
+**The Web client**, an OAuth client of type *Web application*. Its id and
+secret are the `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` secrets below, and
+its id is also `GOOGLE_WEB_CLIENT_ID` in `env/app.json`, so it is in every
+build: replace the secret, never the client. Google shows a secret only when it
+is made, so a lost one is replaced by *Add secret* on the client, put in with
+`wrangler secret put`, and then the old one disabled. Add exactly one
+authorized redirect URI, and the origin:
 
 ```
 https://opensplit.eigeninteractive.com/api/auth/callback/google
@@ -226,9 +226,9 @@ The group's Durable Object calls the FCM v1 HTTP API directly, so what is
 needed is a service account with the **Firebase Cloud Messaging API** enabled:
 *Firebase console → Project settings → Service accounts → Generate new private
 key.* The whole JSON file becomes `FCM_SERVICE_ACCOUNT`, and the `project_id`
-inside it becomes `FCM_PROJECT_ID`. The Supabase era's key cannot be downloaded again; make a
-new one, and delete the old one in *Google Cloud → IAM → Service accounts →
-Keys* once the old stack is gone.
+inside it becomes `FCM_PROJECT_ID`. A key cannot be downloaded again, so a lost
+one is replaced the same way: generate another, put it in, and delete the old
+one in *Google Cloud → IAM → Service accounts → Keys*.
 
 ### 5. Exchange rates
 
@@ -254,11 +254,38 @@ steps above:
 | `EXCHANGERATE_API_KEY` | step 5 | The second rate provider fails; those six currencies get no rate that day. |
 
 The Worker does not exist until its first deploy, and `wrangler secret put`
-needs one to exist, so the first deploy carries all seven in a file (cutover
-step 3). After that, change one at a time with `wrangler secret put`; see
-*Rotating a secret*.
+needs one to exist, so the first deploy carries all seven in a file (step 7).
+After that, change one at a time with `wrangler secret put`; see *Rotating a
+secret*.
 
-### 7. GitHub
+### 7. The first deploy
+
+`opensplit.eigeninteractive.com` must have no DNS record yet: a Custom Domain
+cannot be attached over an existing one, and the deploy says so.
+
+The first deploy is by hand, because it creates the Worker, its two cron
+triggers and the Custom Domain, which needs more permission than the CI token
+has; `wrangler login` has it. The secrets go in with it (step 6), from a file
+outside the repository that only you can read and that is deleted straight
+after.
+
+```sh
+dart run tool/build_web.dart                       # with the production env/app.json
+cd server
+pnpm exec wrangler d1 migrations apply opensplit --remote
+umask 077 && secrets="$(mktemp)"
+"${EDITOR:-vi}" "$secrets"                         # NAME=value, one line for each secret in step 6
+pnpm exec wrangler deploy --env="" --secrets-file "$secrets"
+rm "$secrets"
+```
+
+`FCM_SERVICE_ACCOUNT` is a whole JSON file, so put it on one line in single
+quotes, which keep the private key's `\n` escapes as they are:
+`FCM_SERVICE_ACCOUNT='<the output of jq -c . service-account.json>'`.
+
+Then *Verify* (below).
+
+### 8. GitHub
 
 In *Settings → Environments → `production`*:
 
@@ -268,7 +295,7 @@ In *Settings → Environments → `production`*:
 |---|---|
 | `CLOUDFLARE_API_TOKEN` | *My Profile → API Tokens → Create Token*, from the **Edit Cloudflare Workers** template, plus *Account → D1 → Edit* (the release applies migrations), scoped to this account and the `eigeninteractive.com` zone |
 | `CLOUDFLARE_ACCOUNT_ID` | *Workers & Pages → Overview*, in the right-hand column |
-| `ANDROID_UPLOAD_*` | already set |
+| `ANDROID_UPLOAD_KEYSTORE_BASE64`, `_STORE_PASSWORD`, `_KEY_ALIAS`, `_KEY_PASSWORD` | the upload keystore, base64-encoded, and its passwords and alias |
 
 **Variables.** They become `env/app.json` at build time and are all public:
 
@@ -281,82 +308,15 @@ ANDROID_FCM_API_KEY     ANDROID_FCM_APP_ID
 WEB_FCM_API_KEY         WEB_FCM_APP_ID
 ```
 
-plus the Play ones that are already there (`PLAY_*`, `GCP_WORKLOAD_IDENTITY_PROVIDER`,
-and `FIREBASE_PROJECT_ID`, which the Play step authenticates against).
+plus the Play ones (`PLAY_*`, `GCP_WORKLOAD_IDENTITY_PROVIDER`, and
+`FIREBASE_PROJECT_ID`, which the Play step authenticates against).
 `dart run tool/verify_config.dart` checks the shape of every value.
 
----
-
-## The cutover: merging `cloudflare` into `main`
-
-`main` still runs the Supabase backend and serves the site from Firebase
-Hosting. There are no real users and no data to keep, so this is a replacement,
-not a migration: nothing runs side by side, and nothing needs to stay
-compatible.
-
-1. **Do the production setup above**, steps 0 to 5, and push the commit with
-   the real ids to the `cloudflare` branch.
-2. **Free the domain.** In the Firebase console, *Hosting → the site → Custom
-   domains*, remove `opensplit.eigeninteractive.com`. In Cloudflare, *DNS*,
-   delete every record for `opensplit` that pointed at Firebase. A Custom
-   Domain cannot be attached over an existing record, and the deploy says so.
-3. **Deploy once by hand, from the branch, with the secrets.** This creates
-   the Worker, its two cron triggers and the Custom Domain, which needs more
-   permission than the CI token has; `wrangler login` has it. The secrets go
-   in with it (step 6), from a file outside the repository that only you can
-   read and that is deleted straight after.
-
-   ```sh
-   dart run tool/build_web.dart                       # with the production env/app.json
-   cd server
-   pnpm exec wrangler d1 migrations apply opensplit --remote
-   umask 077 && secrets="$(mktemp)"
-   "${EDITOR:-vi}" "$secrets"                         # NAME=value, one line for each secret in step 6
-   pnpm exec wrangler deploy --env="" --secrets-file "$secrets"
-   rm "$secrets"
-   ```
-
-   `FCM_SERVICE_ACCOUNT` is a whole JSON file, so put it on one line in single
-   quotes, which keep the private key's `\n` escapes as they are:
-   `FCM_SERVICE_ACCOUNT='<the output of jq -c . service-account.json>'`.
-
-4. **Verify** (below). Production now works, and `main` has not changed yet.
-5. **Configure GitHub** (step 7), and delete what belonged to the old stack:
-   the `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`,
-   `FIREBASE_DEPLOY_SERVICE_ACCOUNT` and `FIREBASE_HOSTING_SITE` variables.
-6. **Open the pull request** from `cloudflare` to `main` and wait for CI: the
-   analyse-and-test, backend, release-tooling and web-bundle jobs.
-7. **Merge it** with a merge commit, as the history does. The release workflow
-   then runs CI again, checks the resource ids, builds the web bundle and the
-   signed Android bundle, applies D1 migrations (none pending after step 3),
-   deploys the same code again, waits for `/api/health`, and sends the Android
-   build to Play closed testing.
-8. **Verify again**, then check Android App Links on a phone with the Play
-   build (below). Testers who had the Supabase-era build installed get a fresh
-   local database and sign in again; nothing from the old backend carries over.
-9. **Point the old addresses here.** The two Firebase Hosting sites,
-   `opensplit.web.app` and `opensplit-app.web.app` (and their
-   `.firebaseapp.com` twins), are kept rather than deleted, and turned into
-   permanent redirects to this domain, path and query intact. This waits
-   until now because a 301 is cached by browsers: redirecting to a domain
-   that is not serving yet would strand visitors on a dead address, and
-   before the merge, `main`'s old release workflow would deploy over it.
-
-   ```sh
-   cd legacy-domains
-   pnpm dlx firebase-tools@15.26.0 login               # once, if not logged in
-   pnpm dlx firebase-tools@15.26.0 deploy --only hosting --project opensplit-app
-   curl -sI https://opensplit.web.app/app/welcome      # 301, location: https://opensplit.eigeninteractive.com/app/welcome
-   ```
-
-   Nothing in CI deploys it; see `legacy-domains/README.md`.
-10. **Decommission the old stack**: delete the Supabase project from its
-    dashboard. Keep the Firebase project itself: FCM, the Google OAuth clients
-    and the two redirecting sites live in it.
+From here on, a push to `main` releases.
 
 ---
 
-## Every release after that
+## Every release
 
 A push to `main` runs `.github/workflows/release.yml`:
 
@@ -454,6 +414,18 @@ https://opensplit.eigeninteractive.com/privacy
 https://opensplit.eigeninteractive.com/terms
 https://opensplit.eigeninteractive.com/delete-account
 ```
+
+---
+
+## The old addresses
+
+`opensplit.web.app` and `opensplit-app.web.app` are Firebase Hosting sites that
+301 to this domain, path and query intact, for the links and App Links that
+earlier builds minted under them. Their configuration and the command that
+redeploys them are in `legacy-domains/README.md`; nothing in CI touches them.
+
+Keep the Firebase project, then, though the app is no longer hosted there:
+FCM, the Google OAuth clients and those two sites all live in it.
 
 ---
 
