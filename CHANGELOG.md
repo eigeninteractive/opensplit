@@ -7,10 +7,13 @@ What changed in each version of the app, newest first. The format is
 ## [Unreleased]
 ### Changed
 - Sign-in code emails have a new look to match the app.
+- Empty screens show their picture above the words rather than behind them.
+- The Account page shows your profile, and editing it, or saving a guest account, opens its own screen.
 
 ### Fixed
 - A group where you're owed one currency and owe another now says both on the groups list, instead of calling it all owed to you.
 - Signing in with Google on Android works again.
+- A name you give while creating your first group now shows on your profile straight away.
 
 ## [2.0.0] - 2026-10-01
 ### Changed
