@@ -320,7 +320,7 @@ supported *pair*.
 
 ```bash
 # Required for a deploy, like every secret in wrangler.jsonc — see the table below.
-cd server && pnpm exec wrangler secret put EXCHANGERATE_API_KEY
+cd server && pnpm exec wrangler secret put EXCHANGERATE_API_KEY --env=""
 ```
 
 A daily cron (`0 4 * * *`, after ECB publishes) calls the `Fx` Durable Object,
@@ -554,8 +554,8 @@ JSON; unlike everything above, **it is a real secret**:
 
 ```bash
 cd server
-pnpm exec wrangler secret put FCM_PROJECT_ID
-pnpm exec wrangler secret put FCM_SERVICE_ACCOUNT   # paste the whole JSON
+pnpm exec wrangler secret put FCM_PROJECT_ID --env=""
+pnpm exec wrangler secret put FCM_SERVICE_ACCOUNT --env=""   # paste the whole JSON
 ```
 
 There is no webhook, no shared secret and no trigger. The group's Durable
@@ -727,7 +727,7 @@ can read.
 
 ```bash
 dart run tool/build_web.dart             # builds /app/, then copies site/ over the root
-cd server && pnpm exec wrangler deploy   # script and bundle, one version
+cd server && pnpm exec wrangler deploy --env=""   # script and bundle, one version
 ```
 
 `build/web` is the Worker's `assets.directory`, so those two commands are one

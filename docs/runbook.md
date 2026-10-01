@@ -312,7 +312,7 @@ compatible.
    pnpm exec wrangler d1 migrations apply opensplit --remote
    umask 077 && secrets="$(mktemp)"
    "${EDITOR:-vi}" "$secrets"                         # NAME=value, one line for each secret in step 6
-   pnpm exec wrangler deploy --secrets-file "$secrets"
+   pnpm exec wrangler deploy --env="" --secrets-file "$secrets"
    rm "$secrets"
    ```
 
@@ -460,7 +460,7 @@ https://opensplit.eigeninteractive.com/delete-account
 ## Rotating a secret
 
 ```sh
-pnpm exec wrangler secret put BETTER_AUTH_SECRET
+pnpm exec wrangler secret put BETTER_AUTH_SECRET --env=""
 ```
 
 Takes effect within seconds. Rotating `BETTER_AUTH_SECRET` **signs every

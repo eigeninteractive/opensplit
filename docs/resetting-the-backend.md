@@ -71,7 +71,7 @@ deploys, with the tree temporarily missing a class:
 with `export { Group }` commented out of `src/index.ts`, then:
 
 ```sh
-pnpm exec wrangler deploy      # the namespace and every group in it are gone
+pnpm exec wrangler deploy --env=""   # the namespace and every group in it are gone
 ```
 
 Then put both back as they were — `"Group": { "type": "durable-object",
@@ -106,7 +106,7 @@ Put the new id in `server/wrangler.jsonc` and commit it, then:
 
 ```sh
 pnpm exec wrangler d1 migrations apply opensplit --remote
-pnpm exec wrangler deploy
+pnpm exec wrangler deploy --env=""
 ```
 
 Recreating rather than dropping tables by hand, because the migration state
