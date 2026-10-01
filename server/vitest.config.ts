@@ -6,8 +6,12 @@ import { defineConfig } from "vitest/config";
 
 /** Tests run in workerd against real Durable Objects, D1 and KV, with bindings from wrangler.jsonc. */
 
-// The same migrations `wrangler d1 migrations apply` runs.
-const migrations = await readD1Migrations(path.join(import.meta.dirname, "migrations"));
+// The same migrations `wrangler d1 migrations apply` runs, found the way wrangler.jsonc tells it to.
+const migrations = await readD1Migrations({
+  projectPath: import.meta.dirname,
+  migrationsDir: "migrations",
+  migrationsPattern: "migrations/*/migration.sql",
+});
 
 /** A stand-in for Google's signing key: tokens are signed and verified for real, against this. */
 const KEY_ID = "test-key";

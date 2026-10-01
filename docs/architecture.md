@@ -112,7 +112,7 @@ for data that ships with the code anyway.
 Each shape is declared once and derived from there:
 
 ```
-Drizzle tables ──drizzle-zod──▶ Zod rows, and request bodies picked from them
+Drizzle tables ──drizzle-orm/zod──▶ Zod rows, and request bodies picked from them
     ──@hono/zod-openapi──▶ docs/openapi.json
     ──openapi-generator (dart-dio)──▶ packages/opensplit_api
     ──lib/data/sync/wire.dart──▶ Drift rows
@@ -121,7 +121,7 @@ Drizzle tables ──drizzle-zod──▶ Zod rows, and request bodies picked fr
 - **Rows are their tables.** `createSelectSchema(table, refine)` derives each
   row; the refinements give a column its wire type where SQLite has none (a
   timestamp, a date, a named enum, a length or a regex). Refinements are
-  functions, so drizzle-zod still applies each column's own nullability.
+  functions, so Drizzle still applies each column's own nullability.
 - **Request bodies are `.pick()`s of those rows**, so a column's type and its
   validation are stated once for both directions. `EntryInput` picks the
   entry's editable columns from one list (`editableEntryColumns`), which the

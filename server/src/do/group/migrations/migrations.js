@@ -1,10 +1,8 @@
-import journal from './meta/_journal.json';
-import m0000 from './0000_slimy_nightshade.sql';
+import m0000 from './20261001035136_flashy_matthew_murdock/migration.sql';
 
   export default {
-    journal,
     migrations: {
-      m0000
-    }
+      "20261001035136_flashy_matthew_murdock": m0000
+}
   }
   

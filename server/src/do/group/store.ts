@@ -4,7 +4,7 @@ import type { DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlite";
 import * as schema from "../../db/group/schema";
 import { refuse } from "./refusal";
 
-export type GroupDb = DrizzleSqliteDODatabase<typeof schema>;
+export type GroupDb = DrizzleSqliteDODatabase;
 
 /** Every query runs in a `transactionSync`, reads included, so helpers have one signature. */
 export type Tx = Parameters<Parameters<GroupDb["transaction"]>[0]>[0];

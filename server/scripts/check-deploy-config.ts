@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import ts from "typescript";
+import { type ParseError, parse, printParseErrorCode } from "jsonc-parser";
 
 /**
  * Refuses a deploy whose D1 or KV binding still names the committed
@@ -18,8 +18,9 @@ interface Binding {
 }
 
 const file = path.join(import.meta.dirname, "..", "wrangler.jsonc");
-const { config, error } = ts.parseConfigFileTextToJson(file, await readFile(file, "utf8"));
-if (error) throw new Error(ts.flattenDiagnosticMessageText(error.messageText, "\n"));
+const errors: ParseError[] = [];
+const config = parse(await readFile(file, "utf8"), errors, { allowTrailingComma: true });
+if (errors.length > 0) throw new Error(`wrangler.jsonc: ${errors.map(({ error, offset }) => `${printParseErrorCode(error)} at offset ${offset}`).join("; ")}`);
 
 const bindings: Binding[] = [...(config.d1_databases ?? []), ...(config.kv_namespaces ?? [])];
 const isPlaceholder = (id: string | undefined) => id === undefined || /^0+f?$/.test(id.replaceAll("-", ""));

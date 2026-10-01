@@ -1,9 +1,8 @@
-import m0000 from "./0000_illegal_shocker.sql";
-import journal from "./meta/_journal.json";
+import m0000 from './20261001035136_dazzling_spitfire/migration.sql';
 
-export default {
-  journal,
-  migrations: {
-    m0000,
-  },
-};
+  export default {
+    migrations: {
+      "20261001035136_dazzling_spitfire": m0000
+}
+  }
+  

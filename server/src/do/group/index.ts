@@ -6,7 +6,6 @@ import { migrate } from "drizzle-orm/durable-sqlite/migrator";
 
 import { user } from "../../auth-schema";
 import * as d1 from "../../db/d1/schema";
-import * as schema from "../../db/group/schema";
 import { wakeDevices } from "../../push/fcm";
 import type { EntryInput, GroupChanges, GroupInput, JoinRequest, MemberInput } from "../../schemas/ledger";
 import { changesSince } from "./changes";
@@ -32,9 +31,9 @@ export class Group extends DurableObject<Env> {
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    this.db = drizzle(ctx.storage, { schema, logger: false });
+    this.db = drizzle(ctx.storage, { logger: false });
     // Each object migrates itself lazily, on its first open after a deploy.
-    ctx.blockConcurrencyWhile(() => migrate(this.db, migrations));
+    ctx.blockConcurrencyWhile(async () => migrate(this.db, migrations));
   }
 
   async ping(): Promise<string> {
@@ -124,7 +123,9 @@ export class Group extends DurableObject<Env> {
 
   private async read<T>(body: (tx: Tx, now: string) => T): Promise<Result<T>> {
     const now = nowIso();
-    return attempt(() => this.db.transaction((tx) => body(tx, now)));
+    // Boxed, as in `write`: drizzle refuses a transaction body it cannot prove
+    // synchronous, and a bare `T` could be a promise.
+    return attempt(() => this.db.transaction((tx) => ({ value: body(tx, now) })).value);
   }
 
   /**

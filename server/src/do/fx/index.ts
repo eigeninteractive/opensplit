@@ -20,12 +20,12 @@ import migrations from "./migrations/migrations";
  * the edge replicates them.
  */
 export class Fx extends DurableObject<Env> {
-  private readonly db: DrizzleSqliteDODatabase<typeof schema>;
+  private readonly db: DrizzleSqliteDODatabase;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    this.db = drizzle(ctx.storage, { schema, logger: false });
-    ctx.blockConcurrencyWhile(() => migrate(this.db, migrations));
+    this.db = drizzle(ctx.storage, { logger: false });
+    ctx.blockConcurrencyWhile(async () => migrate(this.db, migrations));
   }
 
   async ping(): Promise<string> {

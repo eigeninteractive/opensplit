@@ -25,7 +25,7 @@ describe("the schema this object migrates itself to", () => {
 
     await runInDurableObject(stub(groupId), async (_instance: Group, state) => {
       const applied = [...state.storage.sql.exec<{ n: number }>("select count(*) as n from __drizzle_migrations")];
-      expect(applied[0]?.n).toBe(migrations.journal.entries.length);
+      expect(applied[0]?.n).toBe(Object.keys(migrations.migrations).length);
 
       const entries = [...state.storage.sql.exec<{ n: number }>("select count(*) as n from entries")];
       expect(entries[0]?.n).toBe(1);

@@ -52,7 +52,8 @@
       "binding": "DB",
       "database_name": "opensplit",
       "database_id": "00000000-0000-0000-0000-000000000000",
-      "migrations_dir": "migrations"
+      "migrations_dir": "migrations",
+      "migrations_pattern": "migrations/*/migration.sql"
     }
   ],
 
@@ -106,7 +107,8 @@
           "binding": "DB",
           "database_name": "opensplit",
           "database_id": "00000000-0000-0000-0000-000000000000",
-          "migrations_dir": "migrations"
+          "migrations_dir": "migrations",
+          "migrations_pattern": "migrations/*/migration.sql"
         }
       ],
       "kv_namespaces": [{ "binding": "CACHE", "id": "0000000000000000000000000000000f" }],

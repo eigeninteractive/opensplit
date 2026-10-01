@@ -55,9 +55,8 @@ anything run with `--remote` (including `pnpm db:migrate:remote`), and
 ### Once per machine
 
 ```sh
-corepack enable                      # installs the pnpm version package.json pins
-cd server
-pnpm install
+cd server                            # pnpm itself installed once: pnpm.io/installation
+pnpm install                         # also fetches the Node that package.json pins
 cp .dev.vars.example .dev.vars       # local secrets; the example's values work as they are
 cd ..
 cp env/local.example.json env/local.json

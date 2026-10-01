@@ -1,12 +1,12 @@
 import { z } from "@hono/zod-openapi";
-import { createSchemaFactory } from "drizzle-zod";
+import { createSchemaFactory } from "drizzle-orm/zod";
 
 /**
  * Wire primitives shared by every schema.
  *
  * Rows are derived from their Drizzle tables with `createSelectSchema`, and
  * request bodies are `.pick()`s of those rows, so a column's type and its
- * validation are declared once. Refinements are functions so drizzle-zod still
+ * validation are declared once. Refinements are functions so Drizzle still
  * applies each column's own nullability.
  */
 export const { createSelectSchema } = createSchemaFactory({ zodInstance: z });

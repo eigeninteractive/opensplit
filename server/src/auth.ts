@@ -1,5 +1,5 @@
+import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
 import { betterAuth } from "better-auth";
-import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { anonymous } from "better-auth/plugins/anonymous";
 import { bearer } from "better-auth/plugins/bearer";
 import { emailOTP } from "better-auth/plugins/email-otp";
@@ -25,7 +25,7 @@ export function build(env: Env) {
   const email = createEmailSender(env);
 
   return betterAuth({
-    database: drizzleAdapter(drizzle(env.DB, { schema: authSchema }), { provider: "sqlite", schema: authSchema }),
+    database: drizzleAdapter(drizzle(env.DB, { relations: authSchema.authRelations }), { provider: "sqlite", schema: authSchema }),
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.APP_ORIGIN,
     basePath: "/api/auth",
