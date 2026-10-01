@@ -345,7 +345,7 @@ compatible.
    ```sh
    cd legacy-domains
    pnpm dlx firebase-tools@15.26.0 login               # once, if not logged in
-   pnpm dlx firebase-tools@15.26.0 deploy --only hosting
+   pnpm dlx firebase-tools@15.26.0 deploy --only hosting --project opensplit-app
    curl -sI https://opensplit.web.app/app/welcome      # 301, location: https://opensplit.eigeninteractive.com/app/welcome
    ```
 

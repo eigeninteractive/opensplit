@@ -17,13 +17,17 @@ neighbours change:
 
 ```sh
 cd legacy-domains
-pnpm dlx firebase-tools@15.26.0 deploy --only hosting
+pnpm dlx firebase-tools@15.26.0 deploy --only hosting --project opensplit-app
 ```
+
+`--project` and not only `.firebaserc`: a `firebase use` run anywhere in this
+repository is remembered per machine and outranks `.firebaserc`, and the
+Supabase era left the alias `prod` behind that way, which names no project.
 
 Before a deploy, the Hosting emulator shows exactly what each site will do:
 
 ```sh
-pnpm dlx firebase-tools@15.26.0 emulators:exec --only hosting \
+pnpm dlx firebase-tools@15.26.0 emulators:exec --only hosting --project opensplit-app \
   'curl -sI "http://127.0.0.1:5000/app/join/abc?x=1"'
 ```
 
