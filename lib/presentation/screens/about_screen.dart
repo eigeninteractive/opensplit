@@ -60,8 +60,8 @@ class AboutScreen extends StatelessWidget {
               icon: Icons.balance_outlined,
               title: 'Licence — AGPL-3.0',
               subtitle:
-                  'Chosen so a proprietary fork cannot take this work, close '
-                  'it, and outcompete the project it came from.',
+                  'Anyone can use, change and share the code, and what is '
+                  'built from it stays open source too.',
               url: licenseUrl,
             ),
 
@@ -84,8 +84,8 @@ class AboutScreen extends StatelessWidget {
 
             const Divider(height: 40),
             Text(
-              'No ads, no analytics SDK, no venture funding, and logging an '
-              'expense is never gated. Those are commitments rather than '
+              'Free for everyone, open source, with no ads, no analytics SDK '
+              'and no venture funding. Those are commitments rather than '
               'features — they are written down in the repository so they can '
               'be held against us.',
               style: theme.textTheme.bodySmall?.copyWith(

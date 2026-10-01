@@ -372,7 +372,7 @@ No queue in front of push, no WebSocket, no server-side balances view, no
 cross-object aggregation, and no portability seam.
 
 The last one is a commitment rather than an omission: the object is written in
-the shape the platform wants, and PRINCIPLES.md #6 states the consequence
+the shape the platform wants, and PRINCIPLES.md #5 states the consequence
 rather than implying a self-host path.
 
 The one storage rule that governs everything else: derive from the ledger on
