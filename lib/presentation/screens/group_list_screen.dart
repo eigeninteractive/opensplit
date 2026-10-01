@@ -209,53 +209,81 @@ class _Summary extends StatelessWidget {
       );
     }
 
-    // One row per currency the group holds, because collapsing them would
-    // require inventing an exchange rate the user never agreed to.
+    // Figures stay per currency, because collapsing them would require
+    // inventing an exchange rate the user never agreed to. They are grouped by
+    // direction, since one group can owe you euros while you owe it pounds,
+    // and a single "You are owed" over both would be wrong about one of them.
     final owed = <String>[];
+    final owing = <String>[];
     for (final code in ledger!.activeCurrencies) {
       final balance = ledger!.balanceOf(me.id, code);
-      if (balance != 0) {
-        owed.add(formatMoneyAbs(currencies[code], balance));
-      }
+      if (balance == 0) continue;
+      (balance > 0 ? owed : owing).add(
+        formatMoneyAbs(currencies[code], balance),
+      );
     }
 
-    if (owed.isEmpty) {
+    if (owed.isEmpty && owing.isEmpty) {
       return Text(
         'Settled up',
         style: style?.copyWith(color: scheme.onSurfaceVariant),
       );
     }
 
-    // Direction is taken from the first non-zero currency; the group screen
-    // breaks it down properly.
-    final firstCode = ledger!.activeCurrencies.firstWhere(
-      (code) => ledger!.balanceOf(me.id, code) != 0,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (owed.isNotEmpty)
+          _Standing(lead: 'You are owed', figures: owed, direction: 1),
+        if (owing.isNotEmpty)
+          _Standing(lead: 'You owe', figures: owing, direction: -1),
+      ],
     );
-    final net = ledger!.balanceOf(me.id, firstCode);
+  }
+}
 
-    final lead = net > 0 ? 'You are owed' : 'You owe';
-    final figures = owed.join(' + ');
-    final words = '$lead $figures';
+/// One direction of a group's balance: an arrow, the words, and every
+/// currency that goes that way.
+class _Standing extends StatelessWidget {
+  const _Standing({
+    required this.lead,
+    required this.figures,
+    required this.direction,
+  });
+
+  final String lead;
+
+  /// Formatted, unsigned amounts, one per currency.
+  final List<String> figures;
+
+  /// Positive when these are owed to you, negative when you owe them.
+  final int direction;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final joined = figures.join(' + ');
 
     // The words in the app's own face and the figures in its tabular one.
-    final base = (style ?? const TextStyle()).copyWith(
-      color: balanceColor(scheme, net),
-      fontWeight: FontWeight.w600,
-    );
+    final base = (Theme.of(context).textTheme.bodyMedium ?? const TextStyle())
+        .copyWith(
+          color: balanceColor(scheme, direction),
+          fontWeight: FontWeight.w600,
+        );
 
     return Semantics(
-      label: words,
+      label: '$lead $joined',
       child: ExcludeSemantics(
         child: Row(
           children: [
-            BalanceArrow(balanceMinor: net, size: 15),
+            BalanceArrow(balanceMinor: direction, size: 15),
             const SizedBox(width: 2),
             Flexible(
               child: Text.rich(
                 TextSpan(
                   children: [
                     TextSpan(text: '$lead '),
-                    TextSpan(text: figures, style: moneyStyle(base)),
+                    TextSpan(text: joined, style: moneyStyle(base)),
                   ],
                 ),
                 overflow: TextOverflow.ellipsis,
