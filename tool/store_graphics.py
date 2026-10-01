@@ -150,8 +150,8 @@ def build():
         'margin': 0.13, 'wordmark': 0.058, 'wordmark_y': 0.20,
         'headline': 0.118, 'headline_y': 0.42,
         'body': 0.042,
-        'lines': ['Open source, with no ads and no tracking.',
-                  'Works offline, in any currency.'],
+        'lines': ['Free and open source, offline and in any',
+                  'currency. No ads, no tracking.'],
     })
     og.save('site/store/og-card.png', optimize=True)
 
@@ -163,7 +163,7 @@ def build():
         'margin': 0.13, 'wordmark': 0.062, 'wordmark_y': 0.21,
         'headline': 0.122, 'headline_y': 0.44,
         'body': 0.044,
-        'lines': ['Open source. No ads, no tracking.'],
+        'lines': ['Free and open source. No ads, no tracking.'],
     })
     play.save('site/store/feature-graphic.jpg', quality=92, optimize=True)
 
