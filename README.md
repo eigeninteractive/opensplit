@@ -220,6 +220,12 @@ Configuration is injected at build time, from a file rather than a dozen
 `--dart-define` flags on one command line — which is how a release ends up
 built against the wrong backend.
 
+A change someone using the app would notice also gets a line in
+[CHANGELOG.md](CHANGELOG.md), which becomes the testers' notes in Play:
+`dart run cider log fixed 'What changed, for a tester.'`. How versions are cut
+and how builds are numbered is under *Versions* in
+[docs/runbook.md](docs/runbook.md).
+
 ```bash
 cp env/app.example.json env/app.json      # gitignored; fill it in
 cp android/key.properties.example android/key.properties   # gitignored too

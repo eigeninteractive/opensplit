@@ -62,6 +62,11 @@ void main() {
     await tester.pump(Duration.zero);
   });
 
+  test('the version line leaves out a build number there is not', () {
+    expect(versionLabel('1.2.0', '1701'), 'Version 1.2.0 (1701)');
+    expect(versionLabel('1.2.0', ''), 'Version 1.2.0');
+  });
+
   test('the licence and issue pages hang off the repository', () {
     // A fork repoints one define and the whole screen follows, which is what
     // makes shipping this screen unmodified an honest answer to AGPL-3.0.

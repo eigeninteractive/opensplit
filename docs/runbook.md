@@ -322,10 +322,14 @@ A push to `main` runs `.github/workflows/release.yml`:
 
 1. CI, the same jobs as on a pull request.
 2. The resource-id check, before anything slow.
-3. The web bundle and the signed Android bundle, uploaded as artifacts.
-4. `wrangler d1 migrations apply opensplit --remote`: whatever is pending.
-5. `wrangler deploy`: the script and the bundle, together, as one version.
-6. A wait for `/api/health`, then Play closed testing.
+3. The build number, and Play's release notes from `CHANGELOG.md` (see
+   *Versions*).
+4. The web bundle and the signed Android bundle, both carrying that number,
+   uploaded as artifacts.
+5. `wrangler d1 migrations apply opensplit --remote`: whatever is pending.
+6. `wrangler deploy`: the script and the bundle, together, as one version.
+7. A wait for `/api/health`, then Play closed testing, with the notes.
+8. A `v<version>` tag, the first time a build of that version ships.
 
 D1 migrations are applied before the Worker that needs them goes live.
 Before launch, a schema change needs no compatibility period; if one is
@@ -335,6 +339,92 @@ opened after a deploy.
 
 A manual run (*Actions → Release → Run workflow*) with **deploy** unchecked
 builds the artifacts without deploying anything.
+
+---
+
+## Versions
+
+A build has two numbers, and only one of them is written down.
+
+- **The version**, `1.2.0`: what people see, and what the changelog is
+  organised by. It is `version:` in `pubspec.yaml`, changed only through
+  [cider](https://pub.dev/packages/cider), which keeps `CHANGELOG.md` in step.
+- **The build number**, `1701`: what Play orders builds by, Android's
+  `versionCode`. It is never written down. The release workflow works it out
+  and gives the same number to the web bundle and the Android bundle, so About
+  reads "Version 1.2.0 (1701)" on both, and a bug report names one build.
+
+cider is a dev dependency, so `dart run cider` is the version `pubspec.lock`
+pins, the same everywhere.
+
+### In every pull request
+
+A change someone using the app would notice gets a line under *Unreleased*:
+
+```sh
+dart run cider log fixed 'Totals no longer round twice.'
+# or added, changed, deprecated, removed, security
+```
+
+Write it for a tester rather than for a reviewer: the lines become the build's
+notes in Play. Refactors, tests and tooling get none.
+
+### Cutting a version
+
+When what is under *Unreleased* deserves a version of its own, and at the
+latest before a build goes beyond closed testing:
+
+```sh
+dart run cider bump minor      # or patch, or major
+dart run cider release         # Unreleased becomes this version's section, dated today
+```
+
+Both files go in one pull request. A bump without the release leaves
+`pubspec.yaml` naming a version the changelog does not have, and
+`test/tool/release_notes_test.dart` fails the pull request for it.
+
+Which part to bump: patch when a version only fixes things, minor when it adds
+anything, and major when it leaves older clients behind, such as a server change
+they can no longer talk to. A major one is also the release to send with update
+priority 4, so those clients are made to update.
+
+Merges between versions keep the version's name and differ by build number;
+"1.2.0 (1701)" and "1.2.0 (1804)" are two builds of 1.2.0.
+
+### What a release does with them
+
+**Play's notes.** `tool/release_notes.dart` takes the *Unreleased* entries,
+since they are what this build has that the last version did not. Straight
+after a version is cut there are none, and it takes that version's section
+instead. It drops the headings and the Markdown, which Play would show
+literally, and keeps whole entries up to Play's 500 characters, counting the
+rest on a last line. The notes are in `en-US`, the store listing's language,
+because Play refuses notes in a language the listing lacks. Add a language to
+the listing, and the workflow has to write that language too.
+
+**Tags.** The first build of each version tags its commit `v1.2.0`, and later
+builds leave the tag where it was. The compare links at the foot of
+`CHANGELOG.md` point at those tags. `v1.0.0` marks the first build that reached
+Play.
+
+### The build number
+
+Run number × 100, plus the attempt: release run 17 is build 1701, and its
+retry is 1702. Numbering builds in CI rather than in the repository is the
+usual arrangement. A number in `pubspec.yaml` has to be raised by a commit,
+and two pull requests then race for it. The run number only goes up, and the
+attempt gives a retry a new number, which Play insists on even for the same
+commit. Play's ceiling, 2,100,000,000, is twenty-one million runs away.
+
+Two other schemes were passed over. The commit count needs the whole history
+in every checkout, and a retry would reuse the number. Asking Play for the
+highest code so far couples every build to the API being reachable.
+
+**What would break it:** GitHub numbers runs per workflow file. Rename or
+recreate `release.yml` and the count starts again at 1, below every code Play
+has seen, so every upload is refused. If it ever has to be renamed, add an
+offset above the last run number to the formula in the *Number this build*
+step.
 
 ---
 
