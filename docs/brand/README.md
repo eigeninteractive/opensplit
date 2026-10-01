@@ -70,7 +70,7 @@ Generated, never edited by hand:
 | `dart run tool/brand_icons.dart` | the favicon and the notification icon, after the command above | the transparent artwork in `assets/icon/` |
 | `dart run flutter_native_splash:create` | the native splash screens | `assets/splash/`, configured in `flutter_native_splash.yaml` |
 | `flutter test tool/screenshots_test.dart` | `site/store/screenshot-*.png` and `web-app.png` | the real screens over demo data |
-| `python3 tool/store_graphics.py` | `site/store/og-card.png` and `feature-graphic.jpg` | the balances screenshot, the mark's geometry and the bundled font |
+| `python3 tool/store_graphics.py` | `site/store/og-card.png` and `feature-graphic.jpg`, and `site/email/wordmark.png` for the sign-in email | the balances screenshot, the mark's geometry and the bundled font |
 
 `assets/icon/icon.png` is opaque because iOS and legacy Android icons cannot
 carry alpha. The adaptive foreground keeps the mark inside the circle a

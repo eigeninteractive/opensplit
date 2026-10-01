@@ -61,24 +61,3 @@ export function createEmailSender(env: Env): EmailSender {
   }
   return new ResendSender(env.RESEND_API_KEY);
 }
-
-/** A code rather than a magic link: links open in the wrong browser and mail scanners consume them. */
-export function signInCodeMessage(to: string, code: string): EmailMessage {
-  const text = `Your OpenSplit code is ${code}
-
-It expires in ten minutes and can be used once.
-If you did not ask for this, you can ignore this message — nothing has
-changed on your account.
-`;
-
-  const html = [
-    '<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;font-size:16px;line-height:1.5;color:#212121">',
-    "<p>Your OpenSplit code is</p>",
-    `<p style="font-size:32px;font-weight:600;letter-spacing:0.12em;font-family:ui-monospace,SFMono-Regular,Menlo,monospace">${code}</p>`,
-    "<p>It expires in ten minutes and can be used once.</p>",
-    '<p style="color:#5f5f5f">If you did not ask for this, you can ignore this message — nothing has changed on your account.</p>',
-    "</div>",
-  ].join("");
-
-  return { to, subject: `${code} is your OpenSplit code`, text, html };
-}
