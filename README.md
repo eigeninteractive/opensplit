@@ -1,6 +1,6 @@
 # OpenSplit
 
-Split expenses with friends. Free forever, no ads, works offline, open source.
+Split expenses with friends. Free forever, open source, no ads, works offline.
 
 OpenSplit is a local-first expense splitter for Android and the web. It exists
 because every alternative either paywalls the act of logging an expense or has

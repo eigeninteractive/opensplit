@@ -139,6 +139,7 @@ const reauthVerifyRoute = createRoute({
   },
 });
 
+/** Better Auth checks the token's nonce claim against `nonce` exactly, so the app gives Google the same value it sends here. */
 const google = (idToken: string, nonce: string | null) => ({ provider: "google" as const, idToken: { token: idToken, nonce: nonce ?? undefined } });
 
 export function identityRoutes(routes: OpenAPIHono<AppEnv>) {

@@ -6,7 +6,7 @@
   "display": "standalone",
   "background_color": "#FCF8FF",
   "theme_color": "#FCF8FF",
-  "description": "Split expenses with friends. Free forever, no ads, works offline, open source.",
+  "description": "Split expenses with friends. Free forever, open source, no ads, works offline.",
   "prefer_related_applications": false,
   "categories": ["finance", "productivity"],
   "icons": [

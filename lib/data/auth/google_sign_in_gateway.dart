@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:math';
 
-import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -33,6 +32,9 @@ class GoogleSignInGateway implements GoogleTokenSource {
   static Future<void>? _ready;
 
   /// The nonce every Google token from this session is bound to.
+  ///
+  /// Google copies it into the token's claim verbatim, and the server checks
+  /// the claim against the value sent alongside, exactly as given.
   static final String _nonce = base64Url
       .encode(List<int>.generate(32, (_) => _random.nextInt(256)))
       .replaceAll('=', '');
@@ -45,7 +47,7 @@ class GoogleSignInGateway implements GoogleTokenSource {
         // The same web client id on Android, deliberately: the Worker verifies
         // the ID token against this audience whichever platform minted it.
         serverClientId: kIsWeb ? null : googleWebClientId,
-        nonce: sha256.convert(utf8.encode(_nonce)).toString(),
+        nonce: _nonce,
       );
 
   /// Returns the ID token, or null if the user backed out.

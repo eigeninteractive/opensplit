@@ -11,6 +11,8 @@ export interface GoogleIdentity {
   sub: string;
   email: string;
   name?: string;
+  /** The claim Google copies verbatim from the nonce the app asked with. */
+  nonce?: string;
 }
 
 export async function googleIdToken(identity: GoogleIdentity): Promise<string> {
@@ -21,6 +23,7 @@ export async function googleIdToken(identity: GoogleIdentity): Promise<string> {
     email: identity.email,
     email_verified: true,
     name: identity.name ?? identity.email.split("@")[0],
+    ...(identity.nonce === undefined ? {} : { nonce: identity.nonce }),
   })
     .setProtectedHeader({ alg: "RS256", kid: jwk.kid })
     .setIssuer("https://accounts.google.com")

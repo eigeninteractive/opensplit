@@ -53,8 +53,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               leading: Icon(Icons.favorite_outline),
               title: Text('Free forever'),
               subtitle: Text(
-                'Logging an expense is never gated, there are no ads, and no '
-                'analytics SDK is present in this app.',
+                'Every feature is free for everyone. The app is open source, '
+                'has no ads, and has no analytics SDK.',
               ),
               isThreeLine: true,
             ),

@@ -19,7 +19,7 @@ function everyOutcomeCarriesTheField(body: Outcome) {
   expect(Object.keys(body).sort()).toEqual(["account", "outcome", "strandedUserId", "token"]);
 }
 
-async function continueWithGoogle(idToken: string, options: { token?: string; allowSignIn?: boolean } = {}): Promise<Response> {
+async function continueWithGoogle(idToken: string, options: { token?: string; allowSignIn?: boolean; nonce?: string } = {}): Promise<Response> {
   return workerExports.default.fetch("https://opensplit.test/api/identity/google", {
     method: "POST",
     headers: {
@@ -28,13 +28,33 @@ async function continueWithGoogle(idToken: string, options: { token?: string; al
     },
     body: JSON.stringify({
       idToken,
-      nonce: null,
+      nonce: options.nonce ?? null,
       allowSignIn: options.allowSignIn ?? false,
     }),
   });
 }
 
 describe("continuing with Google", () => {
+  /** What the app does: Google is given the nonce, and the server the same value. */
+  describe("with the nonce the token is bound to", () => {
+    const nonce = "a-nonce-only-this-device-has";
+
+    it("signs in when the token carries that nonce", async () => {
+      const token = await googleIdToken({ sub: "google-nonce", email: "nonce@example.com", nonce });
+
+      const response = await continueWithGoogle(token, { nonce });
+      expect(response.status).toBe(200);
+    });
+
+    it("refuses a nonce the token was not bound to", async () => {
+      const token = await googleIdToken({ sub: "google-other-nonce", email: "other-nonce@example.com", nonce });
+
+      const response = await continueWithGoogle(token, { nonce: "somebody-else's" });
+      expect(response.status).toBe(401);
+      expect(((await response.json()) as { error: { code: string } }).error.code).toBe("auth_failed");
+    });
+  });
+
   it("signs in when there is no session to attach to", async () => {
     const token = await googleIdToken({
       sub: "google-new",
