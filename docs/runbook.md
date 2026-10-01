@@ -324,9 +324,25 @@ compatible.
 8. **Verify again**, then check Android App Links on a phone with the Play
    build (below). Testers who had the Supabase-era build installed get a fresh
    local database and sign in again; nothing from the old backend carries over.
-9. **Decommission the old stack**: delete the Supabase project from its
-   dashboard, and the Firebase Hosting site. Keep the Firebase project itself:
-   FCM and the Google OAuth clients live in it.
+9. **Point the old addresses here.** The two Firebase Hosting sites,
+   `opensplit.web.app` and `opensplit-app.web.app` (and their
+   `.firebaseapp.com` twins), are kept rather than deleted, and turned into
+   permanent redirects to this domain, path and query intact. This waits
+   until now because a 301 is cached by browsers: redirecting to a domain
+   that is not serving yet would strand visitors on a dead address, and
+   before the merge, `main`'s old release workflow would deploy over it.
+
+   ```sh
+   cd legacy-domains
+   pnpm dlx firebase-tools@15.26.0 login               # once, if not logged in
+   pnpm dlx firebase-tools@15.26.0 deploy --only hosting
+   curl -sI https://opensplit.web.app/app/welcome      # 301, location: https://opensplit.eigeninteractive.com/app/welcome
+   ```
+
+   Nothing in CI deploys it; see `legacy-domains/README.md`.
+10. **Decommission the old stack**: delete the Supabase project from its
+    dashboard. Keep the Firebase project itself: FCM, the Google OAuth clients
+    and the two redirecting sites live in it.
 
 ---
 
