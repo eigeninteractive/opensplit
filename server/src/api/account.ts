@@ -108,8 +108,12 @@ export function accountRoutes(routes: OpenAPIHono<AppEnv>) {
   });
 
   routes.openapi(updateProfileRoute, async (c) => {
-    const { displayName, upiVpa } = c.req.valid("json");
-    const [row] = await c.var.db.update(profiles).set({ displayName, upiVpa, updatedAt: new Date().toISOString() }).where(eq(profiles.id, c.var.session.userId)).returning();
+    const update = c.req.valid("json");
+    const [row] = await c.var.db
+      .update(profiles)
+      .set({ ...update, updatedAt: new Date().toISOString() })
+      .where(eq(profiles.id, c.var.session.userId))
+      .returning();
     // Created by a databaseHook with the account, so a missing row is a bug, not a case.
     if (!row) throw new Error(`No profile for account ${c.var.session.userId}`);
     return c.json(row, 200);

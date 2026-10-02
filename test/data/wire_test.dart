@@ -3,6 +3,7 @@ import 'package:drift/native.dart';
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/repositories/drift_activity_repository.dart';
 import 'package:opensplit/data/sync/wire.dart';
+import 'package:opensplit/domain/avatar.dart';
 import 'package:opensplit/domain/calendar_date.dart';
 import 'package:opensplit/domain/models/entry.dart';
 import 'package:opensplit_api/opensplit_api.dart' as api;
@@ -23,6 +24,8 @@ void main() {
         joinedAt: DateTime.utc(2026),
       );
       final group = Group(
+        avatarKind: api.AvatarKind.initials,
+        coverKind: api.CoverKind.generated,
         id: 'g',
         name: 'Goa',
         defaultCurrency: 'INR',
@@ -45,6 +48,60 @@ void main() {
         allOf(containsPair('leftAt', null), containsPair('upiVpa', null)),
       );
     });
+  });
+
+  test('how a group and a person look survives the wire both ways', () {
+    final group = api.Group(
+      id: 'g',
+      name: 'Goa',
+      defaultCurrency: 'INR',
+      isDirect: false,
+      simplifyDebts: true,
+      avatarKind: api.AvatarKind.emoji,
+      avatarColor: api.AvatarColor.amber,
+      avatarEmoji: '🏖️',
+      avatarIcon: null,
+      avatarPhoto: null,
+      coverKind: api.CoverKind.generated,
+      coverPhoto: null,
+      createdBy: 'm',
+      createdAt: DateTime.utc(2026),
+      archivedAt: null,
+      updatedAt: DateTime.utc(2026),
+      seq: 1,
+    );
+    final row = group.toRow();
+    expect(row.avatar, const EmojiAvatar('🏖️', color: api.AvatarColor.amber));
+    final creator = Member(
+      id: 'm',
+      groupId: 'g',
+      displayName: 'Ravi',
+      joinedAt: DateTime.utc(2026),
+    );
+    expect(
+      row.toInput(creator).toJson(),
+      allOf(
+        containsPair('avatarKind', 'emoji'),
+        containsPair('avatarEmoji', '🏖️'),
+        containsPair('avatarColor', 'amber'),
+        containsPair('avatarIcon', null),
+        containsPair('coverKind', 'generated'),
+      ),
+    );
+
+    final profile = const Profile(
+      id: 'p',
+      avatarKind: api.AvatarKind.initials,
+    ).withAvatar(const IconAvatar(api.AvatarIcon.sailing));
+    expect(
+      profile.toUpdate().toJson(),
+      allOf(
+        containsPair('avatarKind', 'icon'),
+        containsPair('avatarIcon', 'sailing'),
+        // Null is how "not picked" travels, so it is sent, not left out.
+        containsPair('avatarColor', null),
+      ),
+    );
   });
 
   test('when and where an expense happened survive the wire', () {
@@ -100,6 +157,8 @@ void main() {
           .into(db.groups)
           .insert(
             Group(
+              avatarKind: api.AvatarKind.initials,
+              coverKind: api.CoverKind.generated,
               id: 'g',
               name: 'Goa',
               defaultCurrency: 'INR',

@@ -210,6 +210,37 @@ now:
 
 ---
 
+## How people and groups look
+
+A profile (in D1) and a group (in its object) each carry the same **avatar**
+columns, declared once in `server/src/db/appearance.ts`: `avatarKind` —
+`initials`, `emoji`, `icon` or `photo` — plus the one field that kind reads,
+and `avatarColor`. Exactly the kind's own field is set and every other is
+null, the same shape as an event's payload; a CHECK in each table and a Zod
+refinement on each body hold that. `avatarColor` is null until somebody picks
+a hue, and the device then derives one from the id with a fixed hash
+(`hueFor`), so an avatar never changes colour by itself and looks the same on
+every device. Icons are a closed list of Material Symbols names, generated
+into a Dart enum like every other vocabulary; an emoji is any single
+pictographic grapheme.
+
+A group also has a **cover**. `coverKind: generated` stores nothing else: the
+device draws it from the group's hue and the icons of the categories it
+spends on most, laid out by a generator seeded with the group's id. It
+changes as the spending does, and there is no asset to keep.
+
+Changing how a group looks is a group write like a rename, but appends no
+event: the activity feed is about the money and the people.
+
+**Photos are in the shape and switched off.** `avatarPhoto` and `coverPhoto`
+hold a key in a media store that does not exist yet, and both refinements
+refuse any non-null key. Turning uploads on is an R2 binding, an upload
+route that returns a key, and replacing that refusal with a check that the
+key names an uploaded object, plus the device's picker, resizing and upload.
+No column changes, so no migration and no device rebuild.
+
+---
+
 ## Sync is event-triggered, never polled
 
 The client syncs on real triggers — screen open, pull-to-refresh, a data-only

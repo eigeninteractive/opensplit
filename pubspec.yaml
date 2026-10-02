@@ -80,6 +80,7 @@ dependencies:
   # happened. Dart itself only gives abbreviations like "IST".
   flutter_timezone: ^5.1.0
   flutter_secure_storage: ^11.2.0
+  characters: ^1.4.1
 dev_dependencies:
   args: ^2.7.0
   flutter_test:
@@ -132,14 +133,18 @@ flutter:
   # present it resolves from the bundle, and allowRuntimeFetching is off in
   # main.dart so a packaging miss throws instead of reaching for the network.
   #
-  # The brand faces need no `fonts:` entry of their own: google_fonts matches
-  # them by filename, and these names are the ones it builds out of its own font
+  # The brand face needs no `fonts:` entry of its own: google_fonts matches it
+  # by filename, and these names are the ones it builds out of its own font
   # descriptors. Instrument Sans carries 400 and 500 for Material 3's type scale
-  # plus 600, the one weight this app asks for by hand; JetBrains Mono carries
-  # only the 500 that money amounts are set in. See
+  # plus 600, the one weight this app asks for by hand. Named file by file
+  # because the folder also holds JetBrains Mono, which the static site and the
+  # sign-in email set code in and the app does not use. See
   # assets/google_fonts/LICENSE for provenance.
   assets:
-    - assets/google_fonts/
+    - assets/google_fonts/InstrumentSans-Regular.ttf
+    - assets/google_fonts/InstrumentSans-Medium.ttf
+    - assets/google_fonts/InstrumentSans-SemiBold.ttf
+    - assets/google_fonts/LICENSE
     # Only the mark, not the folder. The rest of assets/brand/ — the lockups,
     # the pre-stroked variants, the 1024px PNGs — are sources for generators and
     # for anything outside the app, and bundling them would ship a few hundred

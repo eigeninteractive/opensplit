@@ -5,7 +5,10 @@ import 'package:go_router/go_router.dart';
 import '../../application/ledger_providers.dart';
 import '../../application/session_providers.dart';
 import '../../domain/auth_service.dart';
+import '../../domain/avatar.dart';
+import '../../data/local/database.dart';
 import '../feedback.dart';
+import '../widgets/avatar_view.dart';
 import '../widgets/page_body.dart';
 import 'edit_profile_screen.dart';
 
@@ -174,6 +177,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         SliverList.list(
           children: [
             _Identity(
+              id: account?.id ?? '',
+              avatar: profile?.avatar ?? const InitialsAvatar(),
               name: profile?.displayName,
               email: account?.email,
               isGuest: account?.isAnonymous ?? false,
@@ -266,11 +271,15 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
 /// Who this is, as the people in your groups see them.
 class _Identity extends StatelessWidget {
   const _Identity({
+    required this.id,
+    required this.avatar,
     required this.name,
     required this.email,
     required this.isGuest,
   });
 
+  final String id;
+  final Avatar avatar;
   final String? name;
   final String? email;
   final bool isGuest;
@@ -280,7 +289,6 @@ class _Identity extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final named = name?.trim() ?? '';
-    final initials = initialsOf(named);
 
     return Card.filled(
       margin: EdgeInsets.zero,
@@ -291,13 +299,18 @@ class _Identity extends StatelessWidget {
           padding: const EdgeInsets.all(20),
           child: Row(
             children: [
-              CircleAvatar(
-                radius: 32,
-                backgroundColor: scheme.primaryContainer,
-                foregroundColor: scheme.onPrimaryContainer,
-                child: initials.isEmpty
-                    ? const Icon(Icons.person_outline, size: 32)
-                    : Text(initials, style: theme.textTheme.titleLarge),
+              Tooltip(
+                message: 'Change picture',
+                child: InkResponse(
+                  onTap: () => context.push('/account/picture'),
+                  radius: 36,
+                  child: AvatarView(
+                    avatar: avatar,
+                    name: named,
+                    id: id,
+                    radius: 32,
+                  ),
+                ),
               ),
               const SizedBox(width: 20),
               Expanded(
@@ -436,16 +449,6 @@ class _ProfileRow extends StatelessWidget {
 
 void _edit(BuildContext context, ProfileField field) =>
     context.push('/account/edit?field=${field.name}');
-
-/// Up to two letters for an avatar: the first of the first and last words.
-@visibleForTesting
-String initialsOf(String name) {
-  final words = name.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
-  if (words.isEmpty) return '';
-  final first = words.first.characters.first;
-  final last = words.length > 1 ? words.last.characters.first : '';
-  return (first + last).toUpperCase();
-}
 
 /// A dash and a line of text, for a dialog that has to list consequences.
 class _Bullet extends StatelessWidget {

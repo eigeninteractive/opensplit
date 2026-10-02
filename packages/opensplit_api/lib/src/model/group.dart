@@ -3,6 +3,10 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:opensplit_api/src/model/avatar_color.dart';
+import 'package:opensplit_api/src/model/avatar_kind.dart';
+import 'package:opensplit_api/src/model/cover_kind.dart';
+import 'package:opensplit_api/src/model/avatar_icon.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 part 'group.g.dart';
@@ -25,6 +29,20 @@ class Group {
     required this.isDirect,
 
     required this.simplifyDebts,
+
+    required this.avatarKind,
+
+    required this.avatarColor,
+
+    required this.avatarEmoji,
+
+    required this.avatarIcon,
+
+    required this.avatarPhoto,
+
+    required this.coverKind,
+
+    required this.coverPhoto,
 
     required this.createdBy,
 
@@ -52,6 +70,47 @@ class Group {
   @JsonKey(name: r'simplifyDebts', required: true, includeIfNull: false)
   final bool simplifyDebts;
 
+  @JsonKey(
+    name: r'avatarKind',
+    required: true,
+    includeIfNull: false,
+    unknownEnumValue: AvatarKind.unknownDefaultOpenApi,
+  )
+  final AvatarKind avatarKind;
+
+  @JsonKey(
+    name: r'avatarColor',
+    required: true,
+    includeIfNull: true,
+    unknownEnumValue: AvatarColor.unknownDefaultOpenApi,
+  )
+  final AvatarColor? avatarColor;
+
+  @JsonKey(name: r'avatarEmoji', required: true, includeIfNull: true)
+  final String? avatarEmoji;
+
+  @JsonKey(
+    name: r'avatarIcon',
+    required: true,
+    includeIfNull: true,
+    unknownEnumValue: AvatarIcon.unknownDefaultOpenApi,
+  )
+  final AvatarIcon? avatarIcon;
+
+  @JsonKey(name: r'avatarPhoto', required: true, includeIfNull: true)
+  final String? avatarPhoto;
+
+  @JsonKey(
+    name: r'coverKind',
+    required: true,
+    includeIfNull: false,
+    unknownEnumValue: CoverKind.unknownDefaultOpenApi,
+  )
+  final CoverKind coverKind;
+
+  @JsonKey(name: r'coverPhoto', required: true, includeIfNull: true)
+  final String? coverPhoto;
+
   @JsonKey(name: r'createdBy', required: true, includeIfNull: false)
   final String createdBy;
 
@@ -77,6 +136,13 @@ class Group {
           other.defaultCurrency == defaultCurrency &&
           other.isDirect == isDirect &&
           other.simplifyDebts == simplifyDebts &&
+          other.avatarKind == avatarKind &&
+          other.avatarColor == avatarColor &&
+          other.avatarEmoji == avatarEmoji &&
+          other.avatarIcon == avatarIcon &&
+          other.avatarPhoto == avatarPhoto &&
+          other.coverKind == coverKind &&
+          other.coverPhoto == coverPhoto &&
           other.createdBy == createdBy &&
           other.createdAt == createdAt &&
           other.archivedAt == archivedAt &&
@@ -90,6 +156,13 @@ class Group {
       defaultCurrency.hashCode +
       isDirect.hashCode +
       simplifyDebts.hashCode +
+      avatarKind.hashCode +
+      (avatarColor == null ? 0 : avatarColor.hashCode) +
+      (avatarEmoji == null ? 0 : avatarEmoji.hashCode) +
+      (avatarIcon == null ? 0 : avatarIcon.hashCode) +
+      (avatarPhoto == null ? 0 : avatarPhoto.hashCode) +
+      coverKind.hashCode +
+      (coverPhoto == null ? 0 : coverPhoto.hashCode) +
       createdBy.hashCode +
       createdAt.hashCode +
       (archivedAt == null ? 0 : archivedAt.hashCode) +

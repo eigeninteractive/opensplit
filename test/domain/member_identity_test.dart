@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/domain/member_identity.dart';
 import 'package:test/test.dart';
+import 'package:opensplit_api/opensplit_api.dart' show AvatarKind;
 
 void main() {
   final claimed = Member(
@@ -16,7 +17,11 @@ void main() {
     expect(
       memberDisplayName(
         claimed,
-        const Profile(id: 'profile-brinda', displayName: ' Brinda D '),
+        const Profile(
+          avatarKind: AvatarKind.initials,
+          id: 'profile-brinda',
+          displayName: ' Brinda D ',
+        ),
       ),
       'Brinda D',
     );
@@ -34,7 +39,11 @@ void main() {
     expect(
       memberDisplayName(
         claimed,
-        const Profile(id: 'profile-brinda', displayName: '  '),
+        const Profile(
+          avatarKind: AvatarKind.initials,
+          id: 'profile-brinda',
+          displayName: '  ',
+        ),
       ),
       'Brinda',
     );
@@ -44,7 +53,11 @@ void main() {
     expect(
       memberDisplayName(
         claimed,
-        const Profile(id: 'profile-someone-else', displayName: 'Someone'),
+        const Profile(
+          avatarKind: AvatarKind.initials,
+          id: 'profile-someone-else',
+          displayName: 'Someone',
+        ),
       ),
       'Brinda',
     );

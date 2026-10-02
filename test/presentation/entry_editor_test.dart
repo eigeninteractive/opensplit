@@ -156,7 +156,7 @@ void main() {
     await tester.tap(_splitRow('Arun'));
     await _beats(tester);
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Add expense'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await _beats(tester);
 
     final saved = (await DriftEntryRepository(db).getEntries('g1')).single;
@@ -189,7 +189,7 @@ void main() {
 
     await _openEditor(tester);
     await _type(tester, what: 'Chai', amount: '30');
-    await tester.tap(find.widgetWithText(FilledButton, 'Add expense'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await _beats(tester);
 
     final chai = (await DriftEntryRepository(db).getEntries('g1')).single;
@@ -201,7 +201,7 @@ void main() {
     await tester.tap(find.byTooltip('Remove the time'));
     await _beats(tester);
     expect(find.text('Add a time'), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilledButton, 'Add expense'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await _beats(tester);
 
     final snacks = (await DriftEntryRepository(db).getEntries(
@@ -219,7 +219,7 @@ void main() {
     await _pumpApp(tester, db);
     await _openEditor(tester);
     await _type(tester, what: 'Chai', amount: '90');
-    await tester.tap(find.widgetWithText(FilledButton, 'Add expense'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await _beats(tester);
 
     expect(await DriftEntryRepository(db).getEntries('g1'), hasLength(1));

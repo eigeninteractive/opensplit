@@ -107,13 +107,24 @@ CREATE TABLE `meta` (
 	`default_currency` text NOT NULL,
 	`is_direct` integer DEFAULT false NOT NULL,
 	`simplify_debts` integer DEFAULT true NOT NULL,
+	`avatar_kind` text DEFAULT 'initials' NOT NULL,
+	`avatar_color` text,
+	`avatar_emoji` text,
+	`avatar_icon` text,
+	`avatar_photo` text,
+	`cover_kind` text DEFAULT 'generated' NOT NULL,
+	`cover_photo` text,
 	`created_by` text NOT NULL,
 	`created_at` text NOT NULL,
 	`archived_at` text,
 	`updated_at` text NOT NULL,
 	`seq` integer NOT NULL,
 	CONSTRAINT `fk_meta_created_by_members_id_fk` FOREIGN KEY (`created_by`) REFERENCES `members`(`id`),
-	CONSTRAINT "meta_name_not_blank" CHECK(length(trim("name")) > 0)
+	CONSTRAINT "meta_name_not_blank" CHECK(length(trim("name")) > 0),
+	CONSTRAINT "meta_avatar_emoji" CHECK(("avatar_kind" = 'emoji') = ("avatar_emoji" is not null)),
+	CONSTRAINT "meta_avatar_icon" CHECK(("avatar_kind" = 'icon') = ("avatar_icon" is not null)),
+	CONSTRAINT "meta_avatar_photo" CHECK(("avatar_kind" = 'photo') = ("avatar_photo" is not null)),
+	CONSTRAINT "meta_cover_photo" CHECK(("cover_kind" = 'photo') = ("cover_photo" is not null))
 );
 --> statement-breakpoint
 CREATE TABLE `outbox` (

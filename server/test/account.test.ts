@@ -1,5 +1,6 @@
-import { exports as workerExports } from "cloudflare:workers";
+import { env, exports as workerExports } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
+import { defaultAvatar, defaultGroupLook } from "../src/db/appearance";
 
 import type { ApiError } from "../src/schemas/common";
 import type { AccountDeletion, ChangePage, GroupIds, GroupLink, Joined, LinkPreview, Profile, ProfilePage } from "./api-types";
@@ -26,7 +27,7 @@ async function makeGroup(host: Guest) {
   const id = freshId("acct");
   const created = await call(`/api/groups/${id}`, host, {
     method: "PUT",
-    body: JSON.stringify({ name: "Goa trip", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, creatorId: `${id}-host`, creatorName: "Ravi" }),
+    body: JSON.stringify({ name: "Goa trip", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, ...defaultGroupLook, creatorId: `${id}-host`, creatorName: "Ravi" }),
   });
   expect(created.status).toBe(200);
   return id;
@@ -43,8 +44,8 @@ async function share(host: Guest, guest: Guest, name: string) {
   return { groupId, member: (await json<Joined>(joined)).member };
 }
 
-async function writeProfile(guest: Guest, displayName: string | null, upiVpa: string | null = null): Promise<Profile> {
-  const response = await call("/api/profile", guest, { method: "PUT", body: JSON.stringify({ displayName, upiVpa }) });
+async function writeProfile(guest: Guest, displayName: string | null, upiVpa: string | null = null, look: Record<string, unknown> = {}): Promise<Profile> {
+  const response = await call("/api/profile", guest, { method: "PUT", body: JSON.stringify({ displayName, upiVpa, ...defaultAvatar, ...look }) });
   expect(response.status).toBe(200);
   return json<Profile>(response);
 }
@@ -88,8 +89,48 @@ describe("your own profile", () => {
     expect(cleared.displayName).toBe("Priya S");
   });
 
+  it("keeps the avatar somebody picks, and gives it to everyone who can see them", async () => {
+    const me = await signInAsGuest();
+    expect((await json<ProfilePage>(await call("/api/profiles", me))).profiles[0]).toMatchObject(defaultAvatar);
+
+    const emoji = await writeProfile(me, "Ravi", null, { avatarKind: "emoji", avatarEmoji: "🏏", avatarColor: "teal" });
+    expect(emoji).toMatchObject({ avatarKind: "emoji", avatarEmoji: "🏏", avatarColor: "teal", avatarIcon: null });
+
+    // Back to initials keeps the hue but not the emoji: the row says what is shown.
+    const initials = await writeProfile(me, "Ravi", null, { avatarColor: "teal" });
+    expect(initials).toMatchObject({ avatarKind: "initials", avatarEmoji: null, avatarColor: "teal" });
+  });
+
+  it("refuses an avatar whose fields disagree with its kind, or that is not what it says", async () => {
+    const write = (look: Record<string, unknown>) => call("/api/profile", ravi, { method: "PUT", body: JSON.stringify({ displayName: "Ravi", upiVpa: null, ...defaultAvatar, ...look }) });
+
+    expect((await write({ avatarKind: "emoji" })).status).toBe(400);
+    expect((await write({ avatarEmoji: "🏏" })).status).toBe(400);
+    expect((await write({ avatarKind: "emoji", avatarEmoji: "RK" })).status).toBe(400);
+    expect((await write({ avatarKind: "emoji", avatarEmoji: "🏏🏏" })).status).toBe(400);
+    expect((await write({ avatarKind: "icon", avatarIcon: "not_an_icon" })).status).toBe(400);
+    expect((await write({ avatarColor: "beige" })).status).toBe(400);
+    // A flag and a joined sequence are each one emoji.
+    expect((await write({ avatarKind: "emoji", avatarEmoji: "🇮🇳" })).status).toBe(200);
+    expect((await write({ avatarKind: "emoji", avatarEmoji: "👩‍👩‍👧" })).status).toBe(200);
+  });
+
+  it("has room for a photo, and refuses one while nothing can be uploaded", async () => {
+    const refused = await call("/api/profile", ravi, { method: "PUT", body: JSON.stringify({ displayName: "Ravi", upiVpa: null, ...defaultAvatar, avatarKind: "photo", avatarPhoto: "avatars/me/1.webp" }) });
+    expect(refused.status).toBe(400);
+  });
+
+  it("forgets the avatar with the rest of a deleted account", async () => {
+    const me = await signInAsGuest();
+    await writeProfile(me, "Ravi", null, { avatarKind: "icon", avatarIcon: "sailing", avatarColor: "blue" });
+    expect((await call("/api/account", me, { method: "DELETE" })).status).toBe(200);
+
+    const left = await env.DB.prepare("select avatar_kind, avatar_icon, avatar_color from profiles where id = ?").bind(me.id).first();
+    expect(left).toEqual({ avatar_kind: "initials", avatar_icon: null, avatar_color: null });
+  });
+
   it("refuses a payment handle that is not one", async () => {
-    const refused = await call("/api/profile", ravi, { method: "PUT", body: JSON.stringify({ displayName: "Ravi", upiVpa: "not a vpa" }) });
+    const refused = await call("/api/profile", ravi, { method: "PUT", body: JSON.stringify({ displayName: "Ravi", upiVpa: "not a vpa", ...defaultAvatar }) });
     expect(refused.status).toBe(400);
     expect((await json<ApiError>(refused)).error.code).toBe("malformed");
   });

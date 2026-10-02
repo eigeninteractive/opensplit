@@ -1,5 +1,6 @@
 import { env, exports as workerExports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import { defaultAvatar, defaultGroupLook } from "../src/db/appearance";
 
 import { randomIp, signInAsGuest } from "./session";
 
@@ -94,7 +95,7 @@ describe("an expense with half an exchange rate", () => {
     const auth = { Authorization: `Bearer ${guest.token}` };
     const put = (path: string, body: unknown) => workerExports.default.fetch(`${ORIGIN}/api${path}`, { method: "PUT", headers: { "Content-Type": "application/json", ...auth }, body: JSON.stringify(body) });
 
-    expect((await put(`/groups/${groupId}`, { name: "Trip", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, creatorId: "me", creatorName: "Me" })).status).toBe(200);
+    expect((await put(`/groups/${groupId}`, { name: "Trip", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, ...defaultGroupLook, creatorId: "me", creatorName: "Me" })).status).toBe(200);
 
     const response = await put(`/groups/${groupId}/entries/e1`, {
       kind: "expense",
@@ -129,7 +130,7 @@ describe("a crash", () => {
       const response = await workerExports.default.fetch(`${ORIGIN}/api/profile`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${guest.token}` },
-        body: JSON.stringify({ displayName: "Asha", upiVpa: null }),
+        body: JSON.stringify({ displayName: "Asha", upiVpa: null, ...defaultAvatar }),
       });
 
       expect(response.status).toBe(500);

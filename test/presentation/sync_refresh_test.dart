@@ -17,8 +17,11 @@ import 'package:opensplit/presentation/widgets/group_skeleton.dart';
 import 'package:opensplit/presentation/widgets/pull_to_sync.dart';
 import 'package:opensplit/presentation/widgets/sync_refresh_button.dart';
 import 'package:opensplit/presentation/widgets/sync_status_notice.dart';
+import 'package:opensplit_api/opensplit_api.dart' show AvatarKind, CoverKind;
 
 final _group = Group(
+  avatarKind: AvatarKind.initials,
+  coverKind: CoverKind.generated,
   id: 'home',
   name: 'Saved home group',
   defaultCurrency: 'INR',
@@ -246,7 +249,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('narrow web group actions leave room for refresh', (
+  testWidgets('a narrow group keeps its name and its two main actions', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(320, 720);
@@ -255,22 +258,14 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await _mount(tester, _TestSync(), GroupDetailScreen(groupId: _group.id));
     await tester.pumpAndSettle();
-    if (kIsWeb) {
-      expect(find.byTooltip('Refresh'), findsOneWidget);
-      await tester.tap(find.byTooltip('Group actions'));
-      await tester.pumpAndSettle();
-      for (final label in [
-        'People',
-        'Insights',
-        'Activity',
-        'Settle up',
-        'Group settings',
-      ]) {
-        expect(find.text(label), findsOneWidget);
-      }
-    } else {
-      expect(find.byTooltip('Group actions'), findsNothing);
-      expect(find.byTooltip('People'), findsOneWidget);
+    if (kIsWeb) expect(find.byTooltip('Refresh'), findsOneWidget);
+    expect(find.byTooltip('Settle up'), findsOneWidget);
+    expect(find.byTooltip('People'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('More'));
+    await tester.pumpAndSettle();
+    for (final label in ['Insights', 'Activity', 'Group settings']) {
+      expect(find.text(label), findsOneWidget);
     }
     expect(tester.takeException(), isNull);
   });

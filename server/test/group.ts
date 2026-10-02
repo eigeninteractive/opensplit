@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { expect } from "vitest";
+import { defaultGroupLook } from "../src/db/appearance";
 import type { Result } from "../src/do/group/refusal";
 import type { Entry, EntryInput, Group, GroupInput, JoinRequest, Member, MemberInput } from "../src/schemas/ledger";
 
@@ -62,6 +63,7 @@ export async function makeGroup(options: { groupId?: string; name?: string; curr
         isDirect: false,
         simplifyDebts: true,
         archivedAt: null,
+        ...defaultGroupLook,
         creatorId: `${groupId}-ravi`,
         creatorName: "Ravi",
       },
@@ -155,8 +157,9 @@ export async function editGroup(groupId: string, profileId: string, changes: Par
   const object = stub(groupId);
   const group = ok(await object.changes(profileId, 0, 500)).group;
   if (!group) expect.unreachable("No group row to edit.");
-  const { name, defaultCurrency, isDirect, simplifyDebts, archivedAt, createdBy } = group;
-  return object.putGroup(groupId, { name, defaultCurrency, isDirect, simplifyDebts, archivedAt, creatorId: createdBy, creatorName: "Ravi", ...changes }, profileId);
+  const { name, defaultCurrency, isDirect, simplifyDebts, archivedAt, avatarKind, avatarColor, avatarEmoji, avatarIcon, avatarPhoto, coverKind, coverPhoto, createdBy } = group;
+  const look = { avatarKind, avatarColor, avatarEmoji, avatarIcon, avatarPhoto, coverKind, coverPhoto };
+  return object.putGroup(groupId, { name, defaultCurrency, isDirect, simplifyDebts, archivedAt, ...look, creatorId: createdBy, creatorName: "Ravi", ...changes }, profileId);
 }
 
 /** The same for a member row. */

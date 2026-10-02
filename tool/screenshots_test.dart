@@ -142,8 +142,15 @@ Future<void> _fillExpense(WidgetTester tester) async {
   await tester.enterText(field('How much?'), '180');
   await tester.tap(find.text('Uncategorised'));
   await _settle(tester);
-  final category = find.text('Activities & outings').last;
-  await tester.ensureVisible(category);
+  final category = find.text('Activities & outings');
+  await tester.scrollUntilVisible(
+    category,
+    200,
+    scrollable: find.descendant(
+      of: find.byType(BottomSheet),
+      matching: find.byType(Scrollable),
+    ),
+  );
   await _settle(tester);
   await tester.tap(category);
   await _settle(tester);
@@ -153,11 +160,11 @@ Future<void> _fillExpense(WidgetTester tester) async {
 /// Loads every font the app bundles, and a fallback for the glyphs they lack.
 ///
 /// A test renders with nothing but the fonts it is given. On a phone, a
-/// character Instrument Sans or JetBrains Mono does not have — the `≈` on an
-/// estimate, the `₹` — comes from the system font; here it would be a box.
-/// google_fonts names each family's bare name as the fallback for its styles,
-/// so the SDK's copy of Roboto, Android's system font, is registered under
-/// those names to stand in for the system.
+/// character Instrument Sans does not have — the `≈` on an estimate, the `₹`
+/// — comes from the system font; here it would be a box. google_fonts names
+/// the family's bare name as the fallback for its styles, so the SDK's copy of
+/// Roboto, Android's system font, is registered under that name to stand in
+/// for the system.
 Future<void> _loadFonts() async {
   final manifest =
       jsonDecode(await rootBundle.loadString('FontManifest.json')) as List;
@@ -173,14 +180,12 @@ Future<void> _loadFonts() async {
     '${Platform.environment['FLUTTER_ROOT']}'
     '/bin/cache/artifacts/material_fonts',
   );
-  for (final family in ['InstrumentSans', 'JetBrainsMono']) {
-    final loader = FontLoader(family);
-    for (final weight in ['Regular', 'Medium']) {
-      final file = File('${roboto.path}/Roboto-$weight.ttf');
-      loader.addFont(file.readAsBytes().then(ByteData.sublistView));
-    }
-    await loader.load();
+  final fallback = FontLoader('InstrumentSans');
+  for (final weight in ['Regular', 'Medium']) {
+    final file = File('${roboto.path}/Roboto-$weight.ttf');
+    fallback.addFont(file.readAsBytes().then(ByteData.sublistView));
   }
+  await fallback.load();
 }
 
 /// Four groups in three currencies, the first of them a trip with two.

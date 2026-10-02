@@ -1,5 +1,7 @@
 import { index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
+import { avatarChecks, avatarColumns } from "../appearance";
+
 /**
  * What D1 holds: profiles, plus derived indexes over the group objects (which
  * are the truth), plus Better Auth's tables in `src/auth-schema.ts`.
@@ -19,11 +21,12 @@ export const profiles = sqliteTable(
     /** Null until chosen; a claimed invite adopts the placeholder's name only then. */
     displayName: text("display_name"),
     upiVpa: text("upi_vpa"),
+    ...avatarColumns(),
     updatedAt: text("updated_at").notNull(),
     /** Set by account deletion; the row stays so history still resolves. */
     deletedAt: text("deleted_at"),
   },
-  (table) => [index("profiles_updated").on(table.updatedAt, table.id)],
+  (table) => [index("profiles_updated").on(table.updatedAt, table.id), ...avatarChecks("profiles", table)],
 );
 
 /**

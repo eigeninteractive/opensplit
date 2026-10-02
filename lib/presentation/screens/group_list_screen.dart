@@ -7,14 +7,13 @@ import '../../application/ledger_providers.dart';
 import '../../application/sync_providers.dart';
 import '../../data/local/database.dart';
 import '../../data/web/boot_hint.dart';
-import '../../domain/money_format.dart';
-import '../theme.dart';
-import '../widgets/balance_arrow.dart';
+import '../widgets/avatar_view.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/conflicting_edit_banner.dart';
 import '../widgets/create_group_sheet.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/group_skeleton.dart';
+import '../widgets/group_standing.dart';
 import '../widgets/link_account_prompt.dart';
 import '../widgets/page_body.dart';
 import '../widgets/pull_to_sync.dart';
@@ -157,141 +156,24 @@ class _GroupTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final ledger = ref.watch(groupLedgerProvider(group.id));
     final currencies = ref.watch(currenciesProvider).value ?? const {};
-    final scheme = Theme.of(context).colorScheme;
 
     // A real ListTile, for its touch target, density and large-font growth.
-    return Card.outlined(
+    return Card(
       clipBehavior: Clip.antiAlias,
       child: ListTile(
         onTap: () => context.push('/g/${group.id}'),
-        leading: CircleAvatar(
-          backgroundColor: scheme.secondaryContainer,
-          child: Icon(
-            group.isDirect ? Icons.person_outline : Icons.groups_outlined,
-            color: scheme.onSecondaryContainer,
-          ),
+        contentPadding: const EdgeInsetsDirectional.fromSTEB(16, 8, 24, 8),
+        leading: AvatarView(
+          avatar: group.avatar,
+          name: group.name,
+          id: group.id,
+          radius: 24,
         ),
         title: Text(group.name, overflow: TextOverflow.ellipsis),
-        subtitle: _Summary(
-          ledger: ledger,
-          currencies: currencies,
-          memberCount: ledger?.members.length,
-        ),
-      ),
-    );
-  }
-}
-
-/// The one line that answers the only question anyone opens this app to ask.
-class _Summary extends StatelessWidget {
-  const _Summary({
-    required this.ledger,
-    required this.currencies,
-    required this.memberCount,
-  });
-
-  final GroupLedger? ledger;
-  final Map<String, Currency> currencies;
-  final int? memberCount;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final style = Theme.of(context).textTheme.bodyMedium;
-
-    if (ledger == null) return const SizedBox(height: 20);
-
-    final me = ledger!.me;
-    if (me == null) {
-      return Text(
-        '${memberCount ?? 0} ${memberCount == 1 ? 'member' : 'members'}',
-        style: style?.copyWith(color: scheme.onSurfaceVariant),
-      );
-    }
-
-    // Figures stay per currency, because collapsing them would require
-    // inventing an exchange rate the user never agreed to. They are grouped by
-    // direction, since one group can owe you euros while you owe it pounds,
-    // and a single "You are owed" over both would be wrong about one of them.
-    final owed = <String>[];
-    final owing = <String>[];
-    for (final code in ledger!.activeCurrencies) {
-      final balance = ledger!.balanceOf(me.id, code);
-      if (balance == 0) continue;
-      (balance > 0 ? owed : owing).add(
-        formatMoneyAbs(currencies[code], balance),
-      );
-    }
-
-    if (owed.isEmpty && owing.isEmpty) {
-      return Text(
-        'Settled up',
-        style: style?.copyWith(color: scheme.onSurfaceVariant),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (owed.isNotEmpty)
-          _Standing(lead: 'You are owed', figures: owed, direction: 1),
-        if (owing.isNotEmpty)
-          _Standing(lead: 'You owe', figures: owing, direction: -1),
-      ],
-    );
-  }
-}
-
-/// One direction of a group's balance: an arrow, the words, and every
-/// currency that goes that way.
-class _Standing extends StatelessWidget {
-  const _Standing({
-    required this.lead,
-    required this.figures,
-    required this.direction,
-  });
-
-  final String lead;
-
-  /// Formatted, unsigned amounts, one per currency.
-  final List<String> figures;
-
-  /// Positive when these are owed to you, negative when you owe them.
-  final int direction;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final joined = figures.join(' + ');
-
-    // The words in the app's own face and the figures in its tabular one.
-    final base = (Theme.of(context).textTheme.bodyMedium ?? const TextStyle())
-        .copyWith(
-          color: balanceColor(scheme, direction),
-          fontWeight: FontWeight.w600,
-        );
-
-    return Semantics(
-      label: '$lead $joined',
-      child: ExcludeSemantics(
-        child: Row(
-          children: [
-            BalanceArrow(balanceMinor: direction, size: 15),
-            const SizedBox(width: 2),
-            Flexible(
-              child: Text.rich(
-                TextSpan(
-                  children: [
-                    TextSpan(text: '$lead '),
-                    TextSpan(text: joined, style: moneyStyle(base)),
-                  ],
-                ),
-                overflow: TextOverflow.ellipsis,
-                style: base,
-              ),
-            ),
-          ],
-        ),
+        titleTextStyle: Theme.of(context).textTheme.titleMedium,
+        subtitle: ledger == null
+            ? const SizedBox(height: 20)
+            : GroupStanding(ledger: ledger, currencies: currencies),
       ),
     );
   }

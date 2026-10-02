@@ -7,6 +7,7 @@ import 'screens/about_screen.dart';
 import 'screens/account_screen.dart';
 import 'screens/activity_screen.dart';
 import 'screens/archived_groups_screen.dart';
+import 'screens/avatar_picker_screen.dart';
 import 'screens/edit_profile_screen.dart';
 import 'screens/entry_editor_screen.dart';
 import 'screens/group_detail_screen.dart';
@@ -121,6 +122,10 @@ GoRouter buildRouter({
           builder: (context, state) => const SaveAccountScreen(),
         ),
         GoRoute(
+          path: '/account/picture',
+          builder: (context, state) => const AvatarPickerScreen.profile(),
+        ),
+        GoRoute(
           path: '/g/:groupId',
           builder: (context, state) =>
               GroupDetailScreen(groupId: state.pathParameters['groupId']!),
@@ -150,6 +155,12 @@ GoRouter buildRouter({
               path: 'members',
               builder: (context, state) =>
                   MembersScreen(groupId: state.pathParameters['groupId']!),
+            ),
+            GoRoute(
+              path: 'picture',
+              builder: (context, state) => AvatarPickerScreen.group(
+                groupId: state.pathParameters['groupId']!,
+              ),
             ),
             GoRoute(
               path: 'settle',

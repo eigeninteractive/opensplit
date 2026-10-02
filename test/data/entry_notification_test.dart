@@ -8,7 +8,7 @@ import 'package:opensplit/data/repositories/drift_group_repository.dart';
 import 'package:opensplit/data/repositories/drift_profile_repository.dart';
 import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/split/splitter.dart';
-import 'package:opensplit_api/opensplit_api.dart' show EventKind;
+import 'package:opensplit_api/opensplit_api.dart' show AvatarKind, EventKind;
 import 'package:test/test.dart';
 
 import '../harness.dart';
@@ -101,7 +101,11 @@ void main() {
   test('uses a claimed profile name instead of the placeholder', () async {
     final g = await seed();
     await profiles.upsert(
-      const Profile(id: 'profile-ravi', displayName: 'Ravi D'),
+      const Profile(
+        avatarKind: AvatarKind.initials,
+        id: 'profile-ravi',
+        displayName: 'Ravi D',
+      ),
     );
     final entryId = await addExpense(g, description: 'Dinner');
 

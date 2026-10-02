@@ -79,10 +79,14 @@ ReturnType deserialize<ReturnType, BaseType>(
     case 'AccountDeletion':
       return AccountDeletion.fromJson(value as Map<String, dynamic>)
           as ReturnType;
+    case 'AvatarColor':
+    case 'AvatarIcon':
+    case 'AvatarKind':
     case 'Category':
       return Category.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'ChangePage':
       return ChangePage.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'CoverKind':
     case 'Currency':
       return Currency.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'Device':

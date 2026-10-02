@@ -25,7 +25,6 @@ Future<void> main() async {
   LicenseRegistry.addLicense(() async* {
     yield LicenseEntryWithLineBreaks(const [
       'Instrument Sans',
-      'JetBrains Mono',
     ], await rootBundle.loadString('assets/google_fonts/LICENSE'));
   });
 

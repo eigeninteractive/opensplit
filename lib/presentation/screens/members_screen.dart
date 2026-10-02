@@ -10,6 +10,7 @@ import '../feedback.dart';
 import '../navigation.dart';
 import '../widgets/group_link_sheet.dart';
 import '../widgets/invite_sheet.dart';
+import '../widgets/avatar_view.dart';
 import '../widgets/page_body.dart';
 
 class MembersScreen extends ConsumerWidget {
@@ -20,7 +21,6 @@ class MembersScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ledger = ref.watch(groupLedgerProvider(groupId));
-    final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
@@ -50,22 +50,7 @@ class MembersScreen extends ConsumerWidget {
                   ),
                   for (final member in ledger.members)
                     ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: member.isPlaceholder
-                            ? scheme.surfaceContainerHighest
-                            : scheme.primaryContainer,
-                        foregroundColor: member.isPlaceholder
-                            ? scheme.onSurfaceVariant
-                            : scheme.onPrimaryContainer,
-                        child: Text(
-                          ledger
-                                  .nameOfMember(member)
-                                  .characters
-                                  .firstOrNull
-                                  ?.toUpperCase() ??
-                              '?',
-                        ),
-                      ),
+                      leading: MemberAvatar(ledger: ledger, member: member),
                       title: Text(
                         ledger.nameOfMember(member) +
                             (member.id == ledger.me?.id ? ' (you)' : ''),

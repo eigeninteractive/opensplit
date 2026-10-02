@@ -16,6 +16,13 @@ void main() {
   tearDown(() => db.close());
 
   api.Group group({DateTime? archivedAt, int seq = 1}) => api.Group(
+    avatarKind: api.AvatarKind.initials,
+    avatarColor: null,
+    avatarEmoji: null,
+    avatarIcon: null,
+    avatarPhoto: null,
+    coverKind: api.CoverKind.generated,
+    coverPhoto: null,
     id: 'g',
     name: 'Goa',
     defaultCurrency: 'INR',
@@ -42,6 +49,11 @@ void main() {
 
   api.Profile profile({String? upiVpa, required DateTime updatedAt}) =>
       api.Profile(
+        avatarKind: api.AvatarKind.initials,
+        avatarColor: null,
+        avatarEmoji: null,
+        avatarIcon: null,
+        avatarPhoto: null,
         id: 'p',
         displayName: 'Ravi',
         upiVpa: upiVpa,

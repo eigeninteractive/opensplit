@@ -51,6 +51,41 @@ class CalendarDateConverter extends TypeConverter<DateTime, String> {
   String toSql(DateTime value) => calendarDate(value);
 }
 
+/// How a person or a group is pictured; see `domain/avatar.dart`. Exactly the
+/// field [avatarKind] reads is set.
+mixin AvatarColumns on Table {
+  TextColumn get avatarKind => text()
+      .map(
+        const WireEnumConverter(
+          api.AvatarKind.values,
+          api.AvatarKind.unknownDefaultOpenApi,
+        ),
+      )
+      .withDefault(const Constant('initials'))();
+
+  /// Null until somebody picks one; the app derives a hue from the id.
+  TextColumn get avatarColor => text()
+      .map(
+        const WireEnumConverter(
+          api.AvatarColor.values,
+          api.AvatarColor.unknownDefaultOpenApi,
+        ),
+      )
+      .nullable()();
+  TextColumn get avatarEmoji => text().nullable()();
+  TextColumn get avatarIcon => text()
+      .map(
+        const WireEnumConverter(
+          api.AvatarIcon.values,
+          api.AvatarIcon.unknownDefaultOpenApi,
+        ),
+      )
+      .nullable()();
+
+  /// An uploaded picture's key in the media store.
+  TextColumn get avatarPhoto => text().nullable()();
+}
+
 /// ISO 4217 reference data, refreshed from the server and never edited here.
 @DataClassName('Currency')
 class Currencies extends Table {
@@ -68,7 +103,7 @@ class Currencies extends Table {
 /// Display details for people with accounts. Financial rows never point here:
 /// they reference members, which may have no account at all.
 @DataClassName('Profile')
-class Profiles extends Table {
+class Profiles extends Table with AvatarColumns {
   TextColumn get id => text()();
 
   /// Null until somebody chooses one, which is a different fact from having
@@ -142,7 +177,7 @@ class GroupEvents extends Table {
 /// A set of people sharing costs. A one-to-one split is a two-member group
 /// with [isDirect] set, not a second system.
 @DataClassName('Group')
-class Groups extends Table {
+class Groups extends Table with AvatarColumns {
   TextColumn get id => text()();
   TextColumn get name => text()();
 
@@ -150,6 +185,18 @@ class Groups extends Table {
   TextColumn get defaultCurrency => text().references(Currencies, #code)();
   BoolColumn get isDirect => boolean().withDefault(const Constant(false))();
   BoolColumn get simplifyDebts => boolean().withDefault(const Constant(true))();
+
+  /// A generated cover is drawn from the group's spending, so it stores
+  /// nothing but the choice.
+  TextColumn get coverKind => text()
+      .map(
+        const WireEnumConverter(
+          api.CoverKind.values,
+          api.CoverKind.unknownDefaultOpenApi,
+        ),
+      )
+      .withDefault(const Constant('generated'))();
+  TextColumn get coverPhoto => text().nullable()();
 
   /// The creator's member id. Not a foreign key, because the group row and
   /// its members arrive in one page in no particular order.

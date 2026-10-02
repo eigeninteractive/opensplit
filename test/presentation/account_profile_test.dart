@@ -6,9 +6,10 @@ import 'package:opensplit/application/router_provider.dart';
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/repositories/drift_profile_repository.dart';
 import 'package:opensplit/domain/auth_service.dart';
+import 'package:opensplit/domain/avatar.dart';
 import 'package:opensplit/presentation/app.dart';
-import 'package:opensplit/presentation/screens/account_screen.dart';
-import 'package:opensplit_api/opensplit_api.dart' show Account;
+import 'package:opensplit_api/opensplit_api.dart'
+    show Account, AvatarColor, AvatarIcon, AvatarKind;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../harness.dart';
@@ -46,12 +47,21 @@ void main() {
     await settle(tester);
   }
 
-  Future<void> store(WidgetTester tester, {String? name, String? upi}) =>
-      tester.runAsync(
-        () => DriftProfileRepository(
-          db,
-        ).upsert(Profile(id: testAccountId, displayName: name, upiVpa: upi)),
-      );
+  Future<void> store(
+    WidgetTester tester, {
+    String? name,
+    String? upi,
+    Avatar avatar = const InitialsAvatar(),
+  }) => tester.runAsync(
+    () => DriftProfileRepository(db).upsert(
+      Profile(
+        avatarKind: AvatarKind.initials,
+        id: testAccountId,
+        displayName: name,
+        upiVpa: upi,
+      ).withAvatar(avatar),
+    ),
+  );
 
   Future<Profile?> stored(WidgetTester tester) => tester.runAsync<Profile?>(
     () => DriftProfileRepository(db).byId(testAccountId),
@@ -149,6 +159,48 @@ void main() {
     await unmount(tester);
   });
 
+  testWidgets('choosing your picture saves it and shows it', (tester) async {
+    await store(tester, name: 'Ana Lima', upi: 'ana@okbank');
+    await openAccount(tester);
+
+    await tapAndSettle(tester, find.byTooltip('Change picture'));
+    expect(find.text('Your picture'), findsOneWidget);
+    await tapAndSettle(tester, find.text('Emoji'));
+    await tapAndSettle(tester, find.byTooltip('🏖️'));
+    await tapAndSettle(tester, find.widgetWithText(FilledButton, 'Save'));
+
+    expect(find.text('Your picture'), findsNothing);
+    expect(find.text('🏖️'), findsOneWidget);
+    final profile = await stored(tester);
+    expect(profile?.avatar, const EmojiAvatar('🏖️'));
+    // Only the picture changed.
+    expect(profile?.displayName, 'Ana Lima');
+    expect(profile?.upiVpa, 'ana@okbank');
+    await unmount(tester);
+  });
+
+  testWidgets('editing your name keeps your picture', (tester) async {
+    await store(
+      tester,
+      name: 'Ana',
+      avatar: const IconAvatar(AvatarIcon.sailing, color: AvatarColor.teal),
+    );
+    await openAccount(tester);
+
+    await tapAndSettle(tester, find.byTooltip('Edit profile'));
+    await tester.enterText(field('Name'), 'Ana Lima');
+    await tester.pump();
+    await tapAndSettle(tester, find.widgetWithText(FilledButton, 'Save'));
+
+    final profile = await stored(tester);
+    expect(profile?.displayName, 'Ana Lima');
+    expect(
+      profile?.avatar,
+      const IconAvatar(AvatarIcon.sailing, color: AvatarColor.teal),
+    );
+    await unmount(tester);
+  });
+
   testWidgets('a guest is offered one way to save the account', (tester) async {
     await store(tester, name: 'Ana');
     await openAccount(tester, guest: true);
@@ -159,13 +211,6 @@ void main() {
 
     expect(find.widgetWithText(TextField, 'Email'), findsOneWidget);
     await unmount(tester);
-  });
-
-  test('initials come from the first and last words', () {
-    expect(initialsOf('Ana Lima'), 'AL');
-    expect(initialsOf('ana'), 'A');
-    expect(initialsOf('Ana Maria  da Silva'), 'AS');
-    expect(initialsOf('  '), '');
   });
 }
 

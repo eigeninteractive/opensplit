@@ -1,6 +1,7 @@
 import { z } from "@hono/zod-openapi";
 
 import { deviceTokens, platforms, profiles } from "../db/d1/schema";
+import { avatarFields, avatarRefinements, refineAvatar } from "./appearance";
 import { createSelectSchema, IdSchema, NameSchema, TimestampSchema, UpiVpaSchema } from "./common";
 
 /** The person behind an account, their devices, and deleting it. None of it is group-scoped. */
@@ -11,6 +12,7 @@ const profileRow = createSelectSchema(profiles, {
   id: () => IdSchema,
   displayName: () => NameSchema,
   upiVpa: () => UpiVpaSchema,
+  ...avatarRefinements,
   updatedAt: () => TimestampSchema,
   deletedAt: () => TimestampSchema,
 });
@@ -19,7 +21,10 @@ const profileRow = createSelectSchema(profiles, {
 export const ProfileSchema = profileRow.openapi("Profile");
 
 /** Your own row: the session names it, so there is no id to point at a stranger. */
-export const ProfileUpdateSchema = profileRow.pick({ displayName: true, upiVpa: true }).openapi("ProfileUpdate");
+export const ProfileUpdateSchema = profileRow
+  .pick({ displayName: true, upiVpa: true, ...avatarFields })
+  .superRefine(refineAvatar)
+  .openapi("ProfileUpdate");
 
 /**
  * One page of the profile feed, the one feed cursored on time: D1 has no
