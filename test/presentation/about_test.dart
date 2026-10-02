@@ -43,6 +43,8 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.scrollUntilVisible(find.text('About OpenSplit'), 200);
+    await tester.ensureVisible(find.text('About OpenSplit'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('About OpenSplit'));
     await tester.pumpAndSettle();
 

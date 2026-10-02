@@ -17,6 +17,7 @@ import '../widgets/group_standing.dart';
 import '../widgets/link_account_prompt.dart';
 import '../widgets/page_body.dart';
 import '../widgets/pull_to_sync.dart';
+import '../widgets/segmented_list.dart';
 import '../widgets/sync_refresh_button.dart';
 import '../widgets/sync_status_notice.dart';
 import '../widgets/unsynced_changes_banner.dart';
@@ -84,48 +85,46 @@ class GroupListScreen extends ConsumerWidget {
 
 /// The list itself, as slivers under the destination's app bar.
 abstract final class _GroupList {
+  static const _noticeGap = EdgeInsets.only(bottom: 8);
+
   static List<Widget> slivers({
     required List<Group> groups,
     required int archivedCount,
-  }) {
-    // Four leading slots, each of which renders as nothing until it has
-    // something to say.
-    const leading = 4;
-    final empty = groups.isEmpty;
-    final rows = empty ? 1 : groups.length;
-    final trailing = archivedCount > 0 ? 1 : 0;
-
-    return [
+  }) => [
+    // The notices, each of which renders as nothing until it has something to
+    // say.
+    SliverPadding(
+      padding: const EdgeInsets.only(top: 8),
+      sliver: SliverList.list(
+        children: [
+          const UnsyncedChangesBanner(padding: _noticeGap),
+          const ConflictingEditBanner(padding: _noticeGap),
+          const LinkAccountPrompt(padding: _noticeGap),
+          if (groups.isNotEmpty) const SyncStatusBanner(padding: _noticeGap),
+        ],
+      ),
+    ),
+    if (groups.isEmpty)
+      const SliverToBoxAdapter(child: InitialSyncGate(child: _EmptyState()))
+    else
       SliverPadding(
-        padding: const EdgeInsets.fromLTRB(0, 8, 0, 96),
+        padding: const EdgeInsets.only(top: 8),
         // Built lazily rather than assembled into a list, because every tile
-        // subscribes to its own group's ledger: off-screen groups should not be
-        // folding balances.
-        sliver: SliverList.separated(
-          itemCount: leading + rows + trailing,
-          separatorBuilder: (_, _) => const SizedBox(height: 8),
-          itemBuilder: (context, index) {
-            if (index == 0) return const UnsyncedChangesBanner();
-            if (index == 1) return const ConflictingEditBanner();
-            if (index == 2) return const LinkAccountPrompt();
-            if (index == 3) {
-              return empty ? const SizedBox.shrink() : const SyncStatusBanner();
-            }
-
-            final row = index - leading;
-            if (empty) {
-              return row == 0
-                  ? const InitialSyncGate(child: _EmptyState())
-                  : _ArchivedRow(count: archivedCount);
-            }
-            return row < groups.length
-                ? _GroupTile(group: groups[row])
-                : _ArchivedRow(count: archivedCount);
-          },
+        // subscribes to its own group's ledger: off-screen groups should not
+        // be folding balances.
+        sliver: SliverList.builder(
+          itemCount: groups.length,
+          itemBuilder: (context, index) => Segment(
+            index: index,
+            count: groups.length,
+            child: _GroupTile(group: groups[index]),
+          ),
         ),
       ),
-    ];
-  }
+    if (archivedCount > 0)
+      SliverToBoxAdapter(child: _ArchivedRow(count: archivedCount)),
+    const SliverPadding(padding: EdgeInsets.only(bottom: 96)),
+  ];
 }
 
 /// The way to the groups that are no longer in this list.
@@ -136,13 +135,17 @@ class _ArchivedRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: 8),
-    child: ListTile(
-      onTap: () => context.push('/archived'),
-      leading: const Icon(Icons.inventory_2_outlined),
-      title: Text('Archived groups ($count)'),
-      trailing: const Icon(Icons.chevron_right),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    padding: const EdgeInsets.only(top: 16),
+    // A group of one, apart from the groups above it.
+    child: SegmentedList(
+      children: [
+        ListTile(
+          onTap: () => context.push('/archived'),
+          leading: const Icon(Icons.inventory_2_outlined),
+          title: Text('Archived groups ($count)'),
+          trailing: const Icon(Icons.chevron_right),
+        ),
+      ],
     ),
   );
 }
@@ -158,23 +161,20 @@ class _GroupTile extends ConsumerWidget {
     final currencies = ref.watch(currenciesProvider).value ?? const {};
 
     // A real ListTile, for its touch target, density and large-font growth.
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: ListTile(
-        onTap: () => context.push('/g/${group.id}'),
-        contentPadding: const EdgeInsetsDirectional.fromSTEB(16, 8, 24, 8),
-        leading: AvatarView(
-          avatar: group.avatar,
-          name: group.name,
-          id: group.id,
-          radius: 24,
-        ),
-        title: Text(group.name, overflow: TextOverflow.ellipsis),
-        titleTextStyle: Theme.of(context).textTheme.titleMedium,
-        subtitle: ledger == null
-            ? const SizedBox(height: 20)
-            : GroupStanding(ledger: ledger, currencies: currencies),
+    return ListTile(
+      onTap: () => context.push('/g/${group.id}'),
+      contentPadding: const EdgeInsetsDirectional.fromSTEB(16, 8, 24, 8),
+      leading: AvatarView(
+        avatar: group.avatar,
+        name: group.name,
+        id: group.id,
+        radius: 24,
       ),
+      title: Text(group.name, overflow: TextOverflow.ellipsis),
+      titleTextStyle: Theme.of(context).textTheme.titleMedium,
+      subtitle: ledger == null
+          ? const SizedBox(height: 20)
+          : GroupStanding(ledger: ledger, currencies: currencies),
     );
   }
 }

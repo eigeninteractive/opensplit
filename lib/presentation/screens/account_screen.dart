@@ -10,6 +10,7 @@ import '../../data/local/database.dart';
 import '../feedback.dart';
 import '../widgets/avatar_view.dart';
 import '../widgets/page_body.dart';
+import '../widgets/segmented_list.dart';
 import 'edit_profile_screen.dart';
 
 /// Who you are, in one place: the name and payment handle everybody who shares
@@ -189,76 +190,86 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
             ],
 
             const _SectionHeader('Profile'),
-            _ProfileRow(
-              icon: Icons.badge_outlined,
-              label: 'Name',
-              value: profile?.displayName,
-              unset: 'Add the name your groups see',
-              field: ProfileField.name,
-            ),
-            _ProfileRow(
-              icon: Icons.account_balance_wallet_outlined,
-              label: 'UPI ID',
-              value: profile?.upiVpa,
-              unset: 'Add one so people can pay you by UPI',
-              field: ProfileField.upi,
+            SegmentedList(
+              children: [
+                _ProfileRow(
+                  icon: Icons.badge_outlined,
+                  label: 'Name',
+                  value: profile?.displayName,
+                  unset: 'Add the name your groups see',
+                  field: ProfileField.name,
+                ),
+                _ProfileRow(
+                  icon: Icons.account_balance_wallet_outlined,
+                  label: 'UPI ID',
+                  value: profile?.upiVpa,
+                  unset: 'Add one so people can pay you by UPI',
+                  field: ProfileField.upi,
+                ),
+              ],
             ),
 
             if (account != null) ...[
               const _SectionHeader('Account'),
-              // Offered only to an account somebody can get back into.
-              if (!account.isAnonymous)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.logout, color: theme.colorScheme.error),
-                  title: Text(
-                    'Sign out',
-                    style: TextStyle(color: theme.colorScheme.error),
+              SegmentedList(
+                children: [
+                  // Offered only to an account somebody can get back into.
+                  if (!account.isAnonymous)
+                    ListTile(
+                      leading: Icon(
+                        Icons.logout,
+                        color: theme.colorScheme.error,
+                      ),
+                      title: Text(
+                        'Sign out',
+                        style: TextStyle(color: theme.colorScheme.error),
+                      ),
+                      subtitle: const Text(
+                        'Removes this device\'s copy. Sign back in to get it again.',
+                      ),
+                      onTap: _signOut,
+                    )
+                  // Said out loud rather than left as a gap.
+                  else
+                    ListTile(
+                      leading: Icon(
+                        Icons.no_accounts_outlined,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                      title: Text(
+                        'Signing out would end this account',
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      subtitle: const Text(
+                        'Nothing but this device identifies a guest, so there '
+                        'would be no signing back in. Save your account first.',
+                      ),
+                    ),
+                  ListTile(
+                    leading: Icon(
+                      Icons.delete_forever_outlined,
+                      color: theme.colorScheme.error,
+                    ),
+                    title: Text(
+                      'Delete account',
+                      style: TextStyle(color: theme.colorScheme.error),
+                    ),
+                    subtitle: const Text(
+                      'Removes your account and everything only you can see. '
+                      'Permanent.',
+                    ),
+                    trailing: _deleting
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : null,
+                    onTap: _deleting ? null : _deleteAccount,
                   ),
-                  subtitle: const Text(
-                    'Removes this device\'s copy. Sign back in to get it again.',
-                  ),
-                  onTap: _signOut,
-                )
-              // Said out loud rather than left as a gap.
-              else
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(
-                    Icons.no_accounts_outlined,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                  title: Text(
-                    'Signing out would end this account',
-                    style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
-                  ),
-                  subtitle: const Text(
-                    'Nothing but this device identifies a guest, so there '
-                    'would be no signing back in. Save your account first.',
-                  ),
-                ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(
-                  Icons.delete_forever_outlined,
-                  color: theme.colorScheme.error,
-                ),
-                title: Text(
-                  'Delete account',
-                  style: TextStyle(color: theme.colorScheme.error),
-                ),
-                subtitle: const Text(
-                  'Removes your account and everything only you can see. '
-                  'Permanent.',
-                ),
-                trailing: _deleting
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : null,
-                onTap: _deleting ? null : _deleteAccount,
+                ],
               ),
             ],
           ],
@@ -434,7 +445,6 @@ class _ProfileRow extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final shown = value?.trim() ?? '';
     return ListTile(
-      contentPadding: EdgeInsets.zero,
       leading: Icon(icon),
       title: Text(label),
       subtitle: Text(

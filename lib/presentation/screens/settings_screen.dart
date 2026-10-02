@@ -9,6 +9,7 @@ import '../../config.dart';
 import '../dynamic_colors.dart';
 import '../theme_mode.dart';
 import '../widgets/page_body.dart';
+import '../widgets/segmented_list.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -34,50 +35,55 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             // FCM credentials, matching how every other integration behaves
             // here.
             if (hasPush) ...[
-              const Divider(height: 48),
+              const SizedBox(height: 24),
               const _NotificationSetting(),
             ],
-            const Divider(height: 48),
-            const ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(Icons.lock_outline),
-              title: Text('Your data is on this device'),
-              subtitle: Text(
-                'Expenses are stored locally in SQLite. The app keeps working '
-                'with what it has even if it can never reach a server again.',
-              ),
-              isThreeLine: true,
+            const SizedBox(height: 32),
+            const SegmentedList(
+              children: [
+                ListTile(
+                  leading: Icon(Icons.lock_outline),
+                  title: Text('Your data is on this device'),
+                  subtitle: Text(
+                    'Expenses are stored locally in SQLite. The app keeps working '
+                    'with what it has even if it can never reach a server again.',
+                  ),
+                  isThreeLine: true,
+                ),
+                ListTile(
+                  leading: Icon(Icons.favorite_outline),
+                  title: Text('Free forever'),
+                  subtitle: Text(
+                    'Every feature is free for everyone. The app is open source, '
+                    'has no ads, and has no analytics SDK.',
+                  ),
+                  isThreeLine: true,
+                ),
+              ],
             ),
-            const ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(Icons.favorite_outline),
-              title: Text('Free forever'),
-              subtitle: Text(
-                'Every feature is free for everyone. The app is open source, '
-                'has no ads, and has no analytics SDK.',
-              ),
-              isThreeLine: true,
-            ),
-            const Divider(height: 48),
-            _LegalLink(
-              icon: Icons.privacy_tip_outlined,
-              title: 'Privacy policy',
-              url: privacyPolicyUrl,
-            ),
-            _LegalLink(
-              icon: Icons.gavel_outlined,
-              title: 'Terms of service',
-              url: termsUrl,
-            ),
-            // Last, and a push rather than a link out: everything above leaves
-            // the app, and this is the one row that stays in it.
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.info_outline),
-              title: const Text('About OpenSplit'),
-              subtitle: const Text('Version, source code and licence.'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => context.push('/about'),
+            const SizedBox(height: 24),
+            SegmentedList(
+              children: [
+                _LegalLink(
+                  icon: Icons.privacy_tip_outlined,
+                  title: 'Privacy policy',
+                  url: privacyPolicyUrl,
+                ),
+                _LegalLink(
+                  icon: Icons.gavel_outlined,
+                  title: 'Terms of service',
+                  url: termsUrl,
+                ),
+                // Last, and a push rather than a link out: everything above leaves
+                // the app, and this is the one row that stays in it.
+                ListTile(
+                  leading: const Icon(Icons.info_outline),
+                  title: const Text('About OpenSplit'),
+                  subtitle: const Text('Version, source code and licence.'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push('/about'),
+                ),
+              ],
             ),
           ],
         ),
@@ -200,7 +206,6 @@ class _LegalLink extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListTile(
-    contentPadding: EdgeInsets.zero,
     leading: Icon(icon),
     title: Text(title),
     trailing: const Icon(Icons.open_in_new, size: 18),

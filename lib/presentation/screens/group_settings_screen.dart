@@ -13,6 +13,7 @@ import '../navigation.dart';
 import '../widgets/avatar_view.dart';
 import '../widgets/export_button.dart';
 import '../widgets/page_body.dart';
+import '../widgets/segmented_list.dart';
 
 /// Renaming, archiving and leaving.
 class GroupSettingsScreen extends ConsumerStatefulWidget {
@@ -158,78 +159,80 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
           children: [
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.badge_outlined),
-              title: const Text('Name'),
-              subtitle: Text(ledger.group.name),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: _busy ? null : () => _rename(ledger),
+            SegmentedList(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.badge_outlined),
+                  title: const Text('Name'),
+                  subtitle: Text(ledger.group.name),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _busy ? null : () => _rename(ledger),
+                ),
+                ListTile(
+                  leading: AvatarView(
+                    avatar: ledger.group.avatar,
+                    name: ledger.group.name,
+                    id: ledger.group.id,
+                  ),
+                  title: const Text('Picture'),
+                  subtitle: Text(switch (ledger.group.avatar) {
+                    EmojiAvatar() => 'An emoji',
+                    IconAvatar() => 'An icon',
+                    InitialsAvatar() || PhotoAvatar() => 'Its initials',
+                  }),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push('/g/${widget.groupId}/picture'),
+                ),
+              ],
             ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: AvatarView(
-                avatar: ledger.group.avatar,
-                name: ledger.group.name,
-                id: ledger.group.id,
-              ),
-              title: const Text('Picture'),
-              subtitle: Text(switch (ledger.group.avatar) {
-                EmojiAvatar() => 'An emoji',
-                IconAvatar() => 'An icon',
-                InitialsAvatar() || PhotoAvatar() => 'Its initials',
-              }),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => context.push('/g/${widget.groupId}/picture'),
+            const SizedBox(height: 24),
+            SegmentedList(
+              children: [
+                SwitchListTile(
+                  value: ledger.group.simplifyDebts,
+                  onChanged: _busy
+                      ? null
+                      : (value) => ref
+                            .read(groupRepositoryProvider)
+                            .updateGroup(
+                              ledger.group.copyWith(simplifyDebts: value),
+                            ),
+                  title: const Text('Suggest the fewest payments'),
+                  subtitle: const Text(
+                    'Nets debts down to as few transfers as settle the group. The '
+                    'individual debts underneath are unchanged either way.',
+                  ),
+                ),
+
+                SwitchListTile(
+                  value: archived,
+                  onChanged: _busy
+                      ? null
+                      : (value) => _setArchived(ledger, archived: value),
+                  title: const Text('Archive'),
+                  subtitle: const Text(
+                    'Hides it from your list. Nothing is deleted, everyone stays '
+                    'in it, and un-archiving brings it straight back.',
+                  ),
+                ),
+              ],
             ),
-
-            const Divider(height: 40),
-
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.ios_share),
-              title: const Text('Export this group'),
-              subtitle: const Text(
-                'A spreadsheet to read, or a full backup that keeps every '
-                'split, rate and change.',
-              ),
-              isThreeLine: true,
-              trailing: ExportButton(groupId: widget.groupId),
+            const SizedBox(height: 24),
+            SegmentedList(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.ios_share),
+                  title: const Text('Export this group'),
+                  subtitle: const Text(
+                    'A spreadsheet to read, or a full backup that keeps every '
+                    'split, rate and change.',
+                  ),
+                  isThreeLine: true,
+                  trailing: ExportButton(groupId: widget.groupId),
+                ),
+              ],
             ),
-
-            const Divider(height: 40),
-
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: ledger.group.simplifyDebts,
-              onChanged: _busy
-                  ? null
-                  : (value) => ref
-                        .read(groupRepositoryProvider)
-                        .updateGroup(
-                          ledger.group.copyWith(simplifyDebts: value),
-                        ),
-              title: const Text('Suggest the fewest payments'),
-              subtitle: const Text(
-                'Nets debts down to as few transfers as settle the group. The '
-                'individual debts underneath are unchanged either way.',
-              ),
-            ),
-
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: archived,
-              onChanged: _busy
-                  ? null
-                  : (value) => _setArchived(ledger, archived: value),
-              title: const Text('Archive'),
-              subtitle: const Text(
-                'Hides it from your list. Nothing is deleted, everyone stays '
-                'in it, and un-archiving brings it straight back.',
-              ),
-            ),
-
-            const Divider(height: 40),
+            const SizedBox(height: 24),
 
             if (me == null)
               Text(
@@ -240,18 +243,21 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
                 ),
               )
             else ...[
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.logout, color: scheme.error),
-                title: Text(
-                  'Leave group',
-                  style: TextStyle(color: scheme.error),
-                ),
-                subtitle: const Text(
-                  'Your past expenses stay in the group. You stop appearing in '
-                  'new ones.',
-                ),
-                onTap: _busy ? null : () => _leave(ledger, me),
+              SegmentedList(
+                children: [
+                  ListTile(
+                    leading: Icon(Icons.logout, color: scheme.error),
+                    title: Text(
+                      'Leave group',
+                      style: TextStyle(color: scheme.error),
+                    ),
+                    subtitle: const Text(
+                      'Your past expenses stay in the group. You stop appearing in '
+                      'new ones.',
+                    ),
+                    onTap: _busy ? null : () => _leave(ledger, me),
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
               Text(

@@ -22,6 +22,7 @@ import '../widgets/group_cover.dart';
 import '../widgets/group_pane.dart';
 import '../widgets/group_standing.dart';
 import '../widgets/page_body.dart';
+import '../widgets/segmented_list.dart';
 import '../widgets/sync_refresh_button.dart';
 import '../widgets/sync_status_notice.dart';
 
@@ -294,15 +295,18 @@ class _EntriesPane extends ConsumerWidget {
         category.id: category,
     };
 
-    // Entries arrive newest first, so a day's run is contiguous.
+    // Entries arrive newest first, so a day's run is contiguous: each day is
+    // a header and a segmented group under it.
     final rows = <Object>[];
-    DateTime? day;
+    final days = <List<Entry>>[];
     for (final entry in ledger.entries) {
-      if (entry.row.entryDate != day) {
-        day = entry.row.entryDate;
-        rows.add(day);
+      if (days.isEmpty ||
+          days.last.first.row.entryDate != entry.row.entryDate) {
+        days.add([]);
+        rows.add(entry.row.entryDate);
       }
-      rows.add(entry);
+      days.last.add(entry);
+      rows.add((entry: entry, day: days.last));
     }
 
     return GroupPane(
@@ -319,11 +323,18 @@ class _EntriesPane extends ConsumerWidget {
             itemCount: rows.length,
             itemBuilder: (context, index) => switch (rows[index]) {
               final DateTime day => _DayHeader(day: day),
-              final Entry entry => _EntryTile(
-                entry: entry,
-                ledger: ledger,
-                currency: currencies[entry.row.currency],
-                category: categories[entry.row.categoryId],
+              (entry: final Entry entry, day: final List<Entry> day) => Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Segment(
+                  index: day.indexOf(entry),
+                  count: day.length,
+                  child: _EntryTile(
+                    entry: entry,
+                    ledger: ledger,
+                    currency: currencies[entry.row.currency],
+                    category: categories[entry.row.categoryId],
+                  ),
+                ),
               ),
               _ => const SizedBox.shrink(),
             },
@@ -343,7 +354,7 @@ class _DayHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
       child: Semantics(
         header: true,
         child: Text(

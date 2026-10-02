@@ -15,6 +15,7 @@ import 'avatar_view.dart';
 import 'balance_arrow.dart';
 import 'empty_state.dart';
 import 'group_pane.dart';
+import 'segmented_list.dart';
 
 /// Per-currency balances and, when the group wants them, the payments that
 /// would settle it.
@@ -207,17 +208,11 @@ class _CurrencySection extends StatelessWidget {
         if (!yours.contains(t)) t,
     ];
 
-    Widget transferCard(List<Transfer> list) => Card.filled(
-      child: Column(
-        children: [
-          for (final transfer in list)
-            _TransferTile(
-              ledger: ledger,
-              transfer: transfer,
-              currency: currency,
-            ),
-        ],
-      ),
+    Widget transfersOf(List<Transfer> list) => SegmentedList(
+      children: [
+        for (final transfer in list)
+          _TransferTile(ledger: ledger, transfer: transfer, currency: currency),
+      ],
     );
 
     return Column(
@@ -230,20 +225,18 @@ class _CurrencySection extends StatelessWidget {
         ),
         if (yours.isNotEmpty) ...[
           const _Subheading('Your payments'),
-          transferCard(yours),
+          transfersOf(yours),
         ],
         const _Subheading('Everyone'),
-        Card.filled(
-          child: Column(
-            children: [
-              for (final balance in balances)
-                _MemberBalanceRow(
-                  ledger: ledger,
-                  balance: balance,
-                  currency: currency,
-                ),
-            ],
-          ),
+        SegmentedList(
+          children: [
+            for (final balance in balances)
+              _MemberBalanceRow(
+                ledger: ledger,
+                balance: balance,
+                currency: currency,
+              ),
+          ],
         ),
         if (others.isNotEmpty) ...[
           _Subheading(
@@ -252,7 +245,7 @@ class _CurrencySection extends StatelessWidget {
                       '${others.length == 1 ? 'payment' : 'payments'}'
                 : 'Between the others',
           ),
-          transferCard(others),
+          transfersOf(others),
         ],
       ],
     );
