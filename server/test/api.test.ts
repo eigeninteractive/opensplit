@@ -1,5 +1,6 @@
 import { env, exports as workerExports } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
+import { defaultGroupLook } from "../src/db/appearance";
 
 import type { ApiError } from "../src/schemas/common";
 import type { ChangePage, Entry, Group, GroupIds, Member } from "./api-types";
@@ -26,7 +27,7 @@ async function makeGroup(guest: Guest, name = "Goa trip") {
   const id = freshId("api");
   const response = await call(`/api/groups/${id}`, guest, {
     method: "PUT",
-    body: JSON.stringify({ name, defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, creatorId: `${id}-me`, creatorName: "Ravi" }),
+    body: JSON.stringify({ name, defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, ...defaultGroupLook, creatorId: `${id}-me`, creatorName: "Ravi" }),
   });
 
   expect(response.status).toBe(200);
@@ -262,13 +263,29 @@ describe("the roster over HTTP", () => {
     expect(response.status).toBe(400);
   });
 
+  it("changes how a group looks without telling the activity feed", async () => {
+    const { id } = await makeGroup(ravi);
+    const look = (changes: Record<string, unknown>) => call(`/api/groups/${id}`, ravi, { method: "PUT", body: JSON.stringify({ name: "Goa trip", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, ...defaultGroupLook, creatorId: "unused", creatorName: "Ravi", ...changes }) });
+
+    const events = async () => (await json<ChangePage>(await call(`/api/groups/${id}/changes?since=0`, ravi))).events.length;
+    const before = await events();
+
+    const iconed = await look({ avatarKind: "icon", avatarIcon: "beach_access", avatarColor: "amber" });
+    expect(await json<Group>(iconed)).toMatchObject({ avatarKind: "icon", avatarIcon: "beach_access", avatarColor: "amber", coverKind: "generated" });
+    expect(await events()).toBe(before);
+
+    expect((await look({ avatarKind: "icon" })).status).toBe(400);
+    expect((await look({ coverKind: "photo" })).status).toBe(400);
+    expect((await look({ coverKind: "photo", coverPhoto: "covers/goa/1.webp" })).status).toBe(400);
+  });
+
   it("renames a group, and refuses a blank name", async () => {
     const { id } = await makeGroup(ravi);
 
-    const renamed = await call(`/api/groups/${id}`, ravi, { method: "PUT", body: JSON.stringify({ name: "Goa, take two", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, creatorId: "unused", creatorName: "Ravi" }) });
+    const renamed = await call(`/api/groups/${id}`, ravi, { method: "PUT", body: JSON.stringify({ name: "Goa, take two", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, ...defaultGroupLook, creatorId: "unused", creatorName: "Ravi" }) });
     expect((await json<Group>(renamed)).name).toBe("Goa, take two");
 
-    const blank = await call(`/api/groups/${id}`, ravi, { method: "PUT", body: JSON.stringify({ name: "   ", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, creatorId: "unused", creatorName: "Ravi" }) });
+    const blank = await call(`/api/groups/${id}`, ravi, { method: "PUT", body: JSON.stringify({ name: "   ", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, ...defaultGroupLook, creatorId: "unused", creatorName: "Ravi" }) });
     expect(blank.status).toBe(400);
   });
 });

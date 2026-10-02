@@ -234,7 +234,8 @@ cp android/key.properties.example android/key.properties   # gitignored too
 flutter build appbundle --release --dart-define-from-file=env/app.json
 
 # Web, WasmGC with an automatic JS fallback for older browsers. This also
-# injects Firebase's public web identifiers and versions the offline cache.
+# builds the service worker (needs pnpm), with Firebase's public web
+# identifiers and the release's offline cache.
 dart run tool/build_web.dart
 ```
 
@@ -295,10 +296,10 @@ works identically on every browser, and needs no third-party cookies, no FedCM
 and no JavaScript-origin allow-list. Android is unaffected and still signs in
 natively, without leaving the app.
 
-The source service workers intentionally contain unresolved placeholders. Only
-`tool/build_web.dart` may produce a deployable web directory: it verifies the
-configuration, injects Firebase's public identifiers, and keys the offline cache
-to the commit being built. CI uses structurally valid inert identifiers to prove
+The service worker is built, not copied: `service_worker/` is a small Workbox
+package, and only `tool/build_web.dart` may produce a deployable web directory.
+It verifies the configuration, builds the client, and then has Workbox precache
+the finished release, bundling Firebase's public identifiers into the worker. CI uses structurally valid inert identifiers to prove
 the release build. After every CI gate passes, pushes to `main` build with real
 production variables, deploy the Worker and the bundle together, and distribute
 a signed AAB to Play closed testing. Release reruns the same CI checks before
@@ -589,10 +590,11 @@ in an Edge Function and potentially hundreds of group objects here, each in its
 own place: a per-instance cache would mint a token per active group per hour,
 which is hundreds of round trips to Google to say the same thing.
 
-For web push, `dart run tool/build_web.dart` injects the public Firebase values
-from the same configuration file as Flutter. Do not edit the worker by hand.
-One worker owns `/app/` and handles both offline assets and push, so enabling
-notifications cannot replace the offline worker.
+For web push, `dart run tool/build_web.dart` bundles the public Firebase values
+from the same configuration file as Flutter into the worker, along with the
+Firebase SDK itself (pinned in `service_worker/package.json` to the version the
+page loads). One worker owns `/app/` and handles both offline assets and push,
+so enabling notifications cannot replace the offline worker.
 
 **Permission is never requested at launch.** Android 13+ shows the system
 dialog once or twice and then treats further asks as permanently denied, with
@@ -616,11 +618,21 @@ writer could otherwise restore one after a sign-out — so background work with
 an expired session waits for the next app resume. Push is best-effort, not a
 delivery guarantee or the source of ledger correctness.
 
-On the web there is no equivalent — a service worker cannot run Dart — so
-`web/firebase-messaging-sw.js` deliberately draws nothing and web push only
-wakes an open tab. Tapping any of these opens the entry it was about rather
-than the app's front door, on all three paths: foreground, backgrounded, and
-launched from cold.
+On the web there is no isolate — a service worker cannot run Dart — so the
+worker borrows a tab instead (`service_worker/src/push.ts`). Firebase gives a
+push to the page whenever a tab of the site is visible, and the page syncs and
+redraws; no banner, because the change is on screen. With every app tab
+hidden, the worker asks one of them to sync and word the notification with the
+same composer Android uses, and shows what it answers. With no app tab open,
+or one that does not answer in fifteen seconds, the worker says only what it
+knows without the ledger: that an expense changed, or that somebody joined or
+left, in one of your groups. Signing out removes the device's token first, so
+a browser nobody is signed in to stops being woken at all.
+
+Tapping any of these opens the entry it was about rather than the app's front
+door, on all three paths: foreground, backgrounded, and launched from cold. On
+the web the worker focuses an open tab and routes it, or opens the group's
+link.
 
 ## Developing against a local Worker
 
@@ -879,8 +891,8 @@ leaving it to this file: *Settings → About* links to the source, and
 `REPOSITORY_URL` is a build-time define so that a fork's copy points at the
 fork.
 
-The typefaces are not ours and are not under that licence. Instrument Sans and
-JetBrains Mono are bundled under the SIL Open Font License 1.1, with the notices
+The typeface is not ours and is not under that licence. Instrument Sans is
+bundled under the SIL Open Font License 1.1, with the notice
 and the licence text in [assets/google_fonts/LICENSE](assets/google_fonts/LICENSE)
 — which the app also shows, under *About → Open-source licences*.
 

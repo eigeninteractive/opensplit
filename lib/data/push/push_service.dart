@@ -12,6 +12,7 @@ import '../../config.dart';
 import 'background_handler.dart';
 import 'notification_channel.dart';
 import 'push_data.dart';
+import 'web_push_bridge.dart';
 
 /// Wakes the app when something changes, and lets the app say what changed.
 class PushService {
@@ -102,8 +103,14 @@ class PushService {
     });
 
     // Not supported on the web, where a service worker handles background
-    // delivery and cannot run Dart. See web/firebase-messaging-sw.js.
-    if (!kIsWeb) {
+    // delivery and cannot run Dart. It asks a hidden tab to do what this does
+    // on Android, and routes taps on what it shows. See service_worker/.
+    if (kIsWeb) {
+      listenToServiceWorker(
+        describe: _describeForWorker,
+        openGroup: onOpenGroup,
+      );
+    } else {
       FirebaseMessaging.onBackgroundMessage(handleBackgroundEntryMessage);
     }
 
@@ -195,7 +202,8 @@ class PushService {
     // what a server guessed the recipient's share would be.
     await onWake(groupId);
 
-    // Web messages wake the tab. Local notifications are Android-only.
+    // Firebase only hands the page a push while a tab is visible, and that tab
+    // has just redrawn with the change. A banner on top would repeat it.
     if (kIsWeb || !isEnabled()) return;
 
     final text = await describe(groupId, kind, subjectId);
@@ -216,6 +224,18 @@ class PushService {
       ),
       payload: groupId,
     );
+  }
+
+  /// Syncs and words a push that arrived while every tab was hidden, for the
+  /// service worker to show. Null when there is nothing to show.
+  Future<({String title, String body})?> _describeForWorker(
+    Map<String, dynamic> data,
+  ) async {
+    final push = readPushData(data);
+    if (push == null || !isEnabled()) return null;
+    await onWake(push.groupId);
+    if (!isEnabled()) return null;
+    return describe(push.groupId, push.kind, push.subjectId);
   }
 
   void _open(RemoteMessage message) {

@@ -1,15 +1,19 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../application/ledger_providers.dart';
 import '../../application/local_providers.dart';
 import '../../application/sync_providers.dart';
 import '../../data/local/database.dart';
+import '../../domain/avatar.dart';
 import '../../domain/money_format.dart';
 import '../feedback.dart';
 import '../navigation.dart';
+import '../widgets/avatar_view.dart';
 import '../widgets/export_button.dart';
 import '../widgets/page_body.dart';
+import '../widgets/segmented_list.dart';
 
 /// Renaming, archiving and leaving.
 class GroupSettingsScreen extends ConsumerStatefulWidget {
@@ -23,31 +27,24 @@ class GroupSettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
-  final _name = TextEditingController();
-  bool _loaded = false;
   bool _busy = false;
 
-  @override
-  void dispose() {
-    _name.dispose();
-    super.dispose();
-  }
-
-  void _loadOnce(String name) {
-    if (_loaded) return;
-    _loaded = true;
-    _name.text = name;
-  }
-
+  /// Asks for the new name in a dialog, which holds its own copy only while
+  /// it is open; the screen itself shows the stored name.
   Future<void> _rename(GroupLedger ledger) async {
-    final name = _name.text.trim();
-    if (name.isEmpty || name == ledger.group.name) return;
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => _RenameDialog(current: ledger.group.name),
+    );
+    if (name == null || name == ledger.group.name) return;
 
     setState(() => _busy = true);
     try {
-      await ref
-          .read(groupRepositoryProvider)
-          .updateGroup(ledger.group.copyWith(name: name));
+      // Read again: the row may have changed while the dialog was open.
+      final groups = ref.read(groupRepositoryProvider);
+      final group = await groups.getGroup(widget.groupId);
+      if (group == null) return;
+      await groups.updateGroup(group.copyWith(name: name));
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -147,7 +144,6 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
     if (ledger == null) {
       return Scaffold(appBar: AppBar(leading: const BackButton()));
     }
-    _loadOnce(ledger.group.name);
 
     final archived = ledger.group.archivedAt != null;
     final me = ledger.me;
@@ -163,68 +159,80 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
           children: [
-            TextField(
-              controller: _name,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(labelText: 'Group name'),
-              onSubmitted: (_) => _rename(ledger),
+            SegmentedList(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.badge_outlined),
+                  title: const Text('Name'),
+                  subtitle: Text(ledger.group.name),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _busy ? null : () => _rename(ledger),
+                ),
+                ListTile(
+                  leading: AvatarView(
+                    avatar: ledger.group.avatar,
+                    name: ledger.group.name,
+                    id: ledger.group.id,
+                  ),
+                  title: const Text('Picture'),
+                  subtitle: Text(switch (ledger.group.avatar) {
+                    EmojiAvatar() => 'An emoji',
+                    IconAvatar() => 'An icon',
+                    InitialsAvatar() || PhotoAvatar() => 'Its initials',
+                  }),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push('/g/${widget.groupId}/picture'),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerRight,
-              child: FilledButton(
-                onPressed: _busy ? null : () => _rename(ledger),
-                child: const Text('Save name'),
-              ),
+            const SizedBox(height: 24),
+            SegmentedList(
+              children: [
+                SwitchListTile(
+                  value: ledger.group.simplifyDebts,
+                  onChanged: _busy
+                      ? null
+                      : (value) => ref
+                            .read(groupRepositoryProvider)
+                            .updateGroup(
+                              ledger.group.copyWith(simplifyDebts: value),
+                            ),
+                  title: const Text('Suggest the fewest payments'),
+                  subtitle: const Text(
+                    'Nets debts down to as few transfers as settle the group. The '
+                    'individual debts underneath are unchanged either way.',
+                  ),
+                ),
+
+                SwitchListTile(
+                  value: archived,
+                  onChanged: _busy
+                      ? null
+                      : (value) => _setArchived(ledger, archived: value),
+                  title: const Text('Archive'),
+                  subtitle: const Text(
+                    'Hides it from your list. Nothing is deleted, everyone stays '
+                    'in it, and un-archiving brings it straight back.',
+                  ),
+                ),
+              ],
             ),
-
-            const Divider(height: 40),
-
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.ios_share),
-              title: const Text('Export this group'),
-              subtitle: const Text(
-                'A spreadsheet to read, or a full backup that keeps every '
-                'split, rate and change.',
-              ),
-              isThreeLine: true,
-              trailing: ExportButton(groupId: widget.groupId),
+            const SizedBox(height: 24),
+            SegmentedList(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.ios_share),
+                  title: const Text('Export this group'),
+                  subtitle: const Text(
+                    'A spreadsheet to read, or a full backup that keeps every '
+                    'split, rate and change.',
+                  ),
+                  isThreeLine: true,
+                  trailing: ExportButton(groupId: widget.groupId),
+                ),
+              ],
             ),
-
-            const Divider(height: 40),
-
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: ledger.group.simplifyDebts,
-              onChanged: _busy
-                  ? null
-                  : (value) => ref
-                        .read(groupRepositoryProvider)
-                        .updateGroup(
-                          ledger.group.copyWith(simplifyDebts: value),
-                        ),
-              title: const Text('Suggest the fewest payments'),
-              subtitle: const Text(
-                'Nets debts down to as few transfers as settle the group. The '
-                'individual debts underneath are unchanged either way.',
-              ),
-            ),
-
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: archived,
-              onChanged: _busy
-                  ? null
-                  : (value) => _setArchived(ledger, archived: value),
-              title: const Text('Archive'),
-              subtitle: const Text(
-                'Hides it from your list. Nothing is deleted, everyone stays '
-                'in it, and un-archiving brings it straight back.',
-              ),
-            ),
-
-            const Divider(height: 40),
+            const SizedBox(height: 24),
 
             if (me == null)
               Text(
@@ -235,18 +243,21 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
                 ),
               )
             else ...[
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.logout, color: scheme.error),
-                title: Text(
-                  'Leave group',
-                  style: TextStyle(color: scheme.error),
-                ),
-                subtitle: const Text(
-                  'Your past expenses stay in the group. You stop appearing in '
-                  'new ones.',
-                ),
-                onTap: _busy ? null : () => _leave(ledger, me),
+              SegmentedList(
+                children: [
+                  ListTile(
+                    leading: Icon(Icons.logout, color: scheme.error),
+                    title: Text(
+                      'Leave group',
+                      style: TextStyle(color: scheme.error),
+                    ),
+                    subtitle: const Text(
+                      'Your past expenses stay in the group. You stop appearing in '
+                      'new ones.',
+                    ),
+                    onTap: _busy ? null : () => _leave(ledger, me),
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
               Text(
@@ -263,4 +274,54 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
       ),
     );
   }
+}
+
+/// One field and two buttons, the size of the change it makes.
+class _RenameDialog extends StatefulWidget {
+  const _RenameDialog({required this.current});
+
+  final String current;
+
+  @override
+  State<_RenameDialog> createState() => _RenameDialogState();
+}
+
+class _RenameDialogState extends State<_RenameDialog> {
+  late final _name = TextEditingController(text: widget.current);
+  final _form = GlobalKey<FormState>();
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (!(_form.currentState?.validate() ?? false)) return;
+    Navigator.of(context).pop(_name.text.trim());
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Rename group'),
+    content: Form(
+      key: _form,
+      child: TextFormField(
+        controller: _name,
+        autofocus: true,
+        textCapitalization: TextCapitalization.words,
+        decoration: const InputDecoration(labelText: 'Group name'),
+        validator: (value) =>
+            (value ?? '').trim().isEmpty ? 'A group needs a name.' : null,
+        onFieldSubmitted: (_) => _submit(),
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.of(context).pop(),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(onPressed: _submit, child: const Text('Rename')),
+    ],
+  );
 }

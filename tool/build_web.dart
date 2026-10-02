@@ -1,5 +1,5 @@
-// Builds the production web bundle and injects public deployment identifiers
-// into the two service workers.
+// Builds the production web bundle, including the service worker that serves
+// the client offline and receives web push.
 //
 // The bundle is two things in one tree. `site/` is plain static HTML — the
 // landing page, the privacy policy, the terms — and it is served from the host
@@ -15,16 +15,13 @@
 // between a deploy and an empty origin: one command produces the whole front
 // end, and `wrangler deploy` uploads it alongside the script as one version.
 
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:args/args.dart';
-import 'package:crypto/crypto.dart';
 
 Future<void> main(List<String> args) async {
   final parser = ArgParser()
     ..addOption('config', defaultsTo: 'env/app.json')
-    ..addOption('build-id')
     ..addOption(
       'build-number',
       help:
@@ -51,7 +48,6 @@ Future<void> main(List<String> args) async {
     }
     await _build(
       options.option('config')!,
-      options.option('build-id'),
       buildNumber: _buildNumber(options.option('build-number')),
       siteOnly: options.flag('site-only'),
     );
@@ -77,13 +73,10 @@ Future<void> main(List<String> args) async {
 /// tested against a real Worker. Only `/app/` is missing, and a request for it
 /// answers 404 rather than pretending.
 Future<void> _build(
-  String configPath,
-  String? requestedBuildId, {
+  String configPath, {
   int? buildNumber,
   bool siteOnly = false,
 }) async {
-  final buildId = await _buildId(requestedBuildId);
-
   if (!siteOnly) {
     await _run('dart', [
       'run',
@@ -131,11 +124,10 @@ Future<void> _build(
     return;
   }
 
-  final config =
-      jsonDecode(File(configPath).readAsStringSync()) as Map<String, dynamic>;
-  final cacheId = finalizeWebBundle(output, config, buildId: buildId);
+  // Last, because it precaches the finished client, icons included.
+  await _buildServiceWorker(output, configPath);
 
-  stdout.writeln('Production web bundle ready (build $cacheId).');
+  stdout.writeln('Production web bundle ready.');
   stdout.writeln('  /      static site from site/');
   stdout.writeln('  /app/  Flutter client');
 }
@@ -157,79 +149,22 @@ void _checkServingRules(Directory output) {
   }
 }
 
-/// Injects public push configuration and a complete, content-addressed cache.
+/// Builds `/app/sw.js` with Workbox from `service_worker/`.
 ///
-/// Run only after Flutter and the static site have been copied to [output].
-/// A dirty rebuild at the same commit must still get a new offline cache.
-String finalizeWebBundle(
-  Directory output,
-  Map<String, dynamic> config, {
-  required String buildId,
-}) {
-  _validateId(buildId);
-  final app = Directory('${output.path}/app');
-  _replace('${app.path}/firebase-messaging-sw.js', {
-    '__WEB_FCM_API_KEY__': '${config['WEB_FCM_API_KEY']}',
-    '__WEB_FCM_APP_ID__': '${config['WEB_FCM_APP_ID']}',
-    '__FCM_SENDER_ID__': '${config['FCM_SENDER_ID']}',
-    '__FCM_PROJECT_ID__': '${config['FCM_PROJECT_ID']}',
-  });
-  final resources = <String, File>{};
-  for (final file in app.listSync(recursive: true).whereType<File>()) {
-    final path = file.path.substring(app.path.length + 1);
-    if (path == 'sw.js' ||
-        path == 'flutter_service_worker.js' ||
-        path.endsWith('.map') ||
-        path.split('/').any((part) => part.startsWith('.'))) {
-      continue;
-    }
-    resources[path] = file;
-  }
-  for (final name in ['favicon.png', 'favicon.svg']) {
-    final file = File('${output.path}/$name');
-    if (file.existsSync()) resources['/$name'] = file;
-  }
-  final icons = Directory('${output.path}/icons');
-  if (icons.existsSync()) {
-    for (final file in icons.listSync(recursive: true).whereType<File>()) {
-      resources[file.path.substring(output.path.length)] = file;
-    }
-  }
-  for (final required in [
-    'index.html',
-    'flutter_bootstrap.js',
-    'main.dart.js',
-    'sqlite3.wasm',
-    'drift_worker.js',
-  ]) {
-    if (!resources.containsKey(required)) {
-      throw StateError('Incomplete Flutter bundle: missing $required');
-    }
-  }
-  final paths = resources.keys.toList()..sort();
-  final hashes = paths.map(
-    (path) => '$path:${sha256.convert(resources[path]!.readAsBytesSync())}',
-  );
-  final workerSource = File('${app.path}/sw.js').readAsStringSync();
-  final digest = sha256
-      .convert(utf8.encode('${hashes.join('\n')}\n$workerSource'))
-      .toString();
-  final cacheId = '$buildId-${digest.substring(0, 16)}';
-  _replace('${app.path}/sw.js', {
-    '__OPEN_SPLIT_BUILD_ID__': cacheId,
-    '__OPEN_SPLIT_RESOURCES__': jsonEncode(paths),
-  });
-
-  for (final path in [
-    '${app.path}/firebase-messaging-sw.js',
-    '${app.path}/sw.js',
-  ]) {
-    final contents = File(path).readAsStringSync();
-    if (RegExp(r'__[A-Z0-9_]+__').hasMatch(contents)) {
-      throw StateError('$path contains an unresolved build placeholder.');
-    }
-  }
-  return cacheId;
+/// That package precaches the release and bundles the worker with Firebase's
+/// public identifiers from [configPath]; see `service_worker/build.ts`. Its
+/// install is part of the build, so a fresh checkout needs nothing beyond pnpm.
+Future<void> _buildServiceWorker(Directory output, String configPath) async {
+  const package = 'service_worker';
+  await _run('pnpm', ['--dir', package, 'install', '--frozen-lockfile']);
+  await _run('pnpm', [
+    '--dir',
+    package,
+    'run',
+    'build',
+    '--root=${output.absolute.path}',
+    '--config=${File(configPath).absolute.path}',
+  ]);
 }
 
 /// Copies [from] over [to], including dotfiles.
@@ -250,18 +185,6 @@ void _copyInto(Directory from, Directory to) {
   }
 }
 
-Future<String> _buildId(String? requested) async {
-  final candidate = requested ?? Platform.environment['GITHUB_SHA'];
-  if (candidate != null && candidate.isNotEmpty) return _validateId(candidate);
-
-  final result = await Process.run('git', ['rev-parse', '--short=12', 'HEAD']);
-  if (result.exitCode != 0) {
-    stderr.write(result.stderr);
-    exit(result.exitCode);
-  }
-  return _validateId('${result.stdout}'.trim());
-}
-
 int? _buildNumber(String? value) {
   if (value == null) return null;
   final number = int.tryParse(value);
@@ -269,13 +192,6 @@ int? _buildNumber(String? value) {
     throw FormatException('Invalid build number: $value');
   }
   return number;
-}
-
-String _validateId(String value) {
-  if (!RegExp(r'^[A-Za-z0-9._-]{7,64}$').hasMatch(value)) {
-    throw FormatException('Invalid build id: $value');
-  }
-  return value;
 }
 
 Future<void> _run(String executable, List<String> arguments) async {
@@ -286,13 +202,4 @@ Future<void> _run(String executable, List<String> arguments) async {
   );
   final code = await process.exitCode;
   if (code != 0) exit(code);
-}
-
-void _replace(String path, Map<String, String> replacements) {
-  final file = File(path);
-  var contents = file.readAsStringSync();
-  for (final MapEntry(:key, :value) in replacements.entries) {
-    contents = contents.replaceAll(key, value);
-  }
-  file.writeAsStringSync(contents);
 }

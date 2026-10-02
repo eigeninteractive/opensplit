@@ -2,6 +2,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
 import { user } from "./auth-schema";
+import { defaultAvatar } from "./db/appearance";
 import { deviceTokens, memberships, profiles } from "./db/d1/schema";
 
 /**
@@ -34,7 +35,10 @@ export async function forgetAccount(env: Env, profileId: string, { heir }: { hei
 
   // Kept, emptied, so co-members' history still resolves.
   const now = new Date().toISOString();
-  await db.update(profiles).set({ displayName: null, upiVpa: null, deletedAt: now, updatedAt: now }).where(eq(profiles.id, profileId));
+  await db
+    .update(profiles)
+    .set({ displayName: null, upiVpa: null, ...defaultAvatar, deletedAt: now, updatedAt: now })
+    .where(eq(profiles.id, profileId));
   return { forgotten, purged };
 }
 

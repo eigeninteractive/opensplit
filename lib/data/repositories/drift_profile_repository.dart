@@ -1,5 +1,3 @@
-import 'package:drift/drift.dart';
-
 import '../local/database.dart';
 import '../local/tables.dart';
 import '../sync/outbox_queue.dart';
@@ -31,16 +29,7 @@ final class DriftProfileRepository {
   };
 
   Future<void> upsert(Profile profile) => _db.transaction(() async {
-    await _db
-        .into(_db.profiles)
-        .insertOnConflictUpdate(
-          ProfilesCompanion.insert(
-            id: profile.id,
-            displayName: Value(profile.displayName),
-            upiVpa: Value(profile.upiVpa),
-            updatedAt: Value(profile.updatedAt),
-          ),
-        );
+    await _db.into(_db.profiles).insertOnConflictUpdate(profile);
     await outbox?.enqueue(OutboxTarget.profile, profile.id);
   });
 }

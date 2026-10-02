@@ -45,6 +45,36 @@
           "simplifyDebts": {
             "type": "boolean"
           },
+          "avatarKind": {
+            "$ref": "#/components/schemas/AvatarKind"
+          },
+          "avatarColor": {
+            "$ref": "#/components/schemas/AvatarColor"
+          },
+          "avatarEmoji": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 32,
+            "example": "🏖️"
+          },
+          "avatarIcon": {
+            "$ref": "#/components/schemas/AvatarIcon"
+          },
+          "avatarPhoto": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^[a-z0-9][a-z0-9/_-]{0,127}\\.[a-z0-9]{2,5}$",
+            "example": "avatars/0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f/4f2a.webp"
+          },
+          "coverKind": {
+            "$ref": "#/components/schemas/CoverKind"
+          },
+          "coverPhoto": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^[a-z0-9][a-z0-9/_-]{0,127}\\.[a-z0-9]{2,5}$",
+            "example": "avatars/0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f/4f2a.webp"
+          },
           "createdBy": {
             "type": "string",
             "minLength": 1,
@@ -79,11 +109,80 @@
           "defaultCurrency",
           "isDirect",
           "simplifyDebts",
+          "avatarKind",
+          "avatarColor",
+          "avatarEmoji",
+          "avatarIcon",
+          "avatarPhoto",
+          "coverKind",
+          "coverPhoto",
           "createdBy",
           "createdAt",
           "archivedAt",
           "updatedAt",
           "seq"
+        ]
+      },
+      "AvatarKind": {
+        "type": "string",
+        "enum": [
+          "initials",
+          "emoji",
+          "icon",
+          "photo"
+        ]
+      },
+      "AvatarColor": {
+        "type": "string",
+        "nullable": true,
+        "enum": [
+          "purple",
+          "blue",
+          "teal",
+          "green",
+          "olive",
+          "amber",
+          "orange",
+          "pink",
+          null
+        ]
+      },
+      "AvatarIcon": {
+        "type": "string",
+        "nullable": true,
+        "enum": [
+          "flight",
+          "luggage",
+          "beach_access",
+          "hiking",
+          "sailing",
+          "train",
+          "directions_car",
+          "home",
+          "apartment",
+          "restaurant",
+          "local_cafe",
+          "local_bar",
+          "celebration",
+          "cake",
+          "sports_soccer",
+          "sports_cricket",
+          "sports_basketball",
+          "fitness_center",
+          "music_note",
+          "school",
+          "work",
+          "pets",
+          "favorite",
+          "family_restroom",
+          null
+        ]
+      },
+      "CoverKind": {
+        "type": "string",
+        "enum": [
+          "generated",
+          "photo"
         ]
       },
       "GroupLink": {
@@ -773,6 +872,27 @@
             "pattern": "^[a-zA-Z0-9._-]{2,64}@[a-zA-Z]{2,64}$",
             "example": "ravi@okhdfcbank"
           },
+          "avatarKind": {
+            "$ref": "#/components/schemas/AvatarKind"
+          },
+          "avatarColor": {
+            "$ref": "#/components/schemas/AvatarColor"
+          },
+          "avatarEmoji": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 32,
+            "example": "🏖️"
+          },
+          "avatarIcon": {
+            "$ref": "#/components/schemas/AvatarIcon"
+          },
+          "avatarPhoto": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^[a-z0-9][a-z0-9/_-]{0,127}\\.[a-z0-9]{2,5}$",
+            "example": "avatars/0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f/4f2a.webp"
+          },
           "updatedAt": {
             "type": "string",
             "format": "date-time",
@@ -789,6 +909,11 @@
           "id",
           "displayName",
           "upiVpa",
+          "avatarKind",
+          "avatarColor",
+          "avatarEmoji",
+          "avatarIcon",
+          "avatarPhoto",
           "updatedAt",
           "deletedAt"
         ]
@@ -1096,6 +1221,36 @@
             "format": "date-time",
             "example": "2026-09-23T11:20:41.865Z"
           },
+          "avatarKind": {
+            "$ref": "#/components/schemas/AvatarKind"
+          },
+          "avatarColor": {
+            "$ref": "#/components/schemas/AvatarColor"
+          },
+          "avatarEmoji": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 32,
+            "example": "🏖️"
+          },
+          "avatarIcon": {
+            "$ref": "#/components/schemas/AvatarIcon"
+          },
+          "avatarPhoto": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^[a-z0-9][a-z0-9/_-]{0,127}\\.[a-z0-9]{2,5}$",
+            "example": "avatars/0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f/4f2a.webp"
+          },
+          "coverKind": {
+            "$ref": "#/components/schemas/CoverKind"
+          },
+          "coverPhoto": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^[a-z0-9][a-z0-9/_-]{0,127}\\.[a-z0-9]{2,5}$",
+            "example": "avatars/0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f/4f2a.webp"
+          },
           "creatorId": {
             "type": "string",
             "minLength": 1,
@@ -1114,6 +1269,13 @@
           "isDirect",
           "simplifyDebts",
           "archivedAt",
+          "avatarKind",
+          "avatarColor",
+          "avatarEmoji",
+          "avatarIcon",
+          "avatarPhoto",
+          "coverKind",
+          "coverPhoto",
           "creatorId",
           "creatorName"
         ]
@@ -1512,11 +1674,37 @@
             "nullable": true,
             "pattern": "^[a-zA-Z0-9._-]{2,64}@[a-zA-Z]{2,64}$",
             "example": "ravi@okhdfcbank"
+          },
+          "avatarKind": {
+            "$ref": "#/components/schemas/AvatarKind"
+          },
+          "avatarColor": {
+            "$ref": "#/components/schemas/AvatarColor"
+          },
+          "avatarEmoji": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 32,
+            "example": "🏖️"
+          },
+          "avatarIcon": {
+            "$ref": "#/components/schemas/AvatarIcon"
+          },
+          "avatarPhoto": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^[a-z0-9][a-z0-9/_-]{0,127}\\.[a-z0-9]{2,5}$",
+            "example": "avatars/0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f/4f2a.webp"
           }
         },
         "required": [
           "displayName",
-          "upiVpa"
+          "upiVpa",
+          "avatarKind",
+          "avatarColor",
+          "avatarEmoji",
+          "avatarIcon",
+          "avatarPhoto"
         ]
       },
       "Device": {

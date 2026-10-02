@@ -7,7 +7,8 @@ import { drizzle } from "drizzle-orm/d1";
 
 import * as authSchema from "./auth-schema";
 import { profiles } from "./db/d1/schema";
-import { createEmailSender, signInCodeMessage } from "./email/sender";
+import { createEmailSender } from "./email/sender";
+import { signInCodeMessage } from "./email/sign-in-code";
 import { handOverGuest } from "./forget";
 
 /**

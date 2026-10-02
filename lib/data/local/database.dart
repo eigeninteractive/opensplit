@@ -3,6 +3,10 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 // Named in the generated part, which shares this library's imports.
 import 'package:opensplit_api/opensplit_api.dart'
     show
+        AvatarColor,
+        AvatarIcon,
+        AvatarKind,
+        CoverKind,
         EntryKind,
         EntrySnapshot,
         EventKind,
@@ -11,6 +15,7 @@ import 'package:opensplit_api/opensplit_api.dart'
         MemberEventPayload,
         SplitKind;
 
+import '../../domain/avatar.dart';
 import 'open_database.dart';
 import 'tables.dart';
 
@@ -74,7 +79,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Bump this on **any** change to a table in `tables.dart`.
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   /// Timestamps are stored as ISO-8601 text rather than Unix seconds.
   @override
@@ -114,6 +119,48 @@ class AppDatabase extends _$AppDatabase {
 
 extension GroupState on Group {
   bool get isArchived => archivedAt != null;
+
+  Avatar get avatar => Avatar.fromColumns((
+    kind: avatarKind,
+    color: avatarColor,
+    emoji: avatarEmoji,
+    icon: avatarIcon,
+    photo: avatarPhoto,
+  ));
+
+  /// This group, pictured as [avatar].
+  Group withAvatar(Avatar avatar) {
+    final (:kind, :color, :emoji, :icon, :photo) = avatar.columns;
+    return copyWith(
+      avatarKind: kind,
+      avatarColor: Value(color),
+      avatarEmoji: Value(emoji),
+      avatarIcon: Value(icon),
+      avatarPhoto: Value(photo),
+    );
+  }
+}
+
+extension ProfileState on Profile {
+  Avatar get avatar => Avatar.fromColumns((
+    kind: avatarKind,
+    color: avatarColor,
+    emoji: avatarEmoji,
+    icon: avatarIcon,
+    photo: avatarPhoto,
+  ));
+
+  /// This profile, pictured as [avatar].
+  Profile withAvatar(Avatar avatar) {
+    final (:kind, :color, :emoji, :icon, :photo) = avatar.columns;
+    return copyWith(
+      avatarKind: kind,
+      avatarColor: Value(color),
+      avatarEmoji: Value(emoji),
+      avatarIcon: Value(icon),
+      avatarPhoto: Value(photo),
+    );
+  }
 }
 
 extension MemberState on Member {

@@ -8,13 +8,16 @@ import 'package:drift/drift.dart'
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/local/local_reset.dart';
 import 'package:opensplit/data/local/tables.dart';
+import 'package:opensplit/data/repositories/drift_activity_repository.dart';
 import 'package:opensplit/data/repositories/drift_conflict_repository.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/data/repositories/drift_profile_repository.dart';
 import 'package:opensplit/data/sync/api_client.dart';
+import 'package:opensplit/domain/avatar.dart';
 import 'package:opensplit/domain/balance/balance_fold.dart';
 import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/models/entry_event.dart';
+import 'package:opensplit/domain/models/group_event.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:opensplit_api/opensplit_api.dart' as api;
 import 'package:test/test.dart';
@@ -707,6 +710,17 @@ void main() {
       expect((await a.groups.getGroup(g.groupId))!.name, 'Renamed on B');
     });
 
+    liveTest('a group\'s picture reaches the other devices', () async {
+      final g = await seedGroup();
+      final onB = (await b.groups.getGroup(g.groupId))!;
+      const picture = EmojiAvatar('🏖️', color: api.AvatarColor.amber);
+      await b.groups.updateGroup(onB.withAvatar(picture));
+      await b.sync.syncGroup(g.groupId);
+
+      await a.sync.syncGroup(g.groupId);
+      expect((await a.groups.getGroup(g.groupId))!.avatar, picture);
+    });
+
     liveTest('a member rename converges across devices', () async {
       final g = await seedGroup();
       await b.groups.renameMember(g.priya, 'Priya S');
@@ -948,7 +962,15 @@ void main() {
   group('a name follows the account, not the group', () {
     Future<void> rename(Device device, String name) => fetch(
       device.client.getSyncApi().updateProfile(
-        profileUpdate: api.ProfileUpdate(displayName: name, upiVpa: null),
+        profileUpdate: api.ProfileUpdate(
+          avatarKind: api.AvatarKind.initials,
+          avatarColor: null,
+          avatarEmoji: null,
+          avatarIcon: null,
+          avatarPhoto: null,
+          displayName: name,
+          upiVpa: null,
+        ),
       ),
     );
 
@@ -989,6 +1011,25 @@ void main() {
       );
     });
 
+    liveTest('a picture chosen on one device reaches the others', () async {
+      await seedGroup();
+      const picture = IconAvatar(api.AvatarIcon.sailing);
+      final profiles = DriftProfileRepository(b.db, outbox: b.outbox);
+      await profiles.upsert(
+        Profile(
+          id: b.profileId,
+          displayName: 'Priya',
+          avatarKind: api.AvatarKind.initials,
+        ).withAvatar(picture),
+      );
+      await b.sync.syncEverything();
+
+      await a.sync.shared.pullProfiles();
+      final seen = await DriftProfileRepository(a.db).byId(b.profileId);
+      expect(seen?.avatar, picture);
+      expect(seen?.displayName, 'Priya');
+    });
+
     liveTest('the cursor stops it re-fetching what it already has', () async {
       await start();
       String? after() =>
@@ -1004,6 +1045,28 @@ void main() {
   });
 
   group('the activity feed', () {
+    liveTest('someone who joins later gets the history from before', () async {
+      final g = await seedGroup(joined: false);
+      await a.entries.create(draft(g, 120000), createdBy: g.ravi);
+
+      await join(g);
+
+      final feed = await DriftActivityRepository(
+        b.db,
+      ).watchGroup(g.groupId).first;
+      expect(
+        feed.map(
+          (line) => switch (line) {
+            EntryChanged(:final kind) => kind.name,
+            MemberChanged(:final kind) => kind.value,
+            _ => line.runtimeType.toString(),
+          },
+        ),
+        ['member_joined', 'created', 'member_added', 'member_added'],
+        reason: 'all of it on the first pull, not just what follows',
+      );
+    });
+
     liveTest('reaches the other device, once and only once', () async {
       final g = await seedGroup();
       final entry = await a.entries.create(draft(g, 120000), createdBy: g.ravi);

@@ -1,8 +1,8 @@
-import m0000 from './20261001035136_flashy_matthew_murdock/migration.sql';
+import m0000 from './20261002071250_fair_hemingway/migration.sql';
 
   export default {
     migrations: {
-      "20261001035136_flashy_matthew_murdock": m0000
+      "20261002071250_fair_hemingway": m0000
 }
   }
   

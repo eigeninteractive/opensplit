@@ -96,7 +96,7 @@ void main() {
 
     await _enterInto(tester, 'What was it?', 'Groceries');
     await _enterInto(tester, 'How much?', '2400');
-    await tester.tap(find.widgetWithText(FilledButton, 'Add expense'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await _settle(tester);
 
     expect(find.text('Groceries'), findsOneWidget);
@@ -163,7 +163,9 @@ void main() {
     expect(find.text('Nobody owes anybody anything.'), findsOneWidget);
 
     // ---- The record of all of it, with no server anywhere ---------------
-    await tester.tap(find.byIcon(Icons.history));
+    await tester.tap(find.byTooltip('More'));
+    await _settle(tester);
+    await tester.tap(find.text('Activity'));
     await _settle(tester);
 
     expect(find.text('Nothing yet'), findsNothing);
@@ -187,10 +189,12 @@ void main() {
     await _settle(tester);
 
     await _enterInto(tester, 'How much?', '2000');
-    await tester.tap(find.widgetWithText(FilledButton, 'Save changes'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await _settle(tester);
 
-    await tester.tap(find.byIcon(Icons.history));
+    await tester.tap(find.byTooltip('More'));
+    await _settle(tester);
+    await tester.tap(find.text('Activity'));
     await _settle(tester);
 
     expect(find.textContaining('edited this'), findsOneWidget);

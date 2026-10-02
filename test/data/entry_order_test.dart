@@ -3,11 +3,11 @@ import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/local/entry_writer.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/domain/models/entry.dart';
-import 'package:opensplit_api/opensplit_api.dart' show EntryKind, SplitKind;
+import 'package:opensplit_api/opensplit_api.dart'
+    show AvatarKind, CoverKind, EntryKind, Payer, Share, SplitKind;
 import 'package:test/test.dart';
 
 import '../harness.dart';
-import 'package:opensplit_api/opensplit_api.dart' show Payer, Share;
 
 void main() {
   late AppDatabase db;
@@ -19,6 +19,8 @@ void main() {
         .into(db.groups)
         .insert(
           Group(
+            avatarKind: AvatarKind.initials,
+            coverKind: CoverKind.generated,
             id: 'g',
             name: 'Goa',
             defaultCurrency: 'INR',

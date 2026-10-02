@@ -22,7 +22,7 @@ import '../feedback.dart';
 import '../navigation.dart';
 import '../theme.dart';
 import '../widgets/category_icon.dart';
-import '../widgets/currency_picker.dart';
+import '../widgets/avatar_view.dart';
 import '../widgets/page_body.dart';
 
 /// Creates or edits an expense.
@@ -453,6 +453,9 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
       });
     }
 
+    final textTheme = Theme.of(context).textTheme;
+    final ready = !_saving && currency != null;
+
     return Scaffold(
       appBar: AppBar(
         leading: CloseButton(
@@ -466,15 +469,66 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
               onPressed: _delete,
               icon: const Icon(Icons.delete_outline),
             ),
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: FilledButton(
+              onPressed: ready ? () => _save(ledger, currency, fx) : null,
+              child: const Text('Save'),
+            ),
+          ),
         ],
       ),
       body: PageBody(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 48),
           children: [
+            // The amount is what the whole screen is for, so it is the
+            // largest thing on it.
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                _CurrencyButton(
+                  code: _currencyCode ?? ledger.group.defaultCurrency,
+                  onChanged: (code) => setState(() => _currencyCode = code),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: TextField(
+                    controller: _amount,
+                    autofocus: !widget.isEditing,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    textInputAction: TextInputAction.next,
+                    style: moneyStyle(textTheme.displaySmall!),
+                    decoration: InputDecoration(
+                      labelText: 'How much?',
+                      hintText: currency == null
+                          ? '0'
+                          : currency.formatPlain(0),
+                      prefixText: currency?.symbol == null
+                          ? null
+                          : '${currency!.symbol} ',
+                      border: InputBorder.none,
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+              ],
+            ),
+            if (currency != null &&
+                currency.code != ledger.group.defaultCurrency)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  'Stored in ${currency.code}. Balances in a group are '
+                  'always kept per currency, never converted.',
+                  style: textTheme.bodySmall,
+                ),
+              ),
+            const SizedBox(height: 16),
             TextField(
               controller: _description,
-              autofocus: !widget.isEditing,
               textCapitalization: TextCapitalization.sentences,
               decoration: const InputDecoration(
                 labelText: 'What was it?',
@@ -482,66 +536,33 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            // The details most expenses leave as they are, as chips rather
+            // than a field each.
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                Expanded(
-                  flex: 3,
-                  child: TextField(
-                    controller: _amount,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    decoration: InputDecoration(
-                      labelText: 'How much?',
-                      prefixText: currency?.symbol == null
-                          ? null
-                          : '${currency!.symbol} ',
-                    ),
-                    onChanged: (_) => setState(() {}),
-                  ),
+                _CategoryChip(
+                  value: _categoryId,
+                  onChanged: (id) => setState(() => _categoryId = id),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 2,
-                  child: CurrencyPicker(
-                    value: _currencyCode ?? ledger.group.defaultCurrency,
-                    label: '',
-                    onChanged: (code) => setState(() => _currencyCode = code),
-                  ),
+                ActionChip(
+                  avatar: const Icon(Icons.event_outlined),
+                  label: Text(_dayName(_date)),
+                  tooltip: 'Change the day',
+                  onPressed: _pickDate,
+                ),
+                _TimeChip(
+                  shown: _occurredAt?.toLocal(),
+                  onPick: device == null ? null : () => _pickTime(device),
+                  onClear: () => setState(() {
+                    _occurredAt = null;
+                    _zone = null;
+                  }),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            if (currency != null &&
-                currency.code != ledger.group.defaultCurrency)
-              Text(
-                'Stored in ${currency.code}. Balances in a group are '
-                'always kept per currency, never converted.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            const SizedBox(height: 16),
-            _CategoryPicker(
-              value: _categoryId,
-              onChanged: (id) => setState(() => _categoryId = id),
-            ),
-            const SizedBox(height: 8),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.event_outlined),
-              title: Text(DateFormat.yMMMEd().format(_date)),
-              trailing: const Icon(Icons.edit_calendar_outlined),
-              onTap: _pickDate,
-            ),
-            _TimeRow(
-              shown: _occurredAt?.toLocal(),
-              onPick: device == null ? null : () => _pickTime(device),
-              onClear: () => setState(() {
-                _occurredAt = null;
-                _zone = null;
-              }),
-            ),
-            const Divider(height: 32),
+            const SizedBox(height: 32),
             _PayerSection(
               ledger: ledger,
               currency: currency,
@@ -557,7 +578,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
               onPayersChanged: (next) => setState(() => _payers = next),
               onAmountEdited: () => setState(() {}),
             ),
-            const Divider(height: 32),
+            const SizedBox(height: 32),
             _SplitSection(
               ledger: ledger,
               currency: currency,
@@ -581,28 +602,62 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
                   padding: const EdgeInsets.all(12),
                   child: Text(
                     _error!,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    style: textTheme.bodyMedium?.copyWith(
                       color: Theme.of(context).colorScheme.onErrorContainer,
                     ),
                   ),
                 ),
               ),
             ],
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: _saving || currency == null
-                  ? null
-                  : () => _save(ledger, currency, fx),
-              icon: const Icon(Icons.check),
-              label: Text(widget.isEditing ? 'Save changes' : 'Add expense'),
-            ),
-
             if (widget.isEditing) ...[
-              const Divider(height: 48),
+              const SizedBox(height: 32),
               _History(entryId: widget.entryId!, ledger: ledger),
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  /// "Today", "Yesterday", or the date.
+  static String _dayName(DateTime day) {
+    final today = DateUtils.dateOnly(DateTime.now());
+    final daysAgo = today.difference(DateUtils.dateOnly(day)).inDays;
+    return switch (daysAgo) {
+      0 => 'Today',
+      1 => 'Yesterday',
+      _ => DateFormat.yMMMEd().format(day),
+    };
+  }
+}
+
+/// A section of the editor, named.
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle(this.text, {this.action});
+
+  final String text;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Semantics(
+              header: true,
+              child: Text(
+                text,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+            ),
+          ),
+          ?action,
+        ],
       ),
     );
   }
@@ -651,17 +706,13 @@ class _PayerSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Text('Paid by', style: Theme.of(context).textTheme.titleSmall),
-            const Spacer(),
-            TextButton(
-              onPressed: () => onToggleMultiple(!multiple),
-              child: Text(multiple ? 'One person' : 'Several people'),
-            ),
-          ],
+        _SectionTitle(
+          'Paid by',
+          action: TextButton(
+            onPressed: () => onToggleMultiple(!multiple),
+            child: Text(multiple ? 'One person' : 'Several people'),
+          ),
         ),
-        const SizedBox(height: 8),
         if (!multiple)
           Wrap(
             spacing: 8,
@@ -669,6 +720,14 @@ class _PayerSection extends StatelessWidget {
             children: [
               for (final member in ledger.members)
                 ChoiceChip(
+                  // The person's own picture says which one is chosen better
+                  // than a tick would.
+                  showCheckmark: false,
+                  avatar: MemberAvatar(
+                    ledger: ledger,
+                    member: member,
+                    radius: 12,
+                  ),
                   label: Text(
                     ledger.nameOfMember(member) +
                         (member.id == ledger.me?.id ? ' (you)' : ''),
@@ -800,8 +859,7 @@ class _SplitSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Split', style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 8),
+        const _SectionTitle('Split'),
         SegmentedButton<SplitKind>(
           segments: const [
             ButtonSegment(value: SplitKind.equal, label: Text('Equally')),
@@ -899,9 +957,9 @@ class _SplitSection extends StatelessWidget {
   }
 }
 
-/// Picks a category from the fixed global list.
-class _CategoryPicker extends ConsumerWidget {
-  const _CategoryPicker({required this.value, required this.onChanged});
+/// The category, as a chip that opens the fixed global list.
+class _CategoryChip extends ConsumerWidget {
+  const _CategoryChip({required this.value, required this.onChanged});
 
   final String? value;
   final ValueChanged<String?> onChanged;
@@ -910,37 +968,101 @@ class _CategoryPicker extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final categories =
         ref.watch(categoriesProvider).value ?? const <Category>[];
-    final scheme = Theme.of(context).colorScheme;
+    final chosen = categories.where((c) => c.id == value).firstOrNull;
 
-    // DropdownMenuEntry carries a leadingIcon of its own, so the icon and the
-    // name no longer need a hand-built Row to sit side by side.
-    return DropdownMenu<String?>(
-      initialSelection: categories.any((c) => c.id == value) ? value : null,
-      label: const Text('Category (optional)'),
-      enableFilter: true,
-      requestFocusOnTap: true,
-      menuHeight: 320,
-      expandedInsets: EdgeInsets.zero,
-      dropdownMenuEntries: [
-        DropdownMenuEntry(
-          value: null,
-          label: 'Uncategorised',
-          leadingIcon: Icon(
-            Icons.remove_rounded,
-            color: scheme.onSurfaceVariant,
-          ),
-        ),
-        for (final category in categories)
-          DropdownMenuEntry(
-            value: category.id,
-            label: category.name,
-            leadingIcon: Icon(
-              categoryIcon(category.icon),
-              color: scheme.onSurfaceVariant,
-            ),
-          ),
-      ],
-      onSelected: onChanged,
+    return ActionChip(
+      avatar: Icon(
+        chosen == null ? Icons.category_outlined : categoryIcon(chosen.icon),
+      ),
+      label: Text(chosen?.name ?? 'Uncategorised'),
+      tooltip: 'Change the category',
+      onPressed: () async {
+        final picked = await showModalBottomSheet<({String? id})>(
+          context: context,
+          showDragHandle: true,
+          isScrollControlled: true,
+          builder: (context) =>
+              _CategorySheet(categories: categories, value: value),
+        );
+        if (picked != null) onChanged(picked.id);
+      },
+    );
+  }
+}
+
+/// Every category, the current one marked.
+class _CategorySheet extends StatelessWidget {
+  const _CategorySheet({required this.categories, required this.value});
+
+  final List<Category> categories;
+  final String? value;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    Widget option(String? id, IconData icon, String name) => ListTile(
+      leading: Icon(icon),
+      title: Text(name),
+      selected: id == value,
+      trailing: id == value ? Icon(Icons.check, color: scheme.primary) : null,
+      onTap: () => Navigator.of(context).pop((id: id)),
+    );
+
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.6,
+      maxChildSize: 0.9,
+      builder: (context, controller) => ListView(
+        controller: controller,
+        children: [
+          option(null, Icons.remove_rounded, 'Uncategorised'),
+          for (final category in categories)
+            option(category.id, categoryIcon(category.icon), category.name),
+        ],
+      ),
+    );
+  }
+}
+
+/// The currency, as a tonal button beside the amount, opening Material's
+/// search view over every currency the device knows.
+class _CurrencyButton extends ConsumerWidget {
+  const _CurrencyButton({required this.code, required this.onChanged});
+
+  final String code;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final currencies = ref.watch(currenciesProvider).value ?? const {};
+    final codes = currencies.keys.toList()..sort();
+
+    return SearchAnchor(
+      viewHintText: 'Search currencies',
+      builder: (context, controller) => FilledButton.tonalIcon(
+        onPressed: controller.openView,
+        iconAlignment: IconAlignment.end,
+        icon: const Icon(Icons.arrow_drop_down),
+        label: Text(code),
+      ),
+      suggestionsBuilder: (context, controller) {
+        final query = controller.text.trim().toLowerCase();
+        return [
+          for (final option in codes)
+            if (query.isEmpty ||
+                option.toLowerCase().contains(query) ||
+                currencies[option]!.name.toLowerCase().contains(query))
+              ListTile(
+                title: Text(currencies[option]!.name),
+                leading: SizedBox(width: 48, child: Text(option)),
+                selected: option == code,
+                onTap: () {
+                  controller.closeView(option);
+                  onChanged(option);
+                },
+              ),
+        ];
+      },
     );
   }
 }
@@ -1003,8 +1125,8 @@ class _History extends ConsumerWidget {
 }
 
 /// When on the day it happened: optional, and cleared or changed here.
-class _TimeRow extends StatelessWidget {
-  const _TimeRow({
+class _TimeChip extends StatelessWidget {
+  const _TimeChip({
     required this.shown,
     required this.onPick,
     required this.onClear,
@@ -1020,24 +1142,19 @@ class _TimeRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final shown = this.shown;
-    final theme = Theme.of(context);
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: const Icon(Icons.schedule_outlined),
-      title: shown == null
-          ? Text(
-              'Add a time',
-              style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
-            )
-          : Text(DateFormat.jm().format(shown)),
-      trailing: shown == null
-          ? null
-          : IconButton(
-              tooltip: 'Remove the time',
-              onPressed: onClear,
-              icon: const Icon(Icons.close),
-            ),
-      onTap: onPick,
+    if (shown == null) {
+      return ActionChip(
+        avatar: const Icon(Icons.schedule_outlined),
+        label: const Text('Add a time'),
+        onPressed: onPick,
+      );
+    }
+    return InputChip(
+      avatar: const Icon(Icons.schedule_outlined),
+      label: Text(DateFormat.jm().format(shown)),
+      onPressed: onPick,
+      onDeleted: onClear,
+      deleteButtonTooltipMessage: 'Remove the time',
     );
   }
 }

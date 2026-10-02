@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+import 'package:opensplit_api/opensplit_api.dart' show AvatarKind, CoverKind;
 import 'package:uuid/uuid.dart';
 
 import '../../domain/settle/upi.dart';
@@ -94,6 +95,8 @@ final class DriftGroupRepository {
       defaultCurrency: defaultCurrency,
       isDirect: isDirect,
       simplifyDebts: true,
+      avatarKind: AvatarKind.initials,
+      coverKind: CoverKind.generated,
       createdBy: creator.id,
       createdAt: now,
     );
@@ -110,7 +113,7 @@ final class DriftGroupRepository {
     return (group: group, creator: creator);
   }
 
-  /// Writes a group's editable fields.
+  /// Writes a group's editable fields, how it looks included.
   Future<void> updateGroup(Group group) async {
     final trimmed = group.name.trim();
     if (trimmed.isEmpty) {
@@ -123,6 +126,13 @@ final class DriftGroupRepository {
           name: Value(trimmed),
           simplifyDebts: Value(group.simplifyDebts),
           archivedAt: Value(group.archivedAt),
+          avatarKind: Value(group.avatarKind),
+          avatarColor: Value(group.avatarColor),
+          avatarEmoji: Value(group.avatarEmoji),
+          avatarIcon: Value(group.avatarIcon),
+          avatarPhoto: Value(group.avatarPhoto),
+          coverKind: Value(group.coverKind),
+          coverPhoto: Value(group.coverPhoto),
           // Bumped on every local write.
         ),
       );

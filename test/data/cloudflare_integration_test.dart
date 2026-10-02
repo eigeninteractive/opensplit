@@ -728,6 +728,13 @@ void main() {
         host.client.getGroupsApi().putGroup(
           groupId: groupId,
           groupInput: api.GroupInput(
+            avatarKind: api.AvatarKind.initials,
+            avatarColor: null,
+            avatarEmoji: null,
+            avatarIcon: null,
+            avatarPhoto: null,
+            coverKind: api.CoverKind.generated,
+            coverPhoto: null,
             name: 'Goa trip',
             defaultCurrency: 'INR',
             isDirect: false,
@@ -862,7 +869,15 @@ void main() {
       final named = await _Device.guest();
       await fetch(
         named.client.getSyncApi().updateProfile(
-          profileUpdate: api.ProfileUpdate(displayName: 'Meera', upiVpa: null),
+          profileUpdate: api.ProfileUpdate(
+            avatarKind: api.AvatarKind.initials,
+            avatarColor: null,
+            avatarEmoji: null,
+            avatarIcon: null,
+            avatarPhoto: null,
+            displayName: 'Meera',
+            upiVpa: null,
+          ),
         ),
       );
       expect(
@@ -904,6 +919,11 @@ void main() {
       await fetch(
         ravi.client.getSyncApi().updateProfile(
           profileUpdate: api.ProfileUpdate(
+            avatarKind: api.AvatarKind.initials,
+            avatarColor: null,
+            avatarEmoji: null,
+            avatarIcon: null,
+            avatarPhoto: null,
             displayName: 'Ravi',
             upiVpa: 'ravi@okhdfcbank',
           ),
@@ -950,6 +970,13 @@ void main() {
         ravi.client.getGroupsApi().putGroup(
           groupId: g.groupId,
           groupInput: api.GroupInput(
+            avatarKind: api.AvatarKind.initials,
+            avatarColor: null,
+            avatarEmoji: null,
+            avatarIcon: null,
+            avatarPhoto: null,
+            coverKind: api.CoverKind.generated,
+            coverPhoto: null,
             name: 'Goa',
             defaultCurrency: 'INR',
             isDirect: false,
@@ -964,6 +991,13 @@ void main() {
         ravi.client.getGroupsApi().putGroup(
           groupId: g.groupId,
           groupInput: api.GroupInput(
+            avatarKind: api.AvatarKind.initials,
+            avatarColor: null,
+            avatarEmoji: null,
+            avatarIcon: null,
+            avatarPhoto: null,
+            coverKind: api.CoverKind.generated,
+            coverPhoto: null,
             name: 'Goa',
             defaultCurrency: 'INR',
             isDirect: false,
@@ -1007,6 +1041,11 @@ void main() {
       await fetch(
         ravi.client.getSyncApi().updateProfile(
           profileUpdate: api.ProfileUpdate(
+            avatarKind: api.AvatarKind.initials,
+            avatarColor: null,
+            avatarEmoji: null,
+            avatarIcon: null,
+            avatarPhoto: null,
             displayName: 'Ravi',
             upiVpa: 'ravi@oksbi',
           ),
@@ -1016,7 +1055,15 @@ void main() {
       // Bank accounts close.
       final cleared = await fetch(
         ravi.client.getSyncApi().updateProfile(
-          profileUpdate: api.ProfileUpdate(displayName: 'Ravi K', upiVpa: null),
+          profileUpdate: api.ProfileUpdate(
+            avatarKind: api.AvatarKind.initials,
+            avatarColor: null,
+            avatarEmoji: null,
+            avatarIcon: null,
+            avatarPhoto: null,
+            displayName: 'Ravi K',
+            upiVpa: null,
+          ),
         ),
       );
       expect(cleared.upiVpa, isNull);
@@ -1030,7 +1077,15 @@ void main() {
       final g = await seededGroup(ravi);
       await fetch(
         ravi.client.getSyncApi().updateProfile(
-          profileUpdate: api.ProfileUpdate(displayName: 'Ravi', upiVpa: null),
+          profileUpdate: api.ProfileUpdate(
+            avatarKind: api.AvatarKind.initials,
+            avatarColor: null,
+            avatarEmoji: null,
+            avatarIcon: null,
+            avatarPhoto: null,
+            displayName: 'Ravi',
+            upiVpa: null,
+          ),
         ),
       );
 
@@ -1082,6 +1137,7 @@ void main() {
         final profiles = DriftProfileRepository(device, outbox: queue);
         await profiles.upsert(
           Profile(
+            avatarKind: api.AvatarKind.initials,
             id: ravi.profileId,
             displayName: 'Ravi',
             upiVpa: 'ravi@okhdfcbank',

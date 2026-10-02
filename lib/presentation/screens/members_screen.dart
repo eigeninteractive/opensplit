@@ -10,7 +10,9 @@ import '../feedback.dart';
 import '../navigation.dart';
 import '../widgets/group_link_sheet.dart';
 import '../widgets/invite_sheet.dart';
+import '../widgets/avatar_view.dart';
 import '../widgets/page_body.dart';
+import '../widgets/segmented_list.dart';
 
 class MembersScreen extends ConsumerWidget {
   const MembersScreen({super.key, required this.groupId});
@@ -20,7 +22,6 @@ class MembersScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ledger = ref.watch(groupLedgerProvider(groupId));
-    final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
@@ -48,109 +49,113 @@ class MembersScreen extends ConsumerWidget {
                       label: const Text('Share an invite link'),
                     ),
                   ),
-                  for (final member in ledger.members)
-                    ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: member.isPlaceholder
-                            ? scheme.surfaceContainerHighest
-                            : scheme.primaryContainer,
-                        foregroundColor: member.isPlaceholder
-                            ? scheme.onSurfaceVariant
-                            : scheme.onPrimaryContainer,
-                        child: Text(
-                          ledger
-                                  .nameOfMember(member)
-                                  .characters
-                                  .firstOrNull
-                                  ?.toUpperCase() ??
-                              '?',
-                        ),
-                      ),
-                      title: Text(
-                        ledger.nameOfMember(member) +
-                            (member.id == ledger.me?.id ? ' (you)' : ''),
-                      ),
-                      subtitle: Text(
-                        ledger.upiOf(member) != null
-                            // The handle is the useful thing to see at a glance
-                            // here: it is what makes settling with this person
-                            // one tap instead of a chat message asking for it.
-                            ? ledger.upiOf(member)!
-                            : member.isPlaceholder
-                            // Blunt on purpose: a placeholder is a real member
-                            // with real money attached, not a draft.
-                            ? 'Added by someone here — no account yet'
-                            : 'Member',
-                      ),
-                      trailing: PopupMenuButton<String>(
-                        onSelected: (action) => switch (action) {
-                          'invite' => showInviteSheet(context, ref, member),
-                          'me' => context.go('/account'),
-                          'rename' => _rename(context, ref, member),
-                          'upi' => _setUpi(context, ref, member),
-                          'remove' => _remove(context, ref, member, ledger),
-                          _ => null,
-                        },
-                        // Only placeholders can be renamed or given a payment
-                        // handle here, and that is not a permission rule — it
-                        // is what the fields are.
-                        itemBuilder: (context) {
-                          final mine = member.id == ledger.me?.id;
-
-                          // Your own row, or a placeholder's.
-                          final editable = member.isPlaceholder || mine;
-
-                          // Removing somebody also cuts off their access to the
-                          // group, so it is offered only once nothing is owed
-                          // either way.
-                          final removable =
-                              !mine && ledger.isSettledUp(member.id);
-
-                          return [
-                            if (member.isPlaceholder)
-                              const PopupMenuItem(
-                                value: 'invite',
-                                child: Text('Send invite link'),
-                              ),
-                            if (member.isPlaceholder && editable) ...[
-                              const PopupMenuItem(
-                                value: 'rename',
-                                child: Text('Rename'),
-                              ),
-                              PopupMenuItem(
-                                value: 'upi',
-                                child: Text(
-                                  member.upiVpa == null
-                                      ? 'Add UPI ID'
-                                      : 'Change UPI ID',
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: SegmentedList(
+                      children: [
+                        for (final member in ledger.members)
+                          ListTile(
+                            leading: MemberAvatar(
+                              ledger: ledger,
+                              member: member,
+                            ),
+                            title: Text(
+                              ledger.nameOfMember(member) +
+                                  (member.id == ledger.me?.id ? ' (you)' : ''),
+                            ),
+                            subtitle: Text(
+                              ledger.upiOf(member) != null
+                                  // The handle is the useful thing to see at a glance
+                                  // here: it is what makes settling with this person
+                                  // one tap instead of a chat message asking for it.
+                                  ? ledger.upiOf(member)!
+                                  : member.isPlaceholder
+                                  // Blunt on purpose: a placeholder is a real member
+                                  // with real money attached, not a draft.
+                                  ? 'Added by someone here — no account yet'
+                                  : 'Member',
+                            ),
+                            trailing: PopupMenuButton<String>(
+                              onSelected: (action) => switch (action) {
+                                'invite' => showInviteSheet(
+                                  context,
+                                  ref,
+                                  member,
                                 ),
-                              ),
-                            ],
-                            if (mine)
-                              const PopupMenuItem(
-                                value: 'me',
-                                child: Text('Edit your name and UPI ID'),
-                              ),
-                            if (removable)
-                              const PopupMenuItem(
-                                value: 'remove',
-                                child: Text('Remove from group'),
-                              )
-                            // Said rather than silently withheld: an absent
-                            // menu item reads as a bug, and the reason here is
-                            // something the group can act on.
-                            else if (!mine)
-                              PopupMenuItem(
-                                enabled: false,
-                                child: Text(
-                                  '${ledger.nameOfMember(member)} is not '
-                                  'settled up',
+                                'me' => context.go('/account'),
+                                'rename' => _rename(context, ref, member),
+                                'upi' => _setUpi(context, ref, member),
+                                'remove' => _remove(
+                                  context,
+                                  ref,
+                                  member,
+                                  ledger,
                                 ),
-                              ),
-                          ];
-                        },
-                      ),
+                                _ => null,
+                              },
+                              // Only placeholders can be renamed or given a payment
+                              // handle here, and that is not a permission rule — it
+                              // is what the fields are.
+                              itemBuilder: (context) {
+                                final mine = member.id == ledger.me?.id;
+
+                                // Your own row, or a placeholder's.
+                                final editable = member.isPlaceholder || mine;
+
+                                // Removing somebody also cuts off their access to the
+                                // group, so it is offered only once nothing is owed
+                                // either way.
+                                final removable =
+                                    !mine && ledger.isSettledUp(member.id);
+
+                                return [
+                                  if (member.isPlaceholder)
+                                    const PopupMenuItem(
+                                      value: 'invite',
+                                      child: Text('Send invite link'),
+                                    ),
+                                  if (member.isPlaceholder && editable) ...[
+                                    const PopupMenuItem(
+                                      value: 'rename',
+                                      child: Text('Rename'),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'upi',
+                                      child: Text(
+                                        member.upiVpa == null
+                                            ? 'Add UPI ID'
+                                            : 'Change UPI ID',
+                                      ),
+                                    ),
+                                  ],
+                                  if (mine)
+                                    const PopupMenuItem(
+                                      value: 'me',
+                                      child: Text('Edit your name and UPI ID'),
+                                    ),
+                                  if (removable)
+                                    const PopupMenuItem(
+                                      value: 'remove',
+                                      child: Text('Remove from group'),
+                                    )
+                                  // Said rather than silently withheld: an absent
+                                  // menu item reads as a bug, and the reason here is
+                                  // something the group can act on.
+                                  else if (!mine)
+                                    PopupMenuItem(
+                                      enabled: false,
+                                      child: Text(
+                                        '${ledger.nameOfMember(member)} is not '
+                                        'settled up',
+                                      ),
+                                    ),
+                                ];
+                              },
+                            ),
+                          ),
+                      ],
                     ),
+                  ),
                   const Padding(
                     padding: EdgeInsets.fromLTRB(16, 24, 16, 0),
                     child: Text(

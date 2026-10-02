@@ -14,6 +14,13 @@ extension GroupFromWire on api.Group {
     defaultCurrency: defaultCurrency,
     isDirect: isDirect,
     simplifyDebts: simplifyDebts,
+    avatarKind: avatarKind,
+    avatarColor: avatarColor,
+    avatarEmoji: avatarEmoji,
+    avatarIcon: avatarIcon,
+    avatarPhoto: avatarPhoto,
+    coverKind: coverKind,
+    coverPhoto: coverPhoto,
     createdBy: createdBy,
     createdAt: createdAt,
     archivedAt: archivedAt,
@@ -87,6 +94,11 @@ extension ProfileFromWire on api.Profile {
     id: id,
     displayName: displayName,
     upiVpa: upiVpa,
+    avatarKind: avatarKind,
+    avatarColor: avatarColor,
+    avatarEmoji: avatarEmoji,
+    avatarIcon: avatarIcon,
+    avatarPhoto: avatarPhoto,
     updatedAt: updatedAt,
   );
 }
@@ -131,6 +143,13 @@ extension GroupToWire on Group {
     isDirect: isDirect,
     simplifyDebts: simplifyDebts,
     archivedAt: archivedAt?.toUtc(),
+    avatarKind: avatarKind,
+    avatarColor: avatarColor,
+    avatarEmoji: avatarEmoji,
+    avatarIcon: avatarIcon,
+    avatarPhoto: avatarPhoto,
+    coverKind: coverKind,
+    coverPhoto: coverPhoto,
     creatorId: creator.id,
     creatorName: creator.displayName,
   );
@@ -145,6 +164,13 @@ extension MemberToWire on Member {
 }
 
 extension ProfileToWire on Profile {
-  api.ProfileUpdate toUpdate() =>
-      api.ProfileUpdate(displayName: displayName, upiVpa: upiVpa);
+  api.ProfileUpdate toUpdate() => api.ProfileUpdate(
+    displayName: displayName,
+    upiVpa: upiVpa,
+    avatarKind: avatarKind,
+    avatarColor: avatarColor,
+    avatarEmoji: avatarEmoji,
+    avatarIcon: avatarIcon,
+    avatarPhoto: avatarPhoto,
+  );
 }

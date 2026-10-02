@@ -1,7 +1,7 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "d030e0b6-b2ec-44c0-bb31-d2c3874bb633",
+  "id": "6ac080d4-f4b5-4906-880a-e81a1df1e0e1",
   "prevIds": [
     "00000000-0000-0000-0000-000000000000"
   ],
@@ -199,6 +199,56 @@
       "default": null,
       "generated": null,
       "name": "upi_vpa",
+      "entityType": "columns",
+      "table": "profiles"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'initials'",
+      "generated": null,
+      "name": "avatar_kind",
+      "entityType": "columns",
+      "table": "profiles"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "avatar_color",
+      "entityType": "columns",
+      "table": "profiles"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "avatar_emoji",
+      "entityType": "columns",
+      "table": "profiles"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "avatar_icon",
+      "entityType": "columns",
+      "table": "profiles"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "avatar_photo",
       "entityType": "columns",
       "table": "profiles"
     },
@@ -823,6 +873,24 @@
       "name": "user_email_unique",
       "entityType": "uniques",
       "table": "user"
+    },
+    {
+      "value": "(\"avatar_kind\" = 'emoji') = (\"avatar_emoji\" is not null)",
+      "name": "profiles_avatar_emoji",
+      "entityType": "checks",
+      "table": "profiles"
+    },
+    {
+      "value": "(\"avatar_kind\" = 'icon') = (\"avatar_icon\" is not null)",
+      "name": "profiles_avatar_icon",
+      "entityType": "checks",
+      "table": "profiles"
+    },
+    {
+      "value": "(\"avatar_kind\" = 'photo') = (\"avatar_photo\" is not null)",
+      "name": "profiles_avatar_photo",
+      "entityType": "checks",
+      "table": "profiles"
     }
   ],
   "renames": []

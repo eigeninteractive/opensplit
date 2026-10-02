@@ -1,0 +1,13 @@
+# pnpm's settings for this package (there is no workspace; pnpm 11 reads its
+# settings from this file regardless).
+
+# Dependencies allowed to run install scripts. pnpm refuses any other, so a new
+# one that wants to run code at install time has to be read about and added here.
+allowBuilds:
+  # Fetches its native binary.
+  esbuild: true
+  # Bakes FIREBASE_WEBAPP_CONFIG into the SDK for auto-init; the worker passes
+  # its config explicitly.
+  "@firebase/util": false
+  # Prints a version-scheme warning, nothing else.
+  protobufjs: false

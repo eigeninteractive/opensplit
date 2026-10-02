@@ -3,6 +3,9 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:opensplit_api/src/model/avatar_color.dart';
+import 'package:opensplit_api/src/model/avatar_kind.dart';
+import 'package:opensplit_api/src/model/avatar_icon.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 part 'profile.g.dart';
@@ -22,6 +25,16 @@ class Profile {
 
     required this.upiVpa,
 
+    required this.avatarKind,
+
+    required this.avatarColor,
+
+    required this.avatarEmoji,
+
+    required this.avatarIcon,
+
+    required this.avatarPhoto,
+
     required this.updatedAt,
 
     required this.deletedAt,
@@ -36,6 +49,36 @@ class Profile {
   @JsonKey(name: r'upiVpa', required: true, includeIfNull: true)
   final String? upiVpa;
 
+  @JsonKey(
+    name: r'avatarKind',
+    required: true,
+    includeIfNull: false,
+    unknownEnumValue: AvatarKind.unknownDefaultOpenApi,
+  )
+  final AvatarKind avatarKind;
+
+  @JsonKey(
+    name: r'avatarColor',
+    required: true,
+    includeIfNull: true,
+    unknownEnumValue: AvatarColor.unknownDefaultOpenApi,
+  )
+  final AvatarColor? avatarColor;
+
+  @JsonKey(name: r'avatarEmoji', required: true, includeIfNull: true)
+  final String? avatarEmoji;
+
+  @JsonKey(
+    name: r'avatarIcon',
+    required: true,
+    includeIfNull: true,
+    unknownEnumValue: AvatarIcon.unknownDefaultOpenApi,
+  )
+  final AvatarIcon? avatarIcon;
+
+  @JsonKey(name: r'avatarPhoto', required: true, includeIfNull: true)
+  final String? avatarPhoto;
+
   @JsonKey(name: r'updatedAt', required: true, includeIfNull: false)
   final DateTime updatedAt;
 
@@ -49,6 +92,11 @@ class Profile {
           other.id == id &&
           other.displayName == displayName &&
           other.upiVpa == upiVpa &&
+          other.avatarKind == avatarKind &&
+          other.avatarColor == avatarColor &&
+          other.avatarEmoji == avatarEmoji &&
+          other.avatarIcon == avatarIcon &&
+          other.avatarPhoto == avatarPhoto &&
           other.updatedAt == updatedAt &&
           other.deletedAt == deletedAt;
 
@@ -57,6 +105,11 @@ class Profile {
       id.hashCode +
       (displayName == null ? 0 : displayName.hashCode) +
       (upiVpa == null ? 0 : upiVpa.hashCode) +
+      avatarKind.hashCode +
+      (avatarColor == null ? 0 : avatarColor.hashCode) +
+      (avatarEmoji == null ? 0 : avatarEmoji.hashCode) +
+      (avatarIcon == null ? 0 : avatarIcon.hashCode) +
+      (avatarPhoto == null ? 0 : avatarPhoto.hashCode) +
       updatedAt.hashCode +
       (deletedAt == null ? 0 : deletedAt.hashCode);
 

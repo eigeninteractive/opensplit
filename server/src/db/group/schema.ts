@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 import type { EntrySnapshot, GroupEventPayload, LinkEventPayload, MemberEventPayload } from "../../schemas/ledger";
+import { avatarChecks, avatarColumns, coverChecks, coverColumns } from "../appearance";
 import type { LinkKind } from "../d1/schema";
 
 /**
@@ -65,6 +66,8 @@ export const meta = sqliteTable(
     /** A 1:1 split is a two-member group with this set. */
     isDirect: integer("is_direct", { mode: "boolean" }).notNull().default(false),
     simplifyDebts: integer("simplify_debts", { mode: "boolean" }).notNull().default(true),
+    ...avatarColumns(),
+    ...coverColumns(),
     createdBy: text("created_by")
       .notNull()
       .references(() => members.id),
@@ -73,7 +76,7 @@ export const meta = sqliteTable(
     updatedAt: text("updated_at").notNull(),
     seq: integer("seq").notNull(),
   },
-  (table) => [check("meta_name_not_blank", sql`length(trim(${table.name})) > 0`)],
+  (table) => [check("meta_name_not_blank", sql`length(trim(${table.name})) > 0`), ...avatarChecks("meta", table), ...coverChecks("meta", table)],
 );
 
 /** What remains after a group is collected, so the feed can tell devices to drop it. */

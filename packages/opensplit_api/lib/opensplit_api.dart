@@ -20,8 +20,12 @@ export 'package:opensplit_api/src/api/sync_api.dart';
 
 export 'package:opensplit_api/src/model/account.dart';
 export 'package:opensplit_api/src/model/account_deletion.dart';
+export 'package:opensplit_api/src/model/avatar_color.dart';
+export 'package:opensplit_api/src/model/avatar_icon.dart';
+export 'package:opensplit_api/src/model/avatar_kind.dart';
 export 'package:opensplit_api/src/model/category.dart';
 export 'package:opensplit_api/src/model/change_page.dart';
+export 'package:opensplit_api/src/model/cover_kind.dart';
 export 'package:opensplit_api/src/model/currency.dart';
 export 'package:opensplit_api/src/model/device.dart';
 export 'package:opensplit_api/src/model/device_forgotten.dart';

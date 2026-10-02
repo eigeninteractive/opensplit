@@ -25,8 +25,16 @@ CREATE TABLE `profiles` (
 	`id` text PRIMARY KEY,
 	`display_name` text,
 	`upi_vpa` text,
+	`avatar_kind` text DEFAULT 'initials' NOT NULL,
+	`avatar_color` text,
+	`avatar_emoji` text,
+	`avatar_icon` text,
+	`avatar_photo` text,
 	`updated_at` text NOT NULL,
-	`deleted_at` text
+	`deleted_at` text,
+	CONSTRAINT "profiles_avatar_emoji" CHECK(("avatar_kind" = 'emoji') = ("avatar_emoji" is not null)),
+	CONSTRAINT "profiles_avatar_icon" CHECK(("avatar_kind" = 'icon') = ("avatar_icon" is not null)),
+	CONSTRAINT "profiles_avatar_photo" CHECK(("avatar_kind" = 'photo') = ("avatar_photo" is not null))
 );
 --> statement-breakpoint
 CREATE TABLE `purged_groups` (

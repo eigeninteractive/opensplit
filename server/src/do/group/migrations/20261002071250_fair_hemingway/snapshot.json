@@ -1,7 +1,7 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "bc2c0182-6cae-4c4b-8e05-b9bbf894520d",
+  "id": "f612090c-d005-4921-9693-cb1974b0d8db",
   "prevIds": [
     "00000000-0000-0000-0000-000000000000"
   ],
@@ -708,6 +708,76 @@
       "type": "text",
       "notNull": true,
       "autoincrement": false,
+      "default": "'initials'",
+      "generated": null,
+      "name": "avatar_kind",
+      "entityType": "columns",
+      "table": "meta"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "avatar_color",
+      "entityType": "columns",
+      "table": "meta"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "avatar_emoji",
+      "entityType": "columns",
+      "table": "meta"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "avatar_icon",
+      "entityType": "columns",
+      "table": "meta"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "avatar_photo",
+      "entityType": "columns",
+      "table": "meta"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'generated'",
+      "generated": null,
+      "name": "cover_kind",
+      "entityType": "columns",
+      "table": "meta"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "cover_photo",
+      "entityType": "columns",
+      "table": "meta"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
       "default": null,
       "generated": null,
       "name": "created_by",
@@ -1267,6 +1337,30 @@
     {
       "value": "length(trim(\"name\")) > 0",
       "name": "meta_name_not_blank",
+      "entityType": "checks",
+      "table": "meta"
+    },
+    {
+      "value": "(\"avatar_kind\" = 'emoji') = (\"avatar_emoji\" is not null)",
+      "name": "meta_avatar_emoji",
+      "entityType": "checks",
+      "table": "meta"
+    },
+    {
+      "value": "(\"avatar_kind\" = 'icon') = (\"avatar_icon\" is not null)",
+      "name": "meta_avatar_icon",
+      "entityType": "checks",
+      "table": "meta"
+    },
+    {
+      "value": "(\"avatar_kind\" = 'photo') = (\"avatar_photo\" is not null)",
+      "name": "meta_avatar_photo",
+      "entityType": "checks",
+      "table": "meta"
+    },
+    {
+      "value": "(\"cover_kind\" = 'photo') = (\"cover_photo\" is not null)",
+      "name": "meta_cover_photo",
       "entityType": "checks",
       "table": "meta"
     }

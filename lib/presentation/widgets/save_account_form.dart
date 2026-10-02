@@ -10,15 +10,16 @@ import '../../data/auth/google_sign_in_gateway.dart';
 import '../../domain/auth_service.dart';
 import '../navigation.dart';
 
-/// Attaches a real account to an anonymous session.
-class AccountSection extends ConsumerStatefulWidget {
-  const AccountSection({super.key});
+/// Attaches an email address or Google to a guest session, or signs in to the
+/// account either already belongs to.
+class SaveAccountForm extends ConsumerStatefulWidget {
+  const SaveAccountForm({super.key});
 
   @override
-  ConsumerState<AccountSection> createState() => _AccountSectionState();
+  ConsumerState<SaveAccountForm> createState() => _SaveAccountFormState();
 }
 
-class _AccountSectionState extends ConsumerState<AccountSection> {
+class _SaveAccountFormState extends ConsumerState<SaveAccountForm> {
   final _email = TextEditingController();
   final _code = TextEditingController();
 
@@ -199,46 +200,11 @@ class _AccountSectionState extends ConsumerState<AccountSection> {
 
   @override
   Widget build(BuildContext context) {
-    final account = ref.watch(accountProvider).value;
     final scheme = Theme.of(context).colorScheme;
-
-    if (account == null) {
-      return const SizedBox.shrink();
-    }
-
-    if (!account.isAnonymous) {
-      return ListTile(
-        contentPadding: EdgeInsets.zero,
-        leading: const Icon(Icons.verified_user_outlined),
-        title: const Text('Your account is saved'),
-        subtitle: Text(
-          account.email == null
-              ? 'You can sign in on another device.'
-              : 'Signed in as ${account.email}. You can sign in on another '
-                    'device with this address.',
-        ),
-        isThreeLine: account.email != null,
-      );
-    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          'Save your account',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Your groups are synchronized, but this device is the only way back '
-          'into this guest account, and only while you open OpenSplit at '
-          'least once a year. Adding an email address lets you recover it and '
-          'use OpenSplit on more than one device.',
-          style: Theme.of(
-            context,
-          ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-        ),
-        const SizedBox(height: 12),
         TextField(
           controller: _email,
           enabled: !_codeSent,

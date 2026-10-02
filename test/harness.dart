@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:opensplit/application/backend_providers.dart';
 import 'package:opensplit/application/local_providers.dart';
 import 'package:opensplit/application/preferences_providers.dart';
@@ -22,8 +23,12 @@ Widget signedInApp({
   required SharedPreferences prefs,
   required Widget child,
   String accountId = testAccountId,
+
+  /// Anything else a test needs to supply, such as who the account is.
+  List<Override> overrides = const [],
 }) => ProviderScope(
   overrides: [
+    ...overrides,
     sharedPreferencesProvider.overrideWithValue(prefs),
     // Supplied directly, so the test's in-memory database is used instead of
     // the per-account file the app would open.

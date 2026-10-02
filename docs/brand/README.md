@@ -29,11 +29,16 @@ is a green harmonised toward the seed, and you owe is the scheme's `error`.
 ## Type
 
 - All text is **Instrument Sans**, applied to Material 3's unmodified type scale.
-- Every amount is **JetBrains Mono** with tabular figures, through `moneyStyle`.
+- Every amount is Instrument Sans with **tabular figures**, through
+  `moneyStyle`, so amounts line up in a column and hold still as they change.
+  An amount's prominence comes from the type scale step it is set in, not
+  from a second face.
+- There is no second face. The sign-in email sets its code the same way, and
+  the static site leaves inline code to the reader's own monospace.
 
-Both faces are bundled under `assets/google_fonts/` rather than fetched; see the
-comments in `pubspec.yaml`. The static site serves the same files from `/fonts`,
-so the pages and the app cannot drift onto different cuts of either face.
+The face is bundled under `assets/google_fonts/` rather than fetched; see the
+comments in `pubspec.yaml`. The static site serves the same files from
+`/fonts`, so the pages and the app cannot drift onto different cuts of it.
 
 ## The mark
 
@@ -70,7 +75,7 @@ Generated, never edited by hand:
 | `dart run tool/brand_icons.dart` | the favicon and the notification icon, after the command above | the transparent artwork in `assets/icon/` |
 | `dart run flutter_native_splash:create` | the native splash screens | `assets/splash/`, configured in `flutter_native_splash.yaml` |
 | `flutter test tool/screenshots_test.dart` | `site/store/screenshot-*.png` and `web-app.png` | the real screens over demo data |
-| `python3 tool/store_graphics.py` | `site/store/og-card.png` and `feature-graphic.jpg` | the balances screenshot, the mark's geometry and the bundled font |
+| `python3 tool/store_graphics.py` | `site/store/og-card.png` and `feature-graphic.jpg`, and `site/email/wordmark.png` for the sign-in email | the balances screenshot, the mark's geometry and the bundled font |
 
 `assets/icon/icon.png` is opaque because iOS and legacy Android icons cannot
 carry alpha. The adaptive foreground keeps the mark inside the circle a

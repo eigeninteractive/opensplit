@@ -3,6 +3,7 @@ import { z } from "@hono/zod-openapi";
 import { linkKinds } from "../db/d1/schema";
 import * as tables from "../db/group/schema";
 import { ProfileSchema } from "./account";
+import { avatarFields, avatarRefinements, coverFields, coverRefinements, refineAvatar, refineCover } from "./appearance";
 import { CurrencyCodeSchema, createSelectSchema, DateSchema, IdSchema, NameSchema, SeqSchema, TimestampSchema, TimeZoneSchema, UpiVpaSchema } from "./common";
 
 /**
@@ -105,6 +106,8 @@ const groupRow = createSelectSchema(tables.meta, {
   id: () => IdSchema,
   name: () => NameSchema,
   defaultCurrency: () => CurrencyCodeSchema,
+  ...avatarRefinements,
+  ...coverRefinements,
   createdBy: () => IdSchema,
   createdAt: () => TimestampSchema,
   archivedAt: () => TimestampSchema,
@@ -119,7 +122,12 @@ export const GroupSchema = groupRow.openapi("Group");
  * creator's member row, in one change. `defaultCurrency`, `isDirect` and the
  * creator are read only then: afterwards they describe how the group began.
  */
-export const GroupInputSchema = groupRow.pick({ name: true, defaultCurrency: true, isDirect: true, simplifyDebts: true, archivedAt: true }).extend({ creatorId: memberRow.shape.id, creatorName: memberRow.shape.displayName }).openapi("GroupInput");
+export const GroupInputSchema = groupRow
+  .pick({ name: true, defaultCurrency: true, isDirect: true, simplifyDebts: true, archivedAt: true, ...avatarFields, ...coverFields })
+  .extend({ creatorId: memberRow.shape.id, creatorName: memberRow.shape.displayName })
+  .superRefine(refineAvatar)
+  .superRefine(refineCover)
+  .openapi("GroupInput");
 
 export const InviteSchema = createSelectSchema(tables.invites, {
   token: () => IdSchema,

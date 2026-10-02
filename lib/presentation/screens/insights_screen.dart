@@ -9,6 +9,7 @@ import '../../domain/analytics/analytics_query.dart';
 import '../../domain/money_format.dart';
 import '../navigation.dart';
 import '../theme.dart';
+import '../widgets/avatar_view.dart';
 import '../widgets/export_button.dart';
 import '../widgets/page_body.dart';
 
@@ -109,7 +110,12 @@ class InsightsScreen extends ConsumerWidget {
                                   label: const Text('Clear filters'),
                                 ),
                               ),
-                            const SizedBox(height: 8),
+                            _Total(
+                              buckets: ref.watch(
+                                spendByCategoryProvider(groupId),
+                              ),
+                              currencies: currencies,
+                            ),
                             _Section(
                               title: 'By category',
                               buckets: ref.watch(
@@ -168,6 +174,8 @@ class _MemberFilter extends ConsumerWidget {
       children: [
         for (final member in ledger.members)
           FilterChip(
+            showCheckmark: false,
+            avatar: MemberAvatar(ledger: ledger, member: member, radius: 12),
             label: Text(ledger.nameOfMember(member)),
             selected: filter.memberId == member.id,
             onSelected: (selected) => onChanged(
@@ -206,14 +214,22 @@ class _Section extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 16),
-        Text(title, style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 24),
+        Semantics(
+          header: true,
+          child: Text(
+            title,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+        ),
         if (subtitle != null) ...[
           const SizedBox(height: 2),
           Text(subtitle!, style: Theme.of(context).textTheme.bodySmall),
         ],
         const SizedBox(height: 8),
-        Card.outlined(
+        Card.filled(
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Column(
@@ -267,23 +283,50 @@ class _ShareBar extends StatelessWidget {
   final double fraction;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+  Widget build(BuildContext context) => ExcludeSemantics(
+    child: LinearProgressIndicator(value: fraction.clamp(0.0, 1.0)),
+  );
+}
 
-    return ExcludeSemantics(
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(3),
-        child: SizedBox(
-          height: 6,
-          child: ColoredBox(
-            color: scheme.surfaceContainerHighest,
-            child: FractionallySizedBox(
-              alignment: AlignmentDirectional.centerStart,
-              widthFactor: fraction.clamp(0.0, 1.0),
-              child: ColoredBox(color: scheme.primary),
+/// Everything the current filters cover, in the chosen currency: the screen's
+/// headline.
+class _Total extends StatelessWidget {
+  const _Total({required this.buckets, required this.currencies});
+
+  final AsyncValue<List<SpendBucket>> buckets;
+  final Map<String, Currency> currencies;
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = buckets.value ?? const <SpendBucket>[];
+    if (rows.isEmpty) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    final total = rows.fold(0, (sum, bucket) => sum + bucket.amountMinor);
+    final count = rows.fold(0, (sum, bucket) => sum + bucket.entryCount);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 16, 4, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Spent',
+            style: theme.textTheme.titleSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
-        ),
+          Text(
+            formatMoney(currencies[rows.first.currency], total),
+            style: moneyStyle(theme.textTheme.displaySmall!),
+          ),
+          Text(
+            '$count ${count == 1 ? 'expense' : 'expenses'}',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -317,9 +360,8 @@ class _Results extends ConsumerWidget {
             ),
           ),
         ),
-        SliverList.separated(
+        SliverList.builder(
           itemCount: results.length,
-          separatorBuilder: (_, _) => const Divider(height: 1),
           itemBuilder: (context, index) {
             final entry = results[index];
             return ListTile(

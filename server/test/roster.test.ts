@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { defaultGroupLook } from "../src/db/appearance";
 
 import { deleteEntry, editGroup, editMember, evenly, freshId, makeGroup, makeGroupOfTwo, ok, PRIYA, RAVI, refusal, saveEntry, stub, ZARA } from "./group";
 
@@ -143,7 +144,7 @@ describe("the group itself", () => {
 
   it("cannot be claimed at an id somebody else is already using", async () => {
     const { groupId } = await makeGroup();
-    const refused = refusal(await stub(groupId).putGroup(groupId, { name: "Mine now", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, creatorId: freshId("m"), creatorName: "Zara" }, ZARA));
+    const refused = refusal(await stub(groupId).putGroup(groupId, { name: "Mine now", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, ...defaultGroupLook, creatorId: freshId("m"), creatorName: "Zara" }, ZARA));
 
     // Somebody writing to an id that is taken is a stranger to that group.
     expect(refused.code).toBe("not_member");
@@ -151,7 +152,7 @@ describe("the group itself", () => {
 
   it("answers the account that made it idempotently, for a retry whose response was lost", async () => {
     const { groupId, group } = await makeGroup();
-    const again = ok(await stub(groupId).putGroup(groupId, { name: "Goa trip", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, creatorId: `${groupId}-ravi`, creatorName: "Ravi" }, RAVI));
+    const again = ok(await stub(groupId).putGroup(groupId, { name: "Goa trip", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, ...defaultGroupLook, creatorId: `${groupId}-ravi`, creatorName: "Ravi" }, RAVI));
 
     expect(again.seq).toBe(group.seq);
   });
@@ -160,7 +161,7 @@ describe("the group itself", () => {
     const { groupId } = await makeGroup();
     await stub(groupId).forgetProfile(RAVI, null);
 
-    const refused = refusal(await stub(groupId).putGroup(groupId, { name: "Back again", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, creatorId: freshId("m"), creatorName: "Ravi" }, RAVI));
+    const refused = refusal(await stub(groupId).putGroup(groupId, { name: "Back again", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, ...defaultGroupLook, creatorId: freshId("m"), creatorName: "Ravi" }, RAVI));
     expect(refused.code).toBe("group_purged");
   });
 });

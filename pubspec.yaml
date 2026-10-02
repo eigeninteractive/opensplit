@@ -80,6 +80,7 @@ dependencies:
   # happened. Dart itself only gives abbreviations like "IST".
   flutter_timezone: ^5.1.0
   flutter_secure_storage: ^11.2.0
+  characters: ^1.4.1
 dev_dependencies:
   args: ^2.7.0
   flutter_test:
@@ -132,11 +133,10 @@ flutter:
   # present it resolves from the bundle, and allowRuntimeFetching is off in
   # main.dart so a packaging miss throws instead of reaching for the network.
   #
-  # The brand faces need no `fonts:` entry of their own: google_fonts matches
-  # them by filename, and these names are the ones it builds out of its own font
+  # The brand face needs no `fonts:` entry of its own: google_fonts matches it
+  # by filename, and these names are the ones it builds out of its own font
   # descriptors. Instrument Sans carries 400 and 500 for Material 3's type scale
-  # plus 600, the one weight this app asks for by hand; JetBrains Mono carries
-  # only the 500 that money amounts are set in. See
+  # plus 600, the one weight this app asks for by hand. See
   # assets/google_fonts/LICENSE for provenance.
   assets:
     - assets/google_fonts/

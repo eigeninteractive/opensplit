@@ -24,6 +24,7 @@ export function createGroup(tx: Tx, groupId: string, input: GroupInput, profileI
       defaultCurrency: input.defaultCurrency,
       isDirect: input.isDirect,
       simplifyDebts: input.simplifyDebts,
+      ...appearanceOf(input),
       createdBy: input.creatorId,
       createdAt: now,
       updatedAt: now,
@@ -36,14 +37,29 @@ export function createGroup(tx: Tx, groupId: string, input: GroupInput, profileI
   return requireMeta(tx);
 }
 
-/** Rename, archive or restore, and settings. Any member; all of it is visible and reversible. */
+/** The columns that only decide how the group looks. */
+function appearanceOf(input: GroupInput) {
+  const { avatarKind, avatarColor, avatarEmoji, avatarIcon, avatarPhoto, coverKind, coverPhoto } = input;
+  return { avatarKind, avatarColor, avatarEmoji, avatarIcon, avatarPhoto, coverKind, coverPhoto };
+}
+
+/**
+ * Rename, archive or restore, settings, and how it looks. Any member; all of
+ * it is visible and reversible. A new look is not an event: the activity feed
+ * records what happened to the money and the people, and a picture is neither.
+ */
 export function updateGroup(tx: Tx, input: GroupInput, { now, actor }: WriteContext): Group {
   const meta = requireMeta(tx);
   const { name, simplifyDebts, archivedAt } = input;
-  if (name === meta.name && simplifyDebts === meta.simplifyDebts && archivedAt === meta.archivedAt) return meta;
+  const appearance = appearanceOf(input);
+  const unchanged = name === meta.name && simplifyDebts === meta.simplifyDebts && archivedAt === meta.archivedAt && Object.entries(appearance).every(([column, value]) => meta[column as keyof typeof appearance] === value);
+  if (unchanged) return meta;
 
   const seq = nextSeq(tx);
-  tx.update(schema.meta).set({ name, simplifyDebts, archivedAt, updatedAt: now, seq }).where(eq(schema.meta.id, meta.id)).run();
+  tx.update(schema.meta)
+    .set({ name, simplifyDebts, archivedAt, ...appearance, updatedAt: now, seq })
+    .where(eq(schema.meta.id, meta.id))
+    .run();
 
   const written = { seq, now, actorId: actor.id };
   if (name !== meta.name) append(tx, { ...written, kind: "group_renamed", group: { name, previousName: meta.name } });

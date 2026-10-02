@@ -4,28 +4,59 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('the source workers require release-time version and FCM injection', () {
-    final shellWorker = File('web/sw.js').readAsStringSync();
-    final messagingWorker = File(
-      'web/firebase-messaging-sw.js',
-    ).readAsStringSync();
-
-    expect(shellWorker, contains('__OPEN_SPLIT_BUILD_ID__'));
-    expect(shellWorker, contains('__OPEN_SPLIT_RESOURCES__'));
+  test('the one service worker is built, never copied from web/', () {
+    // Flutter copies web/ into the bundle verbatim, so a worker there would
+    // ship unbuilt wherever the Workbox step did not run after it.
+    expect(File('web/sw.js').existsSync(), isFalse);
+    expect(File('service_worker/src/sw.ts').existsSync(), isTrue);
     expect(
-      shellWorker,
-      matches(
-        RegExp(r"""importScripts\((['"])firebase-messaging-sw\.js\1\)"""),
-      ),
+      File('tool/build_web.dart').readAsStringSync(),
+      contains('_buildServiceWorker'),
     );
+    // Push registers the same script, so it never installs a second worker
+    // that would replace the offline one at the /app/ scope.
     expect(
       File('lib/data/push/push_service.dart').readAsStringSync(),
       contains("serviceWorkerScriptPath: kIsWeb ? 'sw.js' : null"),
     );
-    expect(messagingWorker, contains('__WEB_FCM_API_KEY__'));
-    expect(messagingWorker, contains('__WEB_FCM_APP_ID__'));
-    expect(messagingWorker, contains('__FCM_SENDER_ID__'));
-    expect(messagingWorker, contains('__FCM_PROJECT_ID__'));
+    expect(
+      File('web/flutter_bootstrap.js').readAsStringSync(),
+      contains("navigator.serviceWorker.register('sw.js')"),
+    );
+  });
+
+  test('the worker bundles the Firebase SDK the page loads', () {
+    // The page's SDK comes from FlutterFire, which loads the version
+    // firebase_core_web names from Google's CDN; the worker's is bundled from
+    // npm. Nothing else ties the two, so a `pub upgrade` would leave them apart.
+    final packages =
+        jsonDecode(File('.dart_tool/package_config.json').readAsStringSync())
+            as Map<String, dynamic>;
+    final coreWeb = (packages['packages'] as List).cast<Map>().firstWhere(
+      (package) => package['name'] == 'firebase_core_web',
+    );
+    final source = File.fromUri(
+      Uri.parse(
+        '${coreWeb['rootUri']}/lib/src/firebase_sdk_version.dart',
+      ).normalizePath(),
+    ).readAsStringSync();
+    final page = RegExp(
+      r"supportedFirebaseJsSdkVersion = '([^']+)'",
+    ).firstMatch(source)?.group(1);
+
+    final manifest =
+        jsonDecode(File('service_worker/package.json').readAsStringSync())
+            as Map<String, dynamic>;
+    final worker = (manifest['devDependencies'] as Map)['firebase'];
+
+    expect(page, isNotNull, reason: 'firebase_core_web moved its version');
+    expect(
+      worker,
+      page,
+      reason:
+          'pin firebase in service_worker/package.json to $page: '
+          'pnpm --dir service_worker add -D firebase@$page',
+    );
   });
 
   test('the PWA can adapt to landscape and desktop windows', () {

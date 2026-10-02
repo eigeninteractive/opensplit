@@ -1,7 +1,10 @@
+import 'package:drift/drift.dart' show Value;
+import 'package:opensplit_api/opensplit_api.dart' show AvatarKind;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../data/local/database.dart';
 import '../domain/analytics/analytics_query.dart';
+import '../domain/avatar.dart';
 import '../domain/balance/balance_fold.dart';
 import '../domain/balance/member_balance.dart';
 import '../domain/balance/simplify.dart';
@@ -48,20 +51,30 @@ class MyProfileController extends _$MyProfileController {
   void build() {}
 
   /// Saves both fields together, because the screen edits them together.
-  Future<void> save({required String displayName, String? upiVpa}) async {
+  Future<void> save({required String displayName, String? upiVpa}) {
+    final handle = upiVpa?.trim();
+    return _change(
+      (profile) => profile.copyWith(
+        displayName: Value(displayName.trim()),
+        upiVpa: Value(handle == null || handle.isEmpty ? null : handle),
+      ),
+    );
+  }
+
+  Future<void> setAvatar(Avatar avatar) =>
+      _change((profile) => profile.withAvatar(avatar));
+
+  /// Applies [change] to the stored row, so each screen writes only its own
+  /// fields and leaves the others as they are.
+  Future<void> _change(Profile Function(Profile) change) async {
     final accountId = ref.read(currentAccountIdProvider);
     if (accountId == null) return;
 
     final profiles = ref.read(profileRepositoryProvider);
-    final handle = upiVpa?.trim();
-
-    await profiles.upsert(
-      Profile(
-        id: accountId,
-        displayName: displayName.trim(),
-        upiVpa: handle == null || handle.isEmpty ? null : handle,
-      ),
-    );
+    final stored =
+        await profiles.byId(accountId) ??
+        Profile(id: accountId, avatarKind: AvatarKind.initials);
+    await profiles.upsert(change(stored));
   }
 }
 

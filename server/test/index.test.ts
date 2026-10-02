@@ -1,6 +1,7 @@
 import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import { defaultGroupLook } from "../src/db/appearance";
 
 import type { Group } from "../src/do/group";
 import { finishDeletions } from "../src/forget";
@@ -44,7 +45,7 @@ describe("when D1 is not answering", () => {
     const groupId = freshId("outbox");
 
     await withTableAway("memberships", async () => {
-      ok(await stub(groupId).putGroup(groupId, { name: "Offline", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, creatorId: `${groupId}-m`, creatorName: "Ravi" }, RAVI));
+      ok(await stub(groupId).putGroup(groupId, { name: "Offline", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, ...defaultGroupLook, creatorId: `${groupId}-m`, creatorName: "Ravi" }, RAVI));
 
       // The group itself is fine. The index simply does not know about it yet.
       const waiting = await outboxOf(groupId);
@@ -60,7 +61,7 @@ describe("when D1 is not answering", () => {
   it("drops the retry once it succeeds, and the dormancy clock is armed again", async () => {
     const groupId = freshId("outbox");
     await withTableAway("memberships", async () => {
-      ok(await stub(groupId).putGroup(groupId, { name: "Offline", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, creatorId: `${groupId}-m`, creatorName: "Ravi" }, RAVI));
+      ok(await stub(groupId).putGroup(groupId, { name: "Offline", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, ...defaultGroupLook, creatorId: `${groupId}-m`, creatorName: "Ravi" }, RAVI));
     });
 
     await stub(groupId).runUpkeep(Date.now());
@@ -144,7 +145,7 @@ describe("an account deleted while its membership is on the way", () => {
     const groupId = freshId("gone");
 
     await withTableAway("memberships", async () => {
-      ok(await stub(groupId).putGroup(groupId, { name: "Solo", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, creatorId: `${groupId}-m`, creatorName: "Asha" }, owner));
+      ok(await stub(groupId).putGroup(groupId, { name: "Solo", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, ...defaultGroupLook, creatorId: `${groupId}-m`, creatorName: "Asha" }, owner));
       await env.DB.prepare("delete from user where id = ?").bind(owner).run();
     });
     await stub(groupId).runUpkeep(Date.now());

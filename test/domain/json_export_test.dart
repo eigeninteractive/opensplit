@@ -6,12 +6,13 @@ import 'package:opensplit/domain/models/entry.dart';
 import 'package:opensplit/domain/models/entry_event.dart';
 import 'package:opensplit/domain/models/group_event.dart';
 import 'package:opensplit_api/opensplit_api.dart'
-    show EntryKind, EventKind, SplitKind;
+    show AvatarKind, CoverKind, EntryKind, EventKind, Payer, Share, SplitKind;
 import 'package:test/test.dart';
-import 'package:opensplit_api/opensplit_api.dart' show Payer, Share;
 
 void main() {
   final group = Group(
+    avatarKind: AvatarKind.initials,
+    coverKind: CoverKind.generated,
     id: 'g1',
     name: 'Goa trip',
     defaultCurrency: 'INR',
@@ -41,6 +42,7 @@ void main() {
 
   const profiles = {
     'priya-account': Profile(
+      avatarKind: AvatarKind.initials,
       id: 'priya-account',
       displayName: 'Priya S',
       upiVpa: 'priya@upi',

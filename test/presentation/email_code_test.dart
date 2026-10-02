@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:opensplit/application/session_providers.dart';
 import 'package:opensplit/domain/auth_service.dart';
-import 'package:opensplit/presentation/widgets/account_section.dart';
+import 'package:opensplit/presentation/widgets/save_account_form.dart';
 import 'package:opensplit/presentation/widgets/identity_choices.dart';
 import 'package:opensplit_api/opensplit_api.dart' show Account, EmailFlow;
 
@@ -27,7 +27,7 @@ void main() {
               home: Scaffold(
                 body: SingleChildScrollView(
                   child: linking
-                      ? const AccountSection()
+                      ? const SaveAccountForm()
                       : const IdentityChoices(),
                 ),
               ),

@@ -1,13 +1,17 @@
-"""Generates the two promotional images from the landing page's hero.
+"""Generates the raster brand images: two promotional ones from the landing
+page's hero, and the lockup the sign-in email opens with.
 
     python3 tool/store_graphics.py
 
-after `flutter test tool/screenshots_test.dart`, since both frame a real
-screenshot:
+after `flutter test tool/screenshots_test.dart`, since the first two frame a
+real screenshot:
 
 - site/store/og-card.png, 1200 x 630, the link preview Open Graph asks for.
 - site/store/feature-graphic.jpg, 1024 x 500, the banner on the Play listing.
   JPEG because Play rejects a PNG with an alpha channel, even an opaque one.
+- site/email/wordmark.png, the lockup at three times the size the email shows
+  it (server/src/email/sender.ts). Mail clients load neither SVG nor web fonts,
+  so the one place the brand's type has to survive Gmail is a picture of it.
 
 One composition at two sizes: the headline and wordmark on the left, and on the
 right the brand mark drawn large in lilac with the app's balances screen across
@@ -20,6 +24,7 @@ it renders badly in a preview or a listing nobody on this side ever sees.
 """
 
 import math
+import os
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
@@ -143,6 +148,28 @@ def compose(width, height, layout):
     return canvas.resize((width, height), Image.LANCZOS).convert('RGB')
 
 
+def email_wordmark(size, scale):
+    """The lockup alone on the email card's surface, [size] px type at [scale]x.
+
+    The mark sits centred in a box `1.25 * size` square, as [wordmark] draws
+    it, and that box is the image's height: the type's ascenders and the
+    descender of the "p" both fall inside it.
+    """
+    px = size * scale * S
+    glyph = px * 1.25
+    regular = ImageFont.truetype(REGULAR, round(px))
+    semibold = ImageFont.truetype(SEMIBOLD, round(px))
+    probe = ImageDraw.Draw(Image.new('RGB', (1, 1)))
+    text = (probe.textlength('Open', font=regular)
+            + probe.textlength('Split', font=semibold))
+    W = math.ceil((glyph + px * 0.4 + text) / S) * S
+    H = math.ceil(glyph / S) * S
+
+    canvas = Image.new('RGB', (W, H), PAPER)
+    wordmark(ImageDraw.Draw(canvas), (0, glyph / 2 + px * 0.36), px)
+    return canvas.resize((W // S, H // S), Image.LANCZOS)
+
+
 def build():
     og = compose(1200, 630, {
         'ring': 0.50, 'ring_right': 0.40,
@@ -169,6 +196,11 @@ def build():
 
     for name, image in [('og-card.png', og), ('feature-graphic.jpg', play)]:
         print(f'site/store/{name}: {image.width}x{image.height}')
+
+    email = email_wordmark(20, 3)
+    os.makedirs('site/email', exist_ok=True)
+    email.save('site/email/wordmark.png', optimize=True)
+    print(f'site/email/wordmark.png: {email.width}x{email.height}')
 
 
 if __name__ == '__main__':

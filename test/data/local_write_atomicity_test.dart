@@ -10,6 +10,7 @@ import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/models/entry.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:test/test.dart';
+import 'package:opensplit_api/opensplit_api.dart' show AvatarKind;
 
 import '../harness.dart';
 
@@ -66,7 +67,13 @@ void main() {
   test('a profile cannot be stored without its pending write', () async {
     final profiles = DriftProfileRepository(db, outbox: _RefusingOutbox(db));
     await expectLater(
-      profiles.upsert(const Profile(id: 'profile', displayName: 'Test')),
+      profiles.upsert(
+        const Profile(
+          avatarKind: AvatarKind.initials,
+          id: 'profile',
+          displayName: 'Test',
+        ),
+      ),
       throwsStateError,
     );
     expect(await db.select(db.profiles).get(), isEmpty);

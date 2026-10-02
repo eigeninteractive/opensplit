@@ -11,99 +11,97 @@ import '../../domain/balance/simplify.dart';
 import '../../domain/models/entry.dart';
 import '../../domain/money_format.dart';
 import '../theme.dart';
+import 'avatar_view.dart';
 import 'balance_arrow.dart';
-import 'pull_to_sync.dart';
+import 'empty_state.dart';
+import 'group_pane.dart';
+import 'segmented_list.dart';
 
 /// Per-currency balances and, when the group wants them, the payments that
 /// would settle it.
+///
+/// Ordered by what you would act on: the rough total, then in each currency
+/// the payments you are part of, everyone's balance, and the payments between
+/// other people.
 class BalancesPanel extends ConsumerWidget {
-  const BalancesPanel({super.key, required this.ledger});
+  const BalancesPanel({
+    super.key,
+    required this.ledger,
+    this.showsBanners = true,
+  });
 
   final GroupLedger ledger;
+
+  /// Whether the group's notices head this pane; see [GroupPane].
+  final bool showsBanners;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final currencies = ref.watch(currenciesProvider).value ?? const {};
     final scheme = Theme.of(context).colorScheme;
 
-    if (ledger.isSettled && ledger.isCoherent) {
-      return PullToSync.group(
-        ledger.group.id,
-        child: FillsViewport(
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.check_circle_outline,
-                    size: 48,
-                    color: scheme.primary,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'All settled up',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Nobody owes anybody anything.',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
+    return GroupPane(
+      groupId: ledger.group.id,
+      storageKey: 'balances',
+      showsBanners: showsBanners,
+      slivers: [
+        if (ledger.isSettled && ledger.isCoherent)
+          const SliverFillRemaining(
+            hasScrollBody: false,
+            child: EmptyState(
+              icon: Icons.check_circle_outline,
+              title: 'All settled up',
+              message: 'Nobody owes anybody anything.',
             ),
-          ),
-        ),
-      );
-    }
-
-    return PullToSync.group(
-      ledger.group.id,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-        children: [
-          // Above the numbers, because it is about whether to believe them.
-          if (!ledger.isCoherent) _IncoherentLedgerCard(ledger: ledger),
-          // The estimate leads, the exact per-currency figures follow directly
-          // beneath it.
-          _EstimateCard(groupId: ledger.group.id),
-          for (final code in ledger.activeCurrencies) ...[
-            _CurrencySection(
-              ledger: ledger,
-              code: code,
-              currency: currencies[code],
-            ),
-            const SizedBox(height: 24),
-          ],
-          if (ledger.activeCurrencies.length > 1)
-            Card.outlined(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.info_outline, size: 20, color: scheme.primary),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'This group holds more than one currency. Each is '
-                        'settled on its own — cancelling one against another '
-                        'would quietly hand the exchange-rate risk to whoever '
-                        'the rounding favoured.',
-                        style: Theme.of(context).textTheme.bodySmall,
+          )
+        else
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            sliver: SliverList.list(
+              children: [
+                // Above the numbers, because it is about whether to believe
+                // them.
+                if (!ledger.isCoherent) _IncoherentLedgerCard(ledger: ledger),
+                // The estimate leads, the exact per-currency figures follow
+                // directly beneath it.
+                _Estimate(groupId: ledger.group.id),
+                for (final code in ledger.activeCurrencies)
+                  _CurrencySection(
+                    ledger: ledger,
+                    code: code,
+                    currency: currencies[code],
+                  ),
+                if (ledger.activeCurrencies.length > 1)
+                  Card.outlined(
+                    margin: const EdgeInsets.only(top: 24),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            size: 20,
+                            color: scheme.primary,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'This group holds more than one currency. Each '
+                              'is settled on its own — cancelling one against '
+                              'another would quietly hand the exchange-rate '
+                              'risk to whoever the rounding favoured.',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
-              ),
+                  ),
+              ],
             ),
-        ],
-      ),
+          ),
+      ],
     );
   }
 }
@@ -191,73 +189,111 @@ class _CurrencySection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final balances = [
       for (final b in ledger.balances)
         if (b.currency == code) b,
     ]..sort((a, b) => b.balanceMinor.compareTo(a.balanceMinor));
 
+    final me = ledger.me?.id;
     final transfers = [
       for (final t in ledger.transfers)
         if (t.currency == code) t,
     ];
+    final yours = [
+      for (final t in transfers)
+        if (t.fromMemberId == me || t.toMemberId == me) t,
+    ];
+    final others = [
+      for (final t in transfers)
+        if (!yours.contains(t)) t,
+    ];
+
+    Widget transfersOf(List<Transfer> list) => SegmentedList(
+      children: [
+        for (final transfer in list)
+          _TransferTile(ledger: ledger, transfer: transfer, currency: currency),
+      ],
+    );
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // "Indian Rupee · INR", not a Chip.
-        Text.rich(
-          TextSpan(
-            children: [
-              TextSpan(text: currency?.name ?? code),
-              if (currency?.name != null)
-                TextSpan(
-                  text: '  ·  $code',
-                  style: TextStyle(color: scheme.onSurfaceVariant),
-                ),
-            ],
-          ),
-          style: Theme.of(context).textTheme.titleMedium,
+        _Heading(
+          currency?.name == null ? code : '${currency!.name} · $code',
+          top: 24,
         ),
-        const SizedBox(height: 8),
-        Card.outlined(
-          child: Column(
-            children: [
-              for (final balance in balances)
-                _MemberBalanceRow(
-                  ledger: ledger,
-                  balance: balance,
-                  currency: currency,
-                ),
-            ],
-          ),
-        ),
-        if (transfers.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Text(
-                'Settle with ${transfers.length} '
-                '${transfers.length == 1 ? 'payment' : 'payments'}',
-                style: Theme.of(context).textTheme.titleSmall,
+        if (yours.isNotEmpty) ...[
+          const _Subheading('Your payments'),
+          transfersOf(yours),
+        ],
+        const _Subheading('Everyone'),
+        SegmentedList(
+          children: [
+            for (final balance in balances)
+              _MemberBalanceRow(
+                ledger: ledger,
+                balance: balance,
+                currency: currency,
               ),
-            ],
+          ],
+        ),
+        if (others.isNotEmpty) ...[
+          _Subheading(
+            yours.isEmpty
+                ? 'Settle with ${others.length} '
+                      '${others.length == 1 ? 'payment' : 'payments'}'
+                : 'Between the others',
           ),
-          const SizedBox(height: 8),
-          Card.outlined(
-            child: Column(
-              children: [
-                for (final transfer in transfers)
-                  _TransferTile(
-                    ledger: ledger,
-                    transfer: transfer,
-                    currency: currency,
-                  ),
-              ],
-            ),
-          ),
+          transfersOf(others),
         ],
       ],
+    );
+  }
+}
+
+/// A currency's name, heading its section.
+class _Heading extends StatelessWidget {
+  const _Heading(this.text, {required this.top});
+
+  final String text;
+  final double top;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: EdgeInsets.only(top: top, bottom: 4),
+      child: Semantics(
+        header: true,
+        child: Text(
+          text,
+          style: theme.textTheme.titleMedium?.copyWith(
+            color: theme.colorScheme.primary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Names the card under it.
+class _Subheading extends StatelessWidget {
+  const _Subheading(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
+      child: Text(
+        text,
+        style: theme.textTheme.labelLarge?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      ),
     );
   }
 }
@@ -278,11 +314,22 @@ class _TransferTile extends StatelessWidget {
     final isMine = transfer.fromMemberId == ledger.me?.id;
     final from = ledger.nameOf(transfer.fromMemberId);
     final to = ledger.nameOf(transfer.toMemberId);
+    // Whoever is not you, since that is who the payment is with.
+    final other = ledger.memberById(
+      isMine ? transfer.toMemberId : transfer.fromMemberId,
+    );
 
     final scheme = Theme.of(context).colorScheme;
     final words = isMine
         ? 'You pay $to'
         : '$from pays ${transfer.toMemberId == ledger.me?.id ? 'you' : to}';
+    void settle() => context.push(
+      '/g/${ledger.group.id}/settle'
+      '?from=${transfer.fromMemberId}'
+      '&to=${transfer.toMemberId}'
+      '&amount=${transfer.amountMinor}'
+      '&currency=${transfer.currency}',
+    );
 
     // One control in `trailing`, which is all a Material list item has room
     // for.
@@ -290,6 +337,9 @@ class _TransferTile extends StatelessWidget {
       hint: 'Shows how this payment was worked out',
       child: ListTile(
         onTap: () => _explain(context),
+        leading: other == null
+            ? null
+            : MemberAvatar(ledger: ledger, member: other),
         title: Row(
           children: [
             Flexible(child: Text(words, overflow: TextOverflow.ellipsis)),
@@ -305,16 +355,10 @@ class _TransferTile extends StatelessWidget {
         ),
         subtitle: Text(
           formatMoney(currency, transfer.amountMinor),
-          style: moneyStyle(Theme.of(context).textTheme.bodyMedium!),
+          style: moneyStyle(Theme.of(context).textTheme.titleMedium!),
         ),
         trailing: FilledButton.tonal(
-          onPressed: () => context.push(
-            '/g/${ledger.group.id}/settle'
-            '?from=${transfer.fromMemberId}'
-            '&to=${transfer.toMemberId}'
-            '&amount=${transfer.amountMinor}'
-            '&currency=${transfer.currency}',
-          ),
+          onPressed: settle,
           child: const Text('Settle'),
         ),
       ),
@@ -505,24 +549,31 @@ class _MemberBalanceRow extends StatelessWidget {
     final who = ledger.nameOf(balance.memberId);
     final verb = balance.balanceMinor > 0 ? 'is owed' : 'owes';
     final isMe = balance.memberId == ledger.me?.id;
+    final member = ledger.memberById(balance.memberId);
 
     return ListTile(
+      leading: member == null
+          ? null
+          : MemberAvatar(ledger: ledger, member: member),
       title: Text(isMe ? '$who (you)' : who),
       trailing: BalanceAmount(
         balanceMinor: balance.balanceMinor,
         text: '$verb $amount',
         semanticsLabel: '$who $verb $amount',
-        style: Theme.of(
-          context,
-        ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+        style: moneyStyle(
+          Theme.of(
+            context,
+          ).textTheme.titleSmall!.copyWith(fontWeight: FontWeight.w600),
+        ),
       ),
     );
   }
 }
 
-/// One approximate figure for a group holding several currencies.
-class _EstimateCard extends ConsumerWidget {
-  const _EstimateCard({required this.groupId});
+/// One approximate figure for a group holding several currencies: the pane's
+/// headline.
+class _Estimate extends ConsumerWidget {
+  const _Estimate({required this.groupId});
 
   final String groupId;
 
@@ -532,7 +583,8 @@ class _EstimateCard extends ConsumerWidget {
     final currencies = ref.watch(currenciesProvider).value ?? const {};
     if (estimate == null) return const SizedBox.shrink();
 
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final currency = currencies[estimate.currency];
     final owed = estimate.amountMinor > 0;
     final text = formatMoneyAbs(currency, estimate.amountMinor);
@@ -552,39 +604,34 @@ class _EstimateCard extends ConsumerWidget {
       caveat.write('.');
     }
 
-    return Card.outlined(
-      margin: const EdgeInsets.only(bottom: 24),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Roughly, across everything',
-              style: Theme.of(
-                context,
-              ).textTheme.labelMedium?.copyWith(color: scheme.onSurfaceVariant),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            owed ? 'Roughly owed to you' : 'Roughly what you owe',
+            style: theme.textTheme.titleSmall?.copyWith(
+              color: scheme.onSurfaceVariant,
             ),
-            const SizedBox(height: 4),
-            BalanceAmount(
-              balanceMinor: estimate.amountMinor,
-              text: '≈ $text ${owed ? 'owed to you' : 'you owe'}',
-              semanticsLabel:
-                  'Estimated total: approximately $text '
-                  '${owed ? 'owed to you' : 'that you owe'}',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          BalanceAmount(
+            balanceMinor: estimate.amountMinor,
+            text: '≈ $text',
+            semanticsLabel:
+                'Estimated total: approximately $text '
+                '${owed ? 'owed to you' : 'that you owe'}',
+            style: moneyStyle(theme.textTheme.displaySmall!),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            caveat.toString(),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
             ),
-            const SizedBox(height: 6),
-            Text(
-              caveat.toString(),
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

@@ -1,5 +1,6 @@
 import { exports as workerExports } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
+import { defaultAvatar, defaultGroupLook } from "../src/db/appearance";
 
 import type { ApiError } from "../src/schemas/common";
 import type { ChangePage, GroupLink, Invite, Joined, LinkPreview, LinkRevocation, LiveLink, PlaceholderList } from "./api-types";
@@ -29,7 +30,7 @@ async function makeGroup(host: Guest, placeholder = "Priya") {
 
   const created = await call(`/api/groups/${id}`, host, {
     method: "PUT",
-    body: JSON.stringify({ name: "Goa trip", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, creatorId: memberId, creatorName: "Ravi" }),
+    body: JSON.stringify({ name: "Goa trip", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, ...defaultGroupLook, creatorId: memberId, creatorName: "Ravi" }),
   });
   expect(created.status).toBe(200);
 
@@ -197,7 +198,7 @@ describe("an open link", () => {
     // Anybody who signed in with Google or an email address has one, which is
     // most people arriving on a link.
     const known = await signInAsGuest();
-    await call("/api/profile", known, { method: "PUT", body: JSON.stringify({ displayName: "Zara", upiVpa: null }) });
+    await call("/api/profile", known, { method: "PUT", body: JSON.stringify({ displayName: "Zara", upiVpa: null, ...defaultAvatar }) });
 
     const joined = await json<Joined>(await call(`/api/links/${minted.token}/join`, known, { method: "POST", body: JSON.stringify({ memberId: null, displayName: null }) }));
     expect(joined.member.displayName).toBe("Zara");
@@ -224,7 +225,7 @@ describe("the name, travelling the other way", () => {
     const minted = await json<Invite>(await call(`/api/groups/${id}/members/${slotId}/invite`, ravi, { method: "POST" }));
 
     const arriving = await signInAsGuest();
-    await call("/api/profile", arriving, { method: "PUT", body: JSON.stringify({ displayName: "Priya Sharma", upiVpa: null }) });
+    await call("/api/profile", arriving, { method: "PUT", body: JSON.stringify({ displayName: "Priya Sharma", upiVpa: null, ...defaultAvatar }) });
     const claimed = await json<Joined>(await call(`/api/links/${minted.token}/join`, arriving, { method: "POST", body: JSON.stringify({ memberId: null, displayName: null }) }));
 
     // The slot keeps the name the group knows, and the account keeps its own.
