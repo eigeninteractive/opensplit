@@ -25,6 +25,40 @@ void main() {
     );
   });
 
+  test('the worker bundles the Firebase SDK the page loads', () {
+    // The page's SDK comes from FlutterFire, which loads the version
+    // firebase_core_web names from Google's CDN; the worker's is bundled from
+    // npm. Nothing else ties the two, so a `pub upgrade` would leave them apart.
+    final packages =
+        jsonDecode(File('.dart_tool/package_config.json').readAsStringSync())
+            as Map<String, dynamic>;
+    final coreWeb = (packages['packages'] as List).cast<Map>().firstWhere(
+      (package) => package['name'] == 'firebase_core_web',
+    );
+    final source = File.fromUri(
+      Uri.parse(
+        '${coreWeb['rootUri']}/lib/src/firebase_sdk_version.dart',
+      ).normalizePath(),
+    ).readAsStringSync();
+    final page = RegExp(
+      r"supportedFirebaseJsSdkVersion = '([^']+)'",
+    ).firstMatch(source)?.group(1);
+
+    final manifest =
+        jsonDecode(File('service_worker/package.json').readAsStringSync())
+            as Map<String, dynamic>;
+    final worker = (manifest['devDependencies'] as Map)['firebase'];
+
+    expect(page, isNotNull, reason: 'firebase_core_web moved its version');
+    expect(
+      worker,
+      page,
+      reason:
+          'pin firebase in service_worker/package.json to $page: '
+          'pnpm --dir service_worker add -D firebase@$page',
+    );
+  });
+
   test('the PWA can adapt to landscape and desktop windows', () {
     final manifest =
         jsonDecode(File('web/manifest.json').readAsStringSync())
