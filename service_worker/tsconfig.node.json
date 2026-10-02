@@ -1,0 +1,11 @@
+{
+  // build.ts and the tests, which Node runs directly by stripping their types.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["es2024", "webworker"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": ["node"]
+  },
+  "include": ["build.ts", "test/**/*.ts"]
+}

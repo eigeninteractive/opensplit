@@ -4,28 +4,25 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('the source workers require release-time version and FCM injection', () {
-    final shellWorker = File('web/sw.js').readAsStringSync();
-    final messagingWorker = File(
-      'web/firebase-messaging-sw.js',
-    ).readAsStringSync();
-
-    expect(shellWorker, contains('__OPEN_SPLIT_BUILD_ID__'));
-    expect(shellWorker, contains('__OPEN_SPLIT_RESOURCES__'));
+  test('the one service worker is built, never copied from web/', () {
+    // Flutter copies web/ into the bundle verbatim, so a worker there would
+    // ship unbuilt wherever the Workbox step did not run after it.
+    expect(File('web/sw.js').existsSync(), isFalse);
+    expect(File('service_worker/src/sw.ts').existsSync(), isTrue);
     expect(
-      shellWorker,
-      matches(
-        RegExp(r"""importScripts\((['"])firebase-messaging-sw\.js\1\)"""),
-      ),
+      File('tool/build_web.dart').readAsStringSync(),
+      contains('_buildServiceWorker'),
     );
+    // Push registers the same script, so it never installs a second worker
+    // that would replace the offline one at the /app/ scope.
     expect(
       File('lib/data/push/push_service.dart').readAsStringSync(),
       contains("serviceWorkerScriptPath: kIsWeb ? 'sw.js' : null"),
     );
-    expect(messagingWorker, contains('__WEB_FCM_API_KEY__'));
-    expect(messagingWorker, contains('__WEB_FCM_APP_ID__'));
-    expect(messagingWorker, contains('__FCM_SENDER_ID__'));
-    expect(messagingWorker, contains('__FCM_PROJECT_ID__'));
+    expect(
+      File('web/flutter_bootstrap.js').readAsStringSync(),
+      contains("navigator.serviceWorker.register('sw.js')"),
+    );
   });
 
   test('the PWA can adapt to landscape and desktop windows', () {

@@ -99,11 +99,14 @@ jobs:
       - uses: pnpm/action-setup@v6
         with:
           package_json_file: server/package.json
+      # Both lockfiles: the front-end build below installs service_worker/.
       - uses: actions/setup-node@v7
         with:
           node-version-file: server/package.json
           cache: pnpm
-          cache-dependency-path: server/pnpm-lock.yaml
+          cache-dependency-path: |
+            server/pnpm-lock.yaml
+            service_worker/pnpm-lock.yaml
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.47.4"
@@ -186,10 +189,20 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: service_worker/package.json
       - uses: actions/setup-node@v7
         with:
-          node-version-file: server/package.json
-      - run: node --test test/web_service_worker_test.mjs
+          node-version-file: service_worker/package.json
+          cache: pnpm
+          cache-dependency-path: service_worker/pnpm-lock.yaml
+      - name: Typecheck and test the service worker
+        working-directory: service_worker
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm typecheck
+          pnpm test
       - uses: ruby/setup-ruby@v1
         with:
           bundler-cache: true
@@ -208,6 +221,15 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      # The service worker is built with Workbox, from service_worker/.
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: service_worker/package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: service_worker/package.json
+          cache: pnpm
+          cache-dependency-path: service_worker/pnpm-lock.yaml
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.47.4"

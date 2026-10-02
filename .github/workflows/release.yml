@@ -63,7 +63,9 @@ jobs:
         with:
           node-version-file: server/package.json
           cache: pnpm
-          cache-dependency-path: server/pnpm-lock.yaml
+          cache-dependency-path: |
+            server/pnpm-lock.yaml
+            service_worker/pnpm-lock.yaml
       - uses: ruby/setup-ruby@v1
         with:
           bundler-cache: true

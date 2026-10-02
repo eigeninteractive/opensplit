@@ -1,0 +1,22 @@
+{
+  // The worker, checked against the browser's worker types only. build.ts and
+  // the tests run in Node and use tsconfig.node.json.
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": ["es2022", "webworker"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    // Imports name their .ts files, so Node can run the same sources the bundle is built from.
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "types": []
+  },
+  "include": ["src/**/*.ts"]
+}

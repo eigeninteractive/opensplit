@@ -7,7 +7,9 @@
 // on every cold start, so a reload on a train is a blank page even though all
 // the user's data is already in SQLite on the device.
 //
-// This registers sw.js instead, which is written by hand and lives beside it.
+// This registers sw.js instead: a Workbox worker that tool/build_web.dart
+// builds from service_worker/ into the bundle beside this file. The app offers
+// a restart when a newer one is waiting (lib/data/web/release_updates_web.dart).
 {{flutter_js}}
 {{flutter_build_config}}
 
