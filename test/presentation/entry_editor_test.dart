@@ -212,6 +212,80 @@ void main() {
     await _unmount(tester);
   });
 
+  testWidgets('the category follows the description until it is picked', (
+    tester,
+  ) async {
+    await _seed(db);
+    await _pumpApp(tester, db);
+    await _openEditor(tester);
+    expect(find.text('Uncategorised'), findsOneWidget);
+
+    await tester.enterText(_field('What was it?'), 'Uber');
+    await _beats(tester);
+    expect(find.text('Taxi & rideshare'), findsOneWidget);
+
+    await tester.enterText(_field('What was it?'), 'Dinner at Toit');
+    await _beats(tester);
+    expect(find.text('Restaurants'), findsOneWidget);
+
+    await tester.enterText(_field('What was it?'), 'Misc');
+    await _beats(tester);
+    expect(
+      find.text('Uncategorised'),
+      findsOneWidget,
+      reason: 'a guess that stops matching is taken back',
+    );
+
+    await tester.tap(find.text('Uncategorised'));
+    await _beats(tester);
+    await tester.tap(find.text('Groceries'));
+    await _beats(tester);
+    await tester.enterText(_field('What was it?'), 'Beers');
+    await tester.enterText(_field('How much?'), '600');
+    await _beats(tester);
+    expect(
+      find.text('Groceries'),
+      findsOneWidget,
+      reason: 'a category picked by hand is kept',
+    );
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await _beats(tester);
+    final saved = (await DriftEntryRepository(db).getEntries('g1')).single;
+    final groceries = await (db.select(
+      db.categories,
+    )..where((c) => c.name.equals('Groceries'))).getSingle();
+    expect(saved.row.categoryId, groceries.id);
+    await _unmount(tester);
+  });
+
+  testWidgets('an edited expense keeps the category it was saved with', (
+    tester,
+  ) async {
+    await _seed(db);
+    await _pumpApp(tester, db);
+    await _openEditor(tester);
+    await _type(tester, what: 'Chai', amount: '90');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await _beats(tester);
+
+    await tester.tap(find.text('Chai'));
+    await _beats(tester);
+    expect(find.text('Restaurants'), findsOneWidget);
+
+    await tester.enterText(_field('What was it?'), 'Chai and an Uber');
+    await _beats(tester);
+    expect(find.text('Restaurants'), findsOneWidget);
+    await tester.enterText(_field('What was it?'), 'Uber');
+    await _beats(tester);
+    expect(
+      find.text('Restaurants'),
+      findsOneWidget,
+      reason: 'the saved category counts as chosen',
+    );
+    await _unmount(tester);
+  });
+
   testWidgets('editing an existing expense fills the form from it', (
     tester,
   ) async {
