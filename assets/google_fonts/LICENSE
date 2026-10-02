@@ -1,14 +1,14 @@
 Fonts bundled with OpenSplit, so that the app never fetches one from a
 third-party host at runtime.
 
-Instrument Sans and JetBrains Mono
+Instrument Sans
     SIL Open Font License 1.1
 
-    InstrumentSans-Regular.ttf, InstrumentSans-Medium.ttf,
-    InstrumentSans-SemiBold.ttf and JetBrainsMono-Medium.ttf are the exact
-    files package:google_fonts would otherwise download: each was fetched from
-    the URL that package builds and checked against the SHA-256 and byte length
-    recorded in its own font descriptors.
+    InstrumentSans-Regular.ttf, InstrumentSans-Medium.ttf and
+    InstrumentSans-SemiBold.ttf are the exact files package:google_fonts
+    would otherwise download: each was fetched from the URL that package
+    builds and checked against the SHA-256 and byte length recorded in its
+    own font descriptors.
 
     The notices below are the ones carried in each file's own name table, which
     is where a copyright notice on a font actually lives. The licence follows in
@@ -30,9 +30,6 @@ COPYRIGHT NOTICES
 
 Copyright 2022 The Instrument Sans Project Authors
 (https://github.com/Instrument/instrument-sans)
-
-Copyright 2020 The JetBrains Mono Project Authors
-(https://github.com/JetBrains/JetBrainsMono)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:

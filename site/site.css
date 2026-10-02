@@ -29,12 +29,6 @@
   font-display: swap;
   src: url("/fonts/InstrumentSans-SemiBold.ttf") format("truetype");
 }
-@font-face {
-  font-family: "JetBrains Mono";
-  font-weight: 500;
-  font-display: swap;
-  src: url("/fonts/JetBrainsMono-Medium.ttf") format("truetype");
-}
 
 :root {
   /* surface, onSurface, onSurfaceVariant, outline, outlineVariant */
@@ -53,7 +47,8 @@
   --lilac: #e3dfff;
 
   --sans: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  /* The reader's own monospace: inline code is the only thing set in it. */
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   --measure: 1160px;
   --gutter: clamp(16px, 5vw, 40px);

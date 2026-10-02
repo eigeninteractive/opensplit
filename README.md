@@ -891,8 +891,8 @@ leaving it to this file: *Settings → About* links to the source, and
 `REPOSITORY_URL` is a build-time define so that a fork's copy points at the
 fork.
 
-The typefaces are not ours and are not under that licence. Instrument Sans and
-JetBrains Mono are distributed under the SIL Open Font License 1.1, with the notices
+The typeface is not ours and is not under that licence. Instrument Sans is
+bundled under the SIL Open Font License 1.1, with the notice
 and the licence text in [assets/google_fonts/LICENSE](assets/google_fonts/LICENSE)
 — which the app also shows, under *About → Open-source licences*.
 

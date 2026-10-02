@@ -5,8 +5,9 @@ import type { EmailMessage } from "./sender";
  *
  * Mail clients are not browsers: Gmail drops <style> rules it cannot place, loads no web fonts and
  * no SVG, and Outlook lays out only tables. So every rule is inline, the layout is tables, and the
- * lockup is a PNG (tool/store_graphics.py) rather than the site's inline mark. Instrument Sans and
- * JetBrains Mono are named first for the clients that have them, with the site's fallbacks after.
+ * lockup is a PNG (tool/store_graphics.py) rather than the site's inline mark. Instrument Sans is
+ * named first for the clients that have it, with the site's fallbacks after. The code is set the
+ * way the app sets a figure it wants read: the same face, large, with tabular figures.
  *
  * Light only, declared so: the lockup is drawn on the card's surface, and a client inverting the
  * card around it would leave it a pale rectangle.
@@ -27,7 +28,6 @@ const VIOLET_DEEP = "#434078";
 const LILAC = "#e3dfff";
 
 const SANS = `'Instrument Sans',system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif`;
-const MONO = `'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace`;
 
 /** A code rather than a magic link: links open in the wrong browser and mail scanners consume them. */
 export function signInCodeMessage(to: string, code: string): EmailMessage {
@@ -57,7 +57,6 @@ function html(code: string): string {
 <style>
 @font-face{font-family:'Instrument Sans';font-weight:400;src:url(${SITE}/fonts/InstrumentSans-Regular.ttf) format('truetype')}
 @font-face{font-family:'Instrument Sans';font-weight:600;src:url(${SITE}/fonts/InstrumentSans-SemiBold.ttf) format('truetype')}
-@font-face{font-family:'JetBrains Mono';font-weight:500;src:url(${SITE}/fonts/JetBrainsMono-Medium.ttf) format('truetype')}
 :root{color-scheme:light;supported-color-schemes:light}
 </style>
 </head>
@@ -70,7 +69,7 @@ function html(code: string): string {
 <a href="${SITE}" style="text-decoration:none"><img src="${SITE}/email/wordmark.png" width="128" height="25" alt="OpenSplit" style="display:block;border:0;width:128px;height:25px;color:${INK};font-size:20px;font-weight:600"></a>
 <h1 style="margin:36px 0 8px;font-size:28px;line-height:1.15;letter-spacing:-0.03em;font-weight:600;color:${INK}">Your code</h1>
 <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:${SLATE}">Enter it in OpenSplit to carry on.</p>
-<div style="background:${LILAC};border-radius:16px;padding:20px 12px;text-align:center;font-family:${MONO};font-size:34px;line-height:1.2;font-weight:500;letter-spacing:0.14em;color:${VIOLET_DEEP};font-variant-numeric:tabular-nums">${code}</div>
+<div style="background:${LILAC};border-radius:16px;padding:20px 12px;text-align:center;font-size:36px;line-height:1.2;font-weight:600;letter-spacing:0.12em;color:${VIOLET_DEEP};font-variant-numeric:tabular-nums">${code}</div>
 <p style="margin:24px 0 0;font-size:16px;line-height:1.6;color:${SLATE}">It expires in ten minutes and can be used once.</p>
 <p style="margin:24px 0 0;padding-top:20px;border-top:1px solid ${LINE};font-size:14px;line-height:1.6;color:${MUTED}">If you did not ask for this, you can ignore this message — nothing has changed on your account.</p>
 </td></tr>

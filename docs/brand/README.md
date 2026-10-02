@@ -33,13 +33,12 @@ is a green harmonised toward the seed, and you owe is the scheme's `error`.
   `moneyStyle`, so amounts line up in a column and hold still as they change.
   An amount's prominence comes from the type scale step it is set in, not
   from a second face.
-- **JetBrains Mono** is for code: the static site's legal pages and the digits
-  of the sign-in email.
+- There is no second face. The sign-in email sets its code the same way, and
+  the static site leaves inline code to the reader's own monospace.
 
-Both faces live under `assets/google_fonts/` rather than being fetched; the app
-bundles Instrument Sans from there (see the comments in `pubspec.yaml`), and the
-static site serves the folder from `/fonts`, so the pages and the app cannot
-drift onto different cuts of either face.
+The face is bundled under `assets/google_fonts/` rather than fetched; see the
+comments in `pubspec.yaml`. The static site serves the same files from
+`/fonts`, so the pages and the app cannot drift onto different cuts of it.
 
 ## The mark
 
