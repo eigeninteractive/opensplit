@@ -5,6 +5,10 @@ What changed in each version of the app, newest first. The format is
 [cider](https://pub.dev/packages/cider): see "Versions" in docs/runbook.md.
 
 ## [Unreleased]
+### Added
+- On the web, notifications now arrive when OpenSplit isn't open, and tapping one opens the group.
+- On the web, OpenSplit tells you when an update is ready, and restarts into it when you choose.
+
 ### Changed
 - Sign-in code emails have a new look to match the app.
 - Empty screens show their picture above the words rather than behind them.
@@ -14,6 +18,8 @@ What changed in each version of the app, newest first. The format is
 - A group where you're owed one currency and owe another now says both on the groups list, instead of calling it all owed to you.
 - Signing in with Google on Android works again.
 - A name you give while creating your first group now shows on your profile straight away.
+- Reloading the web app no longer flashes "This site can't be reached" first.
+- Signing out stops notifications for that account on the device.
 
 ## [2.0.0] - 2026-10-01
 ### Changed
