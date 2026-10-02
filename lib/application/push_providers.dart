@@ -117,11 +117,23 @@ class NotificationPreference extends _$NotificationPreference {
   /// fan-out does not keep paying to wake a device that will ignore it.
   Future<void> disable() async {
     await _remember(false);
+    await releaseDevice();
+  }
+
+  /// Removes this device's token from the server without changing the
+  /// preference, so the next account to sign in here registers it again.
+  ///
+  /// Called before signing out, while the session can still prove whose token
+  /// it is. Otherwise the server goes on waking a browser nobody is signed in
+  /// to, and its service worker, which cannot tell, shows the notification.
+  Future<void> releaseDevice() async {
+    final push = ref.read(pushServiceProvider);
     final tokens = ref.read(deviceTokensProvider);
-    final token = await ref.read(pushServiceProvider).token();
-    if (tokens == null || token == null) return;
+    // Asking for a token without permission prompts for it on the web.
+    if (tokens == null || !await push.hasPermission()) return;
     try {
-      await tokens.unregister(token);
+      final token = await push.token();
+      if (token != null) await tokens.unregister(token);
     } catch (_) {
       // The preference is what governs this device either way.
     }

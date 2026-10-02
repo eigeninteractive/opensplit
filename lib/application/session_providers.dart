@@ -5,6 +5,7 @@ import '../data/local/local_reset.dart';
 import '../domain/auth_service.dart';
 import 'backend_providers.dart';
 import 'local_providers.dart';
+import 'push_providers.dart';
 import 'sync_providers.dart';
 
 part 'session_providers.g.dart';
@@ -66,6 +67,7 @@ class SessionController extends _$SessionController {
     if (auth == null) return;
 
     await forgetLocalLedger(ref.read(appDatabaseProvider), requireSynced: true);
+    await ref.read(notificationPreferenceProvider.notifier).releaseDevice();
     await auth.signOut();
     state = null;
   }
