@@ -618,10 +618,21 @@ writer could otherwise restore one after a sign-out — so background work with
 an expired session waits for the next app resume. Push is best-effort, not a
 delivery guarantee or the source of ledger correctness.
 
-On the web there is no equivalent — a service worker cannot run Dart — so
-the worker draws nothing yet and web push only wakes an open tab. Tapping any
-of these opens the entry it was about rather than the app's front door, on all
-three paths: foreground, backgrounded, and launched from cold.
+On the web there is no isolate — a service worker cannot run Dart — so the
+worker borrows a tab instead (`service_worker/src/push.ts`). Firebase gives a
+push to the page whenever a tab of the site is visible, and the page syncs and
+redraws; no banner, because the change is on screen. With every app tab
+hidden, the worker asks one of them to sync and word the notification with the
+same composer Android uses, and shows what it answers. With no app tab open,
+or one that does not answer in fifteen seconds, the worker says only what it
+knows without the ledger: that an expense changed, or that somebody joined or
+left, in one of your groups. Signing out removes the device's token first, so
+a browser nobody is signed in to stops being woken at all.
+
+Tapping any of these opens the entry it was about rather than the app's front
+door, on all three paths: foreground, backgrounded, and launched from cold. On
+the web the worker focuses an open tab and routes it, or opens the group's
+link.
 
 ## Developing against a local Worker
 
