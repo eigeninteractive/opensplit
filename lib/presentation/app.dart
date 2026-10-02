@@ -13,6 +13,7 @@ import '../application/session_providers.dart';
 import '../application/sync_providers.dart';
 import '../data/platform/app_update_service.dart';
 import '../data/web/boot_hint.dart';
+import '../data/web/release_updates.dart';
 import '../domain/auth_service.dart';
 import '../l10n/app_localizations.dart';
 import 'dynamic_colors.dart';
@@ -40,6 +41,7 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
   DateTime? _lastChecked;
   bool _busy = false;
   bool _listeningForSession = false;
+  bool _offeredRestart = false;
 
   @override
   void initState() {
@@ -49,6 +51,10 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
     // Not in initState directly: Riverpod's scope is inherited state, which is
     // first safe to depend on from didChangeDependencies.
     WidgetsBinding.instance.addPostFrameCallback((_) => _offerUpdate());
+
+    // The web's equivalent of Play's flexible update: the service worker has
+    // already downloaded the release, and it only needs a restart.
+    watchForNewRelease(() => _offerRestart(restartIntoNewRelease));
   }
 
   @override
@@ -131,29 +137,31 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
       }
 
       if (await service.download() != AppUpdateResult.success) return;
-      if (!mounted) return;
-
-      final messenger = _messengerKey.currentState;
-      if (messenger == null) return;
-      final l10n = AppLocalizations.of(messenger.context);
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(l10n.updateReady),
-          // Until it is acted on or dismissed. A four-second toast for
-          // something that needs a decision is a toast nobody reads.
-          duration: const Duration(days: 1),
-          action: SnackBarAction(
-            label: l10n.restart,
-            onPressed: service.install,
-          ),
-        ),
-      );
+      _offerRestart(service.install);
     } catch (_) {
       // Every failure mode here is Play's, and none of them is something the
       // person holding the phone can do anything about.
     } finally {
       _busy = false;
     }
+  }
+
+  /// Offers to restart into an update that is downloaded and ready. Once per
+  /// launch: the offer stays up until it is taken or dismissed.
+  void _offerRestart(VoidCallback restart) {
+    final messenger = _messengerKey.currentState;
+    if (!mounted || _offeredRestart || messenger == null) return;
+    _offeredRestart = true;
+    final l10n = AppLocalizations.of(messenger.context);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(l10n.updateReady),
+        // Until it is acted on or dismissed. A four-second toast for
+        // something that needs a decision is a toast nobody reads.
+        duration: const Duration(days: 1),
+        action: SnackBarAction(label: l10n.restart, onPressed: restart),
+      ),
+    );
   }
 
   @override
