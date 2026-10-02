@@ -21,6 +21,8 @@ What changed in each version of the app, newest first. The format is
 - Insights open on the total spent.
 - Renaming a group happens in a dialog rather than a field that is always open.
 - Amounts use the app's own typeface, with figures that line up.
+- Lists are grouped the Material 3 Expressive way, as connected rows rather than separate cards, and icon buttons change shape as you press them.
+- The sign-in code email sets its code in the app's own typeface.
 
 ### Fixed
 - A group where you're owed one currency and owe another now says both on the groups list, instead of calling it all owed to you.
