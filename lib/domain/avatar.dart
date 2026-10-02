@@ -129,10 +129,18 @@ AvatarColor hueFor(String id) => avatarHues[stableHash(id) % avatarHues.length];
 int stableHash(String text) {
   var hash = 0x811c9dc5;
   for (final unit in text.codeUnits) {
-    hash = ((hash ^ unit) * 0x01000193) & 0xffffffff;
+    hash = _timesFnvPrime(hash ^ unit);
   }
   return hash;
 }
+
+/// [value] times the FNV prime, 2^24 + 0x193, modulo 2^32.
+///
+/// In two parts because the web has no 64-bit integers: the whole product
+/// would pass 2^53, where a JavaScript number stops being exact, and the web
+/// would hash every id differently from Android.
+int _timesFnvPrime(int value) =>
+    (((value << 24) & 0xffffffff) + value * 0x193) & 0xffffffff;
 
 /// Up to two letters for [name]: the first letters of its first and last
 /// words, so "Ana Maria da Silva" is "AS".
