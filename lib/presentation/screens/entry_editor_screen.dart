@@ -11,6 +11,7 @@ import '../../application/sync_providers.dart';
 import '../../data/local/database.dart';
 import '../../domain/activity/activity_text.dart';
 import '../../domain/calendar_date.dart';
+import '../../domain/category_guess.dart';
 import '../../domain/entry_draft.dart';
 import '../../domain/fx/fx_quote.dart';
 import '../../domain/models/entry.dart';
@@ -49,6 +50,10 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
 
   String? _currencyCode;
   String? _categoryId;
+
+  /// Whether the category was picked by hand, or came with the expense being
+  /// edited. Until then it follows the description.
+  bool _categoryChosen = false;
 
   /// The day it happened, and when on that day if known, with the zone it
   /// happened in. Times are shown and picked on this device's clock.
@@ -107,6 +112,18 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
     String id,
   ) => map.putIfAbsent(id, TextEditingController.new);
 
+  /// Keeps the category in step with [description] until one is chosen.
+  ///
+  /// A guess that stops matching is taken back, so typing "Uber" and then
+  /// correcting it to "Usha's gift" doesn't leave the expense a taxi ride.
+  void _guessCategory(String description) {
+    if (_categoryChosen) return;
+    final icon = guessCategoryIcon(description);
+    final categories = ref.read(categoriesProvider).value ?? const [];
+    final guess = categories.where((c) => c.icon == icon).firstOrNull?.id;
+    if (guess != _categoryId) setState(() => _categoryId = guess);
+  }
+
   /// Seeds the form as soon as everything it needs has arrived.
   void _seedWhenReady() {
     if (_loaded) return;
@@ -140,6 +157,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
 
     _description.text = existing.row.description;
     _categoryId = existing.row.categoryId;
+    _categoryChosen = _categoryId != null;
     _date = existing.row.entryDate;
     _occurredAt = existing.row.occurredAt;
     _zone = existing.row.timeZone;
@@ -534,6 +552,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
                 labelText: 'What was it?',
                 hintText: 'Dinner at Toit',
               ),
+              onChanged: _guessCategory,
             ),
             const SizedBox(height: 16),
             // The details most expenses leave as they are, as chips rather
@@ -544,7 +563,10 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
               children: [
                 _CategoryChip(
                   value: _categoryId,
-                  onChanged: (id) => setState(() => _categoryId = id),
+                  onChanged: (id) => setState(() {
+                    _categoryId = id;
+                    _categoryChosen = true;
+                  }),
                 ),
                 ActionChip(
                   avatar: const Icon(Icons.event_outlined),
