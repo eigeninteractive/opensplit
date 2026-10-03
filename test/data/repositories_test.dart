@@ -82,6 +82,59 @@ void main() {
       expect(withLeft.firstWhere((m) => m.id == arun.id).isActive, isFalse);
     });
 
+    test('a group this account left is listed as left, not current', () async {
+      final mine = DriftGroupRepository(db, accountId: 'me');
+      final created = await mine.createGroup(
+        name: 'Old flat',
+        defaultCurrency: 'INR',
+        creatorDisplayName: 'Ravi',
+        creatorProfileId: 'me',
+      );
+
+      await mine.leaveGroup(memberId: created.creator.id);
+
+      final listing = (await mine.watchListings().first).single;
+      expect(listing.hasLeft, isTrue);
+      expect(listing.isCurrent, isFalse);
+      // Left, not archived: a sync bringing the group row back cannot undo it.
+      expect(listing.group.isArchived, isFalse);
+    });
+
+    test('groups are listed by their newest activity', () async {
+      final mine = DriftGroupRepository(db, accountId: 'me');
+      final older = await mine.createGroup(
+        name: 'Made first',
+        defaultCurrency: 'INR',
+        creatorDisplayName: 'Ravi',
+        creatorProfileId: 'me',
+      );
+      await mine.createGroup(
+        name: 'Made second',
+        defaultCurrency: 'INR',
+        creatorDisplayName: 'Ravi',
+        creatorProfileId: 'me',
+      );
+      await entries.create(
+        EntryDraft(
+          groupId: older.group.id,
+          currency: 'INR',
+          amountMinor: 1000,
+          description: 'Dinner',
+          split: EqualSplit([older.creator.id]),
+          payerAmounts: {older.creator.id: 1000},
+          entryDate: DateTime.utc(2026, 1, 1),
+        ),
+        createdBy: older.creator.id,
+        now: DateTime.now().add(const Duration(minutes: 1)),
+      );
+
+      final names = [
+        for (final listing in await mine.watchListings().first)
+          listing.group.name,
+      ];
+      expect(names, ['Made first', 'Made second']);
+    });
+
     test('archived groups drop out of the default list', () async {
       final created = await groups.createGroup(
         name: 'Old Trip',
@@ -91,11 +144,9 @@ void main() {
 
       await groups.setArchived(created.group.id, archived: true);
 
-      expect(await groups.watchGroups().first, isEmpty);
-      expect(
-        await groups.watchGroups(includeArchived: true).first,
-        hasLength(1),
-      );
+      final listed = (await groups.watchListings().first).single;
+      expect(listed.group.isArchived, isTrue);
+      expect(listed.isCurrent, isFalse);
     });
   });
 

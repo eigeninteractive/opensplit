@@ -1,4 +1,5 @@
 import '../data/local/database.dart';
+import 'decimal_text.dart';
 
 /// Currencies conventionally grouped in the Indian system — the last three
 /// digits, then pairs: 1,23,45,678 rather than 12,345,678.
@@ -90,24 +91,35 @@ extension CurrencyAmounts on Currency {
   }
 
   /// Parses user input in major units into minor units.
+  ///
+  /// The decimal point may be `.` or `,`, whichever the keyboard offered.
+  /// Grouping separators are not accepted, since `1,250` would otherwise mean
+  /// one thing with a dot keyboard and another with a comma keyboard. Null for
+  /// anything else, including more decimals than this currency has or more
+  /// digits than [maxAmountDigits].
   int? parseToMinor(String input) {
-    final trimmed = input.trim().replaceAll(',', '');
-    if (trimmed.isEmpty) return null;
-
-    final match = RegExp(r'^(-)?(\d*)(?:\.(\d*))?$').firstMatch(trimmed);
+    final match = amountInputPattern(exponent).firstMatch(input.trim());
     if (match == null) return null;
 
-    final sign = match.group(1) == null ? 1 : -1;
-    final majorText = match.group(2) ?? '';
-    final fractionText = match.group(3) ?? '';
+    final majorText = match.group(1) ?? '';
+    final fractionText = match.group(2) ?? '';
     if (majorText.isEmpty && fractionText.isEmpty) return null;
-    if (fractionText.length > exponent) return null;
 
     final major = majorText.isEmpty ? 0 : int.parse(majorText);
     final fraction = fractionText.isEmpty
         ? 0
         : int.parse(fractionText.padRight(exponent, '0'));
-
-    return sign * (major * minorPerMajor + fraction);
+    return major * minorPerMajor + fraction;
   }
 }
+
+/// Whole units an amount may have: a trillion, far past any shared bill, and
+/// short enough that the minor units stay exact as a JavaScript number on the
+/// web as well as in a 64-bit integer.
+const maxAmountDigits = 12;
+
+/// An amount as typed: digits, then optionally `.` or `,` and up to
+/// [exponent] more. Matches every prefix of a valid amount too, including the
+/// empty string, so it can guard a field keystroke by keystroke.
+RegExp amountInputPattern(int exponent) =>
+    decimalInputPattern(wholeDigits: maxAmountDigits, fractionDigits: exponent);

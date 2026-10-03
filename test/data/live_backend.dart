@@ -147,7 +147,7 @@ class Device {
   Device._(this.client, this.tap, this.profileId, {required this.pageSize})
     : db = AppDatabase(NativeDatabase.memory()) {
     outbox = OutboxQueue(db);
-    groups = DriftGroupRepository(db, outbox: outbox);
+    groups = DriftGroupRepository(db, outbox: outbox, accountId: profileId);
     entries = DriftEntryRepository(db, outbox: outbox);
     sync = engine(pageSize: pageSize);
   }
@@ -206,6 +206,7 @@ class Device {
     db: db,
     client: client,
     outbox: outbox,
+    accountId: profileId,
     pageSize: pageSize,
     requestTimeout: requestTimeout,
   );

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../application/ledger_providers.dart';
 import '../../application/sync_providers.dart';
 import '../../data/local/database.dart';
+import '../../data/repositories/drift_group_repository.dart';
 import '../../data/web/boot_hint.dart';
 import '../widgets/avatar_view.dart';
 import '../widgets/brand_mark.dart';
@@ -27,25 +28,26 @@ class GroupListScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Archived groups are pulled in here rather than queried separately, so the
-    // list and the "archived" row at the bottom of it are two readings of one
-    // stream and cannot disagree about which group is where.
-    final source = groupsProvider(includeArchived: true);
+    // Archived and left groups are pulled in here rather than queried
+    // separately, so the list and the "archived" row at the bottom of it are
+    // two readings of one stream and cannot disagree about which group is
+    // where.
+    final source = groupListingsProvider;
 
     // Leaves a note for the next cold start, so the web loader knows whether to
     // draw group cards or just the chrome.
     ref.listen(source, (_, next) {
       final loaded = next.value;
       if (loaded != null) {
-        recordHasGroups(loaded.any((group) => !group.isArchived));
+        recordHasGroups(loaded.any((listing) => listing.isCurrent));
       }
     });
 
     final groupsAsync = ref.watch(source);
-    final all = groupsAsync.value ?? const <Group>[];
+    final all = groupsAsync.value ?? const <GroupListing>[];
     final groups = [
-      for (final group in all)
-        if (!group.isArchived) group,
+      for (final listing in all)
+        if (listing.isCurrent) listing.group,
     ];
     final archived = all.length - groups.length;
 

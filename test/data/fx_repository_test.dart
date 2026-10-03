@@ -42,6 +42,29 @@ void main() {
     });
   }
 
+  group('how old a rate may be', () {
+    test("a weekend is answered by Friday's publication", () async {
+      await publish('2026-08-21', {'USD': 1, 'INR': 95.7});
+      final quote = await repository.quote(
+        base: 'USD',
+        quote: 'INR',
+        asOf: DateTime.utc(2026, 8, 23),
+      );
+      expect(quote?.rate, 95.7);
+    });
+
+    test('a rate from over a week before does not answer for a day', () async {
+      // Otherwise one old backfill would quietly price every day after it.
+      await publish('2026-01-05', {'USD': 1, 'INR': 90});
+      final quote = await repository.quote(
+        base: 'USD',
+        quote: 'INR',
+        asOf: DateTime.utc(2026, 8, 23),
+      );
+      expect(quote, isNull);
+    });
+  });
+
   group('pivot lookup', () {
     test('derives a pair neither side of which is the pivot', () async {
       // 3.6725 AED and 95.7 INR to the dollar.

@@ -1,6 +1,8 @@
 import 'package:opensplit/domain/balance/balance_fold.dart';
 import 'package:opensplit/domain/balance/member_balance.dart';
+import 'package:opensplit/domain/balance/pairwise.dart';
 import 'package:opensplit/domain/balance/simplify.dart';
+import 'package:opensplit/domain/balance/transfer_basis.dart';
 import 'package:opensplit/domain/models/entry.dart';
 import 'package:opensplit_api/opensplit_api.dart' show EntryKind, SplitKind;
 import 'package:test/test.dart';
@@ -332,5 +334,142 @@ void main() {
         }
       },
     );
+  });
+
+  group('pairwiseDebts', () {
+    test('owes each payer only for the expenses actually shared with them', () {
+      final transfers = pairwiseDebts([
+        _entry(
+          id: 'dinner',
+          currency: 'INR',
+          amountMinor: 300,
+          payers: {'a': 300},
+          shares: {'a': 100, 'b': 100, 'c': 100},
+        ),
+        _entry(
+          id: 'taxi',
+          currency: 'INR',
+          amountMinor: 80,
+          payers: {'c': 80},
+          shares: {'d': 80},
+        ),
+      ]);
+
+      expect(transfers, [
+        const Transfer(
+          fromMemberId: 'b',
+          toMemberId: 'a',
+          currency: 'INR',
+          amountMinor: 100,
+        ),
+        const Transfer(
+          fromMemberId: 'c',
+          toMemberId: 'a',
+          currency: 'INR',
+          amountMinor: 100,
+        ),
+        const Transfer(
+          fromMemberId: 'd',
+          toMemberId: 'c',
+          currency: 'INR',
+          amountMinor: 80,
+        ),
+      ]);
+    });
+
+    test('nets two people against each other', () {
+      final transfers = pairwiseDebts([
+        _entry(
+          id: 'one',
+          currency: 'INR',
+          amountMinor: 100,
+          payers: {'a': 100},
+          shares: {'b': 100},
+        ),
+        _entry(
+          id: 'two',
+          currency: 'INR',
+          amountMinor: 60,
+          payers: {'b': 60},
+          shares: {'a': 60},
+        ),
+      ]);
+
+      expect(transfers, [
+        const Transfer(
+          fromMemberId: 'b',
+          toMemberId: 'a',
+          currency: 'INR',
+          amountMinor: 40,
+        ),
+      ]);
+    });
+
+    test('owes several payers in proportion to what each paid', () {
+      final debts = debtsWithin(
+        _entry(
+          id: 'shared',
+          currency: 'INR',
+          amountMinor: 400,
+          payers: {'a': 300, 'b': 100},
+          shares: {'c': 400},
+        ),
+      );
+      expect(debts, {('c', 'a'): 300, ('c', 'b'): 100});
+    });
+
+    test('settling every pair leaves nothing owed, in any ledger', () {
+      final gen = EntryGen(424242);
+      for (var i = 0; i < 2000; i++) {
+        final members = gen.memberIds(2 + gen.random.nextInt(9));
+        final entries = gen.entries(members, 1 + gen.random.nextInt(30));
+
+        final transfers = pairwiseDebts(entries);
+        final settled = [
+          ...entries,
+          for (var j = 0; j < transfers.length; j++)
+            _settlement(transfers[j], j),
+        ];
+
+        expect(
+          foldBalances(settled),
+          isEmpty,
+          reason: 'seed ${gen.seed}, case $i',
+        );
+      }
+    });
+  });
+
+  group('basisOf', () {
+    test('adds up to the payment it explains, in either mode', () {
+      final gen = EntryGen(73);
+      for (var i = 0; i < 500; i++) {
+        final members = gen.memberIds(2 + gen.random.nextInt(6));
+        final entries = gen.entries(members, 1 + gen.random.nextInt(20));
+        final balances = foldBalances(entries);
+
+        for (final transfer in pairwiseDebts(entries)) {
+          expect(
+            basisOf(transfer, entries, simplified: false).net,
+            -transfer.amountMinor,
+            reason: 'seed ${gen.seed}, case $i',
+          );
+        }
+        for (final transfer in simplifyDebts(balances)) {
+          final owed = balances
+              .firstWhere(
+                (b) =>
+                    b.memberId == transfer.fromMemberId &&
+                    b.currency == transfer.currency,
+              )
+              .balanceMinor;
+          expect(
+            basisOf(transfer, entries, simplified: true).net,
+            owed,
+            reason: 'seed ${gen.seed}, case $i',
+          );
+        }
+      }
+    });
   });
 }

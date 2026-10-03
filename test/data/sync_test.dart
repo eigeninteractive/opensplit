@@ -918,7 +918,7 @@ void main() {
     liveTest('a group left behind is not rediscovered', () async {
       final g = await seedGroup(joined: false);
       await a.sync.syncGroup(g.groupId);
-      await a.groups.leaveGroup(groupId: g.groupId, memberId: g.ravi);
+      await a.groups.leaveGroup(memberId: g.ravi);
       await a.sync.syncGroup(g.groupId);
 
       expect(
@@ -926,6 +926,21 @@ void main() {
         isEmpty,
       );
     });
+
+    liveTest(
+      'nor pulled again by the device that left it, once it is confirmed',
+      () async {
+        final g = await seedGroup(joined: false);
+        await a.sync.syncGroup(g.groupId);
+        await a.groups.leaveGroup(memberId: g.ravi);
+
+        // Pushed and read back: the server has said so.
+        await a.sync.syncGroup(g.groupId);
+        expect(await a.sync.discoverGroups(), isEmpty);
+        // Still on the device, read-only, among the groups put away.
+        expect((await a.groups.watchListings().first).single.hasLeft, isTrue);
+      },
+    );
 
     liveTest(
       'failed discovery is not a successful local-only answer',

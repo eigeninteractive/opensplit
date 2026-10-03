@@ -119,6 +119,15 @@ class OutboxQueue {
     return row == null ? null : row.nextAttemptAt ?? _clock();
   }
 
+  /// Rows of [target] changed here that the server has not taken yet:
+  /// queued, backing off, or refused.
+  Future<Set<String>> unsentIds(OutboxTarget target) async => {
+    for (final row in await (_db.select(
+      _db.outbox,
+    )..where((t) => t.target.equalsValue(target))).get())
+      row.targetId,
+  };
+
   /// Whether leaving this account would strand an edit held only here.
   Future<bool> hasUnresolvedWrites() async {
     final pending = await (_db.select(_db.outbox)..limit(1)).get();

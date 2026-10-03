@@ -3,7 +3,7 @@ import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 
 import { user } from "../auth-schema";
-import type { AppEnv } from "../context";
+import { type AppEnv, mayChangeIdentity } from "../context";
 import { deviceTokens, memberships, profiles } from "../db/d1/schema";
 import { forgetAccount } from "../forget";
 import { AccountDeletionSchema, DeviceForgottenSchema, DeviceSchema, ProfilePageSchema, ProfileSchema, ProfileUpdateSchema } from "../schemas/account";
@@ -13,9 +13,6 @@ import { refusals, signedIn } from "./routing";
 /** The person, their devices, and ending the account. */
 
 const PAGE_MAX = 200;
-
-/** How recently somebody must have proved who they are to delete their account: Better Auth's `freshAge`, for our route. */
-const REAUTH_WINDOW = 10 * 60 * 1000;
 
 const profileFeedRoute = createRoute({
   ...signedIn,
@@ -142,7 +139,7 @@ export function accountRoutes(routes: OpenAPIHono<AppEnv>) {
     const db = c.var.db;
 
     // A session lasts a year, so holding one is not enough to end the account behind it.
-    if (!c.var.session.isAnonymous && Date.now() - c.var.session.createdAt > REAUTH_WINDOW) {
+    if (!mayChangeIdentity(c.var.session)) {
       return c.json(apiError("reauth_required", "Confirm it is you before deleting this account."), 403);
     }
 

@@ -379,3 +379,29 @@ describe("a large page", () => {
     expect(page.entries.every((entry) => entry.payers.length === 1 && entry.shares.length === 2)).toBe(true);
   });
 });
+
+/**
+ * One expense among more people than one SQL statement can name: a share is
+ * four bound values and a payer three, against a limit of 100 a statement.
+ */
+describe("an expense shared by a crowd", () => {
+  it("is stored whole, every share and every payer", async () => {
+    const { groupId, ravi } = await makeGroup();
+    const object = stub(groupId);
+    const people = [ravi.id];
+    for (let index = 0; index < 39; index++) {
+      people.push(ok(await object.putMember(freshId("m"), { displayName: `Guest ${index}`, upiVpa: null, leftAt: null }, RAVI)).id);
+    }
+
+    const wedding = expense({
+      id: freshId("e"),
+      amountMinor: 4000,
+      payers: people.map((memberId) => ({ memberId, amountMinor: 100 })),
+      shares: people.map((memberId) => ({ memberId, amountMinor: 100, weightMicros: 1_000_000 })),
+    });
+    const stored = ok(await saveEntry(object, wedding, RAVI));
+
+    expect(stored.payers).toHaveLength(40);
+    expect(stored.shares).toHaveLength(40);
+  });
+});

@@ -126,6 +126,20 @@ describe("the waterfall", () => {
     expect(stored.find((rate) => rate.currency === "EUR")?.rate).toBe(0.92);
   });
 
+  it("counts a rate it already holds as covered, so a second run asks nobody else", async () => {
+    stubFetch((url) => (url.includes("frankfurter") ? frankfurterBody("2026-09-24", Object.fromEntries(supportedCurrencies.map((code) => [code, 3]))) : null));
+    const object = fx();
+    await object.refresh();
+
+    vi.unstubAllGlobals();
+    const calls = stubFetch((url) => (url.includes("frankfurter") ? frankfurterBody("2026-09-24", Object.fromEntries(supportedCurrencies.map((code) => [code, 3]))) : null));
+    const again = await object.refresh();
+
+    expect(again.missing).toEqual([]);
+    expect(again.stored).toBe(0);
+    expect(calls.filter((url) => url.includes("exchangerate-api"))).toEqual([]);
+  });
+
   it("skips a provider with no key rather than failing the run", async () => {
     // How a fork, or a local `wrangler dev`, runs on Frankfurter alone without
     // editing anything. An unconfigured source is not a broken one.
@@ -200,6 +214,72 @@ describe("a backfill", () => {
     // A device with a wrong clock would otherwise fill the throttle table with
     // dates no provider can ever answer.
     expect(await fx().backfill("2099-01-01", "INR")).toBe(false);
+  });
+});
+
+/** Frankfurter's range shape: one map of rates per business day. */
+function frankfurterRange(url: string, skip: (day: string) => boolean = () => false) {
+  const match = /\/v1\/(\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})/.exec(url);
+  if (!match) return null;
+  const [, from = "", to = ""] = match;
+  const rates: Record<string, Record<string, number>> = {};
+  for (let at = Date.parse(from); at <= Date.parse(to); at += 24 * 60 * 60 * 1000) {
+    const day = new Date(at).toISOString().slice(0, 10);
+    const weekday = new Date(at).getUTCDay();
+    if (weekday !== 0 && weekday !== 6 && !skip(day)) rates[day] = { EUR: 0.9, GBP: 0.8 };
+  }
+  return { amount: 1, base: "USD", start_date: from, end_date: to, rates };
+}
+
+describe("the year of history", () => {
+  const now = Date.parse("2026-09-24T12:00:00Z");
+
+  it("is filled in one request on a new deployment, and left alone after", async () => {
+    const calls = stubFetch((url) => (url.includes("frankfurter") ? frankfurterRange(url) : null));
+    const object = fx();
+
+    const first = await object.fillHistory(now);
+    expect(first.gaps).toEqual([{ from: "2025-09-24", to: "2026-09-24" }]);
+    expect(calls).toHaveLength(1);
+    // Two currencies and USD on each of about 260 business days, written in
+    // chunks, since one statement binds at most 100 parameters.
+    expect(first.stored).toBeGreaterThan(700);
+    expect(first.months).toContain("2025-12");
+    expect((await env.CACHE.get<MonthBlob>(monthKey("2025-12"), "json"))?.rates.length).toBeGreaterThan(0);
+
+    const second = await object.fillHistory(now);
+    expect(second.gaps).toEqual([]);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("does not count a weekend or a holiday as missing, but does a week of outage", async () => {
+    // Christmas, and a provider down from 2 to 13 March.
+    const holiday = (day: string) => day === "2025-12-25" || day === "2025-12-26";
+    const outage = (day: string) => day >= "2026-03-02" && day <= "2026-03-13";
+    stubFetch((url) => (url.includes("frankfurter") ? frankfurterRange(url, (day) => holiday(day) || outage(day)) : null));
+    const object = fx();
+    await object.fillHistory(now);
+
+    vi.unstubAllGlobals();
+    const calls = stubFetch((url) => (url.includes("frankfurter") ? frankfurterRange(url) : null));
+    const outcome = await object.fillHistory(now);
+
+    // Every day between the Friday before and the Monday after, in one request.
+    expect(outcome.gaps).toEqual([{ from: "2026-02-28", to: "2026-03-15" }]);
+    expect(calls).toHaveLength(1);
+    expect(outcome.stored).toBeGreaterThan(0);
+  });
+
+  it("is what a day's rate is looked for in, a week back at most", async () => {
+    stubFetch((url) => (url.includes("frankfurter") ? frankfurterBody("2026-01-05", { EUR: 0.9 }) : null));
+    const object = fx();
+    await object.refresh("2026-01-05");
+
+    // Last January's rate does not answer for September, so asking is worth it.
+    stubFetch(() => null);
+    expect(await object.backfill("2026-09-21", "EUR", now)).toBe(true);
+    // But it does answer for the weekend after it.
+    expect(await object.backfill("2026-01-10", "EUR", now)).toBe(false);
   });
 });
 

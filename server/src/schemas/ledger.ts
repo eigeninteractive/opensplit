@@ -162,6 +162,8 @@ export const LinkPreviewSchema = z
     isRevoked: z.boolean(),
     /** Whether the caller already holds a place in this group. */
     isMember: z.boolean(),
+    /** Whether the caller held a place here and left it. Joining brings that same place back. */
+    hasLeft: z.boolean(),
   })
   .openapi("LinkPreview");
 

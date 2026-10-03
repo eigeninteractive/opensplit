@@ -6,7 +6,7 @@ import type { Context } from "hono";
 
 import { clientIp, exhausted, maybeSignedIn, rateLimited, signedIn, tooMany } from "../api/routing";
 import { user } from "../auth-schema";
-import type { AppEnv } from "../context";
+import { type AppEnv, mayChangeIdentity, type Session } from "../context";
 import { apiError, errorResponse, jsonBody, jsonResponse } from "../schemas/common";
 import { EmailStartRequestSchema, EmailStartResponseSchema, EmailVerifyRequestSchema, GoogleIdentityRequestSchema, GoogleRedirectRequestSchema, GoogleRedirectSchema, IdentityOutcomeSchema, ReauthStartSchema, ReauthVerifyRequestSchema, SessionSchema } from "../schemas/identity";
 import { outcomeFor, toAccount } from "./outcome";
@@ -21,6 +21,13 @@ import { outcomeFor, toAccount } from "./outcome";
  * server decides which happened and says so, and refuses a sign-in that would
  * strand a ledger until the caller says it has warned the person.
  */
+
+/**
+ * Attaching an address or a Google account to an account that already has
+ * one is how a session somebody else got hold of would become theirs for
+ * good, so it needs the same fresh sign-in as deleting the account.
+ */
+const reauthRequired = errorResponse("This account has an address, and its sign-in is too old to change who it belongs to. Confirm it is you first: `POST /identity/reauth`, then `POST /identity/reauth/verify`.");
 
 const guestRoute = createRoute({
   ...maybeSignedIn,
@@ -63,6 +70,7 @@ const googleRoute = createRoute({
   request: { body: jsonBody(GoogleIdentityRequestSchema) },
   responses: {
     200: jsonResponse(IdentityOutcomeSchema, "Linked, or signed in"),
+    403: reauthRequired,
     409: errorResponse("That Google account already has an account of its own, and allowSignIn was not set."),
   },
 });
@@ -76,7 +84,7 @@ const googleRedirectRoute = createRoute({
   summary: "Where to send the browser to link or sign in with Google",
   description: "Links to the session in hand unless allowSignIn is set or there is none. Afterwards, read `GET /identity/session`.",
   request: { body: jsonBody(GoogleRedirectRequestSchema) },
-  responses: { 200: jsonResponse(GoogleRedirectSchema, "The URL to visit"), 400: errorResponse("The callback URL is not on this origin.") },
+  responses: { 200: jsonResponse(GoogleRedirectSchema, "The URL to visit"), 400: errorResponse("The callback URL is not on this origin."), 403: reauthRequired },
 });
 
 const emailStartRoute = createRoute({
@@ -87,7 +95,7 @@ const emailStartRoute = createRoute({
   tags: ["identity"],
   summary: "Send a sign-in code, and say which flow it started",
   request: { body: jsonBody(EmailStartRequestSchema) },
-  responses: { 200: jsonResponse(EmailStartResponseSchema, "A code is on its way"), ...rateLimited },
+  responses: { 200: jsonResponse(EmailStartResponseSchema, "A code is on its way"), 403: reauthRequired, ...rateLimited },
 });
 
 const emailVerifyRoute = createRoute({
@@ -102,6 +110,7 @@ const emailVerifyRoute = createRoute({
     200: jsonResponse(IdentityOutcomeSchema, "Attached, or signed in"),
     400: errorResponse("The code is wrong or has expired."),
     401: errorResponse("That code was for a flow this session cannot finish."),
+    403: reauthRequired,
     ...rateLimited,
   },
 });
@@ -138,6 +147,12 @@ const reauthVerifyRoute = createRoute({
     ...rateLimited,
   },
 });
+
+function staleForIdentityChange(session: Session | null): boolean {
+  return session !== null && !mayChangeIdentity(session);
+}
+
+const confirmFirst = () => apiError("reauth_required", "Confirm it is you before changing how this account signs in.");
 
 /** Better Auth checks the token's nonce claim against `nonce` exactly, so the app gives Google the same value it sends here. */
 const google = (idToken: string, nonce: string | null) => ({ provider: "google" as const, idToken: { token: idToken, nonce: nonce ?? undefined } });
@@ -198,8 +213,11 @@ export function identityRoutes(routes: OpenAPIHono<AppEnv>) {
     const { auth, session } = c.var;
     const { idToken, nonce, allowSignIn } = c.req.valid("json");
     const before = session?.userId ?? null;
+    // An old session may still sign in somewhere else; it may not attach an identity to itself.
+    const mayLink = !staleForIdentityChange(session);
+    if (!mayLink && !allowSignIn) return c.json(confirmFirst(), 403);
 
-    if (before !== null) {
+    if (before !== null && mayLink) {
       try {
         const linked = await auth.api.linkSocialAccount({ body: google(idToken, nonce), headers: c.req.raw.headers, returnHeaders: true });
         await settle(c.var.db, before);
@@ -223,6 +241,7 @@ export function identityRoutes(routes: OpenAPIHono<AppEnv>) {
     if (new URL(callbackUrl).origin !== new URL(c.env.APP_ORIGIN).origin) return c.json(apiError("malformed", "The callback URL must be on this site."), 400);
     const body = { provider: "google" as const, callbackURL: callbackUrl, errorCallbackURL: callbackUrl, disableRedirect: true };
     const link = c.var.session !== null && !allowSignIn;
+    if (link && staleForIdentityChange(c.var.session)) return c.json(confirmFirst(), 403);
     const started = link ? await c.var.auth.api.linkSocialAccount({ body, headers: c.req.raw.headers, returnHeaders: true }) : await c.var.auth.api.signInSocial({ body, headers: c.req.raw.headers, returnHeaders: true });
 
     // The OAuth state cookie has to reach the browser for the callback to verify.
@@ -242,6 +261,7 @@ export function identityRoutes(routes: OpenAPIHono<AppEnv>) {
       return c.json({ flow: "signInPending" as const }, 200);
     }
 
+    if (staleForIdentityChange(session)) return c.json(confirmFirst(), 403);
     await auth.api.requestEmailChangeEmailOTP({ body: { newEmail: email }, headers: c.req.raw.headers });
     return c.json({ flow: "linkPending" as const }, 200);
   });
@@ -255,6 +275,7 @@ export function identityRoutes(routes: OpenAPIHono<AppEnv>) {
 
     if (flow === "linkPending") {
       if (before === null) return c.json(apiError("no_session", "That code was for attaching an address to a session, and there is no session to attach it to."), 401);
+      if (staleForIdentityChange(session)) return c.json(confirmFirst(), 403);
       const changed = await auth.api.changeEmailEmailOTP({ body: { newEmail: email, otp: code }, headers: c.req.raw.headers, returnHeaders: true });
       await settle(c.var.db, before);
       return c.json(outcomeFor(await accountById(c.var.db, before), before, forward(c, changed.headers)), 200);

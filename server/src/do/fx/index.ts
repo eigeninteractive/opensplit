@@ -1,11 +1,12 @@
 import { DurableObject } from "cloudflare:workers";
-import { and, asc, between, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, between, eq, gte, inArray, sql } from "drizzle-orm";
 import { type DrizzleSqliteDODatabase, drizzle } from "drizzle-orm/durable-sqlite";
 import { migrate } from "drizzle-orm/durable-sqlite/migrator";
 
+import { insertable } from "../../chunked";
 import * as schema from "../../db/fx/schema";
 import { type MonthBlob, monthKey } from "../../fx/blob";
-import { type FxProvider, providers } from "../../fx/providers";
+import { type FxProvider, type FxSnapshot, providers } from "../../fx/providers";
 import { supportedCurrencies } from "../../reference";
 import type { FxRate } from "../../schemas/reference";
 import migrations from "./migrations/migrations";
@@ -70,6 +71,39 @@ export class Fx extends DurableObject<Env> {
     return true;
   }
 
+  /**
+   * Keeps the last [HISTORY_DAYS] free of any stretch longer than
+   * [STALE_AFTER_DAYS] without a publication, since a rate that old does not
+   * answer for a day. Each such stretch is fetched whole, in one request, from
+   * the first provider that can answer for a range. Run daily: on a new
+   * deployment the first run fills the year, and every run after finds
+   * nothing to do unless a provider was down for a week.
+   */
+  async fillHistory(now: number = Date.now()): Promise<HistoryOutcome> {
+    const gaps = this.gaps(now);
+    const months = new Set<string>();
+    let stored = 0;
+
+    for (const gap of gaps) {
+      for (const provider of providers) {
+        if (!provider.fetchRange) continue;
+        const { snapshots, failure } = await this.attemptRange(provider, gap);
+        this.recordHealth(provider.name, now, failure);
+        if (!snapshots) continue;
+
+        for (const snapshot of snapshots) {
+          const written = this.store(snapshot, provider.name, now);
+          stored += written.length;
+          if (written.length > 0) months.add(snapshot.asOf.slice(0, 7));
+        }
+        break;
+      }
+    }
+
+    await this.publish([...months]);
+    return { gaps, stored, months: [...months].sort() };
+  }
+
   /** Rates on or after a day, straight from storage. */
   async since(asOf: string, limit: number): Promise<FxRate[]> {
     return this.db.select(rateColumns).from(schema.fxRates).where(gte(schema.fxRates.asOf, asOf)).orderBy(asc(schema.fxRates.asOf), asc(schema.fxRates.currency)).limit(limit).all();
@@ -106,19 +140,70 @@ export class Fx extends DurableObject<Env> {
       this.recordHealth(provider.name, now, failure);
       if (!snapshot) continue;
 
-      const rows = Object.entries(snapshot.rates)
-        .filter(([code]) => outstanding.has(code))
-        .map(([currency, rate]) => ({ asOf: snapshot.asOf, currency, rate, source: provider.name, createdAt: new Date(now).toISOString() }));
-      if (rows.length === 0) continue;
+      const answered = Object.entries(snapshot.rates).filter(([code]) => outstanding.has(code));
+      const written = this.store({ asOf: snapshot.asOf, rates: Object.fromEntries(answered) }, provider.name, now);
+      // Covered whether written now or already held: a second run on the same day asks nobody else for it.
+      for (const [currency] of answered) outstanding.delete(currency);
+      if (written.length === 0) continue;
 
-      // Never overwritten: the `source` is stamped on expenses converted with the rate.
-      const written = this.db.insert(schema.fxRates).values(rows).onConflictDoNothing().returning({ currency: schema.fxRates.currency }).all();
       stored += written.length;
       months.add(snapshot.asOf.slice(0, 7));
-      for (const { currency } of written) outstanding.delete(currency);
     }
 
     return { stored, covered: wanted.filter((code) => !outstanding.has(code)), missing: [...outstanding], months: [...months] };
+  }
+
+  /**
+   * Stores one day's rates and returns the currencies newly written. Never
+   * overwrites: the `source` is stamped on expenses converted with a rate.
+   * In pieces, since one statement carries at most 100 values.
+   */
+  private store(snapshot: FxSnapshot, source: string, now: number): string[] {
+    const createdAt = new Date(now).toISOString();
+    const rows = Object.entries(snapshot.rates).map(([currency, rate]) => ({ asOf: snapshot.asOf, currency, rate, source, createdAt }));
+    return insertable(rows).flatMap((chunk) =>
+      this.db
+        .insert(schema.fxRates)
+        .values(chunk)
+        .onConflictDoNothing()
+        .returning({ currency: schema.fxRates.currency })
+        .all()
+        .map((row) => row.currency),
+    );
+  }
+
+  /**
+   * Stretches of the last year where some day has no publication within
+   * [STALE_AFTER_DAYS] before it, each as the run of days between the
+   * publications either side. The edges of the year count as publications.
+   */
+  private gaps(now: number): Gap[] {
+    const today = isoDay(now);
+    const floor = shiftDay(today, -HISTORY_DAYS);
+    const published = this.db
+      .selectDistinct({ asOf: schema.fxRates.asOf })
+      .from(schema.fxRates)
+      .where(between(schema.fxRates.asOf, floor, today))
+      .orderBy(asc(schema.fxRates.asOf))
+      .all()
+      .map((row) => row.asOf);
+
+    const gaps: Gap[] = [];
+    let before = shiftDay(floor, -1);
+    for (const after of [...published, shiftDay(today, 1)]) {
+      if (daysBetween(before, after) > STALE_AFTER_DAYS + 1) gaps.push({ from: shiftDay(before, 1), to: shiftDay(after, -1) });
+      before = after;
+    }
+    return gaps;
+  }
+
+  private async attemptRange(provider: FxProvider, { from, to }: Gap) {
+    try {
+      const snapshots = (await provider.fetchRange?.({ from, to, currencies: supportedCurrencies, env: this.env })) ?? null;
+      return { snapshots, failure: snapshots === null ? "no usable response for a range" : null };
+    } catch (cause) {
+      return { snapshots: null, failure: String(cause) };
+    }
   }
 
   private async attempt(provider: FxProvider, asOf: string | null, currencies: string[]) {
@@ -143,12 +228,16 @@ export class Fx extends DurableObject<Env> {
       .run();
   }
 
-  /** Currencies with no rate on or before a day: a Friday rate answers a Sunday. */
+  /**
+   * Currencies with no rate that answers for a day: one published on it or in
+   * the [STALE_AFTER_DAYS] before, so Friday's answers a Sunday and last
+   * spring's does not answer today.
+   */
   private missingFor(asOf: string): string[] {
     const held = this.db
       .selectDistinct({ currency: schema.fxRates.currency })
       .from(schema.fxRates)
-      .where(and(lte(schema.fxRates.asOf, asOf), inArray(schema.fxRates.currency, supportedCurrencies)))
+      .where(and(between(schema.fxRates.asOf, shiftDay(asOf, -STALE_AFTER_DAYS), asOf), inArray(schema.fxRates.currency, supportedCurrencies)))
       .all();
     const covered = new Set(held.map((row) => row.currency));
     return supportedCurrencies.filter((code) => !covered.has(code));
@@ -168,6 +257,28 @@ export class Fx extends DurableObject<Env> {
   }
 }
 
+/** How far back history is kept complete: the client's own rate window. */
+export const HISTORY_DAYS = 365;
+
+/**
+ * How old a rate may be and still answer for a day. A week covers every
+ * weekend and every ECB holiday. The app holds the same rule, in
+ * `lib/domain/fx/fx_quote.dart`, for the rates it looks up itself.
+ */
+export const STALE_AFTER_DAYS = 7;
+
+/** A run of days, `YYYY-MM-DD`, inclusive. */
+export interface Gap {
+  from: string;
+  to: string;
+}
+
+export interface HistoryOutcome {
+  gaps: Gap[];
+  stored: number;
+  months: string[];
+}
+
 const rateColumns = { asOf: schema.fxRates.asOf, currency: schema.fxRates.currency, rate: schema.fxRates.rate, source: schema.fxRates.source };
 
 export interface RunOutcome {
@@ -181,4 +292,7 @@ const BACKFILL_COOLDOWN = 60 * 60 * 1000;
 /** After this many, a date is accepted as one no provider will answer. */
 const BACKFILL_ATTEMPTS = 5;
 
+const DAY = 24 * 60 * 60 * 1000;
 const isoDay = (at: number) => new Date(at).toISOString().slice(0, 10);
+const shiftDay = (day: string, by: number) => isoDay(Date.parse(day) + by * DAY);
+const daysBetween = (from: string, to: string) => Math.round((Date.parse(to) - Date.parse(from)) / DAY);

@@ -16,6 +16,7 @@ SyncEngine? syncEngine(Ref ref) {
     db: ref.watch(appDatabaseProvider),
     client: client,
     outbox: ref.watch(outboxQueueProvider),
+    accountId: ref.watch(currentAccountIdProvider),
   );
   ref.onDispose(engine.dispose);
   return engine;

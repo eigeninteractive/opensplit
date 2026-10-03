@@ -21,6 +21,7 @@ LinkPreview _$LinkPreviewFromJson(Map<String, dynamic> json) =>
           'isExpired',
           'isRevoked',
           'isMember',
+          'hasLeft',
         ],
       );
       final val = LinkPreview(
@@ -41,6 +42,7 @@ LinkPreview _$LinkPreviewFromJson(Map<String, dynamic> json) =>
         isExpired: $checkedConvert('isExpired', (v) => v as bool),
         isRevoked: $checkedConvert('isRevoked', (v) => v as bool),
         isMember: $checkedConvert('isMember', (v) => v as bool),
+        hasLeft: $checkedConvert('hasLeft', (v) => v as bool),
       );
       return val;
     });
@@ -57,6 +59,7 @@ Map<String, dynamic> _$LinkPreviewToJson(LinkPreview instance) =>
       'isExpired': instance.isExpired,
       'isRevoked': instance.isRevoked,
       'isMember': instance.isMember,
+      'hasLeft': instance.hasLeft,
     };
 
 const _$LinkKindEnumMap = {

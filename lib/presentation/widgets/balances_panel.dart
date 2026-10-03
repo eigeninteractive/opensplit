@@ -8,7 +8,7 @@ import '../../application/ledger_providers.dart';
 import '../../data/local/database.dart';
 import '../../domain/balance/member_balance.dart';
 import '../../domain/balance/simplify.dart';
-import '../../domain/models/entry.dart';
+import '../../domain/balance/transfer_basis.dart';
 import '../../domain/money_format.dart';
 import '../theme.dart';
 import 'avatar_view.dart';
@@ -379,7 +379,7 @@ class _TransferTile extends StatelessWidget {
   }
 }
 
-/// Explains where a simplified payment came from.
+/// Explains where a suggested payment came from.
 class _TransferExplanation extends StatelessWidget {
   const _TransferExplanation({
     required this.ledger,
@@ -395,22 +395,14 @@ class _TransferExplanation extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final debtor = transfer.fromMemberId;
-    final net = ledger.balanceOf(debtor, transfer.currency);
+    final creditor = transfer.toMemberId;
+    final simplified = ledger.group.simplifyDebts;
 
-    // Every entry in this currency that moved the debtor's position, with the
-    // amount it moved it by.
-    final contributions = <({Entry entry, int delta})>[];
-    for (final entry in ledger.entries) {
-      if (entry.row.currency != transfer.currency) continue;
-      var delta = 0;
-      for (final payer in entry.payers) {
-        if (payer.memberId == debtor) delta += payer.amountMinor;
-      }
-      for (final share in entry.shares) {
-        if (share.memberId == debtor) delta -= share.amountMinor;
-      }
-      if (delta != 0) contributions.add((entry: entry, delta: delta));
-    }
+    final (:contributions, :net) = basisOf(
+      transfer,
+      ledger.entries,
+      simplified: simplified,
+    );
 
     final name = ledger.nameOf(debtor);
     final isMe = debtor == ledger.me?.id;
@@ -419,15 +411,21 @@ class _TransferExplanation extends StatelessWidget {
     final rest = transfer.amountMinor == net.abs()
         ? ''
         : ', plus the other suggested payments';
-    final why =
-        '${isMe ? 'You owe' : '$name owes'} '
-        '${formatMoneyAbs(currency, net)} in total across this group. '
-        'Rather than paying several people separately, that whole amount is '
-        'cleared by paying ${ledger.nameOf(transfer.toMemberId)} '
-        '${formatMoney(currency, transfer.amountMinor)}$rest.';
-    const caveat =
-        'This can name someone you never directly owed. It is the shortest '
-        'set of payments that leaves everybody square.';
+    final why = simplified
+        ? '${isMe ? 'You owe' : '$name owes'} '
+              '${formatMoneyAbs(currency, net)} in total across this group. '
+              'Rather than paying several people separately, that whole amount '
+              'is cleared by paying ${ledger.nameOf(creditor)} '
+              '${formatMoney(currency, transfer.amountMinor)}$rest.'
+        : '${isMe ? 'You owe' : '$name owes'} ${ledger.nameOf(creditor)} '
+              '${formatMoney(currency, transfer.amountMinor)}, from the '
+              'expenses the two of you shared, each way netted against the '
+              'other.';
+    final caveat = simplified
+        ? 'This can name someone you never directly owed. It is the shortest '
+              'set of payments that leaves everybody square.'
+        : 'Only the expenses these two shared count here. Turn on "Suggest '
+              'the fewest payments" in group settings to settle in fewer steps.';
 
     return DraggableScrollableSheet(
       expand: false,

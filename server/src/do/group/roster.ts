@@ -89,27 +89,38 @@ function addMember(tx: Tx, memberId: string, input: MemberInput, { now, actor }:
 /**
  * The column rules. Your own row and any placeholder are editable; another
  * account holder's name and payment handle are not, since a handle redirects
- * money. Leaving is always yours; removing somebody else requires them settled.
+ * money. Nobody leaves or is removed owing or owed anything, so a balance is
+ * never stranded with somebody who can no longer see the group. A placeholder
+ * can be brought back by anybody; an account holder only comes back
+ * themselves, with a link.
  */
 function updateMember(tx: Tx, memberId: string, input: MemberInput, { now, actor }: WriteContext): Member {
   const target = requireMember(tx, memberId);
-  const { displayName, upiVpa, leftAt } = input;
+  const { displayName, upiVpa } = input;
+  // The device says whether; the server's clock says when, once.
+  const leftAt = input.leftAt === null ? null : (target.leftAt ?? now);
+  const isSelf = target.id === actor.id;
+  const leaving = leftAt !== null && target.leftAt === null;
+  const returning = leftAt === null && target.leftAt !== null;
 
-  const mineOrPlaceholder = target.profileId === null || target.id === actor.id;
-  if ((displayName !== target.displayName || upiVpa !== target.upiVpa) && !mineOrPlaceholder) {
+  if ((displayName !== target.displayName || upiVpa !== target.upiVpa) && target.profileId !== null && !isSelf) {
     refuse("forbidden", `Only ${target.displayName} can change their own name or payment handle.`);
   }
-  if (leftAt !== target.leftAt && target.id !== actor.id && !isSettled(tx, target.id)) {
-    refuse("not_settled", `${target.displayName} is not settled up in this group, so they cannot be removed from it.`);
+  if (leaving && !isSettled(tx, target.id)) {
+    refuse("not_settled", isSelf ? "You are not settled up in this group yet, so you cannot leave it." : `${target.displayName} is not settled up in this group, so they cannot be removed from it.`);
   }
-  if (displayName === target.displayName && upiVpa === target.upiVpa && leftAt === target.leftAt) return target;
+  if (returning && target.profileId !== null) {
+    refuse("forbidden", `${target.displayName} left this group, so only they can come back, with a link.`);
+  }
+  if (displayName === target.displayName && upiVpa === target.upiVpa && !leaving && !returning) return target;
 
   const seq = nextSeq(tx);
   tx.update(schema.members).set({ displayName, upiVpa, leftAt, updatedAt: now, seq }).where(eq(schema.members.id, memberId)).run();
 
-  // A payment handle and a rejoin are deliberately silent.
+  // A payment handle is deliberately silent.
   const written = { seq, now, actorId: actor.id, subjectId: memberId };
-  if (leftAt !== null && target.leftAt === null) append(tx, { ...written, kind: "member_left", member: { displayName, previousName: null } });
+  if (leaving) append(tx, { ...written, kind: "member_left", member: { displayName, previousName: null } });
+  if (returning) append(tx, { ...written, kind: "member_added", member: { displayName, previousName: null } });
   if (displayName !== target.displayName) append(tx, { ...written, kind: "member_renamed", member: { displayName, previousName: target.displayName } });
 
   if (target.profileId !== null) stageMembership(tx, target.profileId, leftAt, now);

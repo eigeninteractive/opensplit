@@ -7,21 +7,24 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../application/ledger_providers.dart';
+import '../../application/settlement_form.dart';
 import '../../application/local_providers.dart';
 import '../../application/preferences_providers.dart';
 import '../../application/sync_providers.dart';
 import '../../data/local/database.dart';
-import '../../domain/calendar_date.dart';
-import '../../domain/entry_draft.dart';
 import '../../domain/money_format.dart';
 import '../../domain/settle/upi.dart';
+import '../amount_input.dart';
 import '../navigation.dart';
 import '../widgets/currency_picker.dart';
 import '../widgets/page_body.dart';
 
 /// Records a payment between two members, optionally handing off to a UPI app
 /// first.
-class SettleUpScreen extends ConsumerStatefulWidget {
+///
+/// Holds no state of its own: what has been chosen and typed lives in
+/// [SettlementForm].
+class SettleUpScreen extends ConsumerWidget {
   const SettleUpScreen({
     super.key,
     required this.groupId,
@@ -38,84 +41,69 @@ class SettleUpScreen extends ConsumerStatefulWidget {
   final String? currency;
 
   @override
-  ConsumerState<SettleUpScreen> createState() => _SettleUpScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final provider = settlementFormProvider(
+      groupId,
+      fromId: fromMemberId,
+      toId: toMemberId,
+      amountMinor: amountMinor,
+      currency: currency,
+    );
 
-class _SettleUpScreenState extends ConsumerState<SettleUpScreen> {
-  final _amount = TextEditingController();
-  final _payeeVpa = TextEditingController();
-
-  String? _from;
-  String? _to;
-  String? _currencyCode;
-  String? _amountError;
-  bool _saving = false;
-  bool _prefilled = false;
-
-  @override
-  void dispose() {
-    _amount.dispose();
-    _payeeVpa.dispose();
-    super.dispose();
-  }
-
-  /// Applies route parameters and sensible defaults once the ledger arrives.
-  void _prefillOnce(GroupLedger ledger, Map<String, Currency> currencies) {
-    if (_prefilled) return;
-    _prefilled = true;
-
-    _from = widget.fromMemberId ?? ledger.me?.id;
-    _to = widget.toMemberId;
-    _currencyCode = widget.currency ?? ledger.group.defaultCurrency;
-
-    if (widget.amountMinor != null) {
-      final currency = currencies[_currencyCode];
-      if (currency != null) {
-        _amount.text = currency.formatPlain(widget.amountMinor!);
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
     // Started on the way in, so this device's zone is known by the time a
     // settlement is recorded.
     ref.watch(deviceZoneProvider);
 
     // Revalidate on the way in, and this is the one screen where it is not
     // merely tidiness.
-    ref.watch(groupSyncProvider(widget.groupId));
+    ref.watch(groupSyncProvider(groupId));
 
-    final ledger = ref.watch(groupLedgerProvider(widget.groupId));
-    final currencies = ref.watch(currenciesProvider).value ?? const {};
-
-    if (ledger == null) {
+    final ledger = ref.watch(groupLedgerProvider(groupId));
+    final form = ref.watch(provider).value;
+    if (ledger == null || form == null) {
       return Scaffold(appBar: AppBar(leading: const BackButton()));
     }
-    _prefillOnce(ledger, currencies);
-
-    final currency = currencies[_currencyCode];
-    final payee = _to == null ? null : ledger.memberById(_to!);
-
-    // Fill the payee's handle the first time we learn it, without stamping over
-    // anything the user has typed.
-    final knownVpa = payee == null ? null : ledger.upiOf(payee);
-    if (_payeeVpa.text.isEmpty && knownVpa != null) {
-      _payeeVpa.text = knownVpa;
-    }
-
-    final amountMinor = currency?.parseToMinor(_amount.text);
-    final upiUri = buildUpiPaymentUri(
-      payeeVpa: _payeeVpa.text,
-      payeeName: payee == null ? '' : ledger.nameOfMember(payee),
-      amountMinor: amountMinor ?? 0,
-      currency: currency ?? const Currency(code: '', exponent: 2, name: ''),
+    return _SettleUp(
+      ledger: ledger,
+      form: form,
+      controller: ref.read(provider.notifier),
     );
+  }
+}
+
+class _SettleUp extends ConsumerWidget {
+  const _SettleUp({
+    required this.ledger,
+    required this.form,
+    required this.controller,
+  });
+
+  final GroupLedger ledger;
+  final SettlementFormState form;
+  final SettlementForm controller;
+
+  Future<void> _record(BuildContext context, WidgetRef ref) async {
+    if (!await controller.record() || !context.mounted) return;
+    goBack(context, '/g/${ledger.group.id}');
+
+    // The one place the app asks for a review: a debt has just been cleared,
+    // which is the app finishing the thing it exists to do.
+    final review = ref.read(reviewPromptProvider);
+    unawaited(review.isDue().then((due) => due ? review.ask() : null));
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final currencies = ref.watch(currenciesProvider).value ?? const {};
+    final currency = currencies[form.currencyCode];
+    final payee = form.toId == null ? null : ledger.memberById(form.toId!);
+    final payeeName = payee == null ? '' : ledger.nameOfMember(payee);
+    final (from, to) = (form.fromId, form.toId);
 
     return Scaffold(
       appBar: AppBar(
         leading: BackButton(
-          onPressed: () => goBack(context, '/g/${widget.groupId}'),
+          onPressed: () => goBack(context, '/g/${ledger.group.id}'),
         ),
         title: const Text('Settle up'),
       ),
@@ -125,66 +113,76 @@ class _SettleUpScreenState extends ConsumerState<SettleUpScreen> {
           children: [
             _MemberDropdown(
               label: 'Who is paying',
-              members: ledger.members,
+              members: ledger.settleable,
               nameOf: ledger.nameOfMember,
               meId: ledger.me?.id,
-              value: _from,
-              onChanged: (id) => setState(() => _from = id),
+              value: from,
+              onChanged: controller.choosePayer,
             ),
             const SizedBox(height: 16),
             _MemberDropdown(
               label: 'Who is being paid',
-              members: ledger.members,
+              members: ledger.settleable,
               nameOf: ledger.nameOfMember,
               meId: ledger.me?.id,
-              value: _to,
-              excludeId: _from,
-              onChanged: (id) => setState(() => _to = id),
+              value: to,
+              excludeId: from,
+              onChanged: controller.choosePayee,
             ),
             const SizedBox(height: 16),
             CurrencyPicker(
-              value: _currencyCode ?? ledger.group.defaultCurrency,
-              onChanged: (code) => setState(() => _currencyCode = code),
+              value: form.currencyCode,
+              onChanged: controller.chooseCurrency,
             ),
             const SizedBox(height: 16),
-            TextField(
-              controller: _amount,
+            TextFormField(
+              initialValue: form.amount,
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
+              inputFormatters: [DecimalInputFormatter.amount(currency)],
               decoration: InputDecoration(
                 labelText: 'Amount',
                 prefixText: currency?.symbol == null
                     ? null
                     : '${currency!.symbol} ',
-                errorText: _amountError,
+                errorText: form.error,
               ),
-              onChanged: (_) => setState(() => _amountError = null),
+              onChanged: controller.setAmount,
             ),
-            if (_from != null && _to != null && currency != null) ...[
+            if (from != null && to != null && currency != null) ...[
               const SizedBox(height: 8),
               _OutstandingHint(
                 ledger: ledger,
-                from: _from!,
-                to: _to!,
+                from: from,
+                to: to,
                 currency: currency,
               ),
             ],
             const SizedBox(height: 24),
-            if (currency?.code == 'INR') ...[
+            if (currency != null && currency.code == 'INR') ...[
               _UpiSection(
-                payeeName: payee == null ? '' : ledger.nameOfMember(payee),
-                vpaController: _payeeVpa,
-                uri: upiUri,
-                onChanged: () => setState(() {}),
-                onPaid: () => _record(ledger, currency!),
+                payeeName: payeeName,
+                // A new payee, or their handle arriving with their profile,
+                // is a new field: what it shows is never left over from
+                // somebody else.
+                fieldKey: ValueKey((to, form.knownHandleIn(ledger))),
+                handle: form.handleIn(ledger),
+                onHandleChanged: to == null ? null : controller.setHandle,
+                uri: buildUpiPaymentUri(
+                  payeeVpa: form.handleIn(ledger),
+                  payeeName: payeeName,
+                  amountMinor: currency.parseToMinor(form.amount) ?? 0,
+                  currency: currency,
+                ),
+                onPaid: () => _record(context, ref),
               ),
               const SizedBox(height: 24),
             ],
             FilledButton.icon(
-              onPressed: _saving || currency == null
+              onPressed: form.saving || currency == null
                   ? null
-                  : () => _record(ledger, currency),
+                  : () => _record(context, ref),
               icon: const Icon(Icons.check),
               label: const Text('Record this payment'),
             ),
@@ -198,66 +196,6 @@ class _SettleUpScreenState extends ConsumerState<SettleUpScreen> {
         ),
       ),
     );
-  }
-
-  Future<void> _record(GroupLedger ledger, Currency currency) async {
-    final from = _from;
-    final to = _to;
-    final amountMinor = currency.parseToMinor(_amount.text);
-
-    if (from == null || to == null) {
-      setState(() => _amountError = 'Choose who is paying whom.');
-      return;
-    }
-    if (amountMinor == null) {
-      setState(
-        () => _amountError = currency.exponent == 0
-            ? 'Enter a whole amount.'
-            : 'Enter an amount with at most ${currency.exponent} decimal '
-                  'places.',
-      );
-      return;
-    }
-    if (amountMinor <= 0) {
-      setState(() => _amountError = 'Enter an amount greater than zero.');
-      return;
-    }
-
-    setState(() => _saving = true);
-    try {
-      // Paid now, here. Saving never waits to learn where "here" is: with no
-      // zone known yet, only the day is kept.
-      final zone = ref.read(deviceZoneProvider).value;
-      final now = DateTime.now();
-      await ref
-          .read(entryRepositoryProvider)
-          .create(
-            EntryDraft.settlement(
-              groupId: widget.groupId,
-              currency: currency.code,
-              amountMinor: amountMinor,
-              fromMemberId: from,
-              toMemberId: to,
-              entryDate: calendarDay(now),
-              occurredAt: zone == null ? null : now.toUtc(),
-              timeZone: zone,
-            ),
-            createdBy: ledger.me?.id ?? from,
-          );
-
-      if (!mounted) return;
-      goBack(context, '/g/${widget.groupId}');
-
-      // The one place the app asks for a review: a debt has just been cleared,
-      // which is the app finishing the thing it exists to do.
-      final review = ref.read(reviewPromptProvider);
-      unawaited(review.isDue().then((due) => due ? review.ask() : null));
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _amountError = '$error');
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
   }
 }
 
@@ -296,16 +234,23 @@ class _OutstandingHint extends StatelessWidget {
 class _UpiSection extends StatelessWidget {
   const _UpiSection({
     required this.payeeName,
-    required this.vpaController,
+    required this.fieldKey,
+    required this.handle,
+    required this.onHandleChanged,
     required this.uri,
-    required this.onChanged,
     required this.onPaid,
   });
 
   final String payeeName;
-  final TextEditingController vpaController;
+
+  /// Identifies what the field was filled from, so a change there gives a
+  /// fresh field rather than one still showing the old handle.
+  final Key fieldKey;
+  final String? handle;
+
+  /// Null until somebody is chosen to be paid.
+  final ValueChanged<String>? onHandleChanged;
   final Uri? uri;
-  final VoidCallback onChanged;
   final Future<void> Function() onPaid;
 
   @override
@@ -327,15 +272,17 @@ class _UpiSection extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: vpaController,
+            TextFormField(
+              key: fieldKey,
+              initialValue: handle,
+              enabled: onHandleChanged != null,
               decoration: InputDecoration(
                 labelText: payeeName.isEmpty
                     ? 'Their UPI ID'
                     : "$payeeName's UPI ID",
                 hintText: 'name@bank',
               ),
-              onChanged: (_) => onChanged(),
+              onChanged: onHandleChanged,
             ),
             const SizedBox(height: 16),
             if (uri == null)
@@ -462,6 +409,11 @@ class _MemberDropdown extends StatelessWidget {
     ];
 
     return DropdownMenu<String>(
+      // DropdownMenu reads its selection once, and on later changes only
+      // follows one it can find among its entries: cleared to nobody, it
+      // would go on showing the last name. Keyed by the value, a different
+      // value is a fresh menu that shows exactly that.
+      key: ValueKey(value),
       initialSelection: options.any((m) => m.id == value) ? value : null,
       label: Text(label),
       // A group's member list is short and every name is already visible, so

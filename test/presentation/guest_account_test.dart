@@ -27,6 +27,7 @@ Future<void> _pumpPrompt(
     ProviderScope(
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
+        currentAccountIdProvider.overrideWithValue(testAccountId),
         accountProvider.overrideWith(
           (ref) => Stream.value(_account(guest: guest)),
         ),

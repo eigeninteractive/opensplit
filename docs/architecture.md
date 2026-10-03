@@ -327,7 +327,11 @@ tokens.
 
 ## Cron: two schedules
 
-`0 4 * * *` refreshes exchange rates. `0 5 * * *` collects abandoned guest
+`0 4 * * *` refreshes exchange rates, then keeps the last year of them
+complete: any stretch of more than a week with no publication (all of it, on a
+new deployment) is fetched whole in one range request. A rate more than a week
+older than a day does not answer for that day, on the server or the device.
+`0 5 * * *` collects abandoned guest
 accounts (over ninety days old, in no group, no session used in ninety days) and
 finishes any account deletion a request started and did not complete.
 

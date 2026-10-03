@@ -7,11 +7,34 @@ import '../local/database.dart';
 import '../local/tables.dart';
 import '../sync/outbox_queue.dart';
 
+/// A group as a list of groups shows it.
+class GroupListing {
+  const GroupListing({
+    required this.group,
+    required this.hasLeft,
+    required this.lastActivityAt,
+  });
+
+  final Group group;
+
+  /// Whether this account left the group, or was removed from it. Read from
+  /// the account's own member row, which the server confirms, rather than
+  /// from anything this device decided.
+  final bool hasLeft;
+
+  /// The newest line in the group's activity feed, or when it was made.
+  final DateTime lastActivityAt;
+
+  /// In the main list: neither put away nor left.
+  bool get isCurrent => !group.isArchived && !hasLeft;
+}
+
 /// Local-first group and membership storage.
 final class DriftGroupRepository {
   DriftGroupRepository(
     this._db, {
     this.outbox,
+    this.accountId,
     Uuid? uuid,
     DateTime Function()? clock,
   }) : _uuid = uuid ?? const Uuid(),
@@ -19,19 +42,53 @@ final class DriftGroupRepository {
 
   final AppDatabase _db;
 
+  /// The account this ledger belongs to, which is how a group it has left is
+  /// told apart. Null in a purely local build, which has no accounts.
+  final String? accountId;
+
   /// Null in a purely local build, where there is nothing to sync to.
   final OutboxQueue? outbox;
   final Uuid _uuid;
   final DateTime Function() _clock;
 
-  /// Groups this user belongs to, newest activity first.
-  Stream<List<Group>> watchGroups({bool includeArchived = false}) {
-    final query = _db.select(_db.groups)
-      ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]);
-    if (!includeArchived) {
-      query.where((t) => t.archivedAt.isNull());
-    }
-    return query.watch().map((rows) => [for (final row in rows) row]);
+  /// Every group on this device, the most recently active first: what a
+  /// list of groups is ordered by, and where it is put.
+  Stream<List<GroupListing>> watchListings() {
+    final groups = _db.groups;
+    final newestLine = subqueryExpression<DateTime>(
+      _db.selectOnly(_db.groupEvents)
+        ..addColumns([_db.groupEvents.createdAt.max()])
+        ..where(_db.groupEvents.groupId.equalsExp(groups.id)),
+    );
+    final account = accountId;
+    final Expression<bool> hasLeft = account == null
+        ? const Constant(false)
+        : existsQuery(
+            _db.selectOnly(_db.members)
+              ..addColumns([_db.members.id])
+              ..where(
+                _db.members.groupId.equalsExp(groups.id) &
+                    _db.members.profileId.equals(account) &
+                    _db.members.leftAt.isNotNull(),
+              ),
+          );
+
+    final query = _db.select(groups).addColumns([newestLine, hasLeft]);
+    return query.watch().map((rows) {
+      final listings = [
+        for (final row in rows)
+          GroupListing(
+            group: row.readTable(groups),
+            hasLeft: row.read(hasLeft) ?? false,
+            lastActivityAt:
+                row.read(newestLine) ?? row.readTable(groups).createdAt,
+          ),
+      ];
+      // Ordered here rather than in SQL, where an aggregate over a date and
+      // the date column itself are stored differently and would not compare.
+      return listings
+        ..sort((a, b) => b.lastActivityAt.compareTo(a.lastActivityAt));
+    });
   }
 
   Stream<Group?> watchGroup(String groupId) => (_db.select(
@@ -140,19 +197,13 @@ final class DriftGroupRepository {
     });
   }
 
-  /// Leaves a group: marks your own member row as having left, and archives the
-  /// group on this device.
-  Future<void> leaveGroup({
-    required String groupId,
-    required String memberId,
-  }) async {
-    final now = _clock();
+  /// Leaves a group by marking your own member row as having left. The group
+  /// stays on this device, read-only, among the groups put away. The server
+  /// refuses this while you owe or are owed anything in it.
+  Future<void> leaveGroup({required String memberId}) async {
     await _db.transaction(() async {
       await (_db.update(_db.members)..where((t) => t.id.equals(memberId)))
-          .write(MembersCompanion(leftAt: Value(now)));
-      await (_db.update(_db.groups)..where((t) => t.id.equals(groupId))).write(
-        GroupsCompanion(archivedAt: Value(now)),
-      );
+          .write(MembersCompanion(leftAt: Value(_clock())));
       await outbox?.enqueue(OutboxTarget.member, memberId);
     });
   }

@@ -79,6 +79,23 @@ class EntryDraft {
   final String? fxSource;
 }
 
+/// Whether a form describes an entry yet.
+sealed class DraftCheck {
+  const DraftCheck();
+}
+
+/// It does.
+final class DraftReady extends DraftCheck {
+  const DraftReady(this.draft);
+  final EntryDraft draft;
+}
+
+/// Not yet, and why, in words for the person filling it in.
+final class DraftIncomplete extends DraftCheck {
+  const DraftIncomplete(this.reason);
+  final String reason;
+}
+
 /// Turns a [draft] into a balanced [Entry].
 Entry composeEntry(
   EntryDraft draft, {

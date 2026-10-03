@@ -62,6 +62,7 @@ class SyncEngine {
     required this.db,
     required this.client,
     required this.outbox,
+    this.accountId,
     SyncGate? gate,
     DateTime Function()? clock,
     this.pageSize = 200,
@@ -81,6 +82,10 @@ class SyncEngine {
   final AppDatabase db;
   final api.OpensplitApi client;
   final OutboxQueue outbox;
+
+  /// The account this ledger belongs to, which is how a group it has left is
+  /// recognised. Null only where there is no account to ask about.
+  final String? accountId;
   final DateTime Function() _clock;
   final SyncGate _gate;
   final int pageSize;
@@ -111,14 +116,52 @@ class SyncEngine {
   Future<T> _call<T>(Future<dio.Response<T>> request) =>
       fetch(request).timeout(requestTimeout);
 
-  /// The server's groups for this account, plus local ones it has not seen.
-  /// Throws when the server cannot be asked: the local list alone cannot show
-  /// that an account has no other groups.
+  /// The server's groups for this account, plus local ones it has not seen,
+  /// less those this account has left for good. Throws when the server cannot
+  /// be asked: the local list alone cannot show that an account has no other
+  /// groups.
   Future<List<String>> discoverGroups() async {
     final local = await db.select(db.groups).get();
     final remote = await _call(client.getSyncApi().listGroups());
-    return {for (final row in local) row.id, ...remote.groupIds}.toList()
-      ..sort();
+    final left = await _leftForGood();
+    return {
+      for (final row in local)
+        if (!left.contains(row.id)) row.id,
+      ...remote.groupIds,
+    }.toList()..sort();
+  }
+
+  /// Groups this account has left or been removed from, and this device has
+  /// already read that back from the server. A pull of one can only ever come
+  /// back empty, so asking again on every sync is a request for nothing. An
+  /// invite link brings the group back through [ListGroups] once it is joined.
+  Future<Set<String>> _leftForGood() async {
+    final account = accountId;
+    if (account == null) return const {};
+
+    final departed =
+        await (db.select(db.members)..where(
+              (t) =>
+                  t.profileId.equals(account) &
+                  t.leftAt.isNotNull() &
+                  t.seq.isNotNull(),
+            ))
+            .get();
+    if (departed.isEmpty) return const {};
+
+    final cursors = {
+      for (final cursor in await db.select(db.groupCursors).get())
+        cursor.groupId: cursor.seq,
+    };
+    // Unsent, the leave is this device's word alone, and the server may still
+    // refuse it.
+    final unsent = await outbox.unsentIds(OutboxTarget.member);
+    return {
+      for (final member in departed)
+        if (!unsent.contains(member.id) &&
+            (cursors[member.groupId] ?? 0) >= member.seq!)
+          member.groupId,
+    };
   }
 
   Future<SyncReport> syncGroup(String groupId) =>

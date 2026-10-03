@@ -22,8 +22,7 @@ class LinkAccountPrompt extends ConsumerWidget {
     final account = ref.watch(accountProvider).value;
     if (account == null || !account.isAnonymous) return const SizedBox.shrink();
 
-    final groups =
-        ref.watch(groupsProvider(includeArchived: true)).value ?? const [];
+    final groups = ref.watch(groupListingsProvider).value ?? const [];
     final dismissed = ref.watch(promptDismissedProvider);
     if (groups.isEmpty || dismissed) return const SizedBox.shrink();
 

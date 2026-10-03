@@ -1541,6 +1541,9 @@
           },
           "isMember": {
             "type": "boolean"
+          },
+          "hasLeft": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1553,7 +1556,8 @@
           "isRedeemed",
           "isExpired",
           "isRevoked",
-          "isMember"
+          "isMember",
+          "hasLeft"
         ]
       },
       "LinkKind": {
@@ -2193,6 +2197,16 @@
               }
             }
           },
+          "403": {
+            "description": "This account has an address, and its sign-in is too old to change who it belongs to. Confirm it is you first: `POST /identity/reauth`, then `POST /identity/reauth/verify`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "409": {
             "description": "That Google account already has an account of its own, and allowSignIn was not set.",
             "content": {
@@ -2253,6 +2267,16 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "This account has an address, and its sign-in is too old to change who it belongs to. Confirm it is you first: `POST /identity/reauth`, then `POST /identity/reauth/verify`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -2290,6 +2314,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/EmailStartResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account has an address, and its sign-in is too old to change who it belongs to. Confirm it is you first: `POST /identity/reauth`, then `POST /identity/reauth/verify`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -2356,6 +2390,16 @@
           },
           "401": {
             "description": "That code was for a flow this session cannot finish.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account has an address, and its sign-in is too old to change who it belongs to. Confirm it is you first: `POST /identity/reauth`, then `POST /identity/reauth/verify`.",
             "content": {
               "application/json": {
                 "schema": {
