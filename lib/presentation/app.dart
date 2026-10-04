@@ -100,7 +100,7 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
   /// the group been doing, and is there a new version of the app.
   void _onResume() {
     if (ref.read(signedInProvider)) {
-      ref.read(appDatabaseProvider).refreshAfterExternalSync();
+      unawaited(ref.read(appDatabaseProvider).noticeWritesElsewhere());
     }
     ref.read(syncControllerProvider.notifier).resumed();
     _offerUpdate();

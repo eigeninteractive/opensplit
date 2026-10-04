@@ -102,8 +102,9 @@ cd server && pnpm format     # Biome, across the whole repository; CI runs `pnpm
 outranks a personal default formatter.
 
 The server tests are not optional decoration. They cover the balance invariant
-rejecting an expense that does not add up, that a stale edit is refused only
-when applying it would move money, that entries cannot be hard-deleted, that an
+rejecting an expense that does not add up, that an edit composed on an older
+version is refused rather than undoing the one in between, that entries cannot
+be hard-deleted, that an
 invite token can be spent exactly once by somebody with no other access to the
 group, and that a collected group answers everybody with a tombstone rather
 than refusing every device that still holds a copy.

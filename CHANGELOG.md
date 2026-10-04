@@ -30,8 +30,15 @@ What changed in each version of the app, newest first. The format is
 - Groups you have left move to the archived list, read-only, and stop syncing.
 - Amounts can be typed with a comma as the decimal point. Thousands separators are no longer accepted while typing.
 - Exchange-rate estimates only use a rate from within a week of the expense's day, and the server keeps a full year of rates to draw on.
+- Two people editing the same expense at once no longer quietly lose one edit: whichever arrives second is set aside, with the newer version shown, to be applied again on top of it.
+- Saving something syncs that group alone, and all your groups are read in one request, so syncing uses far less data and battery.
 
 ### Fixed
+- Settling up with somebody and then removing them while offline no longer leaves the removal refused once you are back online.
+- One group that can't be read yet, such as one created offline, no longer stops your other groups from syncing.
+- A group is no longer archived as unused while people are still editing its expenses.
+- A name change could occasionally never reach the people you share groups with.
+- Updates the app received in the background now show on screen as soon as you return, and screens no longer redraw after every sync when nothing changed.
 - A group where you're owed one currency and owe another now says both on the groups list, instead of calling it all owed to you.
 - Signing in with Google on Android works again.
 - A name you give while creating your first group now shows on your profile straight away.

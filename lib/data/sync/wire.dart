@@ -99,7 +99,7 @@ extension ProfileFromWire on api.Profile {
     avatarEmoji: avatarEmoji,
     avatarIcon: avatarIcon,
     avatarPhoto: avatarPhoto,
-    updatedAt: updatedAt,
+    version: version,
   );
 }
 

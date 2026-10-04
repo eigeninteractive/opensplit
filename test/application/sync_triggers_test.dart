@@ -12,6 +12,9 @@ void main() {
   late List<DateTime> runs;
   late StreamController<bool> online;
   late StreamController<void> writes;
+
+  /// Partial runs: what a local write sends, and the groups it touched.
+  late List<Set<String>> partial;
   late DateTime now;
   late SyncCoordinator scheduler;
 
@@ -31,6 +34,7 @@ void main() {
 
   setUp(() {
     runs = [];
+    partial = [];
     online = StreamController<bool>.broadcast();
     writes = StreamController<void>.broadcast();
     now = DateTime.utc(2026, 8, 27, 9);
@@ -39,7 +43,10 @@ void main() {
         runs.add(now);
         return _clean;
       },
-      syncGroup: (_) async => _clean,
+      syncGroups: (ids) async {
+        partial.add(ids);
+        return _clean;
+      },
       online: online.stream,
       writes: writes.stream,
       clock: () => now,
@@ -154,7 +161,8 @@ void main() {
     writes.add(null);
     await settleWrite();
 
-    expect(runs, hasLength(2));
+    expect(runs, hasLength(1));
+    expect(partial, [<String>{}], reason: 'the write, sent and read back');
   });
 
   test('one action that queues several rows is one sync', () async {
@@ -169,8 +177,8 @@ void main() {
     await settleWrite();
 
     expect(
-      runs,
-      hasLength(2),
+      partial,
+      hasLength(1),
       reason: 'a burst from one user action collects into a single sync',
     );
   });
@@ -184,7 +192,11 @@ void main() {
         await gate.future;
         return _clean;
       },
-      syncGroup: (_) async => _clean,
+      syncGroups: (_) async {
+        started.add(started.length);
+        await gate.future;
+        return _clean;
+      },
       online: online.stream,
       writes: writes.stream,
       clock: () => now,
@@ -226,7 +238,7 @@ void main() {
         await gate.future;
         return _clean;
       },
-      syncGroup: (_) async => _clean,
+      syncGroups: (_) async => _clean,
       online: online.stream,
       writes: writes.stream,
       clock: () => now,
@@ -255,7 +267,7 @@ void main() {
         attempts++;
         throw StateError('offline');
       },
-      syncGroup: (_) async => _clean,
+      syncGroups: (_) async => _clean,
       online: online.stream,
       writes: writes.stream,
       clock: () => now,
@@ -280,7 +292,7 @@ void main() {
         runs.add(now);
         return _clean;
       },
-      syncGroup: (_) async => _clean,
+      syncGroups: (_) async => _clean,
       online: online.stream,
       clock: () => now,
     );

@@ -6,7 +6,7 @@ import { isSettled } from "./balances";
 import { append } from "./events";
 import { refuse } from "./refusal";
 import { findMemberByProfile, findMeta, nextSeq, purge, requireMember, requireMeta, type Tx, type WriteContext } from "./store";
-import { stageMembership, stagePurge, touchDormancy } from "./upkeep";
+import { stageMembership, stagePurge } from "./upkeep";
 
 /**
  * The group and its people. Membership is the only permission: no owner, no
@@ -33,7 +33,6 @@ export function createGroup(tx: Tx, groupId: string, input: GroupInput, profileI
     .run();
 
   stageMembership(tx, profileId, null, now);
-  touchDormancy(tx, now);
   return requireMeta(tx);
 }
 

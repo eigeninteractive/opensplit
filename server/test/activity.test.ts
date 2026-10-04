@@ -52,7 +52,7 @@ describe("recording an expense", () => {
     const { groupId, ravi, priya } = await makeGroup();
     const id = freshId("e");
 
-    ok(await saveEntry(stub(groupId), evenly(id, ravi.id, [ravi.id, priya.id], 1000), RAVI));
+    const first = ok(await saveEntry(stub(groupId), evenly(id, ravi.id, [ravi.id, priya.id], 1000), RAVI));
     const before = (await eventsOf(groupId, RAVI)).filter((event) => event.kind === "entry").length;
 
     ok(
@@ -60,6 +60,7 @@ describe("recording an expense", () => {
         stub(groupId),
         expense({
           id,
+          baseSeq: first.seq,
           amountMinor: 1000,
           payers: [{ memberId: ravi.id, amountMinor: 1000 }],
           shares: [

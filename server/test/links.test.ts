@@ -3,9 +3,9 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { defaultAvatar, defaultGroupLook } from "../src/db/appearance";
 
 import type { ApiError } from "../src/schemas/common";
-import type { ChangePage, GroupLink, Invite, Joined, LinkPreview, LinkRevocation, LiveLink, PlaceholderList } from "./api-types";
+import type { GroupLink, Invite, Joined, LinkPreview, LinkRevocation, LiveLink, PlaceholderList } from "./api-types";
 import { freshId } from "./group";
-import { type Guest, signInAsGuest } from "./session";
+import { changes, type Guest, signInAsGuest } from "./session";
 
 /** Arriving, over HTTP. */
 
@@ -216,7 +216,7 @@ describe("the name, travelling the other way", () => {
     // Somebody arriving on an invite signed in as a guest a moment earlier and
     // has no name at all, while the group already knows them as whatever was
     // typed on the placeholder.
-    const { profiles } = await json<ChangePage>(await call(`/api/groups/${id}/changes?since=0`, ravi));
+    const { profiles } = await changes(ravi, id);
     expect(profiles).toContainEqual(expect.objectContaining({ id: arriving.id, displayName: "Priya" }));
   });
 
@@ -231,7 +231,7 @@ describe("the name, travelling the other way", () => {
     // The slot keeps the name the group knows, and the account keeps its own.
     expect(claimed.member.displayName).toBe("P");
 
-    const { profiles } = await json<ChangePage>(await call(`/api/groups/${id}/changes?since=0`, ravi));
+    const { profiles } = await changes(ravi, id);
     expect(profiles.find((row) => row.id === arriving.id)?.displayName).toBe("Priya Sharma");
   });
 

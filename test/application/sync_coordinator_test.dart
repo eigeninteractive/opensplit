@@ -22,8 +22,8 @@ void main() {
         fullRuns++;
         return first.future;
       },
-      syncGroup: (id) async {
-        groups.add(id);
+      syncGroups: (ids) async {
+        groups.addAll(ids);
         return _clean;
       },
     );
@@ -50,7 +50,7 @@ void main() {
     var fullRuns = 0;
     final coordinator = SyncCoordinator(
       syncAll: () async => ++fullRuns == 1 ? await first.future : _clean,
-      syncGroup: (_) async => throw StateError('full sync should cover this'),
+      syncGroups: (_) async => throw StateError('full sync should cover this'),
     );
     addTearDown(coordinator.dispose);
 
@@ -66,13 +66,72 @@ void main() {
     expect(coordinator.status.error, isNull);
   });
 
+  testWidgets('a local write sends and reads back only what it touched', (
+    tester,
+  ) async {
+    final writes = StreamController<void>();
+    addTearDown(writes.close);
+    var fullRuns = 0;
+    final partialRuns = <Set<String>>[];
+    final coordinator = SyncCoordinator(
+      syncAll: () async {
+        fullRuns++;
+        return _clean;
+      },
+      syncGroups: (ids) async {
+        partialRuns.add(ids);
+        return _clean;
+      },
+      writes: writes.stream,
+    );
+    addTearDown(coordinator.dispose);
+    coordinator.start();
+    await tester.pump();
+    expect(fullRuns, 1);
+
+    writes
+      ..add(null)
+      ..add(null);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+
+    expect(fullRuns, 1);
+    expect(partialRuns, [<String>{}], reason: 'two writes, one debounced run');
+  });
+
+  testWidgets('groups asked for during a run go out together', (tester) async {
+    final first = Completer<SyncReport>();
+    final partialRuns = <Set<String>>[];
+    final coordinator = SyncCoordinator(
+      syncAll: () async => _clean,
+      syncGroups: (ids) async {
+        partialRuns.add(ids);
+        return partialRuns.length == 1 ? await first.future : _clean;
+      },
+    );
+    addTearDown(coordinator.dispose);
+    await coordinator.syncAll();
+
+    final running = coordinator.syncGroup('home');
+    await tester.pump();
+    final second = coordinator.syncGroup('trip');
+    final third = coordinator.syncGroup('flat');
+    first.complete(_clean);
+    await Future.wait([running, second, third]);
+
+    expect(partialRuns, [
+      {'home'},
+      {'trip', 'flat'},
+    ]);
+  });
+
   testWidgets('a failure stays visible and retries without another trigger', (
     tester,
   ) async {
     var attempts = 0;
     final coordinator = SyncCoordinator(
       syncAll: () async => ++attempts == 1 ? _failed : _clean,
-      syncGroup: (_) async => _clean,
+      syncGroups: (_) async => _clean,
     );
     addTearDown(coordinator.dispose);
 
@@ -100,7 +159,7 @@ void main() {
         attempts++;
         return fail ? _failed : _clean;
       },
-      syncGroup: (_) async => _clean,
+      syncGroups: (_) async => _clean,
     );
     await coordinator.syncAll();
     for (final seconds in [5, 10, 20, 40, 80, 160, 300, 300]) {
@@ -131,10 +190,17 @@ void main() {
       failed: 0,
       nextPushAt: now.add(const Duration(seconds: 30)),
     );
-    var attempts = 0;
+    var fullRuns = 0;
+    final partialRuns = <Set<String>>[];
     final coordinator = SyncCoordinator(
-      syncAll: () async => ++attempts == 1 ? waiting : _clean,
-      syncGroup: (_) async => _clean,
+      syncAll: () async {
+        fullRuns++;
+        return waiting;
+      },
+      syncGroups: (ids) async {
+        partialRuns.add(ids);
+        return _clean;
+      },
       clock: () => now,
     );
     addTearDown(coordinator.dispose);
@@ -144,9 +210,11 @@ void main() {
     expect(coordinator.status.hasCompletedFullSync, isTrue);
     expect(coordinator.status.retryAt, waiting.nextPushAt);
     await tester.pump(const Duration(seconds: 29));
-    expect(attempts, 1);
+    expect(partialRuns, isEmpty);
     await tester.pump(const Duration(seconds: 1));
-    expect(attempts, 2);
+    // Only the write is owed, so only the write is retried.
+    expect(partialRuns, [<String>{}]);
+    expect(fullRuns, 1);
     expect(coordinator.status.retryAt, isNull);
   });
 
@@ -155,7 +223,7 @@ void main() {
   ) async {
     final coordinator = SyncCoordinator(
       syncAll: () async => const SyncReport(pushed: 0, pulled: 1, failed: 1),
-      syncGroup: (_) async => _clean,
+      syncGroups: (_) async => _clean,
     );
     addTearDown(coordinator.dispose);
     await coordinator.syncAll();
@@ -172,7 +240,7 @@ void main() {
     var groupRuns = 0;
     final coordinator = SyncCoordinator(
       syncAll: () async => fail ? _failed : _clean,
-      syncGroup: (_) async {
+      syncGroups: (_) async {
         groupRuns++;
         return _failed;
       },
@@ -203,7 +271,7 @@ void main() {
         attempts++;
         return attempts == 1 ? _failed : await pending.future;
       },
-      syncGroup: (_) async => _clean,
+      syncGroups: (_) async => _clean,
     );
     var updates = 0;
     coordinator.addListener(() => updates++);
@@ -226,7 +294,7 @@ void main() {
   ) async {
     final coordinator = SyncCoordinator(
       syncAll: () => throw StateError('database unavailable'),
-      syncGroup: (_) async => _clean,
+      syncGroups: (_) async => _clean,
     );
     await coordinator.syncAll();
     expect(coordinator.status.error, isA<StateError>());

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 
 import 'package:dio/dio.dart' as dio;
 import 'package:drift/drift.dart';
@@ -116,25 +117,38 @@ class SyncEngine {
   Future<T> _call<T>(Future<dio.Response<T>> request) =>
       fetch(request).timeout(requestTimeout);
 
-  /// The server's groups for this account, plus local ones it has not seen,
-  /// less those this account has left for good. Throws when the server cannot
-  /// be asked: the local list alone cannot show that an account has no other
-  /// groups.
+  /// The groups this account is in, by the server's account and this
+  /// device's, less those [_unreadable] says not to ask about. Throws when the
+  /// server cannot be asked: the local list alone cannot show that an account
+  /// has no other groups.
   Future<List<String>> discoverGroups() async {
-    final local = await db.select(db.groups).get();
-    final remote = await _call(client.getSyncApi().listGroups());
-    final left = await _leftForGood();
+    final answer = await _call(
+      client.getSyncApi().pull(
+        pullRequest: api.PullRequest(groups: const [], limit: pageSize),
+      ),
+    );
+    final skipped = await _unreadable();
     return {
-      for (final row in local)
-        if (!left.contains(row.id)) row.id,
-      ...remote.groupIds,
-    }.toList()..sort();
+      for (final row in await db.select(db.groups).get()) row.id,
+      ...answer.groupIds,
+    }.difference(skipped).toList()..sort();
   }
+
+  /// Groups a pull can only waste a request on: ones the server has never
+  /// acknowledged (their creation is still in the outbox, and the server
+  /// would answer `no_group`), and ones this account has left for good.
+  Future<Set<String>> _unreadable() async => {
+    for (final group in await (db.select(
+      db.groups,
+    )..where((t) => t.seq.isNull())).get())
+      group.id,
+    ...await _leftForGood(),
+  };
 
   /// Groups this account has left or been removed from, and this device has
   /// already read that back from the server. A pull of one can only ever come
-  /// back empty, so asking again on every sync is a request for nothing. An
-  /// invite link brings the group back through [ListGroups] once it is joined.
+  /// back empty. An invite link brings the group back, and the server then
+  /// names it among the account's groups again.
   Future<Set<String>> _leftForGood() async {
     final account = accountId;
     if (account == null) return const {};
@@ -149,10 +163,7 @@ class SyncEngine {
             .get();
     if (departed.isEmpty) return const {};
 
-    final cursors = {
-      for (final cursor in await db.select(db.groupCursors).get())
-        cursor.groupId: cursor.seq,
-    };
+    final cursors = await _groupCursors();
     // Unsent, the leave is this device's word alone, and the server may still
     // refuse it.
     final unsent = await outbox.unsentIds(OutboxTarget.member);
@@ -164,26 +175,33 @@ class SyncEngine {
     };
   }
 
-  Future<SyncReport> syncGroup(String groupId) =>
-      _serialized(() => _run(() => pull(groupId)));
+  /// Pushes what is waiting, then reads [groupIds] and every group the push
+  /// wrote to. What a screen, a local write or a push message asks for: the
+  /// shared feeds are left to [syncEverything].
+  Future<SyncReport> syncGroups(Set<String> groupIds) =>
+      _serialized(() => _run(groupIds: groupIds));
 
-  /// Every group in one run: the outbox and the shared feeds once. A group
-  /// that cannot be pulled ends the sweep; the cause is likely the connection.
-  Future<SyncReport> syncEverything() => _serialized(
-    () => _run(() async {
-      var pulled = 0;
-      for (final groupId in await discoverGroups()) {
-        pulled += await pull(groupId);
-      }
-      return pulled;
-    }),
-  );
+  Future<SyncReport> syncGroup(String groupId) => syncGroups({groupId});
 
-  Future<SyncReport> _run(Future<int> Function() pullGroups) async {
+  /// The outbox, the shared feeds, and every group the account is in.
+  Future<SyncReport> syncEverything() =>
+      _serialized(() => _run(groupIds: const {}, everything: true));
+
+  Future<SyncReport> _run({
+    required Set<String> groupIds,
+    bool everything = false,
+  }) async {
     final pushed = await push();
     try {
-      await shared.pullAll();
-      final pulled = await pullGroups();
+      if (everything) {
+        await shared.pullAll();
+      } else {
+        await shared.pullFxRates();
+      }
+      final pulled = await _pull({
+        ...groupIds,
+        ...pushed.groups,
+      }, everything: everything);
       return SyncReport(
         pushed: pushed.sent,
         pulled: pulled,
@@ -214,6 +232,8 @@ class SyncEngine {
         return await _gate.synchronized(() async {
           _activeEpoch = (await readSyncSession(db)).epoch;
           await _assertActive();
+          // Another isolate may have held the gate, and written, just now.
+          await db.noticeWritesElsewhere();
           final report = await operation();
           return report.withNextPushAt(await outbox.nextAttemptAt());
         });
@@ -236,9 +256,12 @@ class SyncEngine {
   /// dead-lettered, so the loop ends unless the queue refills as it drains.
   static const int _maxPushRounds = 50;
 
-  Future<({int sent, int failed})> push() async {
+  /// Sends the outbox in order. [groups] are the ones it wrote to, or found
+  /// it needs to read back.
+  Future<({int sent, int failed, Set<String> groups})> push() async {
     var sent = 0;
     var failed = 0;
+    final groups = <String>{};
 
     for (var round = 0; round < _maxPushRounds; round++) {
       await _assertActive();
@@ -247,16 +270,18 @@ class SyncEngine {
 
       for (final item in due) {
         try {
-          await _pushOne(item);
+          if (await _pushOne(item) case final groupId?) groups.add(groupId);
           await outbox.complete(item);
           sent++;
         } on ApiFailure catch (e) {
           switch (e.retry) {
             case api.Retry.stale:
-              await _parkConflict(item);
+              if (await _parkConflict(item) case final groupId?) {
+                groups.add(groupId);
+              }
             case api.Retry.transient:
               await outbox.fail(item, e.message);
-              return (sent: sent, failed: failed + 1);
+              return (sent: sent, failed: failed + 1, groups: groups);
             // Refused identically next time; retrying would wedge the queue.
             case api.Retry.permanent:
             case api.Retry.unknownDefaultOpenApi:
@@ -266,21 +291,21 @@ class SyncEngine {
         } catch (e) {
           // A connection failure affects the whole batch.
           await outbox.fail(item, '$e');
-          return (sent: sent, failed: failed + 1);
+          return (sent: sent, failed: failed + 1, groups: groups);
         }
       }
     }
-    return (sent: sent, failed: failed);
+    return (sent: sent, failed: failed, groups: groups);
   }
 
   /// Parks an edit the server refused as stale for a person to read, and
   /// rewinds the cursor to its base so the next pull brings the server's
-  /// version (skipped while the row was dirty).
-  Future<void> _parkConflict(OutboxRow item) async {
-    await db.transaction(() async {
-      if (!await outbox.isCurrent(item)) return;
+  /// version (skipped while the row was dirty). Answers the group to read.
+  Future<String?> _parkConflict(OutboxRow item) async {
+    return db.transaction(() async {
+      if (!await outbox.isCurrent(item)) return null;
       final entry = await _loadEntry(item.targetId);
-      if (entry == null) return;
+      if (entry == null) return null;
 
       await db
           .into(db.entryConflicts)
@@ -295,6 +320,7 @@ class SyncEngine {
           );
       await _rewindCursor(entry.row.groupId, to: entry.row.seq ?? 0);
       await outbox.complete(item);
+      return entry.row.groupId;
     });
   }
 
@@ -346,9 +372,9 @@ class SyncEngine {
         if (row.seq case final seq?) return _rewindCursor(id, to: seq - 1);
         await (db.delete(db.groups)..where((t) => t.id.equals(id))).go();
       case OutboxTarget.profile:
-        // Cursored on time, not seq: forget this copy's timestamp and re-read.
+        // Not on a group's feed: forget this copy's version and re-read.
         await (db.update(db.profiles)..where((t) => t.id.equals(id))).write(
-          const ProfilesCompanion(updatedAt: Value(null)),
+          const ProfilesCompanion(version: Value(null)),
         );
         await shared.resetProfileFeed();
     }
@@ -391,13 +417,14 @@ class SyncEngine {
 
   /// Sends one dirty row, read now rather than at queue time, and records the
   /// sequence number the server gave it: its version and the next edit's base.
-  Future<void> _pushOne(OutboxRow item) async {
+  /// Answers the group it wrote to, if it sent anything that has one.
+  Future<String?> _pushOne(OutboxRow item) async {
     switch (item.target) {
       case OutboxTarget.entry:
         final entry = await _snapshot(item, () => _loadEntry(item.targetId));
-        if (entry == null) return;
+        if (entry == null) return null;
         // Created and deleted before its first push: nothing remote to delete.
-        if (entry.isDeleted && entry.row.seq == null) return;
+        if (entry.isDeleted && entry.row.seq == null) return null;
 
         final stored = await _call(
           client.getEntriesApi().putEntry(
@@ -411,6 +438,7 @@ class SyncEngine {
           await (db.update(db.entries)..where((t) => t.id.equals(stored.id)))
               .write(EntriesCompanion(seq: Value(stored.seq)));
         });
+        return entry.row.groupId;
 
       case OutboxTarget.group:
         final group = await _snapshot(
@@ -419,7 +447,7 @@ class SyncEngine {
             db.groups,
           )..where((t) => t.id.equals(item.targetId))).getSingleOrNull(),
         );
-        if (group == null) return;
+        if (group == null) return null;
 
         // A group the server has never seen is created with its creator.
         final creator = await _creatorOf(group);
@@ -439,6 +467,7 @@ class SyncEngine {
                 .write(MembersCompanion(seq: Value(stored.seq)));
           }
         });
+        return group.id;
 
       case OutboxTarget.member:
         final member = await _snapshot(
@@ -447,7 +476,7 @@ class SyncEngine {
             db.members,
           )..where((t) => t.id.equals(item.targetId))).getSingleOrNull(),
         );
-        if (member == null) return;
+        if (member == null) return null;
 
         final stored = await _call(
           client.getGroupsApi().putMember(
@@ -461,6 +490,7 @@ class SyncEngine {
           await (db.update(db.members)..where((t) => t.id.equals(member.id)))
               .write(MembersCompanion(seq: Value(stored.seq)));
         });
+        return member.groupId;
 
       case OutboxTarget.profile:
         final profile = await _snapshot(
@@ -469,7 +499,7 @@ class SyncEngine {
             db.profiles,
           )..where((t) => t.id.equals(item.targetId))).getSingleOrNull(),
         );
-        if (profile == null) return;
+        if (profile == null) return null;
 
         final stored = await _call(
           client.getSyncApi().updateProfile(profileUpdate: profile.toUpdate()),
@@ -477,8 +507,9 @@ class SyncEngine {
         await db.transaction(() async {
           if (!await outbox.isCurrent(item)) return;
           await (db.update(db.profiles)..where((t) => t.id.equals(profile.id)))
-              .write(ProfilesCompanion(updatedAt: Value(stored.updatedAt)));
+              .write(ProfilesCompanion(version: Value(stored.version)));
         });
+        return null;
     }
   }
 
@@ -499,35 +530,80 @@ class SyncEngine {
   }
 
   /// One group's changes after its cursor, page by page.
-  Future<int> pull(String groupId) async {
-    var cursor = await _readGroupCursor(groupId);
-    var applied = 0;
+  Future<int> pull(String groupId) => _pull({groupId}, everything: false);
 
-    while (true) {
+  /// The most groups the server reads in one pull.
+  static const _groupsPerPull = 50;
+
+  /// Reads [groupIds] past their cursors, many groups to a request, until each
+  /// is caught up or refused. With [everything], also every group this
+  /// account is in, and the server's answer names any it joined elsewhere.
+  ///
+  /// A group the server refuses is logged and left as it is here: one group
+  /// it cannot read says nothing about the others.
+  Future<int> _pull(Set<String> groupIds, {required bool everything}) async {
+    final cursors = await _groupCursors();
+    final skipped = await _unreadable();
+    final wanted = <String, int>{};
+    final done = <String>{};
+    void want(String groupId) {
+      if (done.contains(groupId) || skipped.contains(groupId)) return;
+      wanted.putIfAbsent(groupId, () => cursors[groupId] ?? 0);
+    }
+
+    if (everything) {
+      for (final group in await db.select(db.groups).get()) {
+        want(group.id);
+      }
+    }
+    groupIds.forEach(want);
+
+    var applied = 0;
+    var asked = false;
+    while (wanted.isNotEmpty || (everything && !asked)) {
       await _assertActive();
-      final page = await _call(
-        client.getSyncApi().getChanges(
-          groupId: groupId,
-          since: cursor,
-          limit: pageSize,
+      final batch = [
+        for (final MapEntry(key: groupId, value: since) in wanted.entries.take(
+          _groupsPerPull,
+        ))
+          api.GroupCursor(groupId: groupId, since: since),
+      ];
+      final answer = await _call(
+        client.getSyncApi().pull(
+          pullRequest: api.PullRequest(groups: batch, limit: pageSize),
         ),
       );
+      asked = true;
 
-      applied += await applyGroupChanges(db, page, now: _clock());
-
-      if (page.purgedAt != null) return applied;
-      if (page.seq == cursor) break;
-      cursor = page.seq;
-      if (!page.hasMore) break;
+      for (final cursor in batch) {
+        wanted.remove(cursor.groupId);
+        done.add(cursor.groupId);
+      }
+      for (final page in answer.pages) {
+        applied += await applyGroupChanges(db, page, now: _clock());
+        final since = cursors[page.groupId] ?? 0;
+        cursors[page.groupId] = page.seq;
+        if (page.hasMore && page.purgedAt == null && page.seq > since) {
+          done.remove(page.groupId);
+          want(page.groupId);
+        }
+      }
+      for (final refusal in answer.refusals) {
+        developer.log(
+          'Group ${refusal.groupId} was not read: ${refusal.message}',
+          name: 'opensplit.sync',
+          level: 900,
+        );
+      }
+      if (everything) answer.groupIds.forEach(want);
     }
     return applied;
   }
 
-  Future<int> _readGroupCursor(String groupId) async =>
-      (await (db.select(
-        db.groupCursors,
-      )..where((t) => t.groupId.equals(groupId))).getSingleOrNull())?.seq ??
-      0;
+  Future<Map<String, int>> _groupCursors() async => {
+    for (final cursor in await db.select(db.groupCursors).get())
+      cursor.groupId: cursor.seq,
+  };
 
   Future<Entry?> _loadEntry(String entryId) async {
     final row = await (db.select(

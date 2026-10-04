@@ -49,8 +49,8 @@ class SyncController extends _$SyncController {
     if (engine == null) return const SyncStatus(enabled: false);
 
     final coordinator = SyncCoordinator(
-      syncAll: () => _refreshing(engine.syncEverything()),
-      syncGroup: (groupId) => _refreshing(engine.syncGroup(groupId)),
+      syncAll: engine.syncEverything,
+      syncGroups: engine.syncGroups,
       online: ref.watch(networkSignalProvider).changes,
       // Every local write, from every screen, through one stream.
       writes: ref.watch(outboxQueueProvider).queued,
@@ -78,14 +78,6 @@ class SyncController extends _$SyncController {
   Future<void> discardFailed() async {
     await ref.read(syncEngineProvider)?.discardRefused();
     await syncAll();
-  }
-
-  /// Streams notice writes made through this database on their own; this
-  /// covers ones a background isolate made to the same file.
-  Future<SyncReport> _refreshing(Future<SyncReport> sync) async {
-    final report = await sync;
-    if (ref.mounted) ref.read(appDatabaseProvider).refreshAfterExternalSync();
-    return report;
   }
 }
 

@@ -2,7 +2,7 @@ import { z } from "@hono/zod-openapi";
 
 import { deviceTokens, platforms, profiles } from "../db/d1/schema";
 import { avatarFields, avatarRefinements, refineAvatar } from "./appearance";
-import { createSelectSchema, IdSchema, NameSchema, TimestampSchema, UpiVpaSchema } from "./common";
+import { createSelectSchema, IdSchema, NameSchema, SeqSchema, TimestampSchema, UpiVpaSchema } from "./common";
 
 /** The person behind an account, their devices, and deleting it. None of it is group-scoped. */
 
@@ -15,6 +15,7 @@ const profileRow = createSelectSchema(profiles, {
   ...avatarRefinements,
   updatedAt: () => TimestampSchema,
   deletedAt: () => TimestampSchema,
+  version: () => SeqSchema,
 });
 
 /** A null `displayName` means nobody chose one; a set `deletedAt` means the account is gone. */
@@ -26,21 +27,15 @@ export const ProfileUpdateSchema = profileRow
   .superRefine(refineAvatar)
   .openapi("ProfileUpdate");
 
-/**
- * One page of the profile feed, the one feed cursored on time: D1 has no
- * single writer to hand out a sequence number.
- */
+/** One page of the profile feed, oldest version first. */
 export const ProfilePageSchema = z
   .object({
     profiles: z.array(ProfileSchema),
-    /** Opaque. Send it back as `after`; null when the page is empty. */
-    cursor: z.string().nullable(),
+    /** The newest version on the page, or the cursor sent when it is empty. Send it back as `since`. */
+    seq: SeqSchema,
     hasMore: z.boolean(),
   })
   .openapi("ProfilePage");
-
-/** The groups this account is still in. */
-export const GroupIdsSchema = z.object({ groupIds: z.array(IdSchema) }).openapi("GroupIds");
 
 /** An FCM registration token. Registering claims it for this session, since phones change hands. */
 export const DeviceSchema = createSelectSchema(deviceTokens, { token: () => z.string().min(1).max(4096), platform: () => PlatformSchema })
@@ -61,6 +56,5 @@ export const AccountDeletionSchema = z
 export type Profile = z.infer<typeof ProfileSchema>;
 export type ProfileUpdate = z.infer<typeof ProfileUpdateSchema>;
 export type ProfilePage = z.infer<typeof ProfilePageSchema>;
-export type GroupIds = z.infer<typeof GroupIdsSchema>;
 export type Device = z.infer<typeof DeviceSchema>;
 export type AccountDeletion = z.infer<typeof AccountDeletionSchema>;

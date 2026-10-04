@@ -79,15 +79,30 @@ class AppDatabase extends _$AppDatabase {
 
   /// Bump this on **any** change to a table in `tables.dart`.
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   /// Timestamps are stored as ISO-8601 text rather than Unix seconds.
   @override
   DriftDatabaseOptions get options =>
       const DriftDatabaseOptions(storeDateTimeAsText: true);
 
-  /// Re-runs live queries after the background isolate changed this file.
-  void refreshAfterExternalSync() => markTablesUpdated(allTables);
+  /// SQLite's `data_version` when this connection last looked.
+  int? _dataVersion;
+
+  /// Re-runs live queries if another connection has committed to this file
+  /// since the last look: the push handler, which wakes in its own Flutter
+  /// engine and so cannot share this connection. Drift sees only the writes
+  /// made through it; `data_version` changes for every commit but this
+  /// connection's own, so nothing is re-run when nothing else wrote.
+  Future<void> noticeWritesElsewhere() async {
+    final seen = _dataVersion;
+    final now = _dataVersion = await _readDataVersion();
+    if (seen != null && seen != now) markTablesUpdated(allTables);
+  }
+
+  Future<int> _readDataVersion() async => (await customSelect(
+    'PRAGMA data_version',
+  ).getSingle()).read<int>('data_version');
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -113,6 +128,7 @@ class AppDatabase extends _$AppDatabase {
         await customStatement('PRAGMA journal_mode = WAL');
         await customStatement('PRAGMA busy_timeout = 5000');
       }
+      _dataVersion = await _readDataVersion();
     },
   );
 }

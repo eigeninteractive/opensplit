@@ -4,7 +4,7 @@ import { linkKinds } from "../db/d1/schema";
 import * as tables from "../db/group/schema";
 import { ProfileSchema } from "./account";
 import { avatarFields, avatarRefinements, coverFields, coverRefinements, refineAvatar, refineCover } from "./appearance";
-import { CurrencyCodeSchema, createSelectSchema, DateSchema, IdSchema, NameSchema, SeqSchema, TimestampSchema, TimeZoneSchema, UpiVpaSchema } from "./common";
+import { CurrencyCodeSchema, createSelectSchema, DateSchema, ErrorCodeSchema, IdSchema, NameSchema, SeqSchema, TimestampSchema, TimeZoneSchema, UpiVpaSchema } from "./common";
 
 /**
  * The ledger on the wire. Rows are the group object's tables; request bodies
@@ -230,6 +230,35 @@ export const ChangePageSchema = z
 /** A page as the group's object answers it; the Worker adds the profiles, which live in D1. */
 export type GroupChanges = Omit<ChangePage, "profiles">;
 
+/** Where a device stands in one group's history. */
+export const GroupCursorSchema = z.object({ groupId: IdSchema, since: SeqSchema }).openapi("GroupCursor");
+
+/** The most groups one pull reads. A device with more asks again with the rest. */
+export const MAX_GROUPS_PER_PULL = 50;
+
+/** Groups to read past their cursors, each its own page. */
+export const PullRequestSchema = z
+  .object({
+    groups: z.array(GroupCursorSchema).max(MAX_GROUPS_PER_PULL),
+    /** Per group, counted in changes as on a page. */
+    limit: z.int().min(1).max(500),
+  })
+  .refine((request) => new Set(request.groups.map((cursor) => cursor.groupId)).size === request.groups.length, { path: ["groups"], message: "Each group is asked for once." })
+  .openapi("PullRequest");
+
+/** A group in the request that could not be read, and why. Every other group in the same pull is still answered. */
+export const GroupRefusalSchema = z.object({ groupId: IdSchema, code: ErrorCodeSchema, message: z.string() }).openapi("GroupRefusal");
+
+export const PullSchema = z
+  .object({
+    /** Every group this account is in now, asked for or not: how a device finds a group joined elsewhere. */
+    groupIds: z.array(IdSchema),
+    /** One page per group read, in the order asked. */
+    pages: z.array(ChangePageSchema),
+    refusals: z.array(GroupRefusalSchema),
+  })
+  .openapi("Pull");
+
 /** The kinds that wake a device: an expense, somebody arriving, somebody leaving. */
 export const notifiableKinds = ["entry", "member_joined", "member_left"] as const satisfies readonly (typeof tables.eventKinds)[number][];
 
@@ -267,4 +296,8 @@ export type GroupEventPayload = z.infer<typeof GroupEventPayloadSchema>;
 export type LinkEventPayload = z.infer<typeof LinkEventPayloadSchema>;
 export type Event = z.infer<typeof EventSchema>;
 export type ChangePage = z.infer<typeof ChangePageSchema>;
+export type GroupCursor = z.infer<typeof GroupCursorSchema>;
+export type PullRequest = z.infer<typeof PullRequestSchema>;
+export type GroupRefusal = z.infer<typeof GroupRefusalSchema>;
+export type Pull = z.infer<typeof PullSchema>;
 export type PushData = z.infer<typeof PushDataSchema>;

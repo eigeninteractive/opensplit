@@ -3,9 +3,9 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { defaultAvatar, defaultGroupLook } from "../src/db/appearance";
 
 import type { ApiError } from "../src/schemas/common";
-import type { AccountDeletion, ChangePage, GroupIds, GroupLink, Joined, LinkPreview, Profile, ProfilePage } from "./api-types";
+import type { AccountDeletion, GroupLink, Joined, LinkPreview, Profile, ProfilePage } from "./api-types";
 import { freshId } from "./group";
-import { type Guest, signInAsGuest } from "./session";
+import { changes, type Guest, pull, pullResponse, signInAsGuest } from "./session";
 
 /** The person, rather than the ledger. */
 
@@ -166,7 +166,7 @@ describe("the profile feed", () => {
     expect(other.profiles.map((row) => row.id)).toContain(host.id);
   });
 
-  it("pages on the pair, so two renames in one millisecond cannot hide one", async () => {
+  it("pages on the version, delivering every row once", async () => {
     const host = await signInAsGuest();
     const friends = [await signInAsGuest(), await signInAsGuest(), await signInAsGuest()];
 
@@ -178,17 +178,16 @@ describe("the profile feed", () => {
     }
 
     const collected: string[] = [];
-    let cursor: ProfilePage = { profiles: [], cursor: null, hasMore: true };
+    let page: ProfilePage = { profiles: [], seq: 0, hasMore: true };
     let pages = 0;
 
-    while (cursor.hasMore && pages < 10) {
-      const query = cursor.cursor ? `?limit=2&after=${encodeURIComponent(cursor.cursor)}` : "?limit=2";
-      cursor = await json<ProfilePage>(await call(`/api/profiles${query}`, host));
-      collected.push(...cursor.profiles.map((row) => row.id));
+    while (page.hasMore && pages < 10) {
+      page = await json<ProfilePage>(await call(`/api/profiles?limit=2&since=${page.seq}`, host));
+      collected.push(...page.profiles.map((row) => row.id));
       pages += 1;
     }
 
-    expect(cursor.hasMore).toBe(false);
+    expect(page.hasMore).toBe(false);
     expect(new Set(collected)).toEqual(new Set([host.id, ...friends.map((friend) => friend.id)]));
 
     // No row twice.
@@ -204,7 +203,7 @@ describe("a group's change page", () => {
     await named(stranger, "Zara");
     const { groupId } = await share(host, friend, "Priya");
 
-    const page = await json<ChangePage>(await call(`/api/groups/${groupId}/changes?since=0`, host));
+    const page = await changes(host, groupId);
     expect(page.profiles.map((row) => row.id).sort()).toEqual([host.id, friend.id].sort());
   });
 
@@ -220,7 +219,7 @@ describe("a group's change page", () => {
       await call(`/api/links/${link.token}/join`, guest, { method: "POST", body: JSON.stringify({ memberId: null, displayName: `Friend ${index}` }) });
     }
 
-    const page = await json<ChangePage>(await call(`/api/groups/${groupId}/changes?since=0`, host));
+    const page = await changes(host, groupId);
     expect(page.profiles).toHaveLength(121);
   }, 30_000);
 
@@ -239,7 +238,7 @@ describe("a group's change page", () => {
 
     const { groupId } = await share(host, friend, "Priya");
 
-    const page = await json<ChangePage>(await call(`/api/groups/${groupId}/changes?since=0`, host));
+    const page = await changes(host, groupId);
     expect(page.profiles).toContainEqual(expect.objectContaining({ id: friend.id, displayName: "Priya" }));
   });
 });
@@ -283,7 +282,7 @@ describe("deleting an account", () => {
 
     // The group is untouched for everybody else, and the member row keeps its
     // name: money Ravi paid is a fact about Priya's group as much as his.
-    const page = await json<ChangePage>(await call(`/api/groups/${groupId}/changes?since=0`, staying));
+    const page = await changes(staying, groupId);
     const row = page.members.find((each) => each.id === member.id);
     expect(row?.displayName).toBe("Ravi");
 
@@ -300,7 +299,7 @@ describe("deleting an account", () => {
 
     await call("/api/account", leaving, { method: "DELETE" });
 
-    const page = await json<ChangePage>(await call(`/api/groups/${groupId}/changes?since=0`, staying));
+    const page = await changes(staying, groupId);
     expect(page.members.find((each) => each.id === member.id)?.displayName).toBe("Ravi Kumar");
   });
 
@@ -314,7 +313,7 @@ describe("deleting an account", () => {
     // Holding somebody's expense descriptions forever in a group with no living
     // reader is the opposite of what deleting an account asks for.
     const after = await signInAsGuest();
-    const grave = await json<ChangePage>(await call(`/api/groups/${groupId}/changes?since=0`, after));
+    const grave = await changes(after, groupId);
 
     expect(grave.purgedAt).not.toBeNull();
     expect(grave.members).toEqual([]);
@@ -339,10 +338,10 @@ describe("deleting an account", () => {
 
     // The session is gone with the account, so the device is signed out by
     // consequence rather than by a second call.
-    expect((await call("/api/groups", going)).status).toBe(401);
+    expect((await pullResponse(going, [])).status).toBe(401);
 
     // The place is a placeholder now, so the group no longer names the account at all.
-    const page = await json<ChangePage>(await call(`/api/groups/${groupId}/changes?since=0`, friend));
+    const page = await changes(friend, groupId);
     expect(page.profiles.map((row) => row.id)).not.toContain(going.id);
   });
 
@@ -354,7 +353,7 @@ describe("deleting an account", () => {
 describe("a guest who never became anybody", () => {
   it("still gets a profile, no groups and an empty feed", async () => {
     const guest = await signInAsGuest();
-    expect(await json<GroupIds>(await call("/api/groups", guest))).toEqual({ groupIds: [] });
+    expect((await pull(guest, [])).groupIds).toEqual([]);
 
     // Visible only to themselves, which is the degenerate case of the rule
     // rather than a special one: nobody shares a group with them yet.

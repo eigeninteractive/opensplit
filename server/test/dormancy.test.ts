@@ -1,7 +1,10 @@
+import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
-import { deleteEntry, editMember, evenly, freshId, makeGroup, makeGroupOfTwo, ok, PRIYA, RAVI, refusal, saveEntry, stub } from "./group";
+import { defaultGroupLook } from "../src/db/appearance";
+import type { Group } from "../src/do/group";
+import { deleteEntry, draftOf, editMember, evenly, freshId, makeGroup, makeGroupOfTwo, ok, PRIYA, RAVI, refusal, saveEntry, stub } from "./group";
 
 /** Dormancy and account deletion: what an idle group does to itself, and what survives somebody deleting the account that made it. */
 
@@ -40,6 +43,55 @@ describe("a group that goes quiet", () => {
     ok(await saveEntry(object, evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 400), RAVI));
 
     expect(ok(await object.changes(RAVI, 0, 500)).group?.archivedAt).toBeNull();
+  });
+
+  /**
+   * Quiet is measured from the last change anybody made, not from the newest
+   * expense: a group whose people spend months correcting old expenses, or
+   * only joining and renaming, is in use.
+   */
+  it("counts an edit to an old expense as use", async () => {
+    const { groupId, ravi, priya } = await makeGroup();
+    const object = stub(groupId);
+    const entry = ok(await saveEntry(object, evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 400), RAVI));
+
+    // Recorded, and last touched, half a year ago.
+    const longAgo = Date.now() - 180 * DAYS;
+    await runInDurableObject(object, async (_instance: Group, state) => {
+      state.storage.sql.exec("update entries set created_at = ?", new Date(longAgo).toISOString());
+      state.storage.sql.exec("update meta set last_activity_at = ?", longAgo);
+    });
+    ok(await saveEntry(object, draftOf(entry, { description: "Dinner, corrected" }), RAVI));
+
+    expect((await object.runUpkeep(Date.now() + 10 * DAYS)).archived).toBe(false);
+  });
+
+  it("does not count being archived as use", async () => {
+    const { groupId } = await makeGroup();
+    const object = stub(groupId);
+
+    await object.runUpkeep(Date.now() + 100 * DAYS);
+    const activity = await runInDurableObject(object, async (_instance: Group, state) => state.storage.sql.exec<{ last_activity_at: number }>("select last_activity_at from meta").one().last_activity_at);
+    expect(activity).toBeLessThan(Date.now() + DAYS);
+  });
+
+  /** A deadline already spent would hold the object's one alarm in the past, firing again as soon as it returns. */
+  it("leaves no archive deadline behind once it is archived, by anybody", async () => {
+    const { groupId, ravi, priya } = await makeGroup();
+    const object = stub(groupId);
+    const entry = ok(await saveEntry(object, evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 400), RAVI));
+    ok(await object.putGroup(groupId, { name: "Goa trip", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: new Date().toISOString(), ...defaultGroupLook, creatorId: ravi.id, creatorName: "Ravi" }, RAVI));
+    // Deleting is a change, so it arms the archive deadline again, in an archived group.
+    ok(await deleteEntry(object, entry, RAVI));
+
+    await object.runUpkeep(Date.now() + 100 * DAYS);
+    const chores = await runInDurableObject(object, async (_instance: Group, state) =>
+      state.storage.sql
+        .exec<{ name: string }>("select name from schedule")
+        .toArray()
+        .map((row) => row.name),
+    );
+    expect(chores).not.toContain("archive");
   });
 
   it("tells the record that nobody archived it", async () => {

@@ -19,7 +19,7 @@ class ProfilePage {
   ProfilePage({
     required this.profiles,
 
-    required this.cursor,
+    required this.seq,
 
     required this.hasMore,
   });
@@ -27,8 +27,9 @@ class ProfilePage {
   @JsonKey(name: r'profiles', required: true, includeIfNull: false)
   final List<Profile> profiles;
 
-  @JsonKey(name: r'cursor', required: true, includeIfNull: true)
-  final String? cursor;
+  // minimum: 0
+  @JsonKey(name: r'seq', required: true, includeIfNull: false)
+  final int seq;
 
   @JsonKey(name: r'hasMore', required: true, includeIfNull: false)
   final bool hasMore;
@@ -38,14 +39,11 @@ class ProfilePage {
       identical(this, other) ||
       other is ProfilePage &&
           other.profiles == profiles &&
-          other.cursor == cursor &&
+          other.seq == seq &&
           other.hasMore == hasMore;
 
   @override
-  int get hashCode =>
-      profiles.hashCode +
-      (cursor == null ? 0 : cursor.hashCode) +
-      hasMore.hashCode;
+  int get hashCode => profiles.hashCode + seq.hashCode + hasMore.hashCode;
 
   factory ProfilePage.fromJson(Map<String, dynamic> json) =>
       _$ProfilePageFromJson(json);

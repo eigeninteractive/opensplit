@@ -37,7 +37,7 @@ PushService pushService(Ref ref) {
     ),
     onOpenGroup: (groupId) {
       // The background isolate writes through another Drift connection.
-      ref.read(appDatabaseProvider).refreshAfterExternalSync();
+      unawaited(ref.read(appDatabaseProvider).noticeWritesElsewhere());
       ref.read(routerProvider).go(groupNotificationRoute(groupId));
       unawaited(ref.read(syncControllerProvider.notifier).syncGroup(groupId));
     },

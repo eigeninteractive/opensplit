@@ -1,14 +1,15 @@
 import { createRoute, type OpenAPIHono, z } from "@hono/zod-openapi";
-import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, or } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 
 import { user } from "../auth-schema";
 import { type AppEnv, mayChangeIdentity } from "../context";
+import { nextProfileVersion, profileVersion } from "../db/d1/profile-version";
 import { deviceTokens, memberships, profiles } from "../db/d1/schema";
 import { forgetAccount } from "../forget";
 import { AccountDeletionSchema, DeviceForgottenSchema, DeviceSchema, ProfilePageSchema, ProfileSchema, ProfileUpdateSchema } from "../schemas/account";
 import { apiError, errorResponse, jsonBody, jsonResponse } from "../schemas/common";
-import { refusals, signedIn } from "./routing";
+import { refusals, SeqQuerySchema, signedIn } from "./routing";
 
 /** The person, their devices, and ending the account. */
 
@@ -21,13 +22,10 @@ const profileFeedRoute = createRoute({
   path: "/profiles",
   tags: ["sync"],
   summary: "Everybody you share a group with, plus yourself",
-  description: "Cursored on time, since profiles have no single writer to number them. Send `cursor` back as `after`.",
+  description: "Cursored on each profile's `version`, which D1 numbers in commit order. Send `seq` back as `since` next time.",
   request: {
     query: z.object({
-      after: z
-        .string()
-        .optional()
-        .openapi({ param: { name: "after", in: "query" } }),
+      since: SeqQuerySchema.default(0),
       limit: z.coerce.number().int().min(1).max(PAGE_MAX).default(100).openapi({ type: "integer", example: 100 }),
     }),
   },
@@ -87,30 +85,30 @@ const deleteAccountRoute = createRoute({
 
 export function accountRoutes(routes: OpenAPIHono<AppEnv>) {
   routes.openapi(profileFeedRoute, async (c) => {
-    const { after, limit } = c.req.valid("query");
-    const position = after === undefined ? null : decodeCursor(after);
-    if (position === undefined) return c.json(apiError("malformed", "That is not a cursor from this feed."), 400);
-
+    const { since, limit } = c.req.valid("query");
     const rows = await c.var.db
       .select()
       .from(profiles)
-      .where(and(visibleTo(c.var.db, c.var.session.userId), position ? sql`(${profiles.updatedAt}, ${profiles.id}) > (${position.updatedAt}, ${position.id})` : undefined))
-      .orderBy(profiles.updatedAt, profiles.id)
+      .where(and(visibleTo(c.var.db, c.var.session.userId), gt(profiles.version, since)))
+      .orderBy(profiles.version)
       .limit(limit + 1)
       .all();
 
     const page = rows.slice(0, limit);
-    const last = page.at(-1);
-    return c.json({ profiles: page, cursor: last ? encodeCursor(last) : null, hasMore: rows.length > limit }, 200);
+    return c.json({ profiles: page, seq: page.at(-1)?.version ?? since, hasMore: rows.length > limit }, 200);
   });
 
   routes.openapi(updateProfileRoute, async (c) => {
     const update = c.req.valid("json");
-    const [row] = await c.var.db
-      .update(profiles)
-      .set({ ...update, updatedAt: new Date().toISOString() })
-      .where(eq(profiles.id, c.var.session.userId))
-      .returning();
+    const db = c.var.db;
+    const [, [row]] = await db.batch([
+      nextProfileVersion(db),
+      db
+        .update(profiles)
+        .set({ ...update, updatedAt: new Date().toISOString(), version: profileVersion })
+        .where(eq(profiles.id, c.var.session.userId))
+        .returning(),
+    ]);
     // Created by a databaseHook with the account, so a missing row is a bug, not a case.
     if (!row) throw new Error(`No profile for account ${c.var.session.userId}`);
     return c.json(row, 200);
@@ -162,15 +160,4 @@ function visibleTo(db: DrizzleD1Database, self: string) {
     .from(memberships)
     .where(and(inArray(memberships.groupId, mine), isNull(memberships.leftAt)));
   return or(eq(profiles.id, self), inArray(profiles.id, together));
-}
-
-type Position = { updatedAt: string; id: string };
-
-const encodeCursor = ({ updatedAt, id }: Position) => `${updatedAt}|${id}`;
-
-/** A position, or undefined for something this feed did not issue. */
-function decodeCursor(cursor: string): Position | undefined {
-  const [updatedAt, id, ...rest] = cursor.split("|");
-  if (!updatedAt || !id || rest.length > 0 || Number.isNaN(Date.parse(updatedAt))) return undefined;
-  return { updatedAt, id };
 }

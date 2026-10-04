@@ -3,9 +3,9 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { defaultGroupLook } from "../src/db/appearance";
 
 import type { ApiError } from "../src/schemas/common";
-import type { ChangePage, Entry, Group, GroupIds, Member } from "./api-types";
+import type { Entry, Group, Member } from "./api-types";
 import { freshId } from "./group";
-import { type Guest, signInAsGuest } from "./session";
+import { changes, type Guest, pull, pullResponse, signInAsGuest } from "./session";
 
 /** The sync surface over HTTP. */
 
@@ -72,30 +72,27 @@ beforeAll(async () => {
 
 describe("without a session", () => {
   it("refuses every route in the sync surface", async () => {
-    const paths = ["/api/groups", `/api/groups/${freshId()}/changes`];
-
-    for (const path of paths) {
-      const response = await call(path, null);
-      expect(response.status, path).toBe(401);
-      expect((await json<ApiError>(response)).error.code).toBe("no_session");
-    }
+    const pulled = await pullResponse(null, [{ groupId: freshId(), since: 0 }]);
+    expect(pulled.status).toBe(401);
+    expect((await json<ApiError>(pulled)).error.code).toBe("no_session");
 
     const write = await call(`/api/groups/${freshId()}`, null, { method: "PUT", body: JSON.stringify({}) });
     expect(write.status).toBe(401);
   });
 });
 
-describe("listing groups", () => {
-  it("names the groups the account is still in", async () => {
+describe("finding the account's groups", () => {
+  it("names the groups the account is still in, though none was asked for", async () => {
     const { id } = await makeGroup(ravi);
-    const body = await json<GroupIds>(await call("/api/groups", ravi));
+    const body = await pull(ravi, []);
 
     expect(body.groupIds).toContain(id);
+    expect(body.pages).toEqual([]);
   });
 
   it("does not name somebody else's groups", async () => {
     const { id } = await makeGroup(ravi);
-    const body = await json<GroupIds>(await call("/api/groups", zara));
+    const body = await pull(zara, []);
 
     expect(body.groupIds).not.toContain(id);
   });
@@ -104,39 +101,66 @@ describe("listing groups", () => {
 describe("the change feed", () => {
   it("answers with a cursor, and pages on it", async () => {
     const { id, group } = await makeGroup(ravi);
-    const page = await json<ChangePage>(await call(`/api/groups/${id}/changes?since=0`, ravi));
+    const page = await changes(ravi, id);
 
     expect(page.group?.id).toBe(group.id);
     expect(page.members).toHaveLength(1);
     expect(page.hasMore).toBe(false);
 
-    const nothing = await json<ChangePage>(await call(`/api/groups/${id}/changes?since=${page.seq}`, ravi));
+    const nothing = await changes(ravi, id, page.seq);
     expect(nothing.seq).toBe(page.seq);
     expect(nothing.members).toHaveLength(0);
   });
 
-  it("refuses a stranger with 403, and says the refusal is permanent", async () => {
+  it("refuses a stranger one group, and still answers the rest of the pull", async () => {
     const { id } = await makeGroup(ravi);
-    const response = await call(`/api/groups/${id}/changes`, zara);
+    const { id: zaras } = await makeGroup(zara);
+    const body = await pull(zara, [
+      { groupId: id, since: 0 },
+      { groupId: zaras, since: 0 },
+    ]);
 
-    expect(response.status).toBe(403);
-    const body = await json<ApiError>(response);
-    expect(body.error.code).toBe("not_member");
-    expect(body.error.retry).toBe("permanent");
+    expect(body.refusals).toEqual([{ groupId: id, code: "not_member", message: expect.any(String) }]);
+    expect(body.pages.map((page) => page.groupId)).toEqual([zaras]);
   });
 
-  it("tells a device that a group id names nothing, rather than refusing it", async () => {
-    const response = await call(`/api/groups/${freshId("ghost")}/changes`, ravi);
+  it("tells a device that a group id names nothing", async () => {
+    const ghost = freshId("ghost");
+    const body = await pull(ravi, [{ groupId: ghost, since: 0 }]);
 
-    expect(response.status).toBe(404);
-    expect((await json<ApiError>(response)).error.code).toBe("no_group");
+    expect(body.refusals).toEqual([{ groupId: ghost, code: "no_group", message: expect.any(String) }]);
+  });
+
+  it("reads many groups in one request, each past its own cursor", async () => {
+    const first = await makeGroup(ravi);
+    const second = await makeGroup(ravi);
+    const read = await changes(ravi, first.id);
+
+    const body = await pull(ravi, [
+      { groupId: first.id, since: read.seq },
+      { groupId: second.id, since: 0 },
+    ]);
+
+    expect(body.pages.map((page) => [page.groupId, page.members.length])).toEqual([
+      [first.id, 0],
+      [second.id, 1],
+    ]);
+  });
+
+  it("refuses a pull that asks for one group twice", async () => {
+    const { id } = await makeGroup(ravi);
+    const response = await pullResponse(ravi, [
+      { groupId: id, since: 0 },
+      { groupId: id, since: 0 },
+    ]);
+    expect(response.status).toBe(400);
   });
 });
 
 describe("recording an expense over HTTP", () => {
   it("lands, and comes back in the feed", async () => {
     const { id } = await makeGroup(ravi);
-    const page = await json<ChangePage>(await call(`/api/groups/${id}/changes`, ravi));
+    const page = await changes(ravi, id);
     const me = page.members[0];
     if (!me) expect.unreachable("The group has no members.");
 
@@ -147,7 +171,7 @@ describe("recording an expense over HTTP", () => {
     expect(entry.amountMinor).toBe(1000);
     expect(entry.createdBy).toBe(me.id);
 
-    const after = await json<ChangePage>(await call(`/api/groups/${id}/changes?since=${page.seq}`, ravi));
+    const after = await changes(ravi, id, page.seq);
     expect(after.entries.map((row) => row.id)).toContain(entry.id);
   });
 
@@ -158,7 +182,7 @@ describe("recording an expense over HTTP", () => {
    */
   it("is refused with 422 when it does not add up", async () => {
     const { id } = await makeGroup(ravi);
-    const page = await json<ChangePage>(await call(`/api/groups/${id}/changes`, ravi));
+    const page = await changes(ravi, id);
     const me = page.members[0];
     if (!me) expect.unreachable("The group has no members.");
 
@@ -174,9 +198,9 @@ describe("recording an expense over HTTP", () => {
    * The one refusal a device should act on by re-reading and composing again,
    * and the only one of six 409s that says so.
    */
-  it("is refused with 409 and retry 'stale' when somebody else moved the money", async () => {
+  it("is refused with 409 and retry 'stale' when somebody else changed it first", async () => {
     const { id } = await makeGroup(ravi);
-    const page = await json<ChangePage>(await call(`/api/groups/${id}/changes`, ravi));
+    const page = await changes(ravi, id);
     const me = page.members[0];
     if (!me) expect.unreachable("The group has no members.");
 
@@ -184,7 +208,7 @@ describe("recording an expense over HTTP", () => {
     const entryId = freshId("api-e");
 
     const first = await json<Entry>(await putEntry(id, body(1000)));
-    await putEntry(id, body(2000));
+    await putEntry(id, { ...body(2000), baseSeq: first.seq });
 
     const stale = await putEntry(id, { ...body(1500), baseSeq: first.seq });
 
@@ -204,7 +228,7 @@ describe("recording an expense over HTTP", () => {
 
   it("keeps when and where it happened, both or neither", async () => {
     const { id } = await makeGroup(ravi);
-    const page = await json<ChangePage>(await call(`/api/groups/${id}/changes`, ravi));
+    const page = await changes(ravi, id);
     const me = page.members[0];
     if (!me) expect.unreachable("The group has no members.");
     const post = (moment: Record<string, unknown>) => putEntry(id, expense({ payers: [{ memberId: me.id, amountMinor: 1000 }], shares: [{ memberId: me.id, amountMinor: 1000, weightMicros: null }], ...moment }));
@@ -218,7 +242,7 @@ describe("recording an expense over HTTP", () => {
 
   it("soft-deletes and restores by writing the row, and stamps the server's own time", async () => {
     const { id } = await makeGroup(ravi);
-    const page = await json<ChangePage>(await call(`/api/groups/${id}/changes`, ravi));
+    const page = await changes(ravi, id);
     const me = page.members[0];
     if (!me) expect.unreachable("The group has no members.");
 
@@ -265,9 +289,9 @@ describe("the roster over HTTP", () => {
 
   it("changes how a group looks without telling the activity feed", async () => {
     const { id } = await makeGroup(ravi);
-    const look = (changes: Record<string, unknown>) => call(`/api/groups/${id}`, ravi, { method: "PUT", body: JSON.stringify({ name: "Goa trip", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, ...defaultGroupLook, creatorId: "unused", creatorName: "Ravi", ...changes }) });
+    const look = (look: Record<string, unknown>) => call(`/api/groups/${id}`, ravi, { method: "PUT", body: JSON.stringify({ name: "Goa trip", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, ...defaultGroupLook, creatorId: "unused", creatorName: "Ravi", ...look }) });
 
-    const events = async () => (await json<ChangePage>(await call(`/api/groups/${id}/changes?since=0`, ravi))).events.length;
+    const events = async () => (await changes(ravi, id)).events.length;
     const before = await events();
 
     const iconed = await look({ avatarKind: "icon", avatarIcon: "beach_access", avatarColor: "amber" });
@@ -299,7 +323,7 @@ describe("which group a page is about", () => {
    */
   it("is on the page, and not repeated on every row", async () => {
     const { id } = await makeGroup(ravi);
-    const page = await json<ChangePage>(await call(`/api/groups/${id}/changes`, ravi));
+    const page = await changes(ravi, id);
 
     expect(page.groupId).toBe(id);
 
@@ -312,7 +336,7 @@ describe("which group a page is about", () => {
     const { id } = await makeGroup(ravi);
     await env.GROUP.getByName(id).runUpkeep(Date.now() + 800 * 24 * 60 * 60 * 1000);
 
-    const page = await json<ChangePage>(await call(`/api/groups/${id}/changes`, ravi));
+    const page = await changes(ravi, id);
     expect(page.groupId).toBe(id);
     expect(page.purgedAt).not.toBeNull();
     expect(page.group).toBeNull();

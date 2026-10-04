@@ -38,6 +38,7 @@ class SharedFeeds {
 
   static const _fxFloor = 'fx:floor';
   static const _profileFeed = 'profiles';
+  static const _referenceTag = 'reference:etag';
 
   Future<void> pullAll() async {
     await pullReferenceData();
@@ -47,12 +48,24 @@ class SharedFeeds {
 
   /// Currencies and categories, which must land before a group can be
   /// created. Upsert, never delete: a withdrawn category is still on the
-  /// entries that used it.
+  /// entries that used it. Asked for with the last copy's tag, so an
+  /// unchanged list is a 304 with no body.
   Future<void> pullReferenceData() async {
     try {
-      final reference = await fetch(
-        client.getReferenceApi().getReference(),
-      ).timeout(requestTimeout);
+      final held = await hasReferenceData()
+          ? await _readCursor(_referenceTag)
+          : null;
+      final response = await client
+          .getReferenceApi()
+          .getReference(
+            ifNoneMatch: held,
+            validateStatus: (status) =>
+                status != null && (status ~/ 100 == 2 || status == 304),
+          )
+          .timeout(requestTimeout);
+      final reference = response.data;
+      if (response.statusCode == 304 || reference == null) return;
+
       await db.batch((batch) {
         for (final currency in reference.currencies) {
           final row = currency.toRow().toCompanion(false);
@@ -63,6 +76,9 @@ class SharedFeeds {
           batch.insert(db.categories, row, onConflict: DoUpdate((_) => row));
         }
       });
+      if (response.headers.value('etag') case final tag?) {
+        await _writeCursor(_referenceTag, tag);
+      }
     } catch (error, stackTrace) {
       _log('Reference data was not refreshed', error, stackTrace);
     }
@@ -129,28 +145,28 @@ class SharedFeeds {
     }
   }
 
-  /// Everybody this account shares a group with, cursored by the server.
+  /// Everybody this account shares a group with, past the newest version
+  /// already read.
   Future<int> pullProfiles() async {
-    var cursor = await _readCursor(_profileFeed);
+    var since = int.tryParse(await _readCursor(_profileFeed) ?? '') ?? 0;
     var applied = 0;
 
     while (true) {
       await assertActive();
       final page = await fetch(
-        client.getSyncApi().getProfiles(after: cursor, limit: pageSize),
+        client.getSyncApi().getProfiles(since: since, limit: pageSize),
       ).timeout(requestTimeout);
       if (page.profiles.isEmpty) break;
 
-      final next = page.cursor;
       applied += await db.transaction(() async {
         await assertActive();
         final count = await applyProfiles(db, page.profiles);
-        if (next != null) await _writeCursor(_profileFeed, next);
+        await _writeCursor(_profileFeed, '${page.seq}');
         return count;
       });
 
-      if (next == null || !page.hasMore) break;
-      cursor = next;
+      if (!page.hasMore || page.seq == since) break;
+      since = page.seq;
     }
     return applied;
   }

@@ -62,7 +62,7 @@ export const refusalCodes = [
   "no_such_member",
   /** `sum(payers) = sum(shares) = amount` does not hold. */
   "unbalanced",
-  /** Composed against a version that has since moved money. */
+  /** Composed against a version that has since changed. */
   "stale_base",
   /** A column rule: whose name, whose payment handle. */
   "forbidden",

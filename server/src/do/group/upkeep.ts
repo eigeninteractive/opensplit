@@ -41,20 +41,12 @@ export function nextDue(tx: Tx): number | null {
   );
 }
 
-/** Called on every ledger write: a group in use is not dormant. */
+/** Called in the transaction of every change a member makes: a group in use is not dormant. */
 export function touchDormancy(tx: Tx, now: string): void {
-  scheduleAt(tx, "archive", Date.parse(now) + DORMANCY.archiveAfter);
+  const at = Date.parse(now);
+  tx.update(schema.meta).set({ lastActivityAt: at }).run();
+  scheduleAt(tx, "archive", at + DORMANCY.archiveAfter);
   unschedule(tx, "purge");
-}
-
-/** Last genuine use, recomputed from the ledger so an early alarm cannot archive a busy group. */
-function lastActivity(tx: Tx, createdAt: string): number {
-  const latest =
-    tx
-      .select({ at: sql<string | null>`max(${schema.entries.createdAt})` })
-      .from(schema.entries)
-      .get()?.at ?? createdAt;
-  return Date.parse(latest);
 }
 
 export interface UpkeepOutcome {
@@ -68,7 +60,7 @@ export function runDormancy(tx: Tx, now: number): UpkeepOutcome {
   const meta = findMeta(tx);
   if (!meta) return outcome;
 
-  const quietSince = lastActivity(tx, meta.createdAt);
+  const quietSince = meta.lastActivityAt > 0 ? meta.lastActivityAt : Date.parse(meta.createdAt);
 
   if (meta.archivedAt === null) {
     if (quietSince + DORMANCY.archiveAfter > now) {
@@ -81,8 +73,10 @@ export function runDormancy(tx: Tx, now: number): UpkeepOutcome {
     tx.update(schema.meta).set({ archivedAt: at, updatedAt: at, seq }).where(eq(schema.meta.id, meta.id)).run();
     append(tx, { seq, now: at, actorId: null, kind: "group_archived", group: { name: meta.name, previousName: null } });
     outcome.archived = true;
-    unschedule(tx, "archive");
   }
+  // Archived, by this run or by a member: only collecting is left to wait for, and a spent
+  // archive deadline left behind would hold the alarm in the past.
+  unschedule(tx, "archive");
 
   // Nobody left with an account: collect as soon as it is quiet.
   const due = hasAccountHolders(tx) ? quietSince + DORMANCY.purgeAfter : quietSince;
@@ -99,7 +93,6 @@ export function runDormancy(tx: Tx, now: number): UpkeepOutcome {
   purge(tx, nowIso(now));
   stagePurge(tx, meta.id, nowIso(now));
   unschedule(tx, "purge");
-  unschedule(tx, "archive");
   outcome.purged = true;
   return outcome;
 }

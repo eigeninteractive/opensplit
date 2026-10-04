@@ -138,9 +138,41 @@ bool isEntryWrite(RequestOptions r) =>
     r.method == 'PUT' &&
     RegExp(r'/groups/[^/]+/entries/[^/]+$').hasMatch(r.path);
 
-/// Matches the "which groups am I in" request.
+/// Matches a pull, which also says which groups the account is in.
 bool isGroupList(RequestOptions r) =>
-    r.method == 'GET' && r.path.endsWith('/api/groups');
+    r.method == 'POST' && r.path.endsWith('/api/sync');
+
+/// One group's page past [since], read the way the app reads it.
+Future<api.ChangePage> changesOf(
+  api.OpensplitApi client,
+  String groupId, {
+  int since = 0,
+  int limit = 200,
+}) async {
+  final answer = await fetch(
+    client.getSyncApi().pull(
+      pullRequest: api.PullRequest(
+        groups: [api.GroupCursor(groupId: groupId, since: since)],
+        limit: limit,
+      ),
+    ),
+  );
+  if (answer.refusals case [final refused, ...]) {
+    throw ApiFailure(
+      refused.message,
+      retry: api.Retry.permanent,
+      code: refused.code,
+    );
+  }
+  return answer.pages.single;
+}
+
+/// The groups the server says the account is in.
+Future<List<String>> groupsOf(api.OpensplitApi client) async => (await fetch(
+  client.getSyncApi().pull(
+    pullRequest: api.PullRequest(groups: const [], limit: 1),
+  ),
+)).groupIds;
 
 /// One simulated device: its own local database, and a real session.
 class Device {

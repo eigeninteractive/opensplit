@@ -7,7 +7,6 @@ import { positionsByMember } from "./balances";
 import { appendSnapshot, byMember, moneyRows } from "./events";
 import { refuse } from "./refusal";
 import { type EntryRow, nextSeq, requireMeta, type Tx, type WriteContext } from "./store";
-import { touchDormancy } from "./upkeep";
 
 /**
  * The expense write path. Every rule is checked here against the finished
@@ -55,11 +54,11 @@ export function putEntry(tx: Tx, id: string, input: EntryInput, { now, actor }: 
   assertBalanced(input);
   assertMembersExist(tx, input);
 
-  // The id is client-minted, so a retry after a lost response finds its own row here.
+  // The id is client-minted, so a retry after a lost response finds its own row here, unchanged.
   const stored = readEntry(tx, id);
   if (stored) {
-    assertBaseIsCurrent(stored, input);
     if (JSON.stringify(comparable(stored)) === JSON.stringify(comparable(input))) return stored;
+    assertBaseIsCurrent(stored, input);
   }
   assertDepartedOnlySettle(tx, stored, input);
 
@@ -97,7 +96,6 @@ export function putEntry(tx: Tx, id: string, input: EntryInput, { now, actor }: 
 
   const entry = requireEntry(tx, id);
   appendSnapshot(tx, entry, entry.payers, entry.shares, { seq, now, actorId: actor.id });
-  touchDormancy(tx, now);
   return entry;
 }
 
@@ -169,14 +167,12 @@ function assertDepartedOnlySettle(tx: Tx, stored: Entry | undefined, input: Entr
 }
 
 /**
- * A stale base is refused only when the write would move money; two people
- * fixing a typo never arbitrate. A null base claims no version.
+ * An edit replaces the whole expense, so it must be composed on the version
+ * stored now; anything else would silently undo the edit in between. A null
+ * base claims the row is new, which a stored row contradicts.
  */
 function assertBaseIsCurrent(stored: Entry, input: EntryInput): void {
-  if (input.baseSeq === null || stored.seq === input.baseSeq) return;
-  if (JSON.stringify(money(stored)) !== JSON.stringify(money(input))) {
-    refuse("stale_base", "This expense changed since you opened it.");
-  }
+  if (stored.seq !== input.baseSeq) refuse("stale_base", "This expense changed since you opened it.");
 }
 
 type Comparable = Omit<EntryInput, "baseSeq">;

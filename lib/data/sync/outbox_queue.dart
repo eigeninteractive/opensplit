@@ -49,35 +49,76 @@ class OutboxQueue {
 
   /// Marks [targetId] as dirty, coalescing with any item already waiting for
   /// the same row.
-  Future<void> enqueue(OutboxTarget target, String targetId) async {
-    if (!(await readSyncSession(_db)).enabled) {
-      throw StateError('This account session has ended.');
-    }
-    final revision = const Uuid().v4();
-    await _db
-        .into(_db.outbox)
-        .insert(
-          OutboxCompanion.insert(
-            target: target,
-            targetId: targetId,
-            revision: revision,
-            createdAt: _clock(),
-          ),
-          onConflict: DoUpdate(
-            // A fresh change deserves an immediate attempt even if a previous
-            // one had been backed off, or set aside as a dead letter: whatever
-            // the server refused may be exactly what this edit changed.
-            (_) => OutboxCompanion(
-              revision: Value(revision),
-              attempts: Value(0),
-              nextAttemptAt: Value(null),
-              lastError: Value(null),
-              deadLetteredAt: Value(null),
-            ),
-          ),
-        );
+  ///
+  /// The item goes to the back of the queue, where this change was made,
+  /// unless the server has never seen the row: then it keeps its place, ahead
+  /// of the changes that came after its creation and may name it. Pushing
+  /// reads each row as it is then, so a creation sent from its old place
+  /// carries any later edit too.
+  Future<void> enqueue(OutboxTarget target, String targetId) =>
+      _db.transaction(() async {
+        if (!(await readSyncSession(_db)).enabled) {
+          throw StateError('This account session has ended.');
+        }
+        final revision = const Uuid().v4();
+        final position = await _nextPosition();
+        final moves = await _isOnServer(target, targetId);
+        await _db
+            .into(_db.outbox)
+            .insert(
+              OutboxCompanion.insert(
+                target: target,
+                targetId: targetId,
+                revision: revision,
+                position: position,
+              ),
+              onConflict: DoUpdate(
+                // A fresh change deserves an immediate attempt even if a
+                // previous one had been backed off, or set aside as a dead
+                // letter: whatever the server refused may be exactly what this
+                // edit changed.
+                (_) => OutboxCompanion(
+                  revision: Value(revision),
+                  position: moves ? Value(position) : const Value.absent(),
+                  attempts: const Value(0),
+                  nextAttemptAt: const Value(null),
+                  lastError: const Value(null),
+                  deadLetteredAt: const Value(null),
+                ),
+              ),
+            );
 
-    if (_queued.hasListener) _queued.add(null);
+        if (_queued.hasListener) _queued.add(null);
+      });
+
+  Future<int> _nextPosition() async {
+    final last = _db.outbox.position.max();
+    final row = await (_db.selectOnly(
+      _db.outbox,
+    )..addColumns([last])).getSingle();
+    return (row.read(last) ?? 0) + 1;
+  }
+
+  /// Whether the server holds a version of the row: a sequence number, or for
+  /// a profile a version, came back for it.
+  Future<bool> _isOnServer(OutboxTarget target, String id) async {
+    final BaseSelectStatement acknowledged = switch (target) {
+      OutboxTarget.group => _db.select(
+        _db.groups,
+      )..where((t) => t.id.equals(id) & t.seq.isNotNull()),
+      OutboxTarget.member => _db.select(
+        _db.members,
+      )..where((t) => t.id.equals(id) & t.seq.isNotNull()),
+      OutboxTarget.entry => _db.select(
+        _db.entries,
+      )..where((t) => t.id.equals(id) & t.seq.isNotNull()),
+      OutboxTarget.profile => _db.select(
+        _db.profiles,
+      )..where((t) => t.id.equals(id) & t.version.isNotNull()),
+    };
+    final exists = existsQuery(acknowledged);
+    return (await _db.selectExpressions([exists]).getSingle()).read(exists) ??
+        false;
   }
 
   /// Items ready to be attempted now, in an order the server can accept.
@@ -98,8 +139,10 @@ class OutboxQueue {
     )..where((t) => t.deadLetteredAt.isNull())).get();
 
     rows.sort((a, b) {
-      final byKind = a.target.index.compareTo(b.target.index);
-      return byKind != 0 ? byKind : a.createdAt.compareTo(b.createdAt);
+      final byPosition = a.position.compareTo(b.position);
+      return byPosition != 0
+          ? byPosition
+          : a.target.index.compareTo(b.target.index);
     });
 
     return rows;
