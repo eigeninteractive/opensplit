@@ -1,1 +1,0 @@
-ALTER TABLE `meta` ADD `last_activity_at` integer DEFAULT 0 NOT NULL;

@@ -60,7 +60,7 @@ export function runDormancy(tx: Tx, now: number): UpkeepOutcome {
   const meta = findMeta(tx);
   if (!meta) return outcome;
 
-  const quietSince = meta.lastActivityAt > 0 ? meta.lastActivityAt : Date.parse(meta.createdAt);
+  const quietSince = meta.lastActivityAt;
 
   if (meta.archivedAt === null) {
     if (quietSince + DORMANCY.archiveAfter > now) {

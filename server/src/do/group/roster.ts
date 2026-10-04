@@ -27,6 +27,7 @@ export function createGroup(tx: Tx, groupId: string, input: GroupInput, profileI
       ...appearanceOf(input),
       createdBy: input.creatorId,
       createdAt: now,
+      lastActivityAt: Date.parse(now),
       updatedAt: now,
       seq,
     })
