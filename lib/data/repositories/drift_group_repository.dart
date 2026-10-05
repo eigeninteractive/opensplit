@@ -163,8 +163,8 @@ final class DriftGroupRepository {
       await _db.into(_db.members).insert(creator);
       // Both rows have to reach the server, and the group has to land first:
       // members and entries reference it by foreign key.
-      await outbox?.enqueue(OutboxTarget.group, group.id);
-      await outbox?.enqueue(OutboxTarget.member, creator.id);
+      await outbox?.enqueueInTransaction(OutboxTarget.group, group.id);
+      await outbox?.enqueueInTransaction(OutboxTarget.member, creator.id);
     });
 
     return (group: group, creator: creator);
@@ -193,7 +193,7 @@ final class DriftGroupRepository {
           // Bumped on every local write.
         ),
       );
-      await outbox?.enqueue(OutboxTarget.group, group.id);
+      await outbox?.enqueueInTransaction(OutboxTarget.group, group.id);
     });
   }
 
@@ -204,7 +204,7 @@ final class DriftGroupRepository {
     await _db.transaction(() async {
       await (_db.update(_db.members)..where((t) => t.id.equals(memberId)))
           .write(MembersCompanion(leftAt: Value(_clock())));
-      await outbox?.enqueue(OutboxTarget.member, memberId);
+      await outbox?.enqueueInTransaction(OutboxTarget.member, memberId);
     });
   }
 
@@ -237,7 +237,7 @@ final class DriftGroupRepository {
 
     await _db.transaction(() async {
       await _db.into(_db.members).insert(member);
-      await outbox?.enqueue(OutboxTarget.member, member.id);
+      await outbox?.enqueueInTransaction(OutboxTarget.member, member.id);
     });
     return member;
   }
@@ -254,7 +254,7 @@ final class DriftGroupRepository {
     await _db.transaction(() async {
       await (_db.update(_db.members)..where((t) => t.id.equals(memberId)))
           .write(MembersCompanion(displayName: Value(trimmed)));
-      await outbox?.enqueue(OutboxTarget.member, memberId);
+      await outbox?.enqueueInTransaction(OutboxTarget.member, memberId);
     });
   }
 
@@ -266,7 +266,7 @@ final class DriftGroupRepository {
     await _db.transaction(() async {
       await (_db.update(_db.members)..where((t) => t.id.equals(memberId)))
           .write(MembersCompanion(leftAt: Value(_clock())));
-      await outbox?.enqueue(OutboxTarget.member, memberId);
+      await outbox?.enqueueInTransaction(OutboxTarget.member, memberId);
     });
   }
 
@@ -284,7 +284,7 @@ final class DriftGroupRepository {
           upiVpa: Value(trimmed == null || trimmed.isEmpty ? null : trimmed),
         ),
       );
-      await outbox?.enqueue(OutboxTarget.member, memberId);
+      await outbox?.enqueueInTransaction(OutboxTarget.member, memberId);
     });
   }
 
@@ -314,9 +314,11 @@ final class DriftGroupRepository {
   }
 
   Future<void> setArchived(String groupId, {required bool archived}) async {
-    await (_db.update(_db.groups)..where((t) => t.id.equals(groupId))).write(
-      GroupsCompanion(archivedAt: Value(archived ? _clock() : null)),
-    );
-    await outbox?.enqueue(OutboxTarget.group, groupId);
+    await _db.transaction(() async {
+      await (_db.update(_db.groups)..where((t) => t.id.equals(groupId))).write(
+        GroupsCompanion(archivedAt: Value(archived ? _clock() : null)),
+      );
+      await outbox?.enqueueInTransaction(OutboxTarget.group, groupId);
+    });
   }
 }

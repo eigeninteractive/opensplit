@@ -56,40 +56,50 @@ class OutboxQueue {
   /// reads each row as it is then, so a creation sent from its old place
   /// carries any later edit too.
   Future<void> enqueue(OutboxTarget target, String targetId) =>
-      _db.transaction(() async {
-        if (!(await readSyncSession(_db)).enabled) {
-          throw StateError('This account session has ended.');
-        }
-        final revision = const Uuid().v4();
-        final position = await _nextPosition();
-        final moves = await _isOnServer(target, targetId);
-        await _db
-            .into(_db.outbox)
-            .insert(
-              OutboxCompanion.insert(
-                target: target,
-                targetId: targetId,
-                revision: revision,
-                position: position,
-              ),
-              onConflict: DoUpdate(
-                // A fresh change deserves an immediate attempt even if a
-                // previous one had been backed off, or set aside as a dead
-                // letter: whatever the server refused may be exactly what this
-                // edit changed.
-                (_) => OutboxCompanion(
-                  revision: Value(revision),
-                  position: moves ? Value(position) : const Value.absent(),
-                  attempts: const Value(0),
-                  nextAttemptAt: const Value(null),
-                  lastError: const Value(null),
-                  deadLetteredAt: const Value(null),
-                ),
-              ),
-            );
+      _db.transaction(() => enqueueInTransaction(target, targetId));
 
-        if (_queued.hasListener) _queued.add(null);
-      });
+  /// Queues a row as part of the caller's active database transaction.
+  ///
+  /// The local write and its queue row must commit together. A separate
+  /// transaction would nest on browsers, where Drift holds one Web Lock for
+  /// the outer transaction.
+  Future<void> enqueueInTransaction(
+    OutboxTarget target,
+    String targetId,
+  ) async {
+    if (!(await readSyncSession(_db)).enabled) {
+      throw StateError('This account session has ended.');
+    }
+    final revision = const Uuid().v4();
+    final position = await _nextPosition();
+    final moves = await _isOnServer(target, targetId);
+    await _db
+        .into(_db.outbox)
+        .insert(
+          OutboxCompanion.insert(
+            target: target,
+            targetId: targetId,
+            revision: revision,
+            position: position,
+          ),
+          onConflict: DoUpdate(
+            // A fresh change deserves an immediate attempt even if a
+            // previous one had been backed off, or set aside as a dead
+            // letter: whatever the server refused may be exactly what this
+            // edit changed.
+            (_) => OutboxCompanion(
+              revision: Value(revision),
+              position: moves ? Value(position) : const Value.absent(),
+              attempts: const Value(0),
+              nextAttemptAt: const Value(null),
+              lastError: const Value(null),
+              deadLetteredAt: const Value(null),
+            ),
+          ),
+        );
+
+    if (_queued.hasListener) _queued.add(null);
+  }
 
   Future<int> _nextPosition() async {
     final last = _db.outbox.position.max();
