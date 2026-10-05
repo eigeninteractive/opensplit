@@ -2,7 +2,9 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:dio/dio.dart' show RequestOptions;
 import 'package:drift/drift.dart'
     show BooleanExpressionOperators, Value, driftRuntimeOptions;
 import 'package:opensplit/data/local/database.dart';
@@ -113,14 +115,33 @@ void main() {
 
     liveTest('a renamed row is corrected in place', () async {
       await start();
+      await a.sync.syncEverything();
+      // As if the server's list had changed since: the copy held is older,
+      // and so is the tag it was sent with.
       await (a.db.update(a.db.currencies)..where((t) => t.code.equals('INR')))
           .write(const CurrenciesCompanion(name: Value('Stale name')));
+      await (a.db.update(a.db.feedCursors)
+            ..where((t) => t.feed.equals('reference:etag')))
+          .write(const FeedCursorsCompanion(cursor: Value('"older"')));
       await a.sync.syncEverything();
 
       final inr = await (a.db.select(
         a.db.currencies,
       )..where((t) => t.code.equals('INR'))).getSingle();
       expect(inr.name, 'Indian Rupee');
+    });
+
+    liveTest('an unchanged list costs a 304 and no body', () async {
+      await start();
+      await a.sync.syncEverything();
+      a.tap.requests.clear();
+
+      final report = await a.sync.syncEverything();
+
+      final asked = a.tap.last('GET', '/api/reference');
+      expect(asked?.headers['If-None-Match'], isNotNull);
+      expect(report.error, isNull);
+      expect(await a.sync.shared.hasReferenceData(), isTrue);
     });
   });
 
@@ -406,33 +427,48 @@ void main() {
       },
     );
 
-    liveTest('the last write wins, judged by the server', () async {
-      final g = await seedGroup();
-      final entry = await a.entries.create(
-        draft(g, 100000, description: 'Original'),
-        createdBy: g.ravi,
-      );
-      await a.sync.syncGroup(g.groupId);
-      await b.sync.syncGroup(g.groupId);
+    liveTest(
+      'a second edit to one version is parked, not written over the first',
+      () async {
+        final g = await seedGroup();
+        final entry = await a.entries.create(
+          draft(g, 100000, description: 'Original'),
+          createdBy: g.ravi,
+        );
+        await a.sync.syncGroup(g.groupId);
+        await b.sync.syncGroup(g.groupId);
 
-      await a.entries.update(
-        entry.id,
-        draft(g, 100000, description: 'Edited on A'),
-        actorId: g.ravi,
-      );
-      await b.entries.update(
-        entry.id,
-        draft(g, 100000, description: 'Edited on B'),
-        actorId: g.priya,
-      );
+        await a.entries.update(
+          entry.id,
+          draft(g, 100000, description: 'Edited on A'),
+          actorId: g.ravi,
+        );
+        await b.entries.update(
+          entry.id,
+          draft(g, 100000, description: 'Edited on B'),
+          actorId: g.priya,
+        );
 
-      await a.sync.syncGroup(g.groupId);
-      await b.sync.syncGroup(g.groupId); // B pushes second, so B wins.
-      await a.sync.syncGroup(g.groupId);
+        await a.sync.syncGroup(g.groupId);
+        await b.sync.syncGroup(
+          g.groupId,
+        ); // Composed on the version A replaced.
+        await a.sync.syncGroup(g.groupId);
 
-      expect((await a.ledger(g.groupId)).single.row.description, 'Edited on B');
-      expect((await b.ledger(g.groupId)).single.row.description, 'Edited on B');
-    });
+        expect(
+          (await a.ledger(g.groupId)).single.row.description,
+          'Edited on A',
+        );
+        expect(
+          (await b.ledger(g.groupId)).single.row.description,
+          'Edited on A',
+        );
+        final parked = (await DriftConflictRepository(
+          b.db,
+        ).watchAll().first).single;
+        expect(parked.attempted.description, 'Edited on B');
+      },
+    );
   });
 
   group('the server is the backstop', () {
@@ -781,27 +817,27 @@ void main() {
         a.tap.last('GET', '/api/fx')?.queryParameters['since'] as String?;
 
     liveTest('arrive with sync and are then left alone', () async {
-      final g = await seedGroup(joined: false);
+      await seedGroup(joined: false);
       serveRates(a);
       publish('2026-08-20', 'USD', 1);
       publish('2026-08-20', 'INR', 95.43);
 
-      await a.sync.syncGroup(g.groupId);
+      await a.sync.syncEverything();
       expect(await a.db.select(a.db.fxRates).get(), hasLength(2));
 
-      await a.sync.syncGroup(g.groupId);
+      await a.sync.syncEverything();
       expect(lastSince(), '2026-08-20', reason: 'from the newest date held');
       expect(await a.db.select(a.db.fxRates).get(), hasLength(2));
     });
 
     liveTest('a later publication does not disturb the earlier one', () async {
-      final g = await seedGroup(joined: false);
+      await seedGroup(joined: false);
       serveRates(a);
       publish('2026-08-20', 'INR', 95.43);
-      await a.sync.syncGroup(g.groupId);
+      await a.sync.syncEverything();
 
       publish('2026-08-21', 'INR', 95.70);
-      await a.sync.syncGroup(g.groupId);
+      await a.sync.syncEverything();
 
       final stored = await a.db.select(a.db.fxRates).get()
         ..sort((x, y) => x.asOf.compareTo(y.asOf));
@@ -813,7 +849,7 @@ void main() {
       final g = await seedGroup(joined: false);
       serveRates(a);
       publish('2026-08-20', 'USD', 1);
-      await a.sync.syncGroup(g.groupId);
+      await a.sync.syncEverything();
       expect(lastSince(), isNot('2024-03-11'));
 
       // In a currency that is not the group's own, so it needs a rate.
@@ -828,7 +864,7 @@ void main() {
         createdBy: g.ravi,
       );
       publish('2024-03-11', 'USD', 1);
-      await a.sync.syncGroup(g.groupId);
+      await a.sync.syncEverything();
 
       expect(lastSince(), '2024-03-11');
       expect(
@@ -851,19 +887,19 @@ void main() {
         createdBy: g.ravi,
       );
 
-      await a.sync.syncGroup(g.groupId);
+      await a.sync.syncEverything();
       expect(lastSince(), '1999-01-01');
 
-      await a.sync.syncGroup(g.groupId);
+      await a.sync.syncEverything();
       expect(lastSince(), isNot('1999-01-01'));
     });
 
     liveTest('a rate failure never fails a sync that carries money', () async {
-      final g = await seedGroup(joined: false);
+      await seedGroup(joined: false);
       a.tap.before = (request) async {
         if (request.path.endsWith('/api/fx')) throw offline(request);
       };
-      final report = await a.sync.syncGroup(g.groupId);
+      final report = await a.sync.syncEverything();
       expect(report.isClean, isTrue, reason: '$report');
     });
   });
@@ -918,7 +954,7 @@ void main() {
     liveTest('a group left behind is not rediscovered', () async {
       final g = await seedGroup(joined: false);
       await a.sync.syncGroup(g.groupId);
-      await a.groups.leaveGroup(groupId: g.groupId, memberId: g.ravi);
+      await a.groups.leaveGroup(memberId: g.ravi);
       await a.sync.syncGroup(g.groupId);
 
       expect(
@@ -926,6 +962,21 @@ void main() {
         isEmpty,
       );
     });
+
+    liveTest(
+      'nor pulled again by the device that left it, once it is confirmed',
+      () async {
+        final g = await seedGroup(joined: false);
+        await a.sync.syncGroup(g.groupId);
+        await a.groups.leaveGroup(memberId: g.ravi);
+
+        // Pushed and read back: the server has said so.
+        await a.sync.syncGroup(g.groupId);
+        expect(await a.sync.discoverGroups(), isEmpty);
+        // Still on the device, read-only, among the groups put away.
+        expect((await a.groups.watchListings().first).single.hasLeft, isTrue);
+      },
+    );
 
     liveTest(
       'failed discovery is not a successful local-only answer',
@@ -1032,15 +1083,18 @@ void main() {
 
     liveTest('the cursor stops it re-fetching what it already has', () async {
       await start();
-      String? after() =>
-          a.tap.last('GET', '/api/profiles')?.queryParameters['after']
-              as String?;
+      int? since() =>
+          a.tap.last('GET', '/api/profiles')?.queryParameters['since'] as int?;
 
       await a.sync.shared.pullProfiles();
-      expect(after(), isNull, reason: 'the first pull asks for everything');
+      expect(since(), 0, reason: 'the first pull asks for everything');
 
       await a.sync.shared.pullProfiles();
-      expect(after(), isNotNull, reason: 'the second asks only for changes');
+      expect(
+        since(),
+        greaterThan(0),
+        reason: 'the second asks only for changes',
+      );
     });
   });
 
@@ -1272,24 +1326,21 @@ void main() {
       );
     });
 
-    liveTest('an edit that moves no money is simply applied', () async {
-      final (:g, entryId: _) = await divergent(
-        raviAmount: 45000,
+    /// The write replaces the whole expense, so applying a stale one that
+    /// only renames it would put B's old amount back.
+    liveTest('an edit that moves no money is parked too', () async {
+      final (:g, :entryId) = await divergent(
+        raviAmount: 30000,
         raviDescription: 'Dinner at Toit',
         priyaAmount: 45000,
       );
       await a.sync.syncGroup(g.groupId);
 
-      expect(await DriftConflictRepository(a.db).watchAll().first, isEmpty);
-      expect(
-        (await a.ledger(g.groupId)).single.row.description,
-        'Dinner at Toit',
-      );
+      final parked = await DriftConflictRepository(a.db).byEntry(entryId);
+      expect(parked?.attempted.description, 'Dinner at Toit');
+      expect((await a.ledger(g.groupId)).single.row.amountMinor, 45000);
       await b.sync.syncGroup(g.groupId);
-      expect(
-        (await b.ledger(g.groupId)).single.row.description,
-        'Dinner at Toit',
-      );
+      expect((await b.ledger(g.groupId)).single.row.amountMinor, 45000);
     });
 
     liveTest('editing it again lands, and clears the notice', () async {
@@ -1375,12 +1426,11 @@ void main() {
       await a.sync.syncGroup(g.groupId);
 
       // An expense and its history line share a number, and so a page.
-      final firstPage = await fetch(
-        a.client.getSyncApi().getChanges(
-          groupId: g.groupId,
-          since: beforeExpenses,
-          limit: 1,
-        ),
+      final firstPage = await changesOf(
+        a.client,
+        g.groupId,
+        since: beforeExpenses,
+        limit: 1,
       );
       expect(firstPage.entries, hasLength(1));
       expect(firstPage.events.map((event) => event.seq), [
@@ -1402,6 +1452,156 @@ void main() {
       final device = await arunsDevice(g);
       await device.sync.syncGroup(g.groupId);
       expect((await device.sync.syncGroup(g.groupId)).pulled, 0);
+    });
+  });
+
+  group('what a sync asks for', () {
+    /// The groups a pull asked the server for.
+    List<String> pulled(RequestOptions request) => [
+      for (final cursor
+          in (jsonDecode(request.data as String) as Map)['groups'] as List)
+        (cursor as Map)['groupId'] as String,
+    ];
+
+    liveTest(
+      'a local write sends, and reads back only its own group',
+      () async {
+        final g = await seedGroup();
+        await a.groups.createGroup(
+          name: 'Flat',
+          defaultCurrency: 'INR',
+          creatorDisplayName: 'Ravi',
+          creatorProfileId: a.profileId,
+        );
+        await a.sync.syncEverything();
+        a.tap.requests.clear();
+
+        await a.entries.create(draft(g, 500), createdBy: g.ravi);
+        final report = await a.sync.syncGroups(const {});
+
+        expect(report.isClean, isTrue, reason: '$report');
+        for (final feed in ['/api/reference', '/api/profiles']) {
+          expect(a.tap.count('GET', feed), 0, reason: feed);
+        }
+        expect(a.tap.count('GET', '/api/fx'), 1, reason: '/api/fx');
+        expect(a.tap.requests.where(isGroupList).map(pulled), [
+          [g.groupId],
+        ]);
+      },
+    );
+
+    liveTest('every group goes out in one pull', () async {
+      final g = await seedGroup();
+      for (final name in ['Flat', 'Office']) {
+        await a.groups.createGroup(
+          name: name,
+          defaultCurrency: 'INR',
+          creatorDisplayName: 'Ravi',
+          creatorProfileId: a.profileId,
+        );
+      }
+      await a.sync.syncEverything();
+      a.tap.requests.clear();
+
+      await a.sync.syncEverything();
+
+      final pulls = a.tap.requests.where(isGroupList).toList();
+      expect(pulls, hasLength(1));
+      expect(pulled(pulls.single), hasLength(3));
+      expect(pulled(pulls.single), contains(g.groupId));
+    });
+
+    /// The server judges the removal against the balances it holds, so the
+    /// settlement made first on this device has to reach it first.
+    liveTest(
+      'settling up and then removing somebody, offline, both land',
+      () async {
+        final g = await seedGroup();
+        await a.entries.create(
+          draft(g, 900, between: [g.ravi, g.arun]),
+          createdBy: g.ravi,
+        );
+        await a.sync.syncGroup(g.groupId);
+
+        await a.entries.create(
+          EntryDraft.settlement(
+            groupId: g.groupId,
+            currency: 'INR',
+            amountMinor: 450,
+            fromMemberId: g.arun,
+            toMemberId: g.ravi,
+          ),
+          createdBy: g.ravi,
+        );
+        await a.groups.removeMember(g.arun);
+        final report = await a.sync.syncGroup(g.groupId);
+
+        expect(report.failed, 0, reason: '$report');
+        expect(await a.outbox.watchDeadLetters().first, isEmpty);
+        await b.sync.syncGroup(g.groupId);
+        final arun = await (b.db.select(
+          b.db.members,
+        )..where((t) => t.id.equals(g.arun))).getSingle();
+        expect(arun.leftAt, isNotNull);
+      },
+    );
+
+    liveTest(
+      'a group the server has not taken yet does not stop the rest',
+      () async {
+        final g = await seedGroup();
+        await b.entries.create(draft(g, 700), createdBy: g.priya);
+        await b.sync.syncGroup(g.groupId);
+
+        final offline = await a.groups.createGroup(
+          name: 'Flat',
+          defaultCurrency: 'INR',
+          creatorDisplayName: 'Ravi',
+          creatorProfileId: a.profileId,
+        );
+        a.tap.before = (request) async {
+          if (request.method == 'PUT' &&
+              request.path.endsWith('/groups/${offline.group.id}')) {
+            throw refused(request, status: 503, retry: api.Retry.transient);
+          }
+        };
+
+        final report = await a.sync.syncEverything();
+
+        expect(report.error, isNull, reason: '$report');
+        expect(report.failed, 1, reason: 'the creation waits for a retry');
+        expect((await a.ledger(g.groupId)).map((e) => e.row.amountMinor), [
+          700,
+        ]);
+        expect(
+          a.tap.requests.where(isGroupList).expand(pulled),
+          isNot(contains(offline.group.id)),
+        );
+      },
+    );
+
+    liveTest('a group the server refuses does not stop the rest', () async {
+      final g = await seedGroup();
+      await b.entries.create(draft(g, 700), createdBy: g.priya);
+      await b.sync.syncGroup(g.groupId);
+
+      // A copy the server has no group for, as a reset backend would leave.
+      await a.db
+          .into(a.db.groups)
+          .insert(
+            GroupsCompanion.insert(
+              id: '00000000-0000-4000-8000-00000000dead',
+              name: 'Gone',
+              defaultCurrency: 'INR',
+              createdAt: DateTime.utc(2026, 1, 1),
+              seq: const Value(4),
+            ),
+          );
+
+      final report = await a.sync.syncEverything();
+
+      expect(report.error, isNull, reason: '$report');
+      expect((await a.ledger(g.groupId)).map((e) => e.row.amountMinor), [700]);
     });
   });
 }

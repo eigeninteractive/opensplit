@@ -21,6 +21,7 @@ Profile _$ProfileFromJson(Map<String, dynamic> json) =>
           'avatarPhoto',
           'updatedAt',
           'deletedAt',
+          'version',
         ],
       );
       final val = Profile(
@@ -61,6 +62,7 @@ Profile _$ProfileFromJson(Map<String, dynamic> json) =>
           'deletedAt',
           (v) => v == null ? null : DateTime.parse(v as String),
         ),
+        version: $checkedConvert('version', (v) => (v as num).toInt()),
       );
       return val;
     });
@@ -76,6 +78,7 @@ Map<String, dynamic> _$ProfileToJson(Profile instance) => <String, dynamic>{
   'avatarPhoto': instance.avatarPhoto,
   'updatedAt': instance.updatedAt.toIso8601String(),
   'deletedAt': instance.deletedAt?.toIso8601String(),
+  'version': instance.version,
 };
 
 const _$AvatarKindEnumMap = {

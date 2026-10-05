@@ -1,6 +1,8 @@
 /// Writing one page of a group's history into the local database.
 library;
 
+import 'dart:developer' as developer;
+
 import 'package:drift/drift.dart';
 import 'package:opensplit_api/opensplit_api.dart' as api;
 
@@ -16,6 +18,48 @@ Future<Set<String>> _dirtyIds(AppDatabase db, OutboxTarget target) async {
   )..where((t) => t.target.equalsValue(target))).get();
   return {for (final row in rows) row.targetId};
 }
+
+/// Which of [ids] this device holds under a group other than [groupId].
+///
+/// Ids are minted by devices and each group's server only checks them within
+/// that group, so a member of one group could reuse an id this device holds
+/// in another. Applying it would move that row between groups here; it is
+/// skipped instead, and the group it belongs to keeps it.
+Future<Set<String>> _heldByOtherGroups(
+  AppDatabase db,
+  ResultSetImplementation<Table, Object?> table, {
+  required GeneratedColumn<String> id,
+  required GeneratedColumn<String> owner,
+  required String groupId,
+  required List<String> ids,
+}) async {
+  if (ids.isEmpty) return const {};
+  final rows =
+      await (db.selectOnly(table)
+            ..addColumns([id])
+            ..where(id.isIn(ids) & owner.equals(groupId).not()))
+          .get();
+  final held = {for (final row in rows) row.read(id)!};
+  for (final skipped in held) {
+    _logForeign(groupId, skipped);
+  }
+  return held;
+}
+
+Future<Set<String>> _memberIds(AppDatabase db, String groupId) async => {
+  for (final row
+      in await (db.selectOnly(db.members)
+            ..addColumns([db.members.id])
+            ..where(db.members.groupId.equals(groupId)))
+          .get())
+    row.read(db.members.id)!,
+};
+
+void _logForeign(String groupId, String id) => developer.log(
+  'Skipped $id in group $groupId: it names a row of another group.',
+  name: 'opensplit.sync',
+  level: 900,
+);
 
 /// Applies one page and advances the group's cursor, in one transaction, so a
 /// crash between them can neither re-read nor skip a page.
@@ -51,9 +95,20 @@ Future<int> applyGroupChanges(
     }
 
     final dirtyMembers = await _dirtyIds(db, OutboxTarget.member);
+    final foreignMembers = await _heldByOtherGroups(
+      db,
+      db.members,
+      id: db.members.id,
+      owner: db.members.groupId,
+      groupId: groupId,
+      ids: [for (final member in page.members) member.id],
+    );
     await db.batch((batch) {
       for (final member in page.members) {
-        if (dirtyMembers.contains(member.id)) continue;
+        if (dirtyMembers.contains(member.id) ||
+            foreignMembers.contains(member.id)) {
+          continue;
+        }
         final row = member.toRow(groupId).toCompanion(false);
         // DO UPDATE, never REPLACE: SQLite's REPLACE deletes first, and
         // payers and shares reference members without a cascade.
@@ -62,9 +117,27 @@ Future<int> applyGroupChanges(
     });
 
     final dirtyEntries = await _dirtyIds(db, OutboxTarget.entry);
+    final foreignEntries = await _heldByOtherGroups(
+      db,
+      db.entries,
+      id: db.entries.id,
+      owner: db.entries.groupId,
+      groupId: groupId,
+      ids: [for (final entry in page.entries) entry.id],
+    );
+    final ownMembers = await _memberIds(db, groupId);
     var applied = 0;
     for (final entry in page.entries) {
       if (dirtyEntries.contains(entry.id)) continue;
+      final names = [
+        for (final payer in entry.payers) payer.memberId,
+        for (final share in entry.shares) share.memberId,
+      ];
+      if (foreignEntries.contains(entry.id) ||
+          !names.every(ownMembers.contains)) {
+        _logForeign(groupId, entry.id);
+        continue;
+      }
       await writeEntryInTransaction(db, entry.toEntry(groupId));
       applied++;
     }
@@ -137,9 +210,8 @@ Future<void> _applyEvents(
   }
 }
 
-/// Profiles, the one feed still cursored on a timestamp (they live in D1,
-/// which has several writers and so no sequence number). Here a newer local
-/// `updatedAt` really can mean the remote row is older.
+/// Profiles, which arrive on their own feed and on group pages, so a row can
+/// arrive older than the copy already held: a newer local `version` wins.
 Future<int> applyProfiles(AppDatabase db, List<api.Profile> rows) async {
   if (rows.isEmpty) return 0;
 
@@ -147,12 +219,12 @@ Future<int> applyProfiles(AppDatabase db, List<api.Profile> rows) async {
   final locals = await (db.select(
     db.profiles,
   )..where((t) => t.id.isIn([for (final row in rows) row.id]))).get();
-  final heldAt = {for (final local in locals) local.id: local.updatedAt};
+  final held = {for (final local in locals) local.id: local.version};
 
   final winners = [
     for (final profile in rows)
       if (!dirty.contains(profile.id) &&
-          _remoteWins(heldAt[profile.id], profile.updatedAt))
+          (held[profile.id] ?? 0) < profile.version)
         profile.toRow().toCompanion(false),
   ];
 
@@ -163,6 +235,3 @@ Future<int> applyProfiles(AppDatabase db, List<api.Profile> rows) async {
   });
   return winners.length;
 }
-
-bool _remoteWins(DateTime? local, DateTime? remote) =>
-    local == null || remote == null || local.isBefore(remote);

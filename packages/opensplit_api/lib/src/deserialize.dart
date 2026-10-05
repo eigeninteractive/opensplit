@@ -22,10 +22,11 @@ import 'package:opensplit_api/src/model/google_identity_request.dart';
 import 'package:opensplit_api/src/model/google_redirect.dart';
 import 'package:opensplit_api/src/model/google_redirect_request.dart';
 import 'package:opensplit_api/src/model/group.dart';
+import 'package:opensplit_api/src/model/group_cursor.dart';
 import 'package:opensplit_api/src/model/group_event_payload.dart';
-import 'package:opensplit_api/src/model/group_ids.dart';
 import 'package:opensplit_api/src/model/group_input.dart';
 import 'package:opensplit_api/src/model/group_link.dart';
+import 'package:opensplit_api/src/model/group_refusal.dart';
 import 'package:opensplit_api/src/model/health.dart';
 import 'package:opensplit_api/src/model/identity_outcome.dart';
 import 'package:opensplit_api/src/model/invite.dart';
@@ -45,6 +46,8 @@ import 'package:opensplit_api/src/model/placeholder_list.dart';
 import 'package:opensplit_api/src/model/profile.dart';
 import 'package:opensplit_api/src/model/profile_page.dart';
 import 'package:opensplit_api/src/model/profile_update.dart';
+import 'package:opensplit_api/src/model/pull.dart';
+import 'package:opensplit_api/src/model/pull_request.dart';
 import 'package:opensplit_api/src/model/push_data.dart';
 import 'package:opensplit_api/src/model/reauth_start.dart';
 import 'package:opensplit_api/src/model/reauth_verify_request.dart';
@@ -141,15 +144,17 @@ ReturnType deserialize<ReturnType, BaseType>(
           as ReturnType;
     case 'Group':
       return Group.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'GroupCursor':
+      return GroupCursor.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'GroupEventPayload':
       return GroupEventPayload.fromJson(value as Map<String, dynamic>)
           as ReturnType;
-    case 'GroupIds':
-      return GroupIds.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'GroupInput':
       return GroupInput.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'GroupLink':
       return GroupLink.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'GroupRefusal':
+      return GroupRefusal.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'Health':
       return Health.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'IdentityOutcome':
@@ -197,6 +202,10 @@ ReturnType deserialize<ReturnType, BaseType>(
     case 'ProfileUpdate':
       return ProfileUpdate.fromJson(value as Map<String, dynamic>)
           as ReturnType;
+    case 'Pull':
+      return Pull.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'PullRequest':
+      return PullRequest.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'PushData':
       return PushData.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'ReauthStart':

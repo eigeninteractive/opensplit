@@ -14,7 +14,11 @@ export const ZARA = "99999999-9999-4999-8999-999999999999";
 /** A real account (a `user` row) at a fresh id: D1 refuses memberships for any other kind. */
 export async function makeAccount(displayName: string | null = null): Promise<string> {
   const id = crypto.randomUUID();
-  await env.DB.batch([env.DB.prepare("insert into user (id, name, email, updated_at) values (?, ?, ?, ?)").bind(id, "", `${id}@fixture.invalid`, Date.now()), env.DB.prepare("insert into profiles (id, display_name, updated_at) values (?, ?, ?)").bind(id, displayName, new Date().toISOString())]);
+  await env.DB.batch([
+    env.DB.prepare("insert into user (id, name, email, updated_at) values (?, ?, ?, ?)").bind(id, "", `${id}@fixture.invalid`, Date.now()),
+    env.DB.prepare("insert into counters (name, value) values ('profiles', 1) on conflict (name) do update set value = value + 1"),
+    env.DB.prepare("insert into profiles (id, display_name, updated_at, version) values (?, ?, ?, (select value from counters where name = 'profiles'))").bind(id, displayName, new Date().toISOString()),
+  ]);
   return id;
 }
 

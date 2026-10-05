@@ -30,6 +30,6 @@ final class DriftProfileRepository {
 
   Future<void> upsert(Profile profile) => _db.transaction(() async {
     await _db.into(_db.profiles).insertOnConflictUpdate(profile);
-    await outbox?.enqueue(OutboxTarget.profile, profile.id);
+    await outbox?.enqueueInTransaction(OutboxTarget.profile, profile.id);
   });
 }

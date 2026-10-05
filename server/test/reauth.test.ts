@@ -100,7 +100,60 @@ describe("deleting an account with an address", () => {
   });
 });
 
+/**
+ * A session somebody else got hold of must not be able to point the account
+ * at their own address or Google account: after that, the confirmation above
+ * would go to them.
+ */
+describe("changing how an account with an address signs in", () => {
+  it("is refused for an address once the sign-in is old", async () => {
+    const account = await googleAccount("relink-stale-email");
+    await age(account.id);
+
+    const response = await call("/identity/email", account.token, { method: "POST", body: { email: "thief@example.com" } });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ error: { code: "reauth_required" } });
+  });
+
+  it("is refused for a Google account once the sign-in is old", async () => {
+    const account = await googleAccount("relink-stale-google");
+    await age(account.id);
+
+    const linked = await call("/identity/google", account.token, { method: "POST", body: { idToken: await googleIdToken({ sub: "thief", email: "thief@example.com" }), nonce: null, allowSignIn: false } });
+    expect(linked.status).toBe(403);
+    expect(await linked.json()).toMatchObject({ error: { code: "reauth_required" } });
+
+    const redirect = await call("/identity/google/redirect", account.token, { method: "POST", body: { callbackUrl: "http://localhost:8787/app/welcome", allowSignIn: false } });
+    expect(redirect.status).toBe(403);
+  });
+
+  it("still lets an old session sign in to a different account", async () => {
+    const account = await googleAccount("relink-stale-switch");
+    await age(account.id);
+
+    const response = await call("/identity/google", account.token, { method: "POST", body: { idToken: await googleIdToken({ sub: "relink-other", email: "other@example.com" }), nonce: null, allowSignIn: true } });
+    expect(response.status).toBe(200);
+    const outcome = (await response.json()) as IdentityOutcome;
+    expect(outcome.outcome).toBe("replaced");
+    expect(outcome.strandedUserId).toBe(account.id);
+  });
+
+  it("goes ahead straight after signing in", async () => {
+    const account = await googleAccount("relink-fresh");
+    const response = await call("/identity/email", account.token, { method: "POST", body: { email: "relink-fresh-new@example.com" } });
+    expect(await response.json()).toEqual({ flow: "linkPending" });
+  });
+});
+
 describe("a guest", () => {
+  it("attaches an address however old the session, since that is how it keeps its groups", async () => {
+    const guest = await signInAsGuest();
+    await age(guest.id);
+
+    const response = await call("/identity/email", guest.token, { method: "POST", body: { email: "old-guest@example.com" } });
+    expect(await response.json()).toEqual({ flow: "linkPending" });
+  });
+
   /** Nothing identifies a guest but the session, so there is nothing more to ask for. */
   it("deletes without confirming, however old the session", async () => {
     const guest = await signInAsGuest();

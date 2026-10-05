@@ -1,8 +1,8 @@
-import m0000 from './20261002071250_fair_hemingway/migration.sql';
+import m0000 from './20261005061632_gigantic_mother_askani/migration.sql';
 
   export default {
     migrations: {
-      "20261002071250_fair_hemingway": m0000
+      "20261005061632_gigantic_mother_askani": m0000
 }
   }
   

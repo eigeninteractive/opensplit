@@ -72,6 +72,7 @@ Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
       // no cookie jar on Android.
       client: buildApiClient(baseUrl: apiBaseUrl, token: session.token),
       outbox: outbox,
+      accountId: profileId,
     );
 
     // Sync first. The notification describes what is now on the device, not

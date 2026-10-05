@@ -16,7 +16,7 @@ import { pendingNotices } from "./notices";
 import { attempt, type Result } from "./refusal";
 import { createGroup, forgetProfile, handOver, putMember, updateGroup } from "./roster";
 import { currentSeq, findMeta, findTombstone, type GroupDb, nowIso, requireActiveMember, requireMeta, type Tx, type WriteContext } from "./store";
-import { backoffOutbox, clearOutbox, nextDue, type OutboxRow, pendingOutbox, runDormancy, type UpkeepOutcome } from "./upkeep";
+import { backoffOutbox, clearOutbox, nextDue, type OutboxRow, pendingOutbox, runDormancy, touchDormancy, type UpkeepOutcome } from "./upkeep";
 
 /**
  * One group's ledger and its authorization boundary. The object runs one
@@ -131,7 +131,8 @@ export class Group extends DurableObject<Env> {
   /**
    * One change: run it, flush what it owes D1, and wake the other members if it
    * committed something. A write that changed nothing spends no sequence
-   * number and so notifies nobody, which is what keeps retries quiet.
+   * number, so it notifies nobody and does not count as use of the group,
+   * which is what keeps retries quiet.
    */
   private async write<T>(profileId: string, body: (tx: Tx, now: string) => T): Promise<Result<T>> {
     const now = nowIso();
@@ -140,6 +141,7 @@ export class Group extends DurableObject<Env> {
         const before = currentSeq(tx);
         const value = body(tx, now);
         const after = currentSeq(tx);
+        if (after > before) touchDormancy(tx, now);
         return { value, spent: after > before ? after : null };
       }),
     );

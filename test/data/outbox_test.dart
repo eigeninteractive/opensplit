@@ -73,19 +73,67 @@ void main() {
     expect(await outbox.nextAttemptAt(), isNull);
   });
 
-  test('re-dirtying a row keeps when it first went dirty', () async {
-    var at = DateTime.utc(2026, 8, 26);
-    final clocked = OutboxQueue(
-      db,
-      clock: () => at = at.add(const Duration(seconds: 1)),
+  group('the order changes are pushed in', () {
+    late DriftGroupRepository groups;
+    late DriftEntryRepository entries;
+
+    setUp(() {
+      groups = DriftGroupRepository(db, outbox: outbox);
+      entries = DriftEntryRepository(db, outbox: outbox);
+    });
+
+    Future<List<OutboxTarget>> order() async => [
+      for (final item in await outbox.due()) item.target,
+    ];
+
+    /// The server checks a removal against the balances it holds, so the
+    /// settlement that makes it possible has to arrive first.
+    test('is the order they were made in', () async {
+      final made = await groups.createGroup(
+        name: 'Goa',
+        defaultCurrency: 'INR',
+        creatorDisplayName: 'Ravi',
+      );
+      final priya = await groups.addMember(made.group.id, displayName: 'Priya');
+      await _acknowledge(db);
+
+      await groups.renameMember(priya.id, 'Priya S');
+      await entries.create(
+        _draft(made.group.id, made.creator.id, priya.id),
+        createdBy: made.creator.id,
+      );
+      await groups.removeMember(priya.id);
+
+      expect(await order(), [OutboxTarget.entry, OutboxTarget.member]);
+    });
+
+    /// Until the server has a row, everything after its creation may name it.
+    test(
+      'keeps a row the server has never seen where it was created',
+      () async {
+        final made = await groups.createGroup(
+          name: 'Goa',
+          defaultCurrency: 'INR',
+          creatorDisplayName: 'Ravi',
+        );
+        final priya = await groups.addMember(
+          made.group.id,
+          displayName: 'Priya',
+        );
+        await entries.create(
+          _draft(made.group.id, made.creator.id, priya.id),
+          createdBy: made.creator.id,
+        );
+        await groups.renameMember(priya.id, 'Priya S');
+
+        expect(await order(), [
+          OutboxTarget.group,
+          OutboxTarget.member,
+          OutboxTarget.member,
+          OutboxTarget.entry,
+        ]);
+      },
     );
-    addTearDown(clocked.dispose);
-
-    await clocked.enqueue(OutboxTarget.group, 'g1');
-    final first = (await clocked.due()).single.createdAt;
-    await clocked.enqueue(OutboxTarget.group, 'g1');
-
-    expect((await clocked.due()).single.createdAt, first);
   });
 
   test('every enqueue announces itself', () async {
@@ -141,3 +189,21 @@ void main() {
     expect(feed.single.isProvisional, isTrue);
   });
 }
+
+/// Marks every row as one the server has, and empties the outbox, as a
+/// successful push would.
+Future<void> _acknowledge(AppDatabase db) async {
+  await db.customStatement('UPDATE groups SET seq = 1');
+  await db.customStatement('UPDATE members SET seq = 1');
+  await db.customStatement('UPDATE entries SET seq = 1');
+  await db.delete(db.outbox).go();
+}
+
+EntryDraft _draft(String groupId, String payer, String payee) =>
+    EntryDraft.settlement(
+      groupId: groupId,
+      currency: 'INR',
+      amountMinor: 500,
+      fromMemberId: payer,
+      toMemberId: payee,
+    );

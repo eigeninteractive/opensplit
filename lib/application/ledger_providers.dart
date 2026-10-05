@@ -3,10 +3,12 @@ import 'package:opensplit_api/opensplit_api.dart' show AvatarKind;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../data/local/database.dart';
+import '../data/repositories/drift_group_repository.dart';
 import '../domain/analytics/analytics_query.dart';
 import '../domain/avatar.dart';
 import '../domain/balance/balance_fold.dart';
 import '../domain/balance/member_balance.dart';
+import '../domain/balance/pairwise.dart';
 import '../domain/balance/simplify.dart';
 import '../domain/fx/estimated_total.dart';
 import '../domain/member_identity.dart';
@@ -85,10 +87,11 @@ Stream<Map<String, Currency>> currencies(Ref ref) => ref
     .watchAll()
     .map((list) => {for (final c in list) c.code: c});
 
+/// Every group on this device, the most recently active first, and whether
+/// this account has left each.
 @riverpod
-Stream<List<Group>> groups(Ref ref, {bool includeArchived = false}) => ref
-    .watch(groupRepositoryProvider)
-    .watchGroups(includeArchived: includeArchived);
+Stream<List<GroupListing>> groupListings(Ref ref) =>
+    ref.watch(groupRepositoryProvider).watchListings();
 
 @riverpod
 Stream<Group?> group(Ref ref, String groupId) =>
@@ -133,8 +136,9 @@ class GroupLedger {
   /// Net position per member per currency. Members who are settled are absent.
   final List<MemberBalance> balances;
 
-  /// The suggested payments that would settle the group, per currency. Empty
-  /// when the group has simplification switched off.
+  /// The suggested payments that would settle the group, per currency: the
+  /// fewest that do it when the group simplifies its debts, otherwise each
+  /// pair's own debt to each other.
   final List<Transfer> transfers;
 
   /// This device's member in the group, if it has one.
@@ -167,6 +171,14 @@ class GroupLedger {
     }
     return null;
   }
+
+  /// Who a payment can be recorded between: everybody here, and anybody who
+  /// left with a balance still open, which only settling can close.
+  List<Member> get settleable => [
+    ...members,
+    for (final member in pastMembers)
+      if (!isSettledUp(member.id)) member,
+  ];
 
   /// Whether [memberId] is square with the group in every currency.
   bool isSettledUp(String memberId) =>
@@ -233,7 +245,9 @@ GroupLedger? groupLedger(Ref ref, String groupId) {
     ],
     entries: entryList,
     balances: balances,
-    transfers: group.simplifyDebts ? simplifyDebts(balances) : const [],
+    transfers: group.simplifyDebts
+        ? simplifyDebts(balances)
+        : pairwiseDebts(entryList),
     me: memberList.where((m) => m.profileId == accountId).firstOrNull,
     profiles: profiles,
     brokenEntries: broken,

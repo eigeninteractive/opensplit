@@ -38,3 +38,12 @@ export function isSettled(tx: Tx, memberId: string): boolean {
 export function isGroupSettled(tx: Tx): boolean {
   return outstanding(tx).length === 0;
 }
+
+/** Every open position, by member and then currency: positive is owed, negative owes. */
+export function positionsByMember(tx: Tx): Map<string, Map<string, number>> {
+  const byMember = new Map<string, Map<string, number>>();
+  for (const { memberId, currency, balanceMinor } of outstanding(tx)) {
+    byMember.set(memberId, (byMember.get(memberId) ?? new Map()).set(currency, balanceMinor));
+  }
+  return byMember;
+}

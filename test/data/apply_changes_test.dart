@@ -15,25 +15,27 @@ void main() {
   setUp(() async => db = await testDatabase());
   tearDown(() => db.close());
 
-  api.Group group({DateTime? archivedAt, int seq = 1}) => api.Group(
-    avatarKind: api.AvatarKind.initials,
-    avatarColor: null,
-    avatarEmoji: null,
-    avatarIcon: null,
-    avatarPhoto: null,
-    coverKind: api.CoverKind.generated,
-    coverPhoto: null,
-    id: 'g',
-    name: 'Goa',
-    defaultCurrency: 'INR',
-    isDirect: false,
-    simplifyDebts: true,
-    createdBy: 'm',
-    createdAt: at,
-    archivedAt: archivedAt,
-    updatedAt: at,
-    seq: seq,
-  );
+  api.Group group({String id = 'g', DateTime? archivedAt, int seq = 1}) =>
+      api.Group(
+        avatarKind: api.AvatarKind.initials,
+        avatarColor: null,
+        avatarEmoji: null,
+        avatarIcon: null,
+        avatarPhoto: null,
+        coverKind: api.CoverKind.generated,
+        coverPhoto: null,
+        id: id,
+        name: 'Goa',
+        defaultCurrency: 'INR',
+        isDirect: false,
+        simplifyDebts: true,
+        createdBy: 'm',
+        createdAt: at,
+        archivedAt: archivedAt,
+        updatedAt: at,
+        lastActivityAt: at,
+        seq: seq,
+      );
 
   api.Member member({String? upiVpa, DateTime? leftAt, int seq = 1}) =>
       api.Member(
@@ -47,33 +49,34 @@ void main() {
         seq: seq,
       );
 
-  api.Profile profile({String? upiVpa, required DateTime updatedAt}) =>
-      api.Profile(
-        avatarKind: api.AvatarKind.initials,
-        avatarColor: null,
-        avatarEmoji: null,
-        avatarIcon: null,
-        avatarPhoto: null,
-        id: 'p',
-        displayName: 'Ravi',
-        upiVpa: upiVpa,
-        updatedAt: updatedAt,
-        deletedAt: null,
-      );
+  api.Profile profile({String? upiVpa, required int version}) => api.Profile(
+    avatarKind: api.AvatarKind.initials,
+    avatarColor: null,
+    avatarEmoji: null,
+    avatarIcon: null,
+    avatarPhoto: null,
+    id: 'p',
+    displayName: 'Ravi',
+    upiVpa: upiVpa,
+    updatedAt: at,
+    deletedAt: null,
+    version: version,
+  );
 
   api.ChangePage page({
     required int seq,
     required api.Group group,
     required api.Member member,
     required api.Profile profile,
+    List<api.Entry> entries = const [],
   }) => api.ChangePage(
-    groupId: 'g',
+    groupId: group.id,
     seq: seq,
     hasMore: false,
     group: group,
     members: [member],
     profiles: [profile],
-    entries: const [],
+    entries: entries,
     events: const [],
     purgedAt: null,
   );
@@ -85,7 +88,7 @@ void main() {
         seq: 1,
         group: group(archivedAt: at),
         member: member(upiVpa: 'ravi@okaxis', leftAt: at),
-        profile: profile(upiVpa: 'ravi@okaxis', updatedAt: at),
+        profile: profile(upiVpa: 'ravi@okaxis', version: 1),
       ),
       now: at,
     );
@@ -96,7 +99,7 @@ void main() {
         seq: 2,
         group: group(seq: 2),
         member: member(seq: 2),
-        profile: profile(updatedAt: at.add(const Duration(minutes: 1))),
+        profile: profile(version: 2),
       ),
       now: at,
     );
@@ -108,5 +111,63 @@ void main() {
     expect(ravi.leftAt, isNull, reason: 'Ravi rejoined');
     expect(ravi.upiVpa, isNull, reason: 'the group handle was cleared');
     expect(account.upiVpa, isNull, reason: 'the account handle was cleared');
+  });
+
+  /// Ids are minted on devices and checked by each group's server only within
+  /// that group, so another group can name a row this device already holds.
+  test('a row of another group is neither moved nor named', () async {
+    await applyGroupChanges(
+      db,
+      page(
+        seq: 1,
+        group: group(),
+        member: member(),
+        profile: profile(version: 1),
+      ),
+      now: at,
+    );
+
+    final elsewhere = page(
+      seq: 1,
+      group: group(id: 'h'),
+      member: member(),
+      profile: profile(version: 1),
+      entries: [
+        api.Entry(
+          id: 'e',
+          kind: api.EntryKind.expense,
+          description: 'Taken',
+          categoryId: null,
+          currency: 'INR',
+          amountMinor: 100,
+          entryDate: '2026-09-27',
+          occurredAt: null,
+          timeZone: null,
+          splitKind: api.SplitKind.exact,
+          fxRate: null,
+          fxSource: null,
+          fxAt: null,
+          notes: null,
+          createdBy: 'm',
+          createdAt: at,
+          updatedAt: at,
+          deletedAt: null,
+          seq: 1,
+          payers: [api.Payer(memberId: 'm', amountMinor: 100)],
+          shares: [
+            api.Share(memberId: 'm', amountMinor: 100, weightMicros: null),
+          ],
+        ),
+      ],
+    );
+    await applyGroupChanges(db, elsewhere, now: at);
+
+    final ravi = await db.select(db.members).getSingle();
+    expect(ravi.groupId, 'g', reason: 'still in the group it came from');
+    expect(await db.select(db.entries).get(), isEmpty);
+    final cursor = await (db.select(
+      db.groupCursors,
+    )..where((t) => t.groupId.equals('h'))).getSingle();
+    expect(cursor.seq, 1, reason: 'the rest of the page still lands');
   });
 }

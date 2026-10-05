@@ -93,7 +93,7 @@ Future<void> _deadLetter(
           target: OutboxTarget.entry,
           revision: 'r1',
           targetId: entryId,
-          createdAt: DateTime.utc(2026, 8, 21),
+          position: 1,
           lastError: Value(error),
           deadLetteredAt: Value(DateTime.utc(2026, 8, 21)),
         ),

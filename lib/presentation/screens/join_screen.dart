@@ -104,8 +104,26 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
     }
   }
 
-  /// Spends the token as whoever holds the session now.
-  Future<void> _join() async {
+  /// Spends the token as whoever holds the session now, in the place chosen
+  /// on this screen. A named invite names the place; there is nothing to
+  /// choose.
+  Future<void> _join() => _spend((invites) {
+    if (!(_preview?.isOpenLink ?? false)) return invites.join(widget.token);
+    final name = _name.text.trim();
+    return invites.join(
+      widget.token,
+      memberId: _chosenMemberId,
+      displayName: name.isEmpty ? null : name,
+    );
+  });
+
+  /// Comes back to the place this account left. The server gives that place
+  /// back whatever the link offers, so there is nothing to ask for.
+  Future<void> _rejoin() => _spend((invites) => invites.join(widget.token));
+
+  Future<void> _spend(
+    Future<api.Joined> Function(Invites invites) request,
+  ) async {
     final invites = ref.read(invitesProvider);
     if (invites == null) return;
 
@@ -114,14 +132,7 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
       _error = null;
     });
     try {
-      // A named invite names the place; there is nothing to choose.
-      final joined = (_preview?.isOpenLink ?? false)
-          ? await invites.join(
-              widget.token,
-              memberId: _chosenMemberId,
-              displayName: _name.text.trim().isEmpty ? null : _name.text.trim(),
-            )
-          : await invites.join(widget.token);
+      final joined = await request(invites);
       // Pull the group down before showing it, so it is populated on arrival
       // rather than filling in underneath them.
       await ref.read(syncControllerProvider.notifier).syncGroup(joined.groupId);
@@ -199,6 +210,28 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
     };
   }
 
+  /// Somebody who left, coming back. Whatever the link offered, the server
+  /// gives them their own place back, so that is the only thing to offer.
+  Widget _rejoinView(ThemeData theme, api.LinkPreview preview) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      BrandHeader(
+        title: 'Rejoin ${preview.groupName}',
+        subtitle:
+            'You were in this group before. Rejoining brings back your place '
+            'as it was, with everything you paid and owed, and you get '
+            'updates again.',
+      ),
+      const SizedBox(height: 32),
+      ..._errorIfAny(theme),
+      FilledButton(
+        onPressed: _joining ? null : _rejoin,
+        child: Text(_joining ? 'Rejoining…' : 'Rejoin'),
+      ),
+    ],
+  );
+
   /// A link naming one place, for one person.
   Widget _invitation(
     ThemeData theme,
@@ -219,6 +252,7 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
             'new one.',
       );
     }
+    if (preview.hasLeft) return _rejoinView(theme, preview);
     if (preview.isMember) {
       return _Dead(
         message:
@@ -269,6 +303,7 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
         message: 'This link has expired. Ask ${preview.inviter} for a new one.',
       );
     }
+    if (preview.hasLeft) return _rejoinView(theme, preview);
     if (preview.isMember) {
       return _Dead(
         message:
@@ -304,7 +339,9 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
         if (account == null)
           IdentityChoices(
             onSignedIn: () async {
-              await _loadPlaces();
+              // Asked again as somebody: whether they were in this group
+              // before is something only a session can say.
+              await _peek();
               // Not joined yet, deliberately.
               if (mounted) setState(() {});
             },

@@ -38,6 +38,8 @@ class Profile {
     required this.updatedAt,
 
     required this.deletedAt,
+
+    required this.version,
   });
 
   @JsonKey(name: r'id', required: true, includeIfNull: false)
@@ -85,6 +87,10 @@ class Profile {
   @JsonKey(name: r'deletedAt', required: true, includeIfNull: true)
   final DateTime? deletedAt;
 
+  // minimum: 0
+  @JsonKey(name: r'version', required: true, includeIfNull: false)
+  final int version;
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -98,7 +104,8 @@ class Profile {
           other.avatarIcon == avatarIcon &&
           other.avatarPhoto == avatarPhoto &&
           other.updatedAt == updatedAt &&
-          other.deletedAt == deletedAt;
+          other.deletedAt == deletedAt &&
+          other.version == version;
 
   @override
   int get hashCode =>
@@ -111,7 +118,8 @@ class Profile {
       (avatarIcon == null ? 0 : avatarIcon.hashCode) +
       (avatarPhoto == null ? 0 : avatarPhoto.hashCode) +
       updatedAt.hashCode +
-      (deletedAt == null ? 0 : deletedAt.hashCode);
+      (deletedAt == null ? 0 : deletedAt.hashCode) +
+      version.hashCode;
 
   factory Profile.fromJson(Map<String, dynamic> json) =>
       _$ProfileFromJson(json);

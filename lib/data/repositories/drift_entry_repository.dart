@@ -30,7 +30,7 @@ final class DriftEntryRepository {
 
   /// Queues a row for the server.
   Future<void> _enqueue(String entryId) async =>
-      outbox?.enqueue(OutboxTarget.entry, entryId);
+      outbox?.enqueueInTransaction(OutboxTarget.entry, entryId);
 
   /// Writes an entry, a provisional feed line for it, and its outbox item.
   Future<void> _writeWithSnapshot({

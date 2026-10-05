@@ -10,6 +10,7 @@ import 'package:opensplit/application/session_providers.dart';
 import 'package:opensplit/application/sync_coordinator.dart';
 import 'package:opensplit/application/sync_providers.dart';
 import 'package:opensplit/data/local/database.dart';
+import 'package:opensplit/data/repositories/drift_group_repository.dart';
 import 'package:opensplit/data/sync/sync_engine.dart';
 import 'package:opensplit/presentation/screens/group_detail_screen.dart';
 import 'package:opensplit/presentation/screens/group_list_screen.dart';
@@ -51,9 +52,18 @@ Future<void> _mount(
   ProviderScope(
     overrides: [
       syncControllerProvider.overrideWith(() => sync),
-      groupsProvider(
-        includeArchived: true,
-      ).overrideWith((ref) => groups ?? Stream.value([_group])),
+      groupListingsProvider.overrideWith(
+        (ref) => (groups ?? Stream.value([_group])).map(
+          (list) => [
+            for (final group in list)
+              GroupListing(
+                group: group,
+                hasLeft: false,
+                lastActivityAt: group.createdAt,
+              ),
+          ],
+        ),
+      ),
       groupProvider(_group.id).overrideWith((ref) => Stream.value(_group)),
       groupLedgerProvider(_group.id).overrideWith((ref) => _ledger),
       groupSyncProvider(_group.id).overrideWith((ref) async {}),

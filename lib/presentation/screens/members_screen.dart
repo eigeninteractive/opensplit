@@ -224,21 +224,15 @@ class MembersScreen extends ConsumerWidget {
     Member member,
     GroupLedger ledger,
   ) async {
-    final owes = ledger.balances.any(
-      (b) => b.memberId == member.id && b.balanceMinor != 0,
-    );
-
+    // Only offered once they are settled: the server refuses anything else,
+    // since a balance would be left with somebody who can no longer see it.
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Remove ${ledger.nameOfMember(member)}?'),
-        content: Text(
-          owes
-              ? 'They still have an unsettled balance. Removing them keeps '
-                    'every expense they were part of, and their balance stays '
-                    'visible so it can be settled.'
-              : 'Their past expenses stay exactly as they are. They just stop '
-                    'being included in new ones.',
+        content: const Text(
+          'Their past expenses stay exactly as they are. They just stop '
+          'being included in new ones.',
         ),
         actions: [
           TextButton(

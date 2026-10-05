@@ -1,12 +1,12 @@
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, isNotNull } from "drizzle-orm";
 
-import { chunked } from "../../chunked";
+import { chunked, insertable } from "../../chunked";
 import * as schema from "../../db/group/schema";
 import { type Entry, type EntryInput, editableEntryColumns } from "../../schemas/ledger";
+import { positionsByMember } from "./balances";
 import { appendSnapshot, byMember, moneyRows } from "./events";
 import { refuse } from "./refusal";
 import { type EntryRow, nextSeq, requireMeta, type Tx, type WriteContext } from "./store";
-import { touchDormancy } from "./upkeep";
 
 /**
  * The expense write path. Every rule is checked here against the finished
@@ -54,12 +54,13 @@ export function putEntry(tx: Tx, id: string, input: EntryInput, { now, actor }: 
   assertBalanced(input);
   assertMembersExist(tx, input);
 
-  // The id is client-minted, so a retry after a lost response finds its own row here.
+  // The id is client-minted, so a retry after a lost response finds its own row here, unchanged.
   const stored = readEntry(tx, id);
   if (stored) {
-    assertBaseIsCurrent(stored, input);
     if (JSON.stringify(comparable(stored)) === JSON.stringify(comparable(input))) return stored;
+    assertBaseIsCurrent(stored, input);
   }
+  assertDepartedOnlySettle(tx, stored, input);
 
   const seq = nextSeq(tx);
 
@@ -85,16 +86,16 @@ export function putEntry(tx: Tx, id: string, input: EntryInput, { now, actor }: 
 
   tx.delete(schema.entryPayers).where(eq(schema.entryPayers.entryId, id)).run();
   tx.delete(schema.entryShares).where(eq(schema.entryShares.entryId, id)).run();
-  tx.insert(schema.entryPayers)
-    .values(input.payers.map(({ memberId, amountMinor }) => ({ entryId: id, memberId, amountMinor })))
-    .run();
-  tx.insert(schema.entryShares)
-    .values(input.shares.map(({ memberId, amountMinor, weightMicros }) => ({ entryId: id, memberId, amountMinor, weightMicros })))
-    .run();
+  // A crowd's worth of payers or shares is more than one statement can carry.
+  for (const payers of insertable(input.payers.map(({ memberId, amountMinor }) => ({ entryId: id, memberId, amountMinor })))) {
+    tx.insert(schema.entryPayers).values(payers).run();
+  }
+  for (const shares of insertable(input.shares.map(({ memberId, amountMinor, weightMicros }) => ({ entryId: id, memberId, amountMinor, weightMicros })))) {
+    tx.insert(schema.entryShares).values(shares).run();
+  }
 
   const entry = requireEntry(tx, id);
   appendSnapshot(tx, entry, entry.payers, entry.shares, { seq, now, actorId: actor.id });
-  touchDormancy(tx, now);
   return entry;
 }
 
@@ -121,14 +122,57 @@ function assertMembersExist(tx: Tx, input: EntryInput): void {
 }
 
 /**
- * A stale base is refused only when the write would move money; two people
- * fixing a typo never arbitrate. A null base claims no version.
+ * Somebody who has left cannot see this group, so no write may change what
+ * they owe or are owed, except to settle it: a balance they left with only
+ * moves toward zero. Editing a description, or a split among the people still
+ * here, moves none of their money and goes through.
+ */
+function assertDepartedOnlySettle(tx: Tx, stored: Entry | undefined, input: EntryInput): void {
+  const departed = new Map(
+    tx
+      .select({ id: schema.members.id, name: schema.members.displayName })
+      .from(schema.members)
+      .where(isNotNull(schema.members.leftAt))
+      .all()
+      .map((member) => [member.id, member.name]),
+  );
+  if (departed.size === 0) return;
+
+  // Per member, per currency: what this write moves, the stored version taken back out.
+  const moved = new Map<string, Map<string, number>>();
+  const count = (entry: Pick<EntryInput, "currency" | "deletedAt" | "payers" | "shares">, sign: 1 | -1) => {
+    if (entry.deletedAt !== null) return;
+    const add = (memberId: string, amount: number) => {
+      if (!departed.has(memberId)) return;
+      const byCurrency = moved.get(memberId) ?? new Map<string, number>();
+      byCurrency.set(entry.currency, (byCurrency.get(entry.currency) ?? 0) + sign * amount);
+      moved.set(memberId, byCurrency);
+    };
+    for (const payer of entry.payers) add(payer.memberId, payer.amountMinor);
+    for (const share of entry.shares) add(share.memberId, -share.amountMinor);
+  };
+  if (stored) count(stored, -1);
+  count(input, 1);
+
+  const held = positionsByMember(tx);
+  for (const [memberId, byCurrency] of moved) {
+    for (const [currency, delta] of byCurrency) {
+      if (delta === 0) continue;
+      const before = held.get(memberId)?.get(currency) ?? 0;
+      const after = before + delta;
+      const settles = before !== 0 && Math.sign(after) !== -Math.sign(before) && Math.abs(after) < Math.abs(before);
+      if (!settles) refuse("forbidden", `${departed.get(memberId)} has left this group, so this expense cannot change what they owe.`);
+    }
+  }
+}
+
+/**
+ * An edit replaces the whole expense, so it must be composed on the version
+ * stored now; anything else would silently undo the edit in between. A null
+ * base claims the row is new, which a stored row contradicts.
  */
 function assertBaseIsCurrent(stored: Entry, input: EntryInput): void {
-  if (input.baseSeq === null || stored.seq === input.baseSeq) return;
-  if (JSON.stringify(money(stored)) !== JSON.stringify(money(input))) {
-    refuse("stale_base", "This expense changed since you opened it.");
-  }
+  if (stored.seq !== input.baseSeq) refuse("stale_base", "This expense changed since you opened it.");
 }
 
 type Comparable = Omit<EntryInput, "baseSeq">;

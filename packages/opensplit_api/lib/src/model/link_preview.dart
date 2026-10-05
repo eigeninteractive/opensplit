@@ -36,6 +36,8 @@ class LinkPreview {
     required this.isRevoked,
 
     required this.isMember,
+
+    required this.hasLeft,
   });
 
   @JsonKey(
@@ -74,6 +76,9 @@ class LinkPreview {
   @JsonKey(name: r'isMember', required: true, includeIfNull: false)
   final bool isMember;
 
+  @JsonKey(name: r'hasLeft', required: true, includeIfNull: false)
+  final bool hasLeft;
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -87,7 +92,8 @@ class LinkPreview {
           other.isRedeemed == isRedeemed &&
           other.isExpired == isExpired &&
           other.isRevoked == isRevoked &&
-          other.isMember == isMember;
+          other.isMember == isMember &&
+          other.hasLeft == hasLeft;
 
   @override
   int get hashCode =>
@@ -100,7 +106,8 @@ class LinkPreview {
       isRedeemed.hashCode +
       isExpired.hashCode +
       isRevoked.hashCode +
-      isMember.hashCode;
+      isMember.hashCode +
+      hasLeft.hashCode;
 
   factory LinkPreview.fromJson(Map<String, dynamic> json) =>
       _$LinkPreviewFromJson(json);

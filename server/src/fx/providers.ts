@@ -24,6 +24,14 @@ export interface FetchOptions {
   env: Env;
 }
 
+export interface RangeOptions {
+  /** The first and last day wanted, inclusive, `YYYY-MM-DD`. */
+  from: string;
+  to: string;
+  currencies: string[];
+  env: Env;
+}
+
 /** A rate source; everything provider-specific stays inside the adapter. */
 export interface FxProvider {
   readonly name: string;
@@ -33,6 +41,12 @@ export interface FxProvider {
 
   /** Null for any failure: a provider being down is ordinary. */
   fetch(options: FetchOptions): Promise<FxSnapshot | null>;
+
+  /**
+   * Every publication between two days in one request, for filling a long
+   * stretch of history. Only some providers can; null for any failure.
+   */
+  fetchRange?(options: RangeOptions): Promise<FxSnapshot[] | null>;
 }
 
 /** A fetch that cannot hang the run. */
@@ -82,6 +96,24 @@ export const frankfurter: FxProvider = {
 
     clean.USD = 1;
     return { asOf: date, rates: clean };
+  },
+
+  async fetchRange({ from, to, currencies }: RangeOptions): Promise<FxSnapshot[] | null> {
+    const symbols = currencies.filter((code) => code !== "USD");
+    if (symbols.length === 0) return null;
+
+    // A year of ECB's thirty-odd currencies is a few hundred kilobytes.
+    const body = await getJson(`https://api.frankfurter.dev/v1/${from}..${to}?base=USD&symbols=${symbols.join(",")}`, 30_000);
+    if (typeof body !== "object" || body === null) return null;
+
+    const { rates } = body as { rates?: unknown };
+    if (typeof rates !== "object" || rates === null) return null;
+
+    const snapshots = Object.entries(rates as Record<string, unknown>).flatMap(([asOf, day]) => {
+      const clean = sanitise(day, symbols);
+      return /^\d{4}-\d{2}-\d{2}$/.test(asOf) && Object.keys(clean).length > 0 ? [{ asOf, rates: { ...clean, USD: 1 } }] : [];
+    });
+    return snapshots.length > 0 ? snapshots : null;
   },
 };
 

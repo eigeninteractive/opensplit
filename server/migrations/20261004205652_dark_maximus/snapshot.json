@@ -1,11 +1,15 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "6ac080d4-f4b5-4906-880a-e81a1df1e0e1",
+  "id": "d14dcdc6-1286-4f24-841b-0a76aea5c4f6",
   "prevIds": [
     "00000000-0000-0000-0000-000000000000"
   ],
   "ddl": [
+    {
+      "name": "counters",
+      "entityType": "tables"
+    },
     {
       "name": "device_tokens",
       "entityType": "tables"
@@ -41,6 +45,26 @@
     {
       "name": "verification",
       "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "counters"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "value",
+      "entityType": "columns",
+      "table": "counters"
     },
     {
       "type": "text",
@@ -269,6 +293,16 @@
       "default": null,
       "generated": null,
       "name": "deleted_at",
+      "entityType": "columns",
+      "table": "profiles"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "version",
       "entityType": "columns",
       "table": "profiles"
     },
@@ -684,6 +718,15 @@
     },
     {
       "columns": [
+        "name"
+      ],
+      "nameExplicit": false,
+      "name": "counters_pk",
+      "table": "counters",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
         "token"
       ],
       "nameExplicit": false,
@@ -799,18 +842,14 @@
     {
       "columns": [
         {
-          "value": "updated_at",
-          "isExpression": false
-        },
-        {
-          "value": "id",
+          "value": "version",
           "isExpression": false
         }
       ],
-      "isUnique": false,
+      "isUnique": true,
       "where": null,
       "origin": "manual",
-      "name": "profiles_updated",
+      "name": "profiles_version",
       "entityType": "indexes",
       "table": "profiles"
     },

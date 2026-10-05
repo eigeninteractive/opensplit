@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -85,25 +87,23 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
     ];
   }
 
-  /// Leaving is always available, settled or not. There are no roles, so there
-  /// is nothing to hand over first.
+  /// Leaving needs you settled up first, as removing anybody else does: a
+  /// balance left behind would sit with somebody who can no longer see it.
+  /// There are no roles, so there is nothing else to hand over.
   Future<void> _leave(GroupLedger ledger, Member me) async {
     final debts = _outstanding(ledger, me);
+    if (debts.isNotEmpty) return _settleFirst(debts);
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Leave this group?'),
-        content: Text(
-          [
-            'You stop getting updates, and you will not appear in new '
-                'expenses.',
-            if (debts.isNotEmpty)
-              'You are not settled up: ${debts.join(', ')}. Leaving does not '
-                  'clear that — it stays in the group\'s history for everyone '
-                  'still in it.',
-            'Everything you have already paid for or owed stays exactly as it '
-                'is. This device keeps a copy, archived and read-only.',
-          ].join('\n\n'),
+        content: const Text(
+          'You stop getting updates, and you will not appear in new '
+          'expenses.\n\n'
+          'Everything you have already paid for or owed stays exactly as it '
+          'is. This device keeps a read-only copy with your archived groups, '
+          'and an invite link brings you back to the same place.',
         ),
         actions: [
           TextButton(
@@ -124,9 +124,7 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
 
     setState(() => _busy = true);
     try {
-      await ref
-          .read(groupRepositoryProvider)
-          .leaveGroup(groupId: widget.groupId, memberId: me.id);
+      await ref.read(groupRepositoryProvider).leaveGroup(memberId: me.id);
       // Best effort: the leave is already recorded locally and queued, so an
       // unreachable server only delays it.
       await ref.read(syncControllerProvider.notifier).syncGroup(widget.groupId);
@@ -134,6 +132,33 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
       if (mounted) setState(() => _busy = false);
     }
     if (mounted) goBack(context, '/');
+  }
+
+  /// Says why leaving has to wait, and offers the way to get there.
+  Future<void> _settleFirst(List<String> debts) async {
+    final settle = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Settle up first'),
+        content: Text(
+          'You are not settled up in this group: ${debts.join(', ')}. Once '
+          'nothing is owed either way, you can leave.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Settle up'),
+          ),
+        ],
+      ),
+    );
+    if ((settle ?? false) && mounted) {
+      unawaited(context.push('/g/${widget.groupId}/settle'));
+    }
   }
 
   @override
@@ -199,8 +224,10 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
                             ),
                   title: const Text('Suggest the fewest payments'),
                   subtitle: const Text(
-                    'Nets debts down to as few transfers as settle the group. The '
-                    'individual debts underneath are unchanged either way.',
+                    'On: as few payments as settle the group, which can mean '
+                    'paying someone you never shared an expense with. Off: '
+                    'each person settles with each person they owe. Either '
+                    'way, everyone ends up square.',
                   ),
                 ),
 

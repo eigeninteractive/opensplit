@@ -150,7 +150,10 @@ class _RefusingOutbox extends OutboxQueue {
   _RefusingOutbox(super.db);
 
   @override
-  Future<void> enqueue(OutboxTarget target, String targetId) async {
+  Future<void> enqueueInTransaction(
+    OutboxTarget target,
+    String targetId,
+  ) async {
     throw StateError('Simulated queue failure');
   }
 }

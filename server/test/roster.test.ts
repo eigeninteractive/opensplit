@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { defaultGroupLook } from "../src/db/appearance";
 
-import { deleteEntry, editGroup, editMember, evenly, freshId, makeGroup, makeGroupOfTwo, ok, PRIYA, RAVI, refusal, saveEntry, stub, ZARA } from "./group";
+import { deleteEntry, draftOf, editGroup, editMember, evenly, freshId, makeGroup, makeGroupOfTwo, ok, PRIYA, RAVI, refusal, saveEntry, stub, ZARA } from "./group";
 
 /** What one member of a group can do to another, which is a different question from what a stranger can do and has a much less obvious answer. */
 
@@ -54,14 +54,28 @@ describe("what a member may change about somebody else", () => {
 });
 
 describe("leaving, and being removed", () => {
-  it("is always yours to do, settled or not", async () => {
+  it("is yours to do once you are settled", async () => {
+    const { groupId, ravi } = await makeGroupOfTwo();
+
+    const left = ok(await editMember(groupId, ravi.id, RAVI, { leftAt: new Date().toISOString() }));
+    expect(left.leftAt).not.toBeNull();
+  });
+
+  /** Otherwise the balance stays behind with somebody who can no longer see it. */
+  it("but not while you still owe or are owed", async () => {
     const { groupId, ravi, priya } = await makeGroupOfTwo();
     const object = stub(groupId);
 
     ok(await saveEntry(object, evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 1000), RAVI));
 
-    const left = ok(await editMember(groupId, ravi.id, RAVI, { leftAt: new Date().toISOString() }));
-    expect(left.leftAt).not.toBeNull();
+    const refused = refusal(await editMember(groupId, ravi.id, RAVI, { leftAt: new Date().toISOString() }));
+    expect(refused.code).toBe("not_settled");
+  });
+
+  it("is stamped with the server's own time, whatever the device sent", async () => {
+    const { groupId, ravi } = await makeGroupOfTwo();
+    const left = ok(await editMember(groupId, ravi.id, RAVI, { leftAt: "2001-01-01T00:00:00.000Z" }));
+    expect(Date.parse(left.leftAt ?? "")).toBeGreaterThan(Date.parse("2026-01-01"));
   });
 
   /**
@@ -112,12 +126,104 @@ describe("leaving, and being removed", () => {
     expect(after.hasMore).toBe(false);
   });
 
+  it("including what the group is called after they went", async () => {
+    const { groupId, priya } = await makeGroupOfTwo();
+    const object = stub(groupId);
+    ok(await editMember(groupId, priya.id, RAVI, { leftAt: new Date().toISOString() }));
+    ok(await editGroup(groupId, RAVI, { name: "Somewhere new" }));
+
+    expect(ok(await object.changes(PRIYA, 0, 500)).group?.name).not.toBe("Somewhere new");
+  });
+
   it("and stops them writing to it at all", async () => {
     const { groupId, ravi, priya } = await makeGroupOfTwo();
     const object = stub(groupId);
 
     ok(await editMember(groupId, priya.id, RAVI, { leftAt: new Date().toISOString() }));
     expect(refusal(await saveEntry(object, evenly(freshId("e"), ravi.id, [ravi.id], 300), PRIYA)).code).toBe("not_member");
+  });
+});
+
+describe("coming back", () => {
+  /** Being pulled back into a group is not something somebody else gets to decide for you. */
+  it("is not for anybody else to decide, for somebody with an account", async () => {
+    const { groupId, priya } = await makeGroupOfTwo();
+    ok(await editMember(groupId, priya.id, PRIYA, { leftAt: new Date().toISOString() }));
+
+    const refused = refusal(await editMember(groupId, priya.id, RAVI, { leftAt: null }));
+    expect(refused.code).toBe("forbidden");
+  });
+
+  it("but a removed placeholder can be put back, on the record", async () => {
+    const { groupId, priya } = await makeGroup();
+    const object = stub(groupId);
+    ok(await editMember(groupId, priya.id, RAVI, { leftAt: new Date().toISOString() }));
+
+    const back = ok(await editMember(groupId, priya.id, RAVI, { leftAt: null }));
+    expect(back.leftAt).toBeNull();
+
+    const events = ok(await object.changes(RAVI, 0, 500)).events;
+    expect(events.at(-1)).toMatchObject({ kind: "member_added", subjectId: priya.id });
+  });
+
+  it("is a link away for somebody who left, into the same place", async () => {
+    const { groupId, priya } = await makeGroupOfTwo();
+    const object = stub(groupId);
+    ok(await editMember(groupId, priya.id, PRIYA, { leftAt: new Date().toISOString() }));
+
+    const link = ok(await object.createLink(RAVI));
+    expect(ok(await object.peekLink(link.token, PRIYA))).toMatchObject({ isMember: false, hasLeft: true });
+
+    // Even asking to arrive as somebody new: one account, one place.
+    const { member } = ok(await object.join(link.token, PRIYA, { memberId: null, displayName: "Priya again" }));
+    expect(member.id).toBe(priya.id);
+    expect(member.leftAt).toBeNull();
+    expect(ok(await object.changes(PRIYA, 0, 500)).events.at(-1)).toMatchObject({ kind: "member_joined", subjectId: priya.id });
+  });
+
+  it("leaves an invite for somebody else's place unspent", async () => {
+    const { groupId, priya } = await makeGroupOfTwo();
+    const object = stub(groupId);
+    ok(await editMember(groupId, priya.id, PRIYA, { leftAt: new Date().toISOString() }));
+
+    const zara = ok(await object.putMember(freshId("m"), { displayName: "Zara", upiVpa: null, leftAt: null }, RAVI));
+    const invite = ok(await object.createInvite(zara.id, RAVI));
+
+    expect(ok(await object.join(invite.token, PRIYA, { memberId: null, displayName: null })).member.id).toBe(priya.id);
+    expect(ok(await object.join(invite.token, ZARA, { memberId: null, displayName: null })).member.id).toBe(zara.id);
+  });
+});
+
+/**
+ * Somebody who has left cannot see the group, so nothing written after they
+ * go may change what they owe. Their past expenses stay editable in every
+ * other respect.
+ */
+describe("the money of somebody who has left", () => {
+  async function departedPlaceholder() {
+    const fixture = await makeGroup();
+    const object = stub(fixture.groupId);
+    const dinner = ok(await saveEntry(object, evenly(freshId("e"), fixture.ravi.id, [fixture.ravi.id, fixture.priya.id], 1000), RAVI));
+    const settled = ok(await saveEntry(object, { ...evenly(freshId("e"), fixture.priya.id, [fixture.ravi.id], 500), kind: "settlement" }, RAVI));
+    ok(await editMember(fixture.groupId, fixture.priya.id, RAVI, { leftAt: new Date().toISOString() }));
+    return { ...fixture, object, dinner, settled };
+  }
+
+  it("cannot be charged again", async () => {
+    const { object, ravi, priya } = await departedPlaceholder();
+    const refused = refusal(await saveEntry(object, evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 600), RAVI));
+    expect(refused.code).toBe("forbidden");
+    expect(refused.message).toContain("Priya");
+  });
+
+  it("is not reopened by deleting an expense they were part of", async () => {
+    const { object, dinner } = await departedPlaceholder();
+    expect(refusal(await deleteEntry(object, dinner, RAVI)).code).toBe("forbidden");
+  });
+
+  it("leaves the rest of that expense editable", async () => {
+    const { object, dinner } = await departedPlaceholder();
+    expect(ok(await saveEntry(object, draftOf(dinner, { description: "Dinner at Thalassa" }), RAVI)).description).toBe("Dinner at Thalassa");
   });
 });
 

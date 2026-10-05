@@ -31,7 +31,7 @@ class SyncStatus {
 class SyncCoordinator extends ChangeNotifier {
   SyncCoordinator({
     required this._syncAll,
-    required this._syncGroup,
+    required this._syncGroups,
     this._online = const Stream.empty(),
     this._writes = const Stream.empty(),
     DateTime Function()? clock,
@@ -39,8 +39,11 @@ class SyncCoordinator extends ChangeNotifier {
     this.writeDelay = const Duration(seconds: 1),
   }) : _clock = clock ?? DateTime.now;
 
+  /// The outbox, the shared feeds and every group.
   final Future<SyncReport> Function() _syncAll;
-  final Future<SyncReport> Function(String) _syncGroup;
+
+  /// The outbox, then these groups and every group it wrote to.
+  final Future<SyncReport> Function(Set<String> groupIds) _syncGroups;
   final Stream<bool> _online;
   final Stream<void> _writes;
   final DateTime Function() _clock;
@@ -50,6 +53,9 @@ class SyncCoordinator extends ChangeNotifier {
   final _pendingGroups = <String>{};
   final _subscriptions = <StreamSubscription<Object?>>[];
   bool _allPending = false;
+
+  /// A partial run is owed: the outbox, read back, and [_pendingGroups].
+  bool _partialPending = false;
   bool _disposed = false;
   int _failures = 0;
   DateTime? _lastStarted;
@@ -93,13 +99,22 @@ class SyncCoordinator extends ChangeNotifier {
       return syncAll();
     }
     _pendingGroups.add(groupId);
+    return _syncWrites();
+  }
+
+  /// What was written here, sent, and the groups it touched read back. The
+  /// rest of the account waits for the next full sync: nothing else changed
+  /// on this device, and another device's change arrives with its push.
+  Future<void> _syncWrites() {
+    if (_disposed) return Future.value();
+    _partialPending = true;
     return _begin();
   }
 
   void _writeQueued() {
     if (_disposed) return;
     _writeTimer?.cancel();
-    _writeTimer = Timer(writeDelay, () => unawaited(syncAll()));
+    _writeTimer = Timer(writeDelay, () => unawaited(_syncWrites()));
   }
 
   Future<void> _begin() {
@@ -116,20 +131,18 @@ class SyncCoordinator extends ChangeNotifier {
 
   Future<void> _drain(Completer<void> completed) async {
     if (!_disposed) _setStatus(isSyncing: true);
-    while (!_disposed && (_allPending || _pendingGroups.isNotEmpty)) {
+    while (!_disposed && (_allPending || _partialPending)) {
+      // A full run covers everything a partial one would.
       final full = _allPending;
-      final groupId = full ? null : _pendingGroups.first;
+      final groups = {..._pendingGroups};
       _allPending = false;
-      if (full) {
-        _pendingGroups.clear();
-        _lastStarted = _clock();
-      } else {
-        _pendingGroups.remove(groupId);
-      }
+      _partialPending = false;
+      _pendingGroups.clear();
+      if (full) _lastStarted = _clock();
 
       SyncReport report;
       try {
-        report = await (full ? _syncAll() : _syncGroup(groupId!));
+        report = await (full ? _syncAll() : _syncGroups(groups));
       } catch (error, stackTrace) {
         report = SyncReport(
           pushed: 0,
@@ -150,6 +163,7 @@ class SyncCoordinator extends ChangeNotifier {
         );
         // One failure ends this pass; the retry is a full sync.
         _allPending = false;
+        _partialPending = false;
         _pendingGroups.clear();
       }
       _status = SyncStatus(
@@ -164,8 +178,11 @@ class SyncCoordinator extends ChangeNotifier {
     completed.complete();
   }
 
+  /// After a failure, a full sync once it has backed off; after a write the
+  /// server could not take yet, that write again when it is due.
   void _scheduleRetry() {
     Duration? delay;
+    var retry = syncAll;
     if (_status.error != null) {
       delay = Duration(seconds: math.min(5 * (1 << _failures), 300));
       _failures = math.min(_failures + 1, 6);
@@ -179,9 +196,10 @@ class SyncCoordinator extends ChangeNotifier {
             1000,
           ),
         );
+        retry = _syncWrites;
       }
     }
-    if (delay != null) _retry = Timer(delay, () => unawaited(syncAll()));
+    if (delay != null) _retry = Timer(delay, () => unawaited(retry()));
     _setStatus(
       isSyncing: false,
       retryAt: delay == null ? null : _clock().add(delay),

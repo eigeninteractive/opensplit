@@ -2,6 +2,13 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'fx_quote.freezed.dart';
 
+/// How many days old a rate may be and still answer for a day. A week covers
+/// every weekend and every ECB holiday; older than that, the rate describes
+/// some other time. The server holds the same rule as `STALE_AFTER_DAYS` in
+/// `server/src/do/fx/index.ts`, so the days it fills are the days this asks
+/// for.
+const rateStaleAfterDays = 7;
+
 /// A rate for converting [base] into [quote], as published on [date].
 @freezed
 abstract class FxQuote with _$FxQuote {

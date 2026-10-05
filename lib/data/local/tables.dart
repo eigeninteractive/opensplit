@@ -113,9 +113,9 @@ class Profiles extends Table with AvatarColumns {
   /// Personal UPI handle; a member's own handle takes precedence.
   TextColumn get upiVpa => text().nullable()();
 
-  /// The server's timestamp, and the profile feed's cursor. Null for a row
-  /// this device wrote and has not pushed.
-  DateTimeColumn get updatedAt => dateTime().nullable()();
+  /// The server's version of this row, which the profile feed is cursored
+  /// on. Null for a row this device wrote and has not pushed.
+  IntColumn get version => integer().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -124,6 +124,9 @@ class Profiles extends Table with AvatarColumns {
 /// The server's record of what happened, plus provisional lines this device
 /// wrote for changes it has not pushed yet.
 @DataClassName('GroupEventRow')
+@TableIndex(name: 'group_events_group', columns: {#groupId, #seq, #ordinal})
+@TableIndex(name: 'group_events_subject', columns: {#subjectId})
+@TableIndex(name: 'group_events_actor', columns: {#actorId})
 class GroupEvents extends Table {
   TextColumn get id => text()();
   TextColumn get groupId =>
@@ -213,6 +216,8 @@ class Groups extends Table with AvatarColumns {
 /// a member with no [profileId] is a placeholder — a full member who has no
 /// account yet. Claiming an invite sets that one column.
 @DataClassName('Member')
+@TableIndex(name: 'members_group', columns: {#groupId})
+@TableIndex(name: 'members_profile', columns: {#profileId})
 class Members extends Table {
   TextColumn get id => text()();
   TextColumn get groupId =>
@@ -245,6 +250,7 @@ class Categories extends Table {
 }
 
 @DataClassName('EntryRow')
+@TableIndex(name: 'entries_group', columns: {#groupId, #entryDate})
 class Entries extends Table {
   TextColumn get id => text()();
   TextColumn get groupId =>
@@ -288,7 +294,7 @@ class Entries extends Table {
   DateTimeColumn get createdAt => dateTime()();
 
   /// Also the base the next edit is judged against: the server refuses an
-  /// edit composed on an older `seq` only when it would move money.
+  /// edit composed on any older `seq`.
   IntColumn get seq => integer().nullable()();
 
   /// Soft delete; entries are never removed.
@@ -300,6 +306,7 @@ class Entries extends Table {
 
 /// An edit the server refused because the expense had moved underneath it.
 @DataClassName('EntryConflictRow')
+@TableIndex(name: 'entry_conflicts_group', columns: {#groupId})
 class EntryConflicts extends Table {
   TextColumn get entryId =>
       text().references(Entries, #id, onDelete: KeyAction.cascade)();
@@ -320,6 +327,7 @@ class EntryConflicts extends Table {
 }
 
 @DataClassName('EntryPayerRow')
+@TableIndex(name: 'entry_payers_member', columns: {#memberId})
 class EntryPayers extends Table {
   TextColumn get entryId =>
       text().references(Entries, #id, onDelete: KeyAction.cascade)();
@@ -331,6 +339,7 @@ class EntryPayers extends Table {
 }
 
 @DataClassName('EntryShareRow')
+@TableIndex(name: 'entry_shares_member', columns: {#memberId})
 class EntryShares extends Table {
   TextColumn get entryId =>
       text().references(Entries, #id, onDelete: KeyAction.cascade)();
@@ -348,6 +357,7 @@ class EntryShares extends Table {
 /// Exchange rates against a USD pivot: one row per currency per day, and any
 /// pair is a division.
 @DataClassName('FxRateRow')
+@TableIndex(name: 'fx_rates_currency', columns: {#currency, #asOf})
 class FxRates extends Table {
   /// Publication date, `yyyy-MM-dd`; ISO dates sort, which is the lookup.
   TextColumn get asOf => text()();
@@ -363,8 +373,9 @@ class FxRates extends Table {
   Set<Column> get primaryKey => {asOf, currency};
 }
 
-/// What an outbox item refers to. Pushed in declaration order within a batch:
-/// a group before its members, members before the entries that name them.
+/// What an outbox item refers to. Declared in dependency order, which breaks
+/// a tie in [Outbox.position]: a group before its members, members before the
+/// entries that name them.
 enum OutboxTarget { group, member, entry, profile }
 
 /// Rows this device changed and has not pushed. Client-only.
@@ -376,7 +387,12 @@ class Outbox extends Table {
   /// Identifies one edit, so a response for an older one is not applied over
   /// a newer one made during the upload.
   TextColumn get revision => text()();
-  DateTimeColumn get createdAt => dateTime()();
+
+  /// Where this item is pushed, in the order this device made its changes:
+  /// the server checks each write against what it already has, so a
+  /// settlement has to arrive before the removal it makes possible. See
+  /// `OutboxQueue.enqueue` for how a later edit moves an item.
+  IntColumn get position => integer()();
   IntColumn get attempts => integer().withDefault(const Constant(0))();
   DateTimeColumn get nextAttemptAt => dateTime().nullable()();
   TextColumn get lastError => text().nullable()();

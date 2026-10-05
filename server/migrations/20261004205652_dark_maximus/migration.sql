@@ -1,3 +1,8 @@
+CREATE TABLE `counters` (
+	`name` text PRIMARY KEY,
+	`value` integer NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE `device_tokens` (
 	`token` text PRIMARY KEY,
 	`profile_id` text NOT NULL,
@@ -32,6 +37,7 @@ CREATE TABLE `profiles` (
 	`avatar_photo` text,
 	`updated_at` text NOT NULL,
 	`deleted_at` text,
+	`version` integer NOT NULL,
 	CONSTRAINT "profiles_avatar_emoji" CHECK(("avatar_kind" = 'emoji') = ("avatar_emoji" is not null)),
 	CONSTRAINT "profiles_avatar_icon" CHECK(("avatar_kind" = 'icon') = ("avatar_icon" is not null)),
 	CONSTRAINT "profiles_avatar_photo" CHECK(("avatar_kind" = 'photo') = ("avatar_photo" is not null))
@@ -94,7 +100,7 @@ CREATE TABLE `verification` (
 CREATE INDEX `device_tokens_profile` ON `device_tokens` (`profile_id`);--> statement-breakpoint
 CREATE INDEX `link_tokens_group` ON `link_tokens` (`group_id`);--> statement-breakpoint
 CREATE INDEX `memberships_group` ON `memberships` (`group_id`);--> statement-breakpoint
-CREATE INDEX `profiles_updated` ON `profiles` (`updated_at`,`id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `profiles_version` ON `profiles` (`version`);--> statement-breakpoint
 CREATE INDEX `account_userId_idx` ON `account` (`user_id`);--> statement-breakpoint
 CREATE INDEX `session_userId_idx` ON `session` (`user_id`);--> statement-breakpoint
 CREATE INDEX `verification_identifier_idx` ON `verification` (`identifier`);

@@ -86,6 +86,11 @@
             "format": "date-time",
             "example": "2026-09-23T11:20:41.865Z"
           },
+          "lastActivityAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          },
           "archivedAt": {
             "type": "string",
             "nullable": true,
@@ -118,6 +123,7 @@
           "coverPhoto",
           "createdBy",
           "createdAt",
+          "lastActivityAt",
           "archivedAt",
           "updatedAt",
           "seq"
@@ -704,7 +710,7 @@
           "flow"
         ]
       },
-      "GroupIds": {
+      "Pull": {
         "type": "object",
         "properties": {
           "groupIds": {
@@ -715,10 +721,24 @@
               "maxLength": 64,
               "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
             }
+          },
+          "pages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChangePage"
+            }
+          },
+          "refusals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupRefusal"
+            }
           }
         },
         "required": [
-          "groupIds"
+          "groupIds",
+          "pages",
+          "refusals"
         ]
       },
       "ChangePage": {
@@ -903,6 +923,11 @@
             "nullable": true,
             "format": "date-time",
             "example": "2026-09-23T11:20:41.865Z"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "example": 412
           }
         },
         "required": [
@@ -915,7 +940,8 @@
           "avatarIcon",
           "avatarPhoto",
           "updatedAt",
-          "deletedAt"
+          "deletedAt",
+          "version"
         ]
       },
       "Entry": {
@@ -1194,6 +1220,69 @@
           "link",
           "seq",
           "ordinal"
+        ]
+      },
+      "GroupRefusal": {
+        "type": "object",
+        "properties": {
+          "groupId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "code": {
+            "$ref": "#/components/schemas/ErrorCode"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "groupId",
+          "code",
+          "message"
+        ]
+      },
+      "PullRequest": {
+        "type": "object",
+        "properties": {
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupCursor"
+            },
+            "maxItems": 50
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          }
+        },
+        "required": [
+          "groups",
+          "limit"
+        ]
+      },
+      "GroupCursor": {
+        "type": "object",
+        "properties": {
+          "groupId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "since": {
+            "type": "integer",
+            "minimum": 0,
+            "example": 412
+          }
+        },
+        "required": [
+          "groupId",
+          "since"
         ]
       },
       "GroupInput": {
@@ -1541,6 +1630,9 @@
           },
           "isMember": {
             "type": "boolean"
+          },
+          "hasLeft": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1553,7 +1645,8 @@
           "isRedeemed",
           "isExpired",
           "isRevoked",
-          "isMember"
+          "isMember",
+          "hasLeft"
         ]
       },
       "LinkKind": {
@@ -1646,9 +1739,10 @@
               "$ref": "#/components/schemas/Profile"
             }
           },
-          "cursor": {
-            "type": "string",
-            "nullable": true
+          "seq": {
+            "type": "integer",
+            "minimum": 0,
+            "example": 412
           },
           "hasMore": {
             "type": "boolean"
@@ -1656,7 +1750,7 @@
         },
         "required": [
           "profiles",
-          "cursor",
+          "seq",
           "hasMore"
         ]
       },
@@ -2193,6 +2287,16 @@
               }
             }
           },
+          "403": {
+            "description": "This account has an address, and its sign-in is too old to change who it belongs to. Confirm it is you first: `POST /identity/reauth`, then `POST /identity/reauth/verify`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "409": {
             "description": "That Google account already has an account of its own, and allowSignIn was not set.",
             "content": {
@@ -2253,6 +2357,16 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "This account has an address, and its sign-in is too old to change who it belongs to. Confirm it is you first: `POST /identity/reauth`, then `POST /identity/reauth/verify`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -2290,6 +2404,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/EmailStartResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account has an address, and its sign-in is too old to change who it belongs to. Confirm it is you first: `POST /identity/reauth`, then `POST /identity/reauth/verify`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -2364,6 +2488,16 @@
               }
             }
           },
+          "403": {
+            "description": "This account has an address, and its sign-in is too old to change who it belongs to. Confirm it is you first: `POST /identity/reauth`, then `POST /identity/reauth/verify`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Too many attempts. Wait a minute and try again.",
             "content": {
@@ -2377,8 +2511,8 @@
         }
       }
     },
-    "/api/groups": {
-      "get": {
+    "/api/sync": {
+      "post": {
         "security": [
           {
             "bearer": []
@@ -2387,89 +2521,29 @@
             "cookie": []
           }
         ],
-        "operationId": "listGroups",
+        "operationId": "pull",
         "tags": [
           "sync"
         ],
-        "summary": "The groups this account is still in",
-        "responses": {
-          "200": {
-            "description": "The group ids",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GroupIds"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No session.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+        "summary": "Every group this account is in, and what changed in the ones asked for",
+        "description": "Each group asked for gets its own page past its own cursor, read in parallel; a group that cannot be read is listed in `refusals` and the rest are still answered. `groupIds` names every group the account is in now, so one with no cursor yet is asked for next time, from 0. A page is cut only between sequence numbers, so a device sees a whole write or none of it; send each page's `seq` back as that group's `since`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PullRequest"
               }
             }
           }
-        }
-      }
-    },
-    "/api/groups/{groupId}/changes": {
-      "get": {
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "cookie": []
-          }
-        ],
-        "operationId": "getChanges",
-        "tags": [
-          "sync"
-        ],
-        "summary": "Everything that changed in one group since a cursor",
-        "description": "`limit` counts changes, not rows, and a page is cut only between sequence numbers, so a device sees a whole write or none of it. Send `seq` back as `since` next time.",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 64,
-              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
-            },
-            "required": true,
-            "name": "groupId",
-            "in": "path"
-          },
-          {
-            "schema": {
-              "type": "integer",
-              "example": 412
-            },
-            "required": false,
-            "name": "since",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "integer",
-              "example": 200
-            },
-            "required": false,
-            "name": "limit",
-            "in": "query"
-          }
-        ],
+        },
         "responses": {
           "200": {
-            "description": "The page, and the cursor to send next time",
+            "description": "The account's groups, and a page or a refusal for each group asked for",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ChangePage"
+                  "$ref": "#/components/schemas/Pull"
                 }
               }
             }
@@ -2486,56 +2560,6 @@
           },
           "401": {
             "description": "No session.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "You are not a member of this group, or not allowed to change that.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No such group, entry, member or link.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "The request conflicts with the group's current state. Read `error.retry` before retrying.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "410": {
-            "description": "The group was collected, or the link has expired.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "The expense does not add up.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2819,7 +2843,7 @@
           "entries"
         ],
         "summary": "Record, edit, delete or restore an expense, whole",
-        "description": "A stale `baseSeq` is refused only when the write would move money, so two people fixing a typo never arbitrate. Deleting and restoring always move money.",
+        "description": "`baseSeq` must be the version stored now (null for a new expense), or the write is refused as `stale_base`: the expense is replaced whole, so a write composed on an older version would undo the edit in between. Sending the stored contents again is answered with the stored row, whatever the base.",
         "parameters": [
           {
             "schema": {
@@ -3710,14 +3734,15 @@
           "sync"
         ],
         "summary": "Everybody you share a group with, plus yourself",
-        "description": "Cursored on time, since profiles have no single writer to number them. Send `cursor` back as `after`.",
+        "description": "Cursored on each profile's `version`, which D1 numbers in commit order. Send `seq` back as `since` next time.",
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "integer",
+              "example": 412
             },
             "required": false,
-            "name": "after",
+            "name": "since",
             "in": "query"
           },
           {

@@ -155,7 +155,7 @@ void main() {
         reason: 'what gates the destructive account actions',
       );
       expect(
-        (await fetch(client.getSyncApi().listGroups())).groupIds,
+        await groupsOf(client),
         isEmpty,
         reason: 'a brand-new account belongs to nothing',
       );
@@ -355,9 +355,7 @@ void main() {
       );
       await sync.syncGroup(g.groupId);
 
-      final page = await fetch(
-        client.getSyncApi().getChanges(groupId: g.groupId),
-      );
+      final page = await changesOf(client, g.groupId);
       final recorded = page.events
           .lastWhere((event) => event.subjectId == entry.id)
           .entry;
@@ -365,7 +363,7 @@ void main() {
       expect(snapshotOf(local).toJson(), recorded?.toJson());
     });
 
-    test('a stale edit is refused only when it moves money', () async {
+    test('a stale edit is refused, whatever it changes', () async {
       if (!backendUp) return;
 
       final g = await seeded();
@@ -418,20 +416,22 @@ void main() {
         ),
       );
 
-      // The same stale base, leaving the money exactly where the server has it,
-      // is not refused: arbitrating a typo would cost two people a decision for
-      // nothing.
+      // The same stale base is refused for a rename too: the write carries
+      // every field, so applying it would silently undo whatever else changed.
       final moved = at(150000);
-      final prose = await push(
-        moved.copyWith(
-          row: moved.row.copyWith(
-            description: 'Renamed',
-            seq: Value(base.row.seq),
+      await expectLater(
+        push(
+          moved.copyWith(
+            row: moved.row.copyWith(
+              description: 'Renamed',
+              seq: Value(base.row.seq),
+            ),
           ),
         ),
+        throwsA(
+          isA<ApiFailure>().having((e) => e.retry, 'retry', api.Retry.stale),
+        ),
       );
-      expect(prose.description, 'Renamed');
-      expect(prose.amountMinor, 150000);
     });
 
     test('deleting carries the exact version, and propagates', () async {
@@ -787,9 +787,7 @@ void main() {
       // And the name travelled the other way: a guest has none of its own, so
       // it adopts the one a friend typed on the placeholder. The group's own
       // page carries it, since the place is what made it visible.
-      final page = await fetch(
-        ravi.client.getSyncApi().getChanges(groupId: g.groupId),
-      );
+      final page = await changesOf(ravi.client, g.groupId);
       expect(
         page.profiles.singleWhere((p) => p.id == priya.profileId).displayName,
         'Priya',
@@ -944,9 +942,7 @@ void main() {
 
       // Sharing a group is the whole of the rule, and it is symmetric: a
       // settle-up needs Ravi's handle exactly as much as it needs Priya's.
-      final seen = (await fetch(
-        stranger.client.getSyncApi().getChanges(groupId: g.groupId),
-      )).profiles;
+      final seen = (await changesOf(stranger.client, g.groupId)).profiles;
       expect(
         seen.singleWhere((p) => p.id == ravi.profileId).upiVpa,
         'ravi@okhdfcbank',
@@ -1068,10 +1064,10 @@ void main() {
       );
       expect(cleared.upiVpa, isNull);
       expect(cleared.displayName, 'Ravi K');
-      expect(cleared.updatedAt, isNotNull, reason: 'the feed cursors on it');
+      expect(cleared.version, greaterThan(0), reason: 'the feed cursors on it');
     });
 
-    test('the profile feed pages on the pair, not the timestamp', () async {
+    test('the profile feed pages on the version', () async {
       if (!backendUp) return;
 
       final g = await seededGroup(ravi);
@@ -1099,7 +1095,7 @@ void main() {
       var guard = 0;
       while (page.hasMore && guard++ < 10) {
         page = await fetch(
-          ravi.client.getSyncApi().getProfiles(after: page.cursor, limit: 1),
+          ravi.client.getSyncApi().getProfiles(since: page.seq, limit: 1),
         );
         collected.addAll(page.profiles.map((row) => row.id));
       }
@@ -1147,12 +1143,11 @@ void main() {
         final report = await engine.syncEverything();
         expect(report.isClean, isTrue, reason: '${report.error}');
 
-        // Mine, pushed and read back with the server's timestamp on it — which
-        // is the value the feed cursors on, so a null here would mean the next
-        // sweep started from the beginning forever.
+        // Mine, pushed and read back with the server's version on it, which
+        // is what decides whether a copy arriving later is older.
         final mine = await profiles.byId(ravi.profileId);
         expect(mine?.upiVpa, 'ravi@okhdfcbank');
-        expect(mine?.updatedAt, isNotNull);
+        expect(mine?.version, isNotNull);
 
         // And theirs, which this device never wrote. It arrived because they
         // share a group, which is the whole of the visibility rule.
@@ -1196,13 +1191,7 @@ void main() {
       // Money Priya paid is a fact about Ravi's group as much as hers, so the
       // member row keeps its name and loses its account — exactly the state of
       // somebody a friend added who never signed up.
-      final page = await fetch(
-        ravi.client.getSyncApi().getChanges(
-          groupId: g.groupId,
-          since: 0,
-          limit: 200,
-        ),
-      );
+      final page = await changesOf(ravi.client, g.groupId);
       final row = page.members.firstWhere((member) => member.id == g.priya);
       expect(row.displayName, 'Priya');
       expect(row.profileId, isNull);
@@ -1210,10 +1199,7 @@ void main() {
       // And the session went with it, rather than lingering until something
       // else happened to fail.
       expect(priya.auth.currentUser, isNull);
-      await expectLater(
-        fetch(priya.client.getSyncApi().listGroups()),
-        throwsA(isA<ApiFailure>()),
-      );
+      await expectLater(groupsOf(priya.client), throwsA(isA<ApiFailure>()));
     });
 
     test('a group nobody left could read is collected outright', () async {
@@ -1227,13 +1213,7 @@ void main() {
       // Holding somebody's expense descriptions forever in a group with no
       // living reader is the opposite of what deleting an account asks for.
       final onlooker = await _Device.guest();
-      final grave = await fetch(
-        onlooker.client.getSyncApi().getChanges(
-          groupId: g.groupId,
-          since: 0,
-          limit: 200,
-        ),
-      );
+      final grave = await changesOf(onlooker.client, g.groupId);
       expect(grave.purgedAt, isNotNull);
       expect(grave.group, isNull);
       expect(grave.members, isEmpty);

@@ -10,6 +10,10 @@ class DriftFxRepository {
 
   final AppDatabase _db;
 
+  static String _daysBefore(String day) => calendarDate(
+    parseCalendarDate(day).subtract(const Duration(days: rateStaleAfterDays)),
+  );
+
   /// The rate for converting [base] into [quote] as it stood on [asOf].
   Future<FxQuote?> quote({
     required String base,
@@ -49,13 +53,14 @@ class DriftFxRepository {
     );
   }
 
-  /// The most recent publication for a currency on or before [day].
+  /// The most recent publication for a currency that answers for [day]: on
+  /// it, or no more than [rateStaleAfterDays] before.
   Future<FxRateRow?> _rateOn(String currency, String day) =>
       (_db.select(_db.fxRates)
             ..where(
               (t) =>
                   t.currency.equals(currency) &
-                  t.asOf.isSmallerOrEqualValue(day),
+                  t.asOf.isBetweenValues(_daysBefore(day), day),
             )
             ..orderBy([(t) => OrderingTerm.desc(t.asOf)])
             ..limit(1))

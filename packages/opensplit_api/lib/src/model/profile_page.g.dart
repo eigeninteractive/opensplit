@@ -8,7 +8,7 @@ part of 'profile_page.dart';
 
 ProfilePage _$ProfilePageFromJson(Map<String, dynamic> json) =>
     $checkedCreate('ProfilePage', json, ($checkedConvert) {
-      $checkKeys(json, requiredKeys: const ['profiles', 'cursor', 'hasMore']);
+      $checkKeys(json, requiredKeys: const ['profiles', 'seq', 'hasMore']);
       final val = ProfilePage(
         profiles: $checkedConvert(
           'profiles',
@@ -16,7 +16,7 @@ ProfilePage _$ProfilePageFromJson(Map<String, dynamic> json) =>
               .map((e) => Profile.fromJson(e as Map<String, dynamic>))
               .toList(),
         ),
-        cursor: $checkedConvert('cursor', (v) => v as String?),
+        seq: $checkedConvert('seq', (v) => (v as num).toInt()),
         hasMore: $checkedConvert('hasMore', (v) => v as bool),
       );
       return val;
@@ -25,6 +25,6 @@ ProfilePage _$ProfilePageFromJson(Map<String, dynamic> json) =>
 Map<String, dynamic> _$ProfilePageToJson(ProfilePage instance) =>
     <String, dynamic>{
       'profiles': instance.profiles.map((e) => e.toJson()).toList(),
-      'cursor': instance.cursor,
+      'seq': instance.seq,
       'hasMore': instance.hasMore,
     };

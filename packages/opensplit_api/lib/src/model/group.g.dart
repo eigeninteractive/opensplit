@@ -26,6 +26,7 @@ Group _$GroupFromJson(
       'coverPhoto',
       'createdBy',
       'createdAt',
+      'lastActivityAt',
       'archivedAt',
       'updatedAt',
       'seq',
@@ -74,6 +75,10 @@ Group _$GroupFromJson(
     coverPhoto: $checkedConvert('coverPhoto', (v) => v as String?),
     createdBy: $checkedConvert('createdBy', (v) => v as String),
     createdAt: $checkedConvert('createdAt', (v) => DateTime.parse(v as String)),
+    lastActivityAt: $checkedConvert(
+      'lastActivityAt',
+      (v) => DateTime.parse(v as String),
+    ),
     archivedAt: $checkedConvert(
       'archivedAt',
       (v) => v == null ? null : DateTime.parse(v as String),
@@ -99,6 +104,7 @@ Map<String, dynamic> _$GroupToJson(Group instance) => <String, dynamic>{
   'coverPhoto': instance.coverPhoto,
   'createdBy': instance.createdBy,
   'createdAt': instance.createdAt.toIso8601String(),
+  'lastActivityAt': instance.lastActivityAt.toIso8601String(),
   'archivedAt': instance.archivedAt?.toIso8601String(),
   'updatedAt': instance.updatedAt.toIso8601String(),
   'seq': instance.seq,

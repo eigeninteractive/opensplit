@@ -11,6 +11,18 @@ export interface Session {
   createdAt: number;
 }
 
+/** How recently somebody must have proved who they are to change who they are or end the account: Better Auth's `freshAge`, for our routes. */
+export const REAUTH_WINDOW = 10 * 60 * 1000;
+
+/**
+ * Whether this session may change the identity behind it. A session lasts a
+ * year, so holding one is not proof enough; a guest has nothing to confirm
+ * with, and attaching an identity is how a guest keeps their groups.
+ */
+export function mayChangeIdentity(session: Session): boolean {
+  return session.isAnonymous || Date.now() - session.createdAt <= REAUTH_WINDOW;
+}
+
 interface Services {
   db: DrizzleD1Database;
   auth: Auth;

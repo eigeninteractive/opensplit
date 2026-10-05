@@ -19,7 +19,7 @@ class EntriesApi {
   const EntriesApi(this._dio);
 
   /// Record, edit, delete or restore an expense, whole
-  /// A stale &#x60;baseSeq&#x60; is refused only when the write would move money, so two people fixing a typo never arbitrate. Deleting and restoring always move money.
+  /// &#x60;baseSeq&#x60; must be the version stored now (null for a new expense), or the write is refused as &#x60;stale_base&#x60;: the expense is replaced whole, so a write composed on an older version would undo the edit in between. Sending the stored contents again is answered with the stored row, whatever the base.
   ///
   /// Parameters:
   /// * [groupId]

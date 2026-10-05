@@ -48,6 +48,8 @@ class Group {
 
     required this.createdAt,
 
+    required this.lastActivityAt,
+
     required this.archivedAt,
 
     required this.updatedAt,
@@ -117,6 +119,9 @@ class Group {
   @JsonKey(name: r'createdAt', required: true, includeIfNull: false)
   final DateTime createdAt;
 
+  @JsonKey(name: r'lastActivityAt', required: true, includeIfNull: false)
+  final DateTime lastActivityAt;
+
   @JsonKey(name: r'archivedAt', required: true, includeIfNull: true)
   final DateTime? archivedAt;
 
@@ -145,6 +150,7 @@ class Group {
           other.coverPhoto == coverPhoto &&
           other.createdBy == createdBy &&
           other.createdAt == createdAt &&
+          other.lastActivityAt == lastActivityAt &&
           other.archivedAt == archivedAt &&
           other.updatedAt == updatedAt &&
           other.seq == seq;
@@ -165,6 +171,7 @@ class Group {
       (coverPhoto == null ? 0 : coverPhoto.hashCode) +
       createdBy.hashCode +
       createdAt.hashCode +
+      lastActivityAt.hashCode +
       (archivedAt == null ? 0 : archivedAt.hashCode) +
       updatedAt.hashCode +
       seq.hashCode;

@@ -55,7 +55,8 @@ export function changesSince(tx: Tx, profileId: string, since: number, limit: nu
     purgedAt: null,
     // The group and member rows changed since the cursor ride on every page, even ahead of it:
     // this page's entries and events may name them, and a device's foreign keys need them first.
-    group: meta.seq > since ? meta : null,
+    // Not past the ceiling: somebody who left does not hear what the group is called now.
+    group: meta.seq > since && meta.seq <= ceiling ? meta : null,
     members: tx
       .select()
       .from(schema.members)

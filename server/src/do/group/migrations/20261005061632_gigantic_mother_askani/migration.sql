@@ -116,6 +116,7 @@ CREATE TABLE `meta` (
 	`cover_photo` text,
 	`created_by` text NOT NULL,
 	`created_at` text NOT NULL,
+	`last_activity_at` text NOT NULL,
 	`archived_at` text,
 	`updated_at` text NOT NULL,
 	`seq` integer NOT NULL,

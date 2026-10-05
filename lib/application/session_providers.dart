@@ -112,11 +112,7 @@ class AccountController extends _$AccountController {
 
   /// How many groups a guest signing in to an existing account brings along.
   Future<int> groupsToHandOver() async =>
-      (await ref
-              .read(groupRepositoryProvider)
-              .watchGroups(includeArchived: true)
-              .first)
-          .length;
+      (await ref.read(groupRepositoryProvider).watchListings().first).length;
 
   AuthService _auth() {
     final auth = ref.read(authServiceProvider);

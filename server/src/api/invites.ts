@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 
 import type { AppEnv } from "../context";
+import { nextProfileVersion, profileVersion } from "../db/d1/profile-version";
 import { linkTokens, profiles } from "../db/d1/schema";
 import { apiError, jsonBody, jsonResponse } from "../schemas/common";
 import { GroupLinkSchema, InviteSchema, JoinedSchema, JoinRequestSchema, LinkPreviewSchema, LinkRevocationSchema, LiveLinkSchema, PlaceholderListSchema } from "../schemas/ledger";
@@ -154,7 +155,8 @@ export function inviteRoutes(routes: OpenAPIHono<AppEnv>) {
     const result = await group(c, groupId).join(token, viewer, { ...request, displayName: request.displayName ?? profile?.displayName ?? null });
 
     if (result.ok && !profile?.displayName) {
-      await c.var.db.update(profiles).set({ displayName: result.value.member.displayName, updatedAt: new Date().toISOString() }).where(eq(profiles.id, viewer));
+      const db = c.var.db;
+      await db.batch([nextProfileVersion(db), db.update(profiles).set({ displayName: result.value.member.displayName, updatedAt: new Date().toISOString(), version: profileVersion }).where(eq(profiles.id, viewer))]);
     }
     return respond(c, result);
   });

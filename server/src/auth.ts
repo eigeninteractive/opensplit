@@ -6,6 +6,7 @@ import { emailOTP } from "better-auth/plugins/email-otp";
 import { drizzle } from "drizzle-orm/d1";
 
 import * as authSchema from "./auth-schema";
+import { nextProfileVersion, profileVersion } from "./db/d1/profile-version";
 import { profiles } from "./db/d1/schema";
 import { createEmailSender } from "./email/sender";
 import { signInCodeMessage } from "./email/sign-in-code";
@@ -102,7 +103,8 @@ export function build(env: Env) {
  */
 async function createProfile(env: Env, user: { id: string; name?: string | null; isAnonymous?: boolean | null }): Promise<void> {
   const chosen = user.isAnonymous ? null : user.name?.trim() || null;
-  await drizzle(env.DB).insert(profiles).values({ id: user.id, displayName: chosen, upiVpa: null, updatedAt: new Date().toISOString() }).onConflictDoNothing();
+  const db = drizzle(env.DB);
+  await db.batch([nextProfileVersion(db), db.insert(profiles).values({ id: user.id, displayName: chosen, upiVpa: null, updatedAt: new Date().toISOString(), version: profileVersion }).onConflictDoNothing()]);
 }
 
 export type Auth = ReturnType<typeof build>;

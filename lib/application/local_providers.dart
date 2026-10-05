@@ -69,6 +69,7 @@ Stream<List<FailedWrite>> failedWrites(Ref ref) =>
 DriftGroupRepository groupRepository(Ref ref) => DriftGroupRepository(
   ref.watch(appDatabaseProvider),
   outbox: ref.watch(outboxQueueProvider),
+  accountId: ref.watch(currentAccountIdProvider),
 );
 
 @Riverpod(keepAlive: true)

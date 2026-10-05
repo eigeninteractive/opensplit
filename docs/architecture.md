@@ -41,12 +41,30 @@ of changes is only ever cut between sequence numbers — so a device sees a whol
 change or none of it, and can never hold an expense whose shares have not
 arrived.
 
-One feed uses a timestamp cursor instead, and honestly: profiles live in D1, which
-several requests write concurrently, so there is nothing there that can issue a
-sequence number. A time cursor cannot see a profile that becomes *visible*
-without changing — somebody named long ago claiming a place in your group — so
-each group page carries the profiles of its current members, read by the ids
-the page itself names. The profile feed then only has renames to deliver.
+Profiles live in D1, outside every group, and are numbered the same way by D1
+itself: each write takes the next value of a `counters` row in the same batch
+(`server/src/db/d1/profile-version.ts`). D1 commits one write at a time, so the
+versions follow commit order, which a timestamp from a Worker's clock does not:
+two requests can stamp their times in one order and commit in the other, and a
+device that read in between would pass one of them for good. A counter rather
+than `max(version) + 1`, which would hand a deleted row's number out again.
+
+A version cannot see a profile that becomes *visible* without changing —
+somebody named long ago claiming a place in your group — so each group page
+carries the profiles of its current members, read by the ids the page itself
+names. The profile feed then only has renames to deliver.
+
+### An edit is judged against the version it was made on
+
+Every write replaces the whole row (see below), so an expense edit carries
+`baseSeq`, the version it was composed on, and the object refuses it as
+`stale_base` unless that is the version stored now. Refusing only edits that
+move money would be wrong: the edit still carries the old value of every field
+it did not touch, so a stale rename would silently put back the amount
+somebody else just corrected. The device parks a refused edit for its author to
+apply again on top of the newer version. Sending exactly what is stored is
+answered with the stored row, whatever the base, which is what a retry after a
+lost response is.
 
 ---
 
@@ -57,8 +75,9 @@ the page itself names. The profile feed then only has renames to deliver.
 tables that exist because the object is a little machine as well as a table:
 `counter` (the sequence allocator), `meta` (the group row itself), `tombstone`
 (what is left after a purge, so a device that still holds a copy is told to drop
-it rather than being refused forever), `outbox` (writes owed to D1) and
-`schedule` (the dormancy alarm).
+it rather than being refused forever), `outbox` (writes owed to D1),
+`schedule` (the dormancy alarm) and `activity` (when a member last changed
+anything, which is what quiet is measured from; housekeeping never writes it).
 
 A purge happens when a group is archived, settled in every currency and quiet
 for a year, or at once when its last account holder deletes their account.
@@ -68,7 +87,8 @@ shares and activity. An edit that device never pushed goes with it. The copy
 that survives is whatever somebody exported beforehand.
 
 **D1** (`server/src/db/d1/schema.ts`) — `profiles`, `memberships`,
-`device_tokens`, `link_tokens`, plus Better Auth's own four tables. Everything
+`device_tokens`, `link_tokens`, `counters` (the profile feed's version), plus
+Better Auth's own four tables. Everything
 here except `profiles` is a **derived index**: the objects are the truth, and D1
 is what makes "which groups am I in" and "what does this token point at"
 answerable without asking every object in the account.
@@ -243,9 +263,21 @@ No column changes, so no migration and no device rebuild.
 
 ## Sync is event-triggered, never polled
 
-The client syncs on real triggers — screen open, pull-to-refresh, a data-only
-push waking the device — and asks each group's object for everything after its
-cursor, as one-shot requests.
+The client syncs on real triggers, as one-shot requests, and each trigger asks
+for only what it could have changed:
+
+- **App start, resume, pull-to-refresh, a retry after a failure:** everything.
+  The outbox, the shared feeds (reference data with its `ETag`, rates,
+  profiles), and every group the account is in.
+- **A local write, a screen opening, a push waking the device:** the outbox,
+  then the named group and the groups the push wrote to. Nothing else on the
+  device changed, and another device's change arrives with its own push.
+
+Groups are read with one `POST /sync`, which takes up to fifty groups and their
+cursors, reads them from their objects in parallel, and answers a page each. It
+also names every group the account is in, so a group joined on another device
+is found by the same request rather than a separate one. A group the server
+cannot read is listed under `refusals`, and the rest are answered.
 
 This is a cost decision as much as a correctness one. Request volume from sync
 is the line that scales with usage here; Durable Object compute, storage and
@@ -327,7 +359,11 @@ tokens.
 
 ## Cron: two schedules
 
-`0 4 * * *` refreshes exchange rates. `0 5 * * *` collects abandoned guest
+`0 4 * * *` refreshes exchange rates, then keeps the last year of them
+complete: any stretch of more than a week with no publication (all of it, on a
+new deployment) is fetched whole in one range request. A rate more than a week
+older than a day does not answer for that day, on the server or the device.
+`0 5 * * *` collects abandoned guest
 accounts (over ninety days old, in no group, no session used in ninety days) and
 finishes any account deletion a request started and did not complete.
 

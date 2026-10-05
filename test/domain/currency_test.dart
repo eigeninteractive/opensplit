@@ -58,8 +58,35 @@ void main() {
       expect(kwd.parseToMinor('2.5'), 2500);
     });
 
-    test('strips grouping separators and surrounding space', () {
-      expect(inr.parseToMinor(' 1,20,000.50 '), 12000050);
+    test('takes a comma as the decimal point, and trims space', () {
+      // A German or French number keyboard has no dot key. Read as grouping,
+      // "12,50" would be a thousand and a quarter.
+      expect(inr.parseToMinor(' 12,50 '), 1250);
+      expect(kwd.parseToMinor('2,5'), 2500);
+    });
+
+    test(
+      'refuses grouping, which means different things on different keyboards',
+      () {
+        expect(inr.parseToMinor('1,20,000.50'), isNull);
+        expect(inr.parseToMinor('1,250'), isNull);
+      },
+    );
+
+    test('refuses an amount too long to stay exact', () {
+      expect(inr.parseToMinor('999999999999'), 99999999999900);
+      expect(inr.parseToMinor('9999999999999'), isNull);
+      expect(inr.parseToMinor('99999999999999999999'), isNull);
+    });
+
+    test('accepts every prefix of a valid amount as a field is typed', () {
+      final shape = amountInputPattern(inr.exponent);
+      for (final typed in ['', '1', '12', '12,', '12.5', '12,50']) {
+        expect(shape.hasMatch(typed), isTrue, reason: typed);
+      }
+      for (final typed in ['12.505', '1.2.3', '-1', '1,250.00', 'abc']) {
+        expect(shape.hasMatch(typed), isFalse, reason: typed);
+      }
     });
 
     test('refuses more precision than the currency has', () {

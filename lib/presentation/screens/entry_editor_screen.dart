@@ -1,33 +1,30 @@
-import 'dart:async';
-
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:opensplit_api/opensplit_api.dart' show SplitKind;
 
+import '../../application/entry_form.dart';
 import '../../application/ledger_providers.dart';
 import '../../application/local_providers.dart';
 import '../../application/sync_providers.dart';
 import '../../data/local/database.dart';
 import '../../domain/activity/activity_text.dart';
-import '../../domain/calendar_date.dart';
-import '../../domain/category_guess.dart';
-import '../../domain/entry_draft.dart';
-import '../../domain/fx/fx_quote.dart';
-import '../../domain/models/entry.dart';
+import '../../domain/decimal_text.dart';
 import '../../domain/models/group_event.dart';
 import '../../domain/money_format.dart';
-import '../../domain/split/allocation.dart';
-import '../../domain/split/splitter.dart';
+import '../amount_input.dart';
 import '../feedback.dart';
 import '../navigation.dart';
 import '../theme.dart';
-import '../widgets/category_icon.dart';
 import '../widgets/avatar_view.dart';
+import '../widgets/category_icon.dart';
 import '../widgets/page_body.dart';
 
 /// Creates or edits an expense.
-class EntryEditorScreen extends ConsumerStatefulWidget {
+///
+/// Holds no state of its own: what has been typed lives in [EntryForm], and
+/// every field reports a change there rather than keeping a copy here.
+class EntryEditorScreen extends ConsumerWidget {
   const EntryEditorScreen({super.key, required this.groupId, this.entryId});
 
   final String groupId;
@@ -36,371 +33,43 @@ class EntryEditorScreen extends ConsumerStatefulWidget {
   bool get isEditing => entryId != null;
 
   @override
-  ConsumerState<EntryEditorScreen> createState() => _EntryEditorScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ledger = ref.watch(groupLedgerProvider(groupId));
+    final form = ref.watch(entryFormProvider(groupId, entryId: entryId)).value;
 
-class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
-  final _description = TextEditingController();
-  final _amount = TextEditingController();
-
-  /// Per-member text input for exact amounts, percentages and payer amounts.
-  final _exact = <String, TextEditingController>{};
-  final _percent = <String, TextEditingController>{};
-  final _payerAmounts = <String, TextEditingController>{};
-
-  String? _currencyCode;
-  String? _categoryId;
-
-  /// Whether the category was picked by hand, or came with the expense being
-  /// edited. Until then it follows the description.
-  bool _categoryChosen = false;
-
-  /// The day it happened, and when on that day if known, with the zone it
-  /// happened in. Times are shown and picked on this device's clock.
-  late DateTime _date;
-  DateTime? _occurredAt;
-  String? _zone;
-  SplitKind _splitKind = SplitKind.equal;
-
-  /// Who is in the split, who paid, and the relative weights.
-  ///
-  /// Replaced rather than mutated, so only this state object changes them.
-  Set<String> _participants = {};
-  Map<String, int> _shares = {};
-  Set<String> _payers = {};
-
-  bool _multiplePayers = false;
-  bool _loaded = false;
-  Entry? _editingSnapshot;
-  bool _saving = false;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    final now = DateTime.now();
-    _date = now;
-    _occurredAt = now.toUtc();
-    // Seeding the form is initialisation from asynchronous data, so it listens
-    // instead of running inside build.
-    ref.listenManual(
-      groupLedgerProvider(widget.groupId),
-      (_, _) => _seedWhenReady(),
-      fireImmediately: true,
-    );
-    ref.listenManual(currenciesProvider, (_, _) => _seedWhenReady());
-  }
-
-  @override
-  void dispose() {
-    _description.dispose();
-    _amount.dispose();
-    for (final c in _exact.values) {
-      c.dispose();
+    if (ledger == null || form == null) {
+      return Scaffold(appBar: AppBar(leading: const BackButton()));
     }
-    for (final c in _percent.values) {
-      c.dispose();
-    }
-    for (final c in _payerAmounts.values) {
-      c.dispose();
-    }
-    super.dispose();
-  }
-
-  TextEditingController _controllerFor(
-    Map<String, TextEditingController> map,
-    String id,
-  ) => map.putIfAbsent(id, TextEditingController.new);
-
-  /// Keeps the category in step with [description] until one is chosen.
-  ///
-  /// A guess that stops matching is taken back, so typing "Uber" and then
-  /// correcting it to "Usha's gift" doesn't leave the expense a taxi ride.
-  void _guessCategory(String description) {
-    if (_categoryChosen) return;
-    final icon = guessCategoryIcon(description);
-    final categories = ref.read(categoriesProvider).value ?? const [];
-    final guess = categories.where((c) => c.icon == icon).firstOrNull?.id;
-    if (guess != _categoryId) setState(() => _categoryId = guess);
-  }
-
-  /// Seeds the form as soon as everything it needs has arrived.
-  void _seedWhenReady() {
-    if (_loaded) return;
-
-    final ledger = ref.read(groupLedgerProvider(widget.groupId));
-    final currencies = ref.read(currenciesProvider).value;
-    if (ledger == null || currencies == null) return;
-
-    final existing = widget.isEditing
-        ? ledger.entries.where((e) => e.id == widget.entryId).firstOrNull
-        : null;
-    if (widget.isEditing && existing == null) return;
-
-    _load(ledger, existing, currencies);
-  }
-
-  void _load(GroupLedger ledger, Entry? existing, Map<String, Currency> cx) {
-    _loaded = true;
-    _editingSnapshot = existing;
-
-    _currencyCode = existing?.row.currency ?? ledger.group.defaultCurrency;
-
-    if (existing == null) {
-      // Everyone splits, the person adding it paid. The overwhelmingly common
-      // case, pre-filled so the fast path is two fields and a button.
-      _participants = {for (final member in ledger.members) member.id};
-      final me = ledger.me?.id ?? ledger.members.firstOrNull?.id;
-      if (me != null) _payers = {me};
-      return;
-    }
-
-    _description.text = existing.row.description;
-    _categoryId = existing.row.categoryId;
-    _categoryChosen = _categoryId != null;
-    _date = existing.row.entryDate;
-    _occurredAt = existing.row.occurredAt;
-    _zone = existing.row.timeZone;
-    _splitKind = existing.row.splitKind;
-    final currency = cx[existing.row.currency];
-    if (currency != null) {
-      _amount.text = currency.formatPlain(existing.row.amountMinor);
-    }
-
-    _participants = {for (final share in existing.shares) share.memberId};
-    _payers = {for (final payer in existing.payers) payer.memberId};
-    _multiplePayers = existing.payers.length > 1;
-
-    _shares = {};
-    for (final share in existing.shares) {
-      if (currency != null) {
-        _controllerFor(_exact, share.memberId).text = currency.formatPlain(
-          share.amountMinor,
-        );
-      }
-      final weight = share.weightMicros;
-      if (weight != null) {
-        _shares[share.memberId] = (weight / weightScale).round();
-        _controllerFor(_percent, share.memberId).text = _microsToText(weight);
-      }
-    }
-    for (final payer in existing.payers) {
-      if (currency != null) {
-        _controllerFor(_payerAmounts, payer.memberId).text = currency
-            .formatPlain(payer.amountMinor);
-      }
-    }
-  }
-
-  static String _microsToText(int micros) {
-    final whole = micros ~/ weightScale;
-    final frac = micros % weightScale;
-    if (frac == 0) return '$whole';
-    final decimals = frac
-        .toString()
-        .padLeft(6, '0')
-        .replaceAll(RegExp(r'0+$'), '');
-    return '$whole.$decimals';
-  }
-
-  /// Parses a decimal string into units of 10^-6, the precision the weight
-  /// column stores.
-  static int? _textToMicros(String text) {
-    final trimmed = text.trim();
-    if (trimmed.isEmpty) return null;
-    final match = RegExp(r'^(\d*)(?:\.(\d{0,6}))?$').firstMatch(trimmed);
-    if (match == null) return null;
-    final whole = match.group(1) ?? '';
-    final frac = match.group(2) ?? '';
-    if (whole.isEmpty && frac.isEmpty) return null;
-    final wholeValue = whole.isEmpty ? 0 : int.parse(whole);
-    final fracValue = frac.isEmpty ? 0 : int.parse(frac.padRight(6, '0'));
-    return wholeValue * weightScale + fracValue;
-  }
-
-  SplitSpec? _buildSplit(Currency currency, int totalMinor) {
-    final ids = _participants.toList();
-    if (ids.isEmpty) return null;
-
-    switch (_splitKind) {
-      case SplitKind.equal:
-        return EqualSplit(ids);
-
-      case SplitKind.exact:
-        final amounts = <String, int>{};
-        for (final id in ids) {
-          final parsed = currency.parseToMinor(_exact[id]?.text ?? '');
-          if (parsed == null) return null;
-          amounts[id] = parsed;
-        }
-        return ExactSplit(amounts);
-
-      case SplitKind.shares:
-        return SharesSplit({for (final id in ids) id: _shares[id] ?? 1});
-
-      case SplitKind.percent:
-        final percents = <String, int>{};
-        for (final id in ids) {
-          final parsed = _textToMicros(_percent[id]?.text ?? '');
-          if (parsed == null) return null;
-          percents[id] = parsed;
-        }
-        return PercentSplit(percents);
-
-      // A split rule from a newer server: saving would have to guess it.
-      case SplitKind.unknownDefaultOpenApi:
-        return null;
-    }
-  }
-
-  Map<String, int>? _buildPayers(Currency currency, int totalMinor) {
-    if (!_multiplePayers) {
-      final only = _payers.firstOrNull;
-      return only == null ? null : {only: totalMinor};
-    }
-    final amounts = <String, int>{};
-    for (final id in _payers) {
-      final parsed = currency.parseToMinor(_payerAmounts[id]?.text ?? '');
-      if (parsed == null || parsed <= 0) return null;
-      amounts[id] = parsed;
-    }
-    return amounts.isEmpty ? null : amounts;
-  }
-
-  Future<void> _save(GroupLedger ledger, Currency currency, FxQuote? fx) async {
-    setState(() => _error = null);
-
-    final totalMinor = currency.parseToMinor(_amount.text);
-    if (totalMinor == null || totalMinor <= 0) {
-      setState(
-        () => _error = currency.exponent == 0
-            ? 'Enter a whole amount.'
-            : 'Enter an amount with at most ${currency.exponent} decimal '
-                  'places.',
-      );
-      return;
-    }
-
-    final split = _buildSplit(currency, totalMinor);
-    final payers = _buildPayers(currency, totalMinor);
-    if (split == null) {
-      setState(() => _error = 'Check the split — some amounts are missing.');
-      return;
-    }
-    if (payers == null) {
-      setState(() => _error = 'Check who paid — some amounts are missing.');
-      return;
-    }
-
-    final moment = _moment();
-    final draft = EntryDraft(
-      groupId: widget.groupId,
-      currency: currency.code,
-      amountMinor: totalMinor,
-      description: _description.text.trim(),
-      categoryId: _categoryId,
-      split: split,
-      payerAmounts: payers,
-      entryDate: calendarDay(_date),
-      occurredAt: moment?.at,
-      timeZone: moment?.zone,
-      // A fact about the transaction, captured once.
-      fxRate: fx?.rate,
-      fxSource: fx == null ? null : '${fx.source}@${calendarDate(fx.date)}',
-    );
-
-    setState(() => _saving = true);
-    try {
-      final repository = ref.read(entryRepositoryProvider);
-      if (widget.isEditing) {
-        // Who is editing, which need not be who created it — that difference is
-        // most of what makes a feed line worth reading.
-        await repository.update(
-          widget.entryId!,
-          draft,
-          actorId: ledger.me?.id,
-          expected: _editingSnapshot,
-        );
-      } else {
-        await repository.create(
-          draft,
-          createdBy: ledger.me?.id ?? payers.keys.first,
-        );
-      }
-      if (!mounted) return;
-      goBack(context, '/g/${widget.groupId}');
-    } on SplitException catch (e) {
-      // The domain refused it, so nothing was written. Its messages are written
-      // for people, so they are shown as-is.
-      if (mounted) setState(() => _error = e.message);
-    } catch (error) {
-      if (mounted) setState(() => _error = '$error');
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  /// The moment to save. A time with no zone yet (a new expense) is this
-  /// device's. Saving never waits to learn which that is: with no zone known
-  /// yet, only the day is kept.
-  ({DateTime at, String zone})? _moment() {
-    final at = _occurredAt;
-    final zone = _zone ?? ref.read(deviceZoneProvider).value;
-    return at == null || zone == null ? null : (at: at, zone: zone);
-  }
-
-  Future<void> _pickDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _date,
-      firstDate: DateTime(2000),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-    );
-    if (picked == null || DateUtils.isSameDay(picked, _date)) return;
-    setState(() {
-      _date = picked;
-      _occurredAt = null;
-      _zone = null;
-    });
-  }
-
-  /// A time picked on this device's clock happened in this device's zone.
-  Future<void> _pickTime(String device) async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(
-        _occurredAt?.toLocal() ?? DateTime.now(),
+    return _Editor(
+      ledger: ledger,
+      form: form,
+      controller: ref.read(
+        entryFormProvider(groupId, entryId: entryId).notifier,
       ),
     );
-    if (picked == null || !mounted) return;
-    setState(() {
-      _occurredAt = DateTime(
-        _date.year,
-        _date.month,
-        _date.day,
-        picked.hour,
-        picked.minute,
-      ).toUtc();
-      _zone = device;
-    });
+  }
+}
+
+class _Editor extends ConsumerWidget {
+  const _Editor({
+    required this.ledger,
+    required this.form,
+    required this.controller,
+  });
+
+  final GroupLedger ledger;
+  final EntryFormState form;
+  final EntryForm controller;
+
+  String get _groupPath => '/g/${ledger.group.id}';
+
+  Future<void> _save(BuildContext context) async {
+    if (await controller.save() && context.mounted) {
+      goBack(context, _groupPath);
+    }
   }
 
-  /// Dates already asked for, so a rebuild does not re-ask.
-  final _requestedRates = <String>{};
-
-  void _requestRate(DateTime asOf, String currency) {
-    final day = calendarDate(asOf);
-    if (!_requestedRates.add('$day|$currency')) return;
-
-    // Not awaited: this must not delay a frame or a save.
-    ref
-        .read(syncEngineProvider)
-        ?.shared
-        .requestBackfill(asOf, currency)
-        .ignore();
-  }
-
-  Future<void> _delete() async {
+  Future<void> _delete(BuildContext context) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -425,72 +94,61 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
       ),
     );
     if (!(confirmed ?? false)) return;
-
-    try {
-      await ref
-          .read(entryRepositoryProvider)
-          .delete(
-            widget.entryId!,
-            actorId: ref.read(groupLedgerProvider(widget.groupId))?.me?.id,
-            expected: _editingSnapshot,
-          );
-      if (mounted) goBack(context, '/g/${widget.groupId}');
-    } catch (error) {
-      if (mounted) setState(() => _error = '$error');
+    if (await controller.delete() && context.mounted) {
+      goBack(context, _groupPath);
     }
   }
 
+  Future<void> _pickDay(BuildContext context) async {
+    final day = form.day;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime(day.year, day.month, day.day),
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked != null) controller.chooseDay(picked);
+  }
+
+  /// A time picked on this device's clock happened in this device's zone.
+  Future<void> _pickTime(BuildContext context, String device) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(
+        form.occurredAt?.toLocal() ?? DateTime.now(),
+      ),
+    );
+    if (picked == null) return;
+    controller.chooseTime(
+      hour: picked.hour,
+      minute: picked.minute,
+      zone: device,
+    );
+  }
+
   @override
-  Widget build(BuildContext context) {
-    final ledger = ref.watch(groupLedgerProvider(widget.groupId));
+  Widget build(BuildContext context, WidgetRef ref) {
     final device = ref.watch(deviceZoneProvider).value;
     final currencies = ref.watch(currenciesProvider).value ?? const {};
-
-    if (ledger == null) {
-      return Scaffold(appBar: AppBar(leading: const BackButton()));
-    }
-
-    final currency = currencies[_currencyCode];
-    final totalMinor = currency?.parseToMinor(_amount.text);
-
-    // The rate as it stood on the ENTRY's date, not today's.
-    final target = ledger.group.defaultCurrency;
-    FxQuote? fx;
-    if (currency != null && currency.code != target) {
-      final day = DateTime.utc(_date.year, _date.month, _date.day);
-      final quote = fxQuoteProvider(currency.code, target, day);
-      fx = ref.watch(quote).value;
-
-      // Nothing local can price this date, so ask the server: the rate lands on
-      // a later sync and the entry saves without a snapshot in the meantime,
-      // which the schema allows.
-      final code = currency.code;
-      ref.listen(quote, (_, next) {
-        if (next.isLoading || next.value != null) return;
-        _requestRate(day, code);
-      });
-    }
-
+    final currency = currencies[form.currencyCode];
     final textTheme = Theme.of(context).textTheme;
-    final ready = !_saving && currency != null;
+    final ready = !form.saving && currency != null;
 
     return Scaffold(
       appBar: AppBar(
-        leading: CloseButton(
-          onPressed: () => goBack(context, '/g/${widget.groupId}'),
-        ),
-        title: Text(widget.isEditing ? 'Edit expense' : 'Add expense'),
+        leading: CloseButton(onPressed: () => goBack(context, _groupPath)),
+        title: Text(form.isEditing ? 'Edit expense' : 'Add expense'),
         actions: [
-          if (widget.isEditing)
+          if (form.isEditing)
             IconButton(
               tooltip: 'Delete',
-              onPressed: _delete,
+              onPressed: () => _delete(context),
               icon: const Icon(Icons.delete_outline),
             ),
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: FilledButton(
-              onPressed: ready ? () => _save(ledger, currency, fx) : null,
+              onPressed: ready ? () => _save(context) : null,
               child: const Text('Save'),
             ),
           ),
@@ -506,17 +164,18 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 _CurrencyButton(
-                  code: _currencyCode ?? ledger.group.defaultCurrency,
-                  onChanged: (code) => setState(() => _currencyCode = code),
+                  code: form.currencyCode,
+                  onChanged: controller.chooseCurrency,
                 ),
                 const SizedBox(width: 16),
                 Expanded(
-                  child: TextField(
-                    controller: _amount,
-                    autofocus: !widget.isEditing,
+                  child: TextFormField(
+                    initialValue: form.amount,
+                    autofocus: !form.isEditing,
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
+                    inputFormatters: [DecimalInputFormatter.amount(currency)],
                     textInputAction: TextInputAction.next,
                     style: moneyStyle(textTheme.displaySmall!),
                     decoration: InputDecoration(
@@ -529,7 +188,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
                           : '${currency!.symbol} ',
                       border: InputBorder.none,
                     ),
-                    onChanged: (_) => setState(() {}),
+                    onChanged: controller.setAmount,
                   ),
                 ),
               ],
@@ -545,14 +204,14 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
                 ),
               ),
             const SizedBox(height: 16),
-            TextField(
-              controller: _description,
+            TextFormField(
+              initialValue: form.description,
               textCapitalization: TextCapitalization.sentences,
               decoration: const InputDecoration(
                 labelText: 'What was it?',
                 hintText: 'Dinner at Toit',
               ),
-              onChanged: _guessCategory,
+              onChanged: controller.setDescription,
             ),
             const SizedBox(height: 16),
             // The details most expenses leave as they are, as chips rather
@@ -562,25 +221,21 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
               runSpacing: 8,
               children: [
                 _CategoryChip(
-                  value: _categoryId,
-                  onChanged: (id) => setState(() {
-                    _categoryId = id;
-                    _categoryChosen = true;
-                  }),
+                  value: form.categoryId,
+                  onChanged: controller.chooseCategory,
                 ),
                 ActionChip(
                   avatar: const Icon(Icons.event_outlined),
-                  label: Text(_dayName(_date)),
+                  label: Text(_dayName(form.day)),
                   tooltip: 'Change the day',
-                  onPressed: _pickDate,
+                  onPressed: () => _pickDay(context),
                 ),
                 _TimeChip(
-                  shown: _occurredAt?.toLocal(),
-                  onPick: device == null ? null : () => _pickTime(device),
-                  onClear: () => setState(() {
-                    _occurredAt = null;
-                    _zone = null;
-                  }),
+                  shown: form.occurredAt?.toLocal(),
+                  onPick: device == null
+                      ? null
+                      : () => _pickTime(context, device),
+                  onClear: controller.clearTime,
                 ),
               ],
             ),
@@ -588,42 +243,24 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
             _PayerSection(
               ledger: ledger,
               currency: currency,
-              payers: _payers,
-              multiple: _multiplePayers,
-              controllerFor: (id) => _controllerFor(_payerAmounts, id),
-              onToggleMultiple: (value) => setState(() {
-                _multiplePayers = value;
-                if (!value && _payers.length > 1) {
-                  _payers = {_payers.first};
-                }
-              }),
-              onPayersChanged: (next) => setState(() => _payers = next),
-              onAmountEdited: () => setState(() {}),
+              form: form,
+              controller: controller,
             ),
             const SizedBox(height: 32),
             _SplitSection(
               ledger: ledger,
               currency: currency,
-              totalMinor: totalMinor,
-              splitKind: _splitKind,
-              participants: _participants,
-              shares: _shares,
-              exactControllerFor: (id) => _controllerFor(_exact, id),
-              percentControllerFor: (id) => _controllerFor(_percent, id),
-              onKindChanged: (kind) => setState(() => _splitKind = kind),
-              onParticipantsChanged: (next) =>
-                  setState(() => _participants = next),
-              onSharesChanged: (next) => setState(() => _shares = next),
-              onAmountEdited: () => setState(() {}),
+              form: form,
+              controller: controller,
             ),
-            if (_error != null) ...[
+            if (form.error case final error?) ...[
               const SizedBox(height: 16),
               Card.filled(
                 color: Theme.of(context).colorScheme.errorContainer,
                 child: Padding(
                   padding: const EdgeInsets.all(12),
                   child: Text(
-                    _error!,
+                    error,
                     style: textTheme.bodyMedium?.copyWith(
                       color: Theme.of(context).colorScheme.onErrorContainer,
                     ),
@@ -631,9 +268,9 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
                 ),
               ),
             ],
-            if (widget.isEditing) ...[
+            if (form.editing case final editing?) ...[
               const SizedBox(height: 32),
-              _History(entryId: widget.entryId!, ledger: ledger),
+              _History(entryId: editing.id, ledger: ledger),
             ],
           ],
         ),
@@ -641,14 +278,14 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
     );
   }
 
-  /// "Today", "Yesterday", or the date.
+  /// "Today", "Yesterday", or the date, for a day stored at UTC midnight.
   static String _dayName(DateTime day) {
-    final today = DateUtils.dateOnly(DateTime.now());
-    final daysAgo = today.difference(DateUtils.dateOnly(day)).inDays;
+    final local = DateTime(day.year, day.month, day.day);
+    final daysAgo = DateUtils.dateOnly(DateTime.now()).difference(local).inDays;
     return switch (daysAgo) {
       0 => 'Today',
       1 => 'Yesterday',
-      _ => DateFormat.yMMMEd().format(day),
+      _ => DateFormat.yMMMEd().format(local),
     };
   }
 }
@@ -689,39 +326,14 @@ class _PayerSection extends StatelessWidget {
   const _PayerSection({
     required this.ledger,
     required this.currency,
-    required this.payers,
-    required this.multiple,
-    required this.controllerFor,
-    required this.onToggleMultiple,
-    required this.onPayersChanged,
-    required this.onAmountEdited,
+    required this.form,
+    required this.controller,
   });
 
   final GroupLedger ledger;
   final Currency? currency;
-
-  /// Who paid, to render. Read only: a new selection goes back up through
-  /// [onPayersChanged] rather than being edited in place.
-  final Set<String> payers;
-
-  final bool multiple;
-  final TextEditingController Function(String) controllerFor;
-  final ValueChanged<bool> onToggleMultiple;
-  final ValueChanged<Set<String>> onPayersChanged;
-
-  /// An amount was typed. The controllers belong to the editor, and the field
-  /// has already written to one, so this only asks for a rebuild.
-  final VoidCallback onAmountEdited;
-
-  Set<String> _with(String memberId, {required bool selected}) {
-    final next = {...payers};
-    if (selected) {
-      next.add(memberId);
-    } else {
-      next.remove(memberId);
-    }
-    return next;
-  }
+  final EntryFormState form;
+  final EntryForm controller;
 
   @override
   Widget build(BuildContext context) {
@@ -731,11 +343,11 @@ class _PayerSection extends StatelessWidget {
         _SectionTitle(
           'Paid by',
           action: TextButton(
-            onPressed: () => onToggleMultiple(!multiple),
-            child: Text(multiple ? 'One person' : 'Several people'),
+            onPressed: () => controller.setSeveralPayers(!form.severalPayers),
+            child: Text(form.severalPayers ? 'One person' : 'Several people'),
           ),
         ),
-        if (!multiple)
+        if (!form.severalPayers)
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -754,8 +366,8 @@ class _PayerSection extends StatelessWidget {
                     ledger.nameOfMember(member) +
                         (member.id == ledger.me?.id ? ' (you)' : ''),
                   ),
-                  selected: payers.contains(member.id),
-                  onSelected: (_) => onPayersChanged({member.id}),
+                  selected: form.payers.contains(member.id),
+                  onSelected: (_) => controller.choosePayer(member.id),
                 ),
             ],
           )
@@ -769,26 +381,32 @@ class _PayerSection extends StatelessWidget {
                       child: CheckboxListTile(
                         contentPadding: EdgeInsets.zero,
                         controlAffinity: ListTileControlAffinity.leading,
-                        value: payers.contains(member.id),
+                        value: form.payers.contains(member.id),
                         title: Text(ledger.nameOfMember(member)),
-                        onChanged: (checked) => onPayersChanged(
-                          _with(member.id, selected: checked ?? false),
+                        onChanged: (checked) => controller.setPaying(
+                          member.id,
+                          paying: checked ?? false,
                         ),
                       ),
                     ),
                     SizedBox(
                       width: 110,
-                      child: TextField(
-                        controller: controllerFor(member.id),
-                        enabled: payers.contains(member.id),
+                      child: TextFormField(
+                        key: ValueKey(('paid', member.id)),
+                        initialValue: form.paidAmounts[member.id],
+                        enabled: form.payers.contains(member.id),
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
                         ),
+                        inputFormatters: [
+                          DecimalInputFormatter.amount(currency),
+                        ],
                         decoration: InputDecoration(
                           isDense: true,
                           prefixText: currency?.symbol,
                         ),
-                        onChanged: (_) => onAmountEdited(),
+                        onChanged: (text) =>
+                            controller.setPaidAmount(member.id, text),
                       ),
                     ),
                   ],
@@ -812,71 +430,19 @@ class _SplitSection extends StatelessWidget {
   const _SplitSection({
     required this.ledger,
     required this.currency,
-    required this.totalMinor,
-    required this.splitKind,
-    required this.participants,
-    required this.shares,
-    required this.exactControllerFor,
-    required this.percentControllerFor,
-    required this.onKindChanged,
-    required this.onParticipantsChanged,
-    required this.onSharesChanged,
-    required this.onAmountEdited,
+    required this.form,
+    required this.controller,
   });
 
   final GroupLedger ledger;
   final Currency? currency;
-  final int? totalMinor;
-  final SplitKind splitKind;
-
-  /// Who is in the split and their relative weights, to render. Both read only:
-  /// a new value goes back up through the callbacks below.
-  final Set<String> participants;
-  final Map<String, int> shares;
-
-  final TextEditingController Function(String) exactControllerFor;
-  final TextEditingController Function(String) percentControllerFor;
-  final ValueChanged<SplitKind> onKindChanged;
-  final ValueChanged<Set<String>> onParticipantsChanged;
-  final ValueChanged<Map<String, int>> onSharesChanged;
-
-  /// An amount or a percentage was typed. The controllers belong to the editor,
-  /// so this only asks for a rebuild of the preview.
-  final VoidCallback onAmountEdited;
-
-  /// The weight for [memberId], nudged by [by] and never below zero.
-  Map<String, int> _nudge(String memberId, int by) {
-    final next = {...shares};
-    next[memberId] = ((next[memberId] ?? 1) + by).clamp(0, 1 << 30);
-    return next;
-  }
-
-  /// A live preview of what each person ends up owing.
-  Map<String, int>? _preview() {
-    if (currency == null || totalMinor == null || totalMinor! <= 0) return null;
-    if (participants.isEmpty) return null;
-
-    try {
-      final spec = switch (splitKind) {
-        SplitKind.equal => EqualSplit(participants.toList()),
-        SplitKind.shares => SharesSplit({
-          for (final id in participants) id: shares[id] ?? 1,
-        }),
-        _ => null,
-      };
-      if (spec == null) return null;
-      return {
-        for (final share in spec.resolve(totalMinor!))
-          share.memberId: share.amountMinor,
-      };
-    } on SplitException {
-      return null;
-    }
-  }
+  final EntryFormState form;
+  final EntryForm controller;
 
   @override
   Widget build(BuildContext context) {
-    final preview = _preview();
+    final currency = this.currency;
+    final preview = currency == null ? null : form.preview(currency);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -889,8 +455,8 @@ class _SplitSection extends StatelessWidget {
             ButtonSegment(value: SplitKind.shares, label: Text('Shares')),
             ButtonSegment(value: SplitKind.percent, label: Text('%')),
           ],
-          selected: {splitKind},
-          onSelectionChanged: (set) => onKindChanged(set.first),
+          selected: {form.splitKind},
+          onSelectionChanged: (set) => controller.chooseSplitKind(set.first),
           showSelectedIcon: false,
         ),
         const SizedBox(height: 8),
@@ -901,58 +467,62 @@ class _SplitSection extends StatelessWidget {
                 child: CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
                   controlAffinity: ListTileControlAffinity.leading,
-                  value: participants.contains(member.id),
+                  value: form.participants.contains(member.id),
                   title: Text(
                     ledger.nameOfMember(member) +
                         (member.id == ledger.me?.id ? ' (you)' : ''),
                   ),
-                  subtitle: preview != null && participants.contains(member.id)
-                      ? Text(
-                          formatMoney(currency, preview[member.id] ?? 0),
-                          style: moneyStyle(
-                            Theme.of(context).textTheme.bodySmall!,
-                          ),
-                        )
-                      : null,
-                  onChanged: (checked) {
-                    final next = {...participants};
-                    if (checked ?? false) {
-                      next.add(member.id);
-                    } else {
-                      next.remove(member.id);
-                    }
-                    onParticipantsChanged(next);
+                  subtitle: switch (preview?[member.id]) {
+                    final owed? => Text(
+                      formatMoney(currency, owed),
+                      style: moneyStyle(Theme.of(context).textTheme.bodySmall!),
+                    ),
+                    null => null,
                   },
+                  onChanged: (checked) => controller.setInSplit(
+                    member.id,
+                    included: checked ?? false,
+                  ),
                 ),
               ),
-              if (participants.contains(member.id))
-                switch (splitKind) {
+              if (form.participants.contains(member.id))
+                // Keyed by kind as well as person: an amount and a percentage
+                // sit in the same place, and must not share a field's text.
+                switch (form.splitKind) {
                   SplitKind.exact => SizedBox(
                     width: 110,
-                    child: TextField(
-                      controller: exactControllerFor(member.id),
+                    child: TextFormField(
+                      key: ValueKey(('exact', member.id)),
+                      initialValue: form.exactAmounts[member.id],
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
+                      inputFormatters: [DecimalInputFormatter.amount(currency)],
                       decoration: InputDecoration(
                         isDense: true,
                         prefixText: currency?.symbol,
                       ),
-                      onChanged: (_) => onAmountEdited(),
+                      onChanged: (text) =>
+                          controller.setExactAmount(member.id, text),
                     ),
                   ),
                   SplitKind.percent => SizedBox(
                     width: 90,
-                    child: TextField(
-                      controller: percentControllerFor(member.id),
+                    child: TextFormField(
+                      key: ValueKey(('percent', member.id)),
+                      initialValue: form.percents[member.id],
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
+                      inputFormatters: [
+                        DecimalInputFormatter(percentInputPattern),
+                      ],
                       decoration: const InputDecoration(
                         isDense: true,
                         suffixText: '%',
                       ),
-                      onChanged: (_) => onAmountEdited(),
+                      onChanged: (text) =>
+                          controller.setPercent(member.id, text),
                     ),
                   ),
                   SplitKind.shares => Row(
@@ -960,12 +530,12 @@ class _SplitSection extends StatelessWidget {
                     children: [
                       IconButton(
                         icon: const Icon(Icons.remove_circle_outline),
-                        onPressed: () => onSharesChanged(_nudge(member.id, -1)),
+                        onPressed: () => controller.nudgeShares(member.id, -1),
                       ),
-                      Text('${shares[member.id] ?? 1}'),
+                      Text('${form.shareCountOf(member.id)}'),
                       IconButton(
                         icon: const Icon(Icons.add_circle_outline),
-                        onPressed: () => onSharesChanged(_nudge(member.id, 1)),
+                        onPressed: () => controller.nudgeShares(member.id, 1),
                       ),
                     ],
                   ),

@@ -1,4 +1,4 @@
-import { index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 import { avatarChecks, avatarColumns } from "../appearance";
 
@@ -25,9 +25,26 @@ export const profiles = sqliteTable(
     updatedAt: text("updated_at").notNull(),
     /** Set by account deletion; the row stays so history still resolves. */
     deletedAt: text("deleted_at"),
+    /**
+     * The profile feed's cursor: the `profiles` counter's value when this row
+     * was last written, taken in the same transaction (`profileVersion`).
+     * D1 commits one write at a time, so versions follow commit order, which
+     * a timestamp from the Worker's clock does not.
+     */
+    version: integer("version").notNull(),
   },
-  (table) => [index("profiles_updated").on(table.updatedAt, table.id), ...avatarChecks("profiles", table)],
+  (table) => [uniqueIndex("profiles_version").on(table.version), ...avatarChecks("profiles", table)],
 );
+
+/**
+ * Named counters that only go up, for rows D1 numbers itself. A counter
+ * rather than `max(version) + 1`, which would hand a deleted row's number out
+ * again, behind a cursor that has already passed it.
+ */
+export const counters = sqliteTable("counters", {
+  name: text("name").primaryKey(),
+  value: integer("value").notNull(),
+});
 
 /**
  * Which groups a person is in. Derived from the group objects, which send

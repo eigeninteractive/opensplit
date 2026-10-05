@@ -9,10 +9,15 @@ import { finishDeletions } from "./forget";
 /** The two crons. Dormant groups are not swept: each group object arms its own alarm. */
 
 export async function refreshRates(env: Env): Promise<void> {
-  const outcome = await env.FX.getByName("global").refresh();
+  const fx = env.FX.getByName("global");
+  const outcome = await fx.refresh();
   // Logged, not alerted: a missing rate is a missing estimate, never a wrong balance.
   if (outcome.missing.length > 0) console.warn("[fx] uncovered after the waterfall", outcome.missing.join(","));
   console.log("[fx] stored", outcome.stored, "months", outcome.months.join(","));
+
+  // After today's, so a gap reaching up to today is measured against it. Nothing to do on almost every run.
+  const history = await fx.fillHistory();
+  if (history.gaps.length > 0) console.log("[fx] filled", history.gaps.map((gap) => `${gap.from}..${gap.to}`).join(","), "stored", history.stored);
 }
 
 const DAY = 24 * 60 * 60 * 1000;

@@ -84,8 +84,8 @@ export function peek(tx: Tx, token: string, viewer: string | null, now: string):
   const meta = requireMeta(tx);
   const nameOf = (memberId: string) => tx.select({ name: schema.members.displayName }).from(schema.members).where(eq(schema.members.id, memberId)).get()?.name ?? null;
   const memberCount = tx.select({ count: sql<number>`count(*)` }).from(schema.members).where(isNull(schema.members.leftAt)).get()?.count ?? 0;
-  const isMember = viewer !== null && activeMemberFor(tx, viewer) !== undefined;
-  const shared = { groupId: meta.id, groupName: meta.name, memberCount, isMember };
+  const place = viewer === null ? undefined : placeOf(tx, viewer);
+  const shared = { groupId: meta.id, groupName: meta.name, memberCount, isMember: place !== undefined && place.leftAt === null, hasLeft: place?.leftAt != null };
 
   const invite = tx.select().from(schema.invites).where(eq(schema.invites.token, token)).get();
   if (invite) {
@@ -129,23 +129,26 @@ export function placeholders(tx: Tx, token: string, now: string): Placeholder[] 
 
 /**
  * Walking in: redeem an invite, claim a placeholder behind an open link, or
- * arrive as somebody new. Never a second place for one account.
+ * arrive as somebody new. Never a second place for one account: somebody who
+ * left gets their own place back, whatever the link offered.
  */
 export function join(tx: Tx, token: string, profileId: string, request: JoinRequest, now: string): Member {
   requireMeta(tx);
-  if (tx.select().from(schema.members).where(eq(schema.members.profileId, profileId)).get()) {
-    refuse("already_member", "You are already in this group.");
-  }
+  const previous = placeOf(tx, profileId);
+  if (previous && previous.leftAt === null) refuse("already_member", "You are already in this group.");
 
   const invite = tx.select().from(schema.invites).where(eq(schema.invites.token, token)).get();
   if (invite) {
     if (invite.redeemedAt !== null) refuse("invite_spent", "This invite link has already been used.");
     if (invite.expiresAt < now) refuse("invite_expired", "This invite link has expired.");
+    // The invite names somebody else's place, so it stays unspent for them.
+    if (previous) return rejoin(tx, previous, now);
     tx.update(schema.invites).set({ redeemedAt: now, redeemedBy: profileId }).where(eq(schema.invites.token, token)).run();
     return claim(tx, invite.memberId, profileId, now);
   }
 
   requireLiveLink(tx, token, now);
+  if (previous) return rejoin(tx, previous, now);
   if (request.memberId !== null) return claim(tx, request.memberId, profileId, now);
 
   const name = request.displayName?.trim() ?? "";
@@ -157,6 +160,15 @@ export function join(tx: Tx, token: string, profileId: string, request: JoinRequ
   append(tx, { seq, now, actorId: null, kind: "member_joined", subjectId: id, member: { displayName: name, previousName: null } });
   stageMembership(tx, profileId, null, now);
   return requireMember(tx, id);
+}
+
+/** Coming back to the place you left, balances and history as they were. */
+function rejoin(tx: Tx, member: MemberRow, now: string): Member {
+  const seq = nextSeq(tx);
+  tx.update(schema.members).set({ leftAt: null, updatedAt: now, seq }).where(eq(schema.members.id, member.id)).run();
+  append(tx, { seq, now, actorId: null, kind: "member_joined", subjectId: member.id, member: { displayName: member.displayName, previousName: null } });
+  if (member.profileId !== null) stageMembership(tx, member.profileId, null, now);
+  return requireMember(tx, member.id);
 }
 
 /** Taking over a placeholder sets one column; no balance moves. Nobody did it to them, so no actor. */
@@ -179,10 +191,7 @@ function requireLiveLink(tx: Tx, token: string, now: string): void {
   if (link.expiresAt < now) refuse("invite_expired", "This invite link has expired.");
 }
 
-function activeMemberFor(tx: Tx, profileId: string): MemberRow | undefined {
-  return tx
-    .select()
-    .from(schema.members)
-    .where(and(eq(schema.members.profileId, profileId), isNull(schema.members.leftAt)))
-    .get();
+/** The account's place here, current or left. One account never holds two. */
+function placeOf(tx: Tx, profileId: string): MemberRow | undefined {
+  return tx.select().from(schema.members).where(eq(schema.members.profileId, profileId)).get();
 }
