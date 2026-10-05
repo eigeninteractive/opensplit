@@ -33,6 +33,7 @@ void main() {
         createdAt: at,
         archivedAt: archivedAt,
         updatedAt: at,
+        lastActivityAt: at,
         seq: seq,
       );
 

@@ -68,6 +68,7 @@ void main() {
       createdAt: DateTime.utc(2026),
       archivedAt: null,
       updatedAt: DateTime.utc(2026),
+      lastActivityAt: DateTime.utc(2026),
       seq: 1,
     );
     final row = group.toRow();

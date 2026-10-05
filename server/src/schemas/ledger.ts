@@ -112,6 +112,7 @@ const groupRow = createSelectSchema(tables.meta, {
   createdAt: () => TimestampSchema,
   archivedAt: () => TimestampSchema,
   updatedAt: () => TimestampSchema,
+  lastActivityAt: () => TimestampSchema,
   seq: () => SeqSchema,
 });
 

@@ -119,10 +119,8 @@ class Group {
   @JsonKey(name: r'createdAt', required: true, includeIfNull: false)
   final DateTime createdAt;
 
-  // minimum: -9007199254740991
-  // maximum: 9007199254740991
   @JsonKey(name: r'lastActivityAt', required: true, includeIfNull: false)
-  final int lastActivityAt;
+  final DateTime lastActivityAt;
 
   @JsonKey(name: r'archivedAt', required: true, includeIfNull: true)
   final DateTime? archivedAt;

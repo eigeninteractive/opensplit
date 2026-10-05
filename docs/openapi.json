@@ -87,9 +87,9 @@
             "example": "2026-09-23T11:20:41.865Z"
           },
           "lastActivityAt": {
-            "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
           },
           "archivedAt": {
             "type": "string",
