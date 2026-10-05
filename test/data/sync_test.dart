@@ -1480,9 +1480,10 @@ void main() {
         final report = await a.sync.syncGroups(const {});
 
         expect(report.isClean, isTrue, reason: '$report');
-        for (final feed in ['/api/reference', '/api/fx', '/api/profiles']) {
+        for (final feed in ['/api/reference', '/api/profiles']) {
           expect(a.tap.count('GET', feed), 0, reason: feed);
         }
+        expect(a.tap.count('GET', '/api/fx'), 1, reason: '/api/fx');
         expect(a.tap.requests.where(isGroupList).map(pulled), [
           [g.groupId],
         ]);
