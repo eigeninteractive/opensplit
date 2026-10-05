@@ -43,9 +43,8 @@ export function nextDue(tx: Tx): number | null {
 
 /** Called in the transaction of every change a member makes: a group in use is not dormant. */
 export function touchDormancy(tx: Tx, now: string): void {
-  const at = Date.parse(now);
-  tx.update(schema.meta).set({ lastActivityAt: at }).run();
-  scheduleAt(tx, "archive", at + DORMANCY.archiveAfter);
+  tx.update(schema.meta).set({ lastActivityAt: now }).run();
+  scheduleAt(tx, "archive", Date.parse(now) + DORMANCY.archiveAfter);
   unschedule(tx, "purge");
 }
 
@@ -60,7 +59,7 @@ export function runDormancy(tx: Tx, now: number): UpkeepOutcome {
   const meta = findMeta(tx);
   if (!meta) return outcome;
 
-  const quietSince = meta.lastActivityAt;
+  const quietSince = Date.parse(meta.lastActivityAt);
 
   if (meta.archivedAt === null) {
     if (quietSince + DORMANCY.archiveAfter > now) {

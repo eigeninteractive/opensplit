@@ -59,7 +59,7 @@ describe("a group that goes quiet", () => {
     const longAgo = Date.now() - 180 * DAYS;
     await runInDurableObject(object, async (_instance: Group, state) => {
       state.storage.sql.exec("update entries set created_at = ?", new Date(longAgo).toISOString());
-      state.storage.sql.exec("update meta set last_activity_at = ?", longAgo);
+      state.storage.sql.exec("update meta set last_activity_at = ?", new Date(longAgo).toISOString());
     });
     ok(await saveEntry(object, draftOf(entry, { description: "Dinner, corrected" }), RAVI));
 
@@ -71,8 +71,8 @@ describe("a group that goes quiet", () => {
     const object = stub(groupId);
 
     await object.runUpkeep(Date.now() + 100 * DAYS);
-    const activity = await runInDurableObject(object, async (_instance: Group, state) => state.storage.sql.exec<{ last_activity_at: number }>("select last_activity_at from meta").one().last_activity_at);
-    expect(activity).toBeLessThan(Date.now() + DAYS);
+    const activity = await runInDurableObject(object, async (_instance: Group, state) => state.storage.sql.exec<{ last_activity_at: string }>("select last_activity_at from meta").one().last_activity_at);
+    expect(Date.parse(activity)).toBeLessThan(Date.now() + DAYS);
   });
 
   /** A deadline already spent would hold the object's one alarm in the past, firing again as soon as it returns. */

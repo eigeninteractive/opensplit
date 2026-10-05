@@ -72,7 +72,7 @@ export const meta = sqliteTable(
       .notNull()
       .references(() => members.id),
     createdAt: text("created_at").notNull(),
-    lastActivityAt: integer("last_activity_at").notNull(),
+    lastActivityAt: text("last_activity_at").notNull(),
     archivedAt: text("archived_at"),
     updatedAt: text("updated_at").notNull(),
     seq: integer("seq").notNull(),
