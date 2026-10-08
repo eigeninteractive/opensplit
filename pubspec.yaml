@@ -51,14 +51,14 @@ dependencies:
   share_plus: ^13.3.0
   firebase_core: ^4.15.0
   firebase_messaging: ^16.7.0
-  flutter_local_notifications: ^22.3.1
+  flutter_local_notifications: ^23.0.0-dev.3
   dynamic_color: ^2.1.0
   google_fonts: ^9.0.0
   web: ^1.1.1
   flutter_svg: ^2.3.0
   in_app_update: ^5.0.0
   in_app_review: ^2.0.12
-  connectivity_plus: ^7.3.1
+  connectivity_plus: ^7.3.2
   # Flutter's Cupertino localizations expose Cupertino icon data even though
   # the app uses Material widgets. Shipping the matching tree-shaken font
   # avoids missing glyphs in platform-adaptive framework surfaces.
