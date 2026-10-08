@@ -63,7 +63,7 @@ dependencies:
   # the app uses Material widgets. Shipping the matching tree-shaken font
   # avoids missing glyphs in platform-adaptive framework surfaces.
   cupertino_icons: ^2.0.0
-  package_info_plus: ^10.2.1
+  package_info_plus: ^10.2.2
   # The API client, generated from docs/openapi.json by
   # `dart run tool/generate_api_client.dart`. A path dependency rather than a
   # folder under lib/, so generated code keeps its own lint posture instead of
