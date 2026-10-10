@@ -29,6 +29,32 @@ void main() {
     expect(LaunchHold.isHolding, isFalse);
   });
 
+  testWidgets('says when the released frame is drawn, and only then', (
+    tester,
+  ) async {
+    final loaded = ValueNotifier(false);
+    addTearDown(loaded.dispose);
+    var shown = 0;
+
+    LaunchHold.begin(limit: const Duration(seconds: 5), onShown: () => shown++);
+    await tester.pumpWidget(
+      ValueListenableBuilder(
+        valueListenable: loaded,
+        builder: (context, isLoaded, _) => isLoaded
+            ? const Text('Saved home group', textDirection: TextDirection.ltr)
+            : const LaunchPlaceholder(child: SizedBox()),
+      ),
+    );
+    await tester.pump();
+    expect(shown, 0);
+
+    loaded.value = true;
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+    expect(shown, 1);
+  });
+
   testWidgets('releases a screen with nothing to wait for', (tester) async {
     LaunchHold.begin(limit: const Duration(seconds: 5));
     await tester.pumpWidget(

@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'application/backend_providers.dart';
 import 'application/preferences_providers.dart';
 import 'config.dart';
+import 'data/web/launch_signal.dart';
 import 'data/auth/session_store.dart';
 import 'presentation/app.dart';
 import 'presentation/launch_hold.dart';
@@ -21,7 +22,7 @@ Future<void> main() async {
 
   // The splash stays up while the first screen reads what is saved, so a launch
   // is one wait that ends on real content.
-  LaunchHold.begin();
+  LaunchHold.begin(onShown: announceLaunchShown);
 
   // google_fonts falls back to downloading a face it cannot find in the bundle.
   GoogleFonts.config.allowRuntimeFetching = false;

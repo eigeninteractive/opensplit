@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:opensplit/presentation/theme.dart';
 
 /// Relative luminance, per WCAG 2.1.
@@ -79,6 +80,36 @@ void main() {
 
   group('the web splash', () {
     test('uses the theme\'s own colours', _splashMatchesTheme);
+
+    test('draws the mark the size Android 12+ draws it', () {
+      // Android shows assets/splash/splash-icon.png as a 288dp icon; the mark
+      // is whatever share of that image is not transparent.
+      final png = img.decodePng(
+        File('assets/splash/splash-icon.png').readAsBytesSync(),
+      )!;
+      var left = png.width;
+      var right = 0;
+      for (final pixel in png) {
+        if (pixel.a > 0) {
+          left = math.min(left, pixel.x);
+          right = math.max(right, pixel.x);
+        }
+      }
+      final androidRing = (right - left + 1) / png.width * 288;
+
+      // The web draws the same mark as SVG: a ring 40.5 units across in a
+      // 48-unit viewBox, in a box the stylesheet sizes.
+      final css = File('web/index.html').readAsStringSync();
+      final box = RegExp(r'#splash \.mark \{\s*width: (\d+)px').firstMatch(css);
+      expect(box, isNotNull, reason: 'no #splash .mark width in index.html');
+      final webRing = int.parse(box!.group(1)!) * 40.5 / 48;
+
+      expect(
+        webRing,
+        closeTo(androidRing, 1),
+        reason: 'the web splash mark must match Android\'s (${androidRing}dp)',
+      );
+    });
 
     test('paints its launch background in the theme\'s surface', () {
       final surface = buildTheme(Brightness.light).colorScheme.surface;

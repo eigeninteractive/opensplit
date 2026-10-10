@@ -94,9 +94,13 @@
       justify-content: center;
       background: var(--surface);
     }
+    /* The ring is 160px across, the size Android 12+ draws it from
+     * assets/splash/splash-icon.png (a 288dp icon, the mark 640/1152 of it).
+     * The ring spans 40.5 of the viewBox's 48, so the box is 160 * 48 / 40.5.
+     * Pinned to the Android asset by test/presentation/theme_test.dart. */
     #splash .mark {
-      width: 72px;
-      height: 72px;
+      width: 190px;
+      height: 190px;
       color: var(--primary);
     }
     #splash.done {
@@ -127,10 +131,10 @@
     </noscript>
 
     <script>
-    // Flutter fires this once it has actually painted, so the swap happens
-    // when there is something real underneath rather than on a timer that
-    // guesses.
-    window.addEventListener("flutter-first-frame", () => {
+    // Sent by the app (lib/data/web/launch_signal_web.dart) once a screen with
+    // real data is drawn. Not Flutter's flutter-first-frame, which fires as
+    // soon as the first frame is built, even while the app holds it back.
+    window.addEventListener("opensplit-launch-shown", () => {
       var splash = document.getElementById("splash");
       if (!splash) return;
       splash.classList.add("done");

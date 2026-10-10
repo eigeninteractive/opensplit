@@ -20,20 +20,28 @@ abstract final class LaunchHold {
   static int _placeholders = 0;
   static bool _holding = false;
   static Timer? _limit;
+  static VoidCallback? _onShown;
 
   /// Whether the first frame is still being held back.
   static bool get isHolding => _holding;
 
   /// Defers the first frame. Call once, before `runApp`.
   ///
+  /// [onShown] runs once the released frame has been drawn, for a launch
+  /// screen the platform does not take down by itself.
+  ///
   /// The [limit] is not a tuning knob. It is there so that a local query that
   /// never answers shows the app, with its navigation and settings, instead of
   /// a splash that cannot be told apart from a hang. It is longer than SQLite's
   /// own five-second busy timeout, so a locked database reports its own error
   /// first.
-  static void begin({Duration limit = const Duration(seconds: 10)}) {
+  static void begin({
+    Duration limit = const Duration(seconds: 10),
+    VoidCallback? onShown,
+  }) {
     if (_holding) return;
     _holding = true;
+    _onShown = onShown;
     WidgetsBinding.instance.deferFirstFrame();
     _limit = Timer(limit, _release);
     _checkAfterNextFrame(settled: false);
@@ -59,11 +67,19 @@ abstract final class LaunchHold {
     _limit?.cancel();
     _limit = null;
     WidgetsBinding.instance.allowFirstFrame();
+    final onShown = _onShown;
+    _onShown = null;
+    if (onShown != null) {
+      SchedulerBinding.instance
+        ..addPostFrameCallback((_) => onShown())
+        ..scheduleFrame();
+    }
   }
 
   /// Forgets any hold, for tests that begin one.
   @visibleForTesting
   static void reset() {
+    _onShown = null;
     _release();
     _placeholders = 0;
   }
