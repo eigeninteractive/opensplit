@@ -73,9 +73,8 @@ GoRouter buildRouter({
 }) => GoRouter(
   initialLocation: '/',
   refreshListenable: refresh,
-  errorBuilder: _selectable(
-    (context, state) => NotFoundScreen(location: state.uri.toString()),
-  ),
+  errorBuilder: (context, state) =>
+      NotFoundScreen(location: state.uri.toString()),
 
   /// Nothing above the welcome screen works without a session.
   redirect: (context, state) =>
@@ -92,120 +91,94 @@ GoRouter buildRouter({
     GoRoute(
       path: '/welcome',
       pageBuilder: (context, state) =>
-          const NoTransitionPage(child: SelectionArea(child: WelcomeScreen())),
+          const NoTransitionPage(child: WelcomeScreen()),
     ),
     // The link a friend sends.
     GoRoute(
       path: '/join/:token',
-      builder: _selectable(
-        (context, state) => JoinScreen(token: state.pathParameters['token']!),
-      ),
+      builder: (context, state) =>
+          JoinScreen(token: state.pathParameters['token']!),
     ),
     GoRoute(
       path: '/archived',
-      builder: _selectable((context, state) => const ArchivedGroupsScreen()),
+      builder: (context, state) => const ArchivedGroupsScreen(),
     ),
     // Above the shell rather than inside Settings' branch, so it arrives
     // with a back arrow instead of a menu button -- it is a screen reached
     // from a destination, not a destination.
-    GoRoute(
-      path: '/about',
-      builder: _selectable((context, state) => const AboutScreen()),
-    ),
+    GoRoute(path: '/about', builder: (context, state) => const AboutScreen()),
     // Reached from the Account destination, above the shell for the same
     // reason as About.
     GoRoute(
       path: '/account/edit',
-      builder: _selectable(
-        (context, state) => EditProfileScreen(
-          focus:
-              ProfileField.values
-                  .asNameMap()[state.uri.queryParameters['field']] ??
-              ProfileField.name,
-        ),
+      builder: (context, state) => EditProfileScreen(
+        focus:
+            ProfileField.values
+                .asNameMap()[state.uri.queryParameters['field']] ??
+            ProfileField.name,
       ),
     ),
     GoRoute(
       path: '/account/save',
-      builder: _selectable((context, state) => const SaveAccountScreen()),
+      builder: (context, state) => const SaveAccountScreen(),
     ),
     GoRoute(
       path: '/account/picture',
-      builder: _selectable(
-        (context, state) => const AvatarPickerScreen.profile(),
-      ),
+      builder: (context, state) => const AvatarPickerScreen.profile(),
     ),
     GoRoute(
       path: '/g/:groupId',
-      builder: _selectable(
-        (context, state) =>
-            GroupDetailScreen(groupId: state.pathParameters['groupId']!),
-      ),
+      builder: (context, state) =>
+          GroupDetailScreen(groupId: state.pathParameters['groupId']!),
       routes: [
         GoRoute(
           path: 'add',
-          builder: _selectable(
-            (context, state) =>
-                EntryEditorScreen(groupId: state.pathParameters['groupId']!),
-          ),
+          builder: (context, state) =>
+              EntryEditorScreen(groupId: state.pathParameters['groupId']!),
         ),
         GoRoute(
           path: 'activity',
-          builder: _selectable(
-            (context, state) =>
-                ActivityScreen(groupId: state.pathParameters['groupId']!),
-          ),
+          builder: (context, state) =>
+              ActivityScreen(groupId: state.pathParameters['groupId']!),
         ),
         GoRoute(
           path: 'insights',
-          builder: _selectable(
-            (context, state) =>
-                InsightsScreen(groupId: state.pathParameters['groupId']!),
-          ),
+          builder: (context, state) =>
+              InsightsScreen(groupId: state.pathParameters['groupId']!),
         ),
         GoRoute(
           path: 'settings',
-          builder: _selectable(
-            (context, state) =>
-                GroupSettingsScreen(groupId: state.pathParameters['groupId']!),
-          ),
+          builder: (context, state) =>
+              GroupSettingsScreen(groupId: state.pathParameters['groupId']!),
         ),
         GoRoute(
           path: 'members',
-          builder: _selectable(
-            (context, state) =>
-                MembersScreen(groupId: state.pathParameters['groupId']!),
-          ),
+          builder: (context, state) =>
+              MembersScreen(groupId: state.pathParameters['groupId']!),
         ),
         GoRoute(
           path: 'picture',
-          builder: _selectable(
-            (context, state) => AvatarPickerScreen.group(
-              groupId: state.pathParameters['groupId']!,
-            ),
+          builder: (context, state) => AvatarPickerScreen.group(
+            groupId: state.pathParameters['groupId']!,
           ),
         ),
         GoRoute(
           path: 'settle',
-          builder: _selectable(
-            (context, state) => SettleUpScreen(
-              groupId: state.pathParameters['groupId']!,
-              fromMemberId: state.uri.queryParameters['from'],
-              toMemberId: state.uri.queryParameters['to'],
-              amountMinor: int.tryParse(
-                state.uri.queryParameters['amount'] ?? '',
-              ),
-              currency: state.uri.queryParameters['currency'],
+          builder: (context, state) => SettleUpScreen(
+            groupId: state.pathParameters['groupId']!,
+            fromMemberId: state.uri.queryParameters['from'],
+            toMemberId: state.uri.queryParameters['to'],
+            amountMinor: int.tryParse(
+              state.uri.queryParameters['amount'] ?? '',
             ),
+            currency: state.uri.queryParameters['currency'],
           ),
         ),
         GoRoute(
           path: 'e/:entryId',
-          builder: _selectable(
-            (context, state) => EntryEditorScreen(
-              groupId: state.pathParameters['groupId']!,
-              entryId: state.pathParameters['entryId'],
-            ),
+          builder: (context, state) => EntryEditorScreen(
+            groupId: state.pathParameters['groupId']!,
+            entryId: state.pathParameters['entryId'],
           ),
         ),
       ],
@@ -224,7 +197,7 @@ GoRouter buildRouter({
           routes: [
             GoRoute(
               path: '/',
-              builder: _selectable((context, state) => const GroupListScreen()),
+              builder: (context, state) => const GroupListScreen(),
             ),
           ],
         ),
@@ -233,7 +206,7 @@ GoRouter buildRouter({
           routes: [
             GoRoute(
               path: '/account',
-              builder: _selectable((context, state) => const AccountScreen()),
+              builder: (context, state) => const AccountScreen(),
             ),
           ],
         ),
@@ -241,7 +214,7 @@ GoRouter buildRouter({
           routes: [
             GoRoute(
               path: '/settings',
-              builder: _selectable((context, state) => const SettingsScreen()),
+              builder: (context, state) => const SettingsScreen(),
             ),
           ],
         ),
@@ -249,14 +222,6 @@ GoRouter buildRouter({
     ),
   ],
 );
-
-/// Builds a screen whose text can be selected and copied.
-///
-/// One [SelectionArea] per route, as Flutter recommends: it needs the
-/// route's overlay for its handles and toolbar, and a selection never runs
-/// from a dialog into the page beneath it.
-GoRouterWidgetBuilder _selectable(GoRouterWidgetBuilder build) =>
-    (context, state) => SelectionArea(child: build(context, state));
 
 /// Shows the selected destination, fading through from the last one.
 ///

@@ -259,8 +259,9 @@ void main() {
         expect(find.byType(DatePickerDialog), findsNothing);
         expect(find.byType(EntryEditorScreen), findsOneWidget);
 
-        await tester.tap(find.byType(CloseButton));
-        await tester.pumpAndSettle();
+        // The group is drawn back in under the gesture, and nothing on the
+        // way trips an assertion.
+        await _swipeBack(tester);
         expect(find.byType(EntryEditorScreen), findsNothing);
         expect(find.byType(GroupDetailScreen), findsOneWidget);
 
