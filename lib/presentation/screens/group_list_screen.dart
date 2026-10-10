@@ -7,15 +7,15 @@ import '../../application/ledger_providers.dart';
 import '../../application/sync_providers.dart';
 import '../../data/local/database.dart';
 import '../../data/repositories/drift_group_repository.dart';
-import '../../data/web/boot_hint.dart';
+import '../launch_hold.dart';
 import '../widgets/avatar_view.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/conflicting_edit_banner.dart';
 import '../widgets/create_group_sheet.dart';
 import '../widgets/empty_state.dart';
-import '../widgets/group_skeleton.dart';
 import '../widgets/group_standing.dart';
 import '../widgets/link_account_prompt.dart';
+import '../widgets/offline_indicator.dart';
 import '../widgets/page_body.dart';
 import '../widgets/pull_to_sync.dart';
 import '../widgets/segmented_list.dart';
@@ -34,15 +34,6 @@ class GroupListScreen extends ConsumerWidget {
     // where.
     final source = groupListingsProvider;
 
-    // Leaves a note for the next cold start, so the web loader knows whether to
-    // draw group cards or just the chrome.
-    ref.listen(source, (_, next) {
-      final loaded = next.value;
-      if (loaded != null) {
-        recordHasGroups(loaded.any((listing) => listing.isCurrent));
-      }
-    });
-
     final groupsAsync = ref.watch(source);
     final all = groupsAsync.value ?? const <GroupListing>[];
     final groups = [
@@ -53,7 +44,15 @@ class GroupListScreen extends ConsumerWidget {
 
     return DestinationScaffold(
       titleWidget: const BrandLockup(),
-      actions: [if (kIsWeb) const SyncRefreshButton.everything()],
+      actions: [
+        const OfflineIndicator(),
+        if (kIsWeb) const SyncRefreshButton.everything(),
+      ],
+      // The empty state is shown at once rather than held back until the
+      // server confirms it, so an empty list says when it may yet fill.
+      bottom: groups.isEmpty
+          ? const InitialSyncProgress(label: 'Checking for your groups')
+          : null,
       // Disabled until the device has learned what a currency is, which is only
       // ever true during a brand-new install's first sweep or on a rebuilt
       // device with no connection.
@@ -79,7 +78,9 @@ class GroupListScreen extends ConsumerWidget {
           groups: groups,
           archivedCount: archived,
         ),
-        _ => const [GroupListSkeleton()],
+        // Nothing, rather than placeholder cards: at launch the splash covers
+        // this, and afterwards a local read is too quick to be worth drawing.
+        _ => const [LaunchPlaceholder(child: SliverToBoxAdapter())],
       },
     );
   }
@@ -102,12 +103,12 @@ abstract final class _GroupList {
           const UnsyncedChangesBanner(padding: _noticeGap),
           const ConflictingEditBanner(padding: _noticeGap),
           const LinkAccountPrompt(padding: _noticeGap),
-          if (groups.isNotEmpty) const SyncStatusBanner(padding: _noticeGap),
+          const SyncStatusBanner(padding: _noticeGap),
         ],
       ),
     ),
     if (groups.isEmpty)
-      const SliverToBoxAdapter(child: InitialSyncGate(child: _EmptyState()))
+      const SliverToBoxAdapter(child: _EmptyState())
     else
       SliverPadding(
         padding: const EdgeInsets.only(top: 8),
@@ -175,7 +176,7 @@ class _GroupTile extends ConsumerWidget {
       title: Text(group.name, overflow: TextOverflow.ellipsis),
       titleTextStyle: Theme.of(context).textTheme.titleMedium,
       subtitle: ledger == null
-          ? const SizedBox(height: 20)
+          ? const LaunchPlaceholder(child: SizedBox(height: 20))
           : GroupStanding(ledger: ledger, currencies: currencies),
     );
   }

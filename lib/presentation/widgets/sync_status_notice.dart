@@ -3,20 +3,22 @@ import 'package:flutter/widget_previews.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/sync_providers.dart';
+import '../launch_hold.dart';
 
-/// Indicates that the local database has not produced its first result yet.
+/// Stands in, invisibly, for saved content the local database has not
+/// returned yet.
+///
+/// At launch the splash covers it (see [LaunchHold]); after launch a local
+/// read finishes before a spinner would be worth drawing.
 class SavedDataLoading extends StatelessWidget {
   const SavedDataLoading({super.key, required this.label});
 
-  /// The saved content being opened, distinct from a network refresh.
+  /// The saved content being opened, for screen readers.
   final String label;
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(32),
-      child: CircularProgressIndicator(semanticsLabel: label),
-    ),
+  Widget build(BuildContext context) => LaunchPlaceholder(
+    child: Semantics(label: label, child: const SizedBox.expand()),
   );
 }
 
@@ -48,7 +50,39 @@ class InitialSyncGate extends ConsumerWidget {
   }
 }
 
+/// A thin bar under the app bar while this session's first full refresh runs.
+///
+/// Saved data is shown as soon as the device has read it; this only says that
+/// more may still arrive from the server. Later refreshes stay quiet, so a
+/// write or a return to the foreground does not flash it. The bar's height is
+/// reserved even while idle, so content does not shift when it disappears.
+class InitialSyncProgress extends ConsumerWidget
+    implements PreferredSizeWidget {
+  const InitialSyncProgress({super.key, required this.label});
+
+  /// What is being checked, for screen readers.
+  final String label;
+
+  @override
+  Size get preferredSize => const Size.fromHeight(4);
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final status = ref.watch(syncControllerProvider);
+    final checking =
+        status.enabled && status.isSyncing && !status.hasCompletedFullSync;
+    return SizedBox.fromSize(
+      size: preferredSize,
+      child: checking ? LinearProgressIndicator(semanticsLabel: label) : null,
+    );
+  }
+}
+
 /// Keeps saved data visible while explaining a failed refresh or upload.
+///
+/// Says nothing while offline: for an app that works offline that is a normal
+/// state, not a problem to act on, and [OfflineIndicator] in the app bar
+/// already says it.
 class SyncStatusBanner extends ConsumerWidget {
   const SyncStatusBanner({super.key, this.padding = EdgeInsets.zero});
 
@@ -58,10 +92,11 @@ class SyncStatusBanner extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final status = ref.watch(syncControllerProvider);
     final refreshFailed = status.error != null;
-    if (!status.enabled ||
-        (!refreshFailed && status.lastReport?.nextPushAt == null)) {
+    final changesWaiting = status.lastReport?.nextPushAt != null;
+    if (!status.enabled || (!refreshFailed && !changesWaiting)) {
       return const SizedBox.shrink();
     }
+    if (status.isOffline) return const SizedBox.shrink();
     return Padding(
       padding: padding,
       child: _SyncProblem(
@@ -135,10 +170,4 @@ Widget syncFailurePreview() => MaterialApp(
       onRetry: () {},
     ),
   ),
-);
-
-/// Previews the local database loading state before any saved rows are ready.
-@Preview(name: 'Opening saved groups', group: 'Sync', size: Size(360, 240))
-Widget savedDataLoadingPreview() => const MaterialApp(
-  home: Scaffold(body: SavedDataLoading(label: 'Loading saved groups')),
 );

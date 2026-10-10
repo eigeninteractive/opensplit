@@ -198,7 +198,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 10));
     }
     expect(container.read(syncControllerProvider).isSyncing, isTrue);
-    expect(find.text('No groups yet'), findsNothing);
+    expect(find.bySemanticsLabel('Checking for your groups'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     auth.currentUser = _otherAccount;

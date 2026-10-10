@@ -16,9 +16,7 @@
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
         <item name="android:windowSplashScreenBackground">#FCF8FF</item>
         <item name="android:windowSplashScreenAnimatedIcon">@drawable/android12splash</item>
-        <item name="android:windowSplashScreenIconBackgroundColor">#E3DFFF</item>
     </style>
-
     <!-- Same as the pre-31 NormalTheme, and stated again because this file
          shadows it on Android 12 and up. The generator leaves
          ?android:colorBackground here, which is the platform's white and is

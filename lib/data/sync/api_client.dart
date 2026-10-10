@@ -28,7 +28,12 @@ api.OpensplitApi buildApiClient({
 
 /// A request the server refused, or that never got an answer.
 class ApiFailure implements Exception {
-  const ApiFailure(this.message, {required this.retry, this.code});
+  const ApiFailure(
+    this.message, {
+    required this.retry,
+    this.code,
+    this.unreachable = false,
+  });
 
   /// Reads the `{error: {code, message, retry}}` envelope off a failed request.
   factory ApiFailure.from(DioException error) {
@@ -54,6 +59,7 @@ class ApiFailure implements Exception {
       retry: status == null || status >= 500
           ? api.Retry.transient
           : api.Retry.permanent,
+      unreachable: _neverAnswered(error),
     );
   }
 
@@ -62,6 +68,10 @@ class ApiFailure implements Exception {
 
   /// Null when no server answered in the expected shape.
   final api.ErrorCode? code;
+
+  /// Whether the request never reached a server that answered: the device is
+  /// offline, or the server is out of reach from where it is.
+  final bool unreachable;
 
   static api.ErrorError? _decode(Map<String, dynamic> body) {
     try {
@@ -99,3 +109,17 @@ Future<void> send(Future<Response<void>> request) async {
     throw ApiFailure.from(error);
   }
 }
+
+/// Whether [error] means no server answered at all, as opposed to a server
+/// that answered and refused.
+///
+/// Judged by the request itself rather than by the device's network
+/// interfaces, which report a captive portal or a dead Wi-Fi as connected.
+bool isUnreachable(Object? error) => switch (error) {
+  ApiFailure(:final unreachable) => unreachable,
+  DioException() => _neverAnswered(error),
+  _ => false,
+};
+
+bool _neverAnswered(DioException error) =>
+    error.response == null && error.type != DioExceptionType.cancel;

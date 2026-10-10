@@ -11,10 +11,13 @@ import 'package:opensplit/application/sync_coordinator.dart';
 import 'package:opensplit/application/sync_providers.dart';
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';
+import 'package:dio/dio.dart'
+    show DioException, DioExceptionType, RequestOptions;
 import 'package:opensplit/data/sync/sync_engine.dart';
 import 'package:opensplit/presentation/screens/group_detail_screen.dart';
 import 'package:opensplit/presentation/screens/group_list_screen.dart';
-import 'package:opensplit/presentation/widgets/group_skeleton.dart';
+import 'package:opensplit/presentation/launch_hold.dart';
+import 'package:opensplit/presentation/widgets/offline_indicator.dart';
 import 'package:opensplit/presentation/widgets/pull_to_sync.dart';
 import 'package:opensplit/presentation/widgets/sync_refresh_button.dart';
 import 'package:opensplit/presentation/widgets/sync_status_notice.dart';
@@ -173,7 +176,7 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('opening saved groups has a loading state, not a blank body', (
+  testWidgets('opening saved groups holds the launch, not a placeholder', (
     tester,
   ) async {
     final groups = StreamController<List<Group>>();
@@ -184,16 +187,101 @@ void main() {
       const GroupListScreen(),
       groups: groups.stream,
     );
-    // The skeleton, not a spinner and not a blank body: the point of the
-    // assertion is that something group-shaped is on screen before the database
-    // has answered, which is what the web loader has already been drawing for
-    // the whole of the engine download.
-    expect(find.byType(GroupListSkeleton), findsOneWidget);
+    // Nothing group-shaped is drawn while the database has not answered: the
+    // splash covers that wait, and this marker is what keeps it up.
+    expect(find.byType(LaunchPlaceholder, skipOffstage: false), findsOneWidget);
     expect(find.text('No groups yet'), findsNothing);
     groups.add([_group]);
     await tester.pumpAndSettle();
     expect(find.text(_group.name), findsOneWidget);
-    expect(find.byType(GroupListSkeleton), findsNothing);
+    expect(find.byType(LaunchPlaceholder, skipOffstage: false), findsNothing);
+  });
+
+  testWidgets('an empty list shows at once while the first refresh runs', (
+    tester,
+  ) async {
+    final sync = _TestSync(initial: const SyncStatus(isSyncing: true));
+    await _mount(
+      tester,
+      sync,
+      const GroupListScreen(),
+      groups: Stream.value(const []),
+    );
+    await tester.pump();
+    expect(find.text('No groups yet'), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+
+    sync.finish();
+    await tester.pumpAndSettle();
+    expect(find.text('No groups yet'), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+  });
+
+  testWidgets('an empty list keeps its empty state through a failed refresh', (
+    tester,
+  ) async {
+    final sync = _TestSync(initial: const SyncStatus(isSyncing: true));
+    await _mount(
+      tester,
+      sync,
+      const GroupListScreen(),
+      groups: Stream.value(const []),
+    );
+    await tester.pump();
+    sync.show(
+      SyncStatus(
+        lastReport: SyncReport(
+          pushed: 0,
+          pulled: 0,
+          failed: 0,
+          error: StateError('connection unavailable'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('No groups yet'), findsOneWidget);
+    expect(find.text('Could not refresh'), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+  });
+
+  testWidgets('offline is an app bar icon, not a problem card', (tester) async {
+    final sync = _TestSync();
+    await _mount(tester, sync, const GroupListScreen());
+    await tester.pumpAndSettle();
+
+    sync.show(
+      SyncStatus(
+        hasCompletedFullSync: true,
+        lastReport: SyncReport(
+          pushed: 0,
+          pulled: 0,
+          failed: 0,
+          error: DioException(
+            requestOptions: RequestOptions(path: '/api/sync'),
+            type: DioExceptionType.connectionError,
+          ),
+          nextPushAt: DateTime.utc(2026, 10, 10),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(_group.name), findsOneWidget);
+    expect(find.byType(OfflineIndicator), findsOneWidget);
+    expect(find.byIcon(Icons.cloud_off_outlined), findsOneWidget);
+    expect(
+      find.byTooltip(
+        'Offline. Your changes are saved on this device and will sync when '
+        'you are back online.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Could not refresh'), findsNothing);
+    expect(find.text('Changes waiting to sync'), findsNothing);
+    expect(find.text('Try again'), findsNothing);
+
+    sync.finish();
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.cloud_off_outlined), findsNothing);
   });
 
   testWidgets('the group list keeps its saved rows through refresh and error', (

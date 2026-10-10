@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:go_router/go_router.dart';
+import 'package:animations/animations.dart';
 
 import '../l10n/app_localizations.dart';
 import 'navigation.dart';
@@ -78,143 +79,142 @@ GoRouter buildRouter({
   /// Nothing above the welcome screen works without a session.
   redirect: (context, state) =>
       redirectAppRoute(state.uri, signedIn: isSignedIn()),
+  // Every screen that can be pushed is a page on the one root navigator,
+  // which is also where dialogs, date and time pickers and most sheets open.
+  // A second navigator around these, as a ShellRoute would add, makes two
+  // stacks with two tops: the system back gesture then pops the page that is
+  // top of its own stack while a picker sits over it on the other. The
+  // destinations' branches below are the only nested navigators, and each
+  // holds just its destination, so there is never anything in them to pop.
   routes: [
-    // One shell around everything, for one reason: SelectionArea.
-    ShellRoute(
-      builder: (context, state, child) => SelectionArea(child: child),
+    // No transition, in both directions.
+    GoRoute(
+      path: '/welcome',
+      pageBuilder: (context, state) =>
+          const NoTransitionPage(child: WelcomeScreen()),
+    ),
+    // The link a friend sends.
+    GoRoute(
+      path: '/join/:token',
+      builder: (context, state) =>
+          JoinScreen(token: state.pathParameters['token']!),
+    ),
+    GoRoute(
+      path: '/archived',
+      builder: (context, state) => const ArchivedGroupsScreen(),
+    ),
+    // Above the shell rather than inside Settings' branch, so it arrives
+    // with a back arrow instead of a menu button -- it is a screen reached
+    // from a destination, not a destination.
+    GoRoute(path: '/about', builder: (context, state) => const AboutScreen()),
+    // Reached from the Account destination, above the shell for the same
+    // reason as About.
+    GoRoute(
+      path: '/account/edit',
+      builder: (context, state) => EditProfileScreen(
+        focus:
+            ProfileField.values
+                .asNameMap()[state.uri.queryParameters['field']] ??
+            ProfileField.name,
+      ),
+    ),
+    GoRoute(
+      path: '/account/save',
+      builder: (context, state) => const SaveAccountScreen(),
+    ),
+    GoRoute(
+      path: '/account/picture',
+      builder: (context, state) => const AvatarPickerScreen.profile(),
+    ),
+    GoRoute(
+      path: '/g/:groupId',
+      builder: (context, state) =>
+          GroupDetailScreen(groupId: state.pathParameters['groupId']!),
       routes: [
-        // No transition, in both directions.
         GoRoute(
-          path: '/welcome',
-          pageBuilder: (context, state) =>
-              const NoTransitionPage(child: WelcomeScreen()),
-        ),
-        // The link a friend sends.
-        GoRoute(
-          path: '/join/:token',
+          path: 'add',
           builder: (context, state) =>
-              JoinScreen(token: state.pathParameters['token']!),
+              EntryEditorScreen(groupId: state.pathParameters['groupId']!),
         ),
         GoRoute(
-          path: '/archived',
-          builder: (context, state) => const ArchivedGroupsScreen(),
+          path: 'activity',
+          builder: (context, state) =>
+              ActivityScreen(groupId: state.pathParameters['groupId']!),
         ),
-        // Above the shell rather than inside Settings' branch, so it arrives
-        // with a back arrow instead of a menu button -- it is a screen reached
-        // from a destination, not a destination.
         GoRoute(
-          path: '/about',
-          builder: (context, state) => const AboutScreen(),
+          path: 'insights',
+          builder: (context, state) =>
+              InsightsScreen(groupId: state.pathParameters['groupId']!),
         ),
-        // Reached from the Account destination, above the shell for the same
-        // reason as About.
         GoRoute(
-          path: '/account/edit',
-          builder: (context, state) => EditProfileScreen(
-            focus:
-                ProfileField.values
-                    .asNameMap()[state.uri.queryParameters['field']] ??
-                ProfileField.name,
+          path: 'settings',
+          builder: (context, state) =>
+              GroupSettingsScreen(groupId: state.pathParameters['groupId']!),
+        ),
+        GoRoute(
+          path: 'members',
+          builder: (context, state) =>
+              MembersScreen(groupId: state.pathParameters['groupId']!),
+        ),
+        GoRoute(
+          path: 'picture',
+          builder: (context, state) => AvatarPickerScreen.group(
+            groupId: state.pathParameters['groupId']!,
           ),
         ),
         GoRoute(
-          path: '/account/save',
-          builder: (context, state) => const SaveAccountScreen(),
+          path: 'settle',
+          builder: (context, state) => SettleUpScreen(
+            groupId: state.pathParameters['groupId']!,
+            fromMemberId: state.uri.queryParameters['from'],
+            toMemberId: state.uri.queryParameters['to'],
+            amountMinor: int.tryParse(
+              state.uri.queryParameters['amount'] ?? '',
+            ),
+            currency: state.uri.queryParameters['currency'],
+          ),
         ),
         GoRoute(
-          path: '/account/picture',
-          builder: (context, state) => const AvatarPickerScreen.profile(),
+          path: 'e/:entryId',
+          builder: (context, state) => EntryEditorScreen(
+            groupId: state.pathParameters['groupId']!,
+            entryId: state.pathParameters['entryId'],
+          ),
         ),
-        GoRoute(
-          path: '/g/:groupId',
-          builder: (context, state) =>
-              GroupDetailScreen(groupId: state.pathParameters['groupId']!),
+      ],
+    ),
+    // The other half of that, and the half that actually does the work: an
+    // outgoing page is only removed once the *incoming* one has finished
+    // arriving, so silencing the welcome screen alone changed nothing while
+    // the destinations still animated in over it.
+    StatefulShellRoute(
+      pageBuilder: (context, state, shell) =>
+          NoTransitionPage(child: AdaptiveNavigation(shell: shell)),
+      navigatorContainerBuilder: (context, shell, children) =>
+          _FadeThroughBranches(index: shell.currentIndex, children: children),
+      branches: [
+        StatefulShellBranch(
           routes: [
             GoRoute(
-              path: 'add',
-              builder: (context, state) =>
-                  EntryEditorScreen(groupId: state.pathParameters['groupId']!),
-            ),
-            GoRoute(
-              path: 'activity',
-              builder: (context, state) =>
-                  ActivityScreen(groupId: state.pathParameters['groupId']!),
-            ),
-            GoRoute(
-              path: 'insights',
-              builder: (context, state) =>
-                  InsightsScreen(groupId: state.pathParameters['groupId']!),
-            ),
-            GoRoute(
-              path: 'settings',
-              builder: (context, state) => GroupSettingsScreen(
-                groupId: state.pathParameters['groupId']!,
-              ),
-            ),
-            GoRoute(
-              path: 'members',
-              builder: (context, state) =>
-                  MembersScreen(groupId: state.pathParameters['groupId']!),
-            ),
-            GoRoute(
-              path: 'picture',
-              builder: (context, state) => AvatarPickerScreen.group(
-                groupId: state.pathParameters['groupId']!,
-              ),
-            ),
-            GoRoute(
-              path: 'settle',
-              builder: (context, state) => SettleUpScreen(
-                groupId: state.pathParameters['groupId']!,
-                fromMemberId: state.uri.queryParameters['from'],
-                toMemberId: state.uri.queryParameters['to'],
-                amountMinor: int.tryParse(
-                  state.uri.queryParameters['amount'] ?? '',
-                ),
-                currency: state.uri.queryParameters['currency'],
-              ),
-            ),
-            GoRoute(
-              path: 'e/:entryId',
-              builder: (context, state) => EntryEditorScreen(
-                groupId: state.pathParameters['groupId']!,
-                entryId: state.pathParameters['entryId'],
-              ),
+              path: '/',
+              builder: (context, state) => const GroupListScreen(),
             ),
           ],
         ),
-        // The other half of that, and the half that actually does the work: an
-        // outgoing page is only removed once the *incoming* one has finished
-        // arriving, so silencing the welcome screen alone changed nothing while
-        // the destinations still animated in over it.
-        StatefulShellRoute.indexedStack(
-          pageBuilder: (context, state, shell) =>
-              NoTransitionPage(child: AdaptiveNavigation(shell: shell)),
-          branches: [
-            StatefulShellBranch(
-              routes: [
-                GoRoute(
-                  path: '/',
-                  builder: (context, state) => const GroupListScreen(),
-                ),
-              ],
+        // A top-level destination, not a detail reached from Settings.
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/account',
+              builder: (context, state) => const AccountScreen(),
             ),
-            // A top-level destination, not a detail reached from Settings.
-            StatefulShellBranch(
-              routes: [
-                GoRoute(
-                  path: '/account',
-                  builder: (context, state) => const AccountScreen(),
-                ),
-              ],
-            ),
-            StatefulShellBranch(
-              routes: [
-                GoRoute(
-                  path: '/settings',
-                  builder: (context, state) => const SettingsScreen(),
-                ),
-              ],
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/settings',
+              builder: (context, state) => const SettingsScreen(),
             ),
           ],
         ),
@@ -222,6 +222,110 @@ GoRouter buildRouter({
     ),
   ],
 );
+
+/// Shows the selected destination, fading through from the last one.
+///
+/// Material's pattern for moving between top-level destinations, which are not
+/// related to each other in the way a pushed screen is related to the one
+/// below it. Every branch stays built, as in an `IndexedStack`, so each keeps
+/// its scroll position and stack.
+class _FadeThroughBranches extends StatefulWidget {
+  const _FadeThroughBranches({required this.index, required this.children});
+
+  final int index;
+  final List<Widget> children;
+
+  @override
+  State<_FadeThroughBranches> createState() => _FadeThroughBranchesState();
+}
+
+class _FadeThroughBranchesState extends State<_FadeThroughBranches>
+    with SingleTickerProviderStateMixin {
+  late final _controller =
+      AnimationController(vsync: this, duration: Durations.medium2, value: 1)
+        ..addStatusListener((status) {
+          if (status.isCompleted) setState(() => _leaving = null);
+        });
+
+  /// The destination fading out, while it does.
+  int? _leaving;
+
+  @override
+  void didUpdateWidget(_FadeThroughBranches oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.index == oldWidget.index) return;
+    if (MediaQuery.disableAnimationsOf(context)) return;
+    _leaving = oldWidget.index;
+    _controller.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => ColoredBox(
+    // Behind both while neither is fully drawn. A phone has nothing else
+    // under the destinations, so without it the midpoint would be black.
+    color: Theme.of(context).scaffoldBackgroundColor,
+    child: Stack(
+      fit: StackFit.expand,
+      children: [
+        for (final (index, child) in widget.children.indexed)
+          _Branch(
+            selected: index == widget.index,
+            leaving: index == _leaving,
+            fade: _controller,
+            child: child,
+          ),
+      ],
+    ),
+  );
+}
+
+/// One destination: shown, fading out, or kept offstage.
+///
+/// The same widgets in every state, so starting or ending a fade never
+/// rebuilds a branch's navigator from scratch.
+class _Branch extends StatelessWidget {
+  const _Branch({
+    required this.selected,
+    required this.leaving,
+    required this.fade,
+    required this.child,
+  });
+
+  final bool selected;
+  final bool leaving;
+
+  /// Runs forward over a switch: this branch fades in on it when [selected],
+  /// and out on it when [leaving].
+  final Animation<double> fade;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Offstage(
+    offstage: !selected && !leaving,
+    child: TickerMode(
+      enabled: selected,
+      child: IgnorePointer(
+        ignoring: !selected,
+        child: ExcludeSemantics(
+          excluding: !selected,
+          child: FadeThroughTransition(
+            animation: selected ? fade : kAlwaysCompleteAnimation,
+            secondaryAnimation: leaving ? fade : kAlwaysDismissedAnimation,
+            // The one fill is painted behind every branch, by the parent.
+            fillColor: Colors.transparent,
+            child: child,
+          ),
+        ),
+      ),
+    ),
+  );
+}
 
 /// The app's only navigation surface, in whichever form the window has room
 /// for.
@@ -234,7 +338,7 @@ class AdaptiveNavigation extends StatelessWidget {
   /// Material 3's own default destination width, and the rail's width outright:
   /// a destination is padded 8dp either side *within* this, and only pushes
   /// past it if a label needs more. None of the three labels is anywhere near,
-  /// so the rail is a fixed 80dp and the skeleton can count on it.
+  /// so the rail is a fixed 80dp.
   static const double _railWidth = 80;
 
   final StatefulNavigationShell shell;
@@ -262,10 +366,6 @@ class AdaptiveNavigation extends StatelessWidget {
           NavigationRail(
             selectedIndex: shell.currentIndex,
             labelType: NavigationRailLabelType.all,
-            // Material's own default, stated rather than inherited because the
-            // web loading skeleton draws a rail of exactly this width before
-            // Flutter starts — see the 840px block in web/index.html, and the
-            // test that holds the two numbers together.
             minWidth: _railWidth,
             onDestinationSelected: _select,
             destinations: [

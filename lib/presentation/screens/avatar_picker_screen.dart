@@ -10,6 +10,7 @@ import '../navigation.dart';
 import '../theme.dart';
 import '../widgets/avatar_view.dart';
 import '../widgets/page_body.dart';
+import '../widgets/sync_status_notice.dart';
 
 /// Chooses what stands for you, or for a group: initials, an emoji or an
 /// icon, on a hue.
@@ -50,7 +51,11 @@ class _AvatarPickerScreenState extends ConsumerState<AvatarPickerScreen> {
     }
     final id = ref.watch(currentAccountIdProvider);
     if (id == null) return null;
-    final profile = ref.watch(myProfileProvider).value;
+    // Not until the saved profile has been read: what is shown first becomes
+    // the picture that "unchanged" is measured against.
+    final saved = ref.watch(myProfileProvider);
+    if (!saved.hasValue) return null;
+    final profile = saved.value;
     return (
       avatar: profile?.avatar ?? const InitialsAvatar(),
       name: profile?.displayName ?? '',
@@ -105,7 +110,7 @@ class _AvatarPickerScreenState extends ConsumerState<AvatarPickerScreen> {
       ),
       body: PageBody(
         child: subject == null || chosen == null
-            ? const Center(child: CircularProgressIndicator())
+            ? const SavedDataLoading(label: 'Loading the current picture')
             : _Picker(
                 subject: subject,
                 chosen: chosen,

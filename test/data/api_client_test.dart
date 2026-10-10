@@ -31,6 +31,20 @@ void main() {
       expect(failure.message, 'Something went wrong.');
     });
 
+    test('a request no server answered reads as unreachable', () {
+      final request = RequestOptions(path: '/api/groups/g');
+      final offline = DioException(
+        requestOptions: request,
+        type: DioExceptionType.connectionError,
+      );
+
+      expect(ApiFailure.from(offline).unreachable, isTrue);
+      expect(isUnreachable(ApiFailure.from(offline)), isTrue);
+      expect(isUnreachable(offline), isTrue);
+      expect(isUnreachable(ApiFailure.from(_refusal(500, 'transient'))), false);
+      expect(isUnreachable(StateError('not a request')), isFalse);
+    });
+
     test('a refusal keeps the retry the server gave it', () {
       expect(ApiFailure.from(_refusal(409, 'stale')).retry, api.Retry.stale);
       expect(

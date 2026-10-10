@@ -21,6 +21,7 @@ import '../widgets/empty_state.dart';
 import '../widgets/group_cover.dart';
 import '../widgets/group_pane.dart';
 import '../widgets/group_standing.dart';
+import '../widgets/offline_indicator.dart';
 import '../widgets/page_body.dart';
 import '../widgets/segmented_list.dart';
 import '../widgets/sync_refresh_button.dart';
@@ -145,6 +146,7 @@ class _GroupAppBar extends StatelessWidget {
       leading: BackButton(onPressed: () => goBack(context, '/')),
       title: Text(ledger.group.name),
       actions: [
+        const OfflineIndicator(),
         if (kIsWeb) SyncRefreshButton.group(groupId),
         IconButton(
           tooltip: 'Settle up',
