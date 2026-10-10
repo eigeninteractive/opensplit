@@ -4,7 +4,7 @@ What changed in each version of the app, newest first. The format is
 [Semantic Versioning](https://semver.org/), and the file is kept by
 [cider](https://pub.dev/packages/cider): see "Versions" in docs/runbook.md.
 
-## [Unreleased]
+## [3.0.0] - 2026-10-10
 ### Added
 - On the web, notifications now arrive when OpenSplit isn't open, and tapping one opens the group.
 - On the web, OpenSplit tells you when an update is ready, and restarts into it when you choose.
@@ -37,6 +37,7 @@ What changed in each version of the app, newest first. The format is
 - Moving between Groups, Account and Settings fades from one to the next.
 - The Android launch screen shows the logo without a tile behind it.
 - Text on screen is no longer selectable, as in other apps. Invite links can still be copied.
+- Earlier versions of OpenSplit can no longer sync. Update to this one to keep your groups syncing.
 
 ### Fixed
 - Settling up with somebody and then removing them while offline no longer leaves the removal refused once you are back online.
@@ -73,6 +74,6 @@ What changed in each version of the app, newest first. The format is
 ### Added
 - The first build, to Play internal testing.
 
-[Unreleased]: https://github.com/eigeninteractive/opensplit/compare/v2.0.0...HEAD
+[3.0.0]: https://github.com/eigeninteractive/opensplit/compare/v2.0.0...v3.0.0
 [2.0.0]: https://github.com/eigeninteractive/opensplit/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/eigeninteractive/opensplit/releases/tag/v1.0.0
