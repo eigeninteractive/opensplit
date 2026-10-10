@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:go_router/go_router.dart';
+import 'package:animations/animations.dart';
 
 import '../l10n/app_localizations.dart';
 import 'navigation.dart';
@@ -213,9 +214,11 @@ GoRouter buildRouter({
     // outgoing page is only removed once the *incoming* one has finished
     // arriving, so silencing the welcome screen alone changed nothing while
     // the destinations still animated in over it.
-    StatefulShellRoute.indexedStack(
+    StatefulShellRoute(
       pageBuilder: (context, state, shell) =>
           NoTransitionPage(child: AdaptiveNavigation(shell: shell)),
+      navigatorContainerBuilder: (context, shell, children) =>
+          _FadeThroughBranches(index: shell.currentIndex, children: children),
       branches: [
         StatefulShellBranch(
           routes: [
@@ -254,6 +257,110 @@ GoRouter buildRouter({
 /// from a dialog into the page beneath it.
 GoRouterWidgetBuilder _selectable(GoRouterWidgetBuilder build) =>
     (context, state) => SelectionArea(child: build(context, state));
+
+/// Shows the selected destination, fading through from the last one.
+///
+/// Material's pattern for moving between top-level destinations, which are not
+/// related to each other in the way a pushed screen is related to the one
+/// below it. Every branch stays built, as in an `IndexedStack`, so each keeps
+/// its scroll position and stack.
+class _FadeThroughBranches extends StatefulWidget {
+  const _FadeThroughBranches({required this.index, required this.children});
+
+  final int index;
+  final List<Widget> children;
+
+  @override
+  State<_FadeThroughBranches> createState() => _FadeThroughBranchesState();
+}
+
+class _FadeThroughBranchesState extends State<_FadeThroughBranches>
+    with SingleTickerProviderStateMixin {
+  late final _controller =
+      AnimationController(vsync: this, duration: Durations.medium2, value: 1)
+        ..addStatusListener((status) {
+          if (status.isCompleted) setState(() => _leaving = null);
+        });
+
+  /// The destination fading out, while it does.
+  int? _leaving;
+
+  @override
+  void didUpdateWidget(_FadeThroughBranches oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.index == oldWidget.index) return;
+    if (MediaQuery.disableAnimationsOf(context)) return;
+    _leaving = oldWidget.index;
+    _controller.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => ColoredBox(
+    // Behind both while neither is fully drawn. A phone has nothing else
+    // under the destinations, so without it the midpoint would be black.
+    color: Theme.of(context).scaffoldBackgroundColor,
+    child: Stack(
+      fit: StackFit.expand,
+      children: [
+        for (final (index, child) in widget.children.indexed)
+          _Branch(
+            selected: index == widget.index,
+            leaving: index == _leaving,
+            fade: _controller,
+            child: child,
+          ),
+      ],
+    ),
+  );
+}
+
+/// One destination: shown, fading out, or kept offstage.
+///
+/// The same widgets in every state, so starting or ending a fade never
+/// rebuilds a branch's navigator from scratch.
+class _Branch extends StatelessWidget {
+  const _Branch({
+    required this.selected,
+    required this.leaving,
+    required this.fade,
+    required this.child,
+  });
+
+  final bool selected;
+  final bool leaving;
+
+  /// Runs forward over a switch: this branch fades in on it when [selected],
+  /// and out on it when [leaving].
+  final Animation<double> fade;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Offstage(
+    offstage: !selected && !leaving,
+    child: TickerMode(
+      enabled: selected,
+      child: IgnorePointer(
+        ignoring: !selected,
+        child: ExcludeSemantics(
+          excluding: !selected,
+          child: FadeThroughTransition(
+            animation: selected ? fade : kAlwaysCompleteAnimation,
+            secondaryAnimation: leaving ? fade : kAlwaysDismissedAnimation,
+            // The one fill is painted behind every branch, by the parent.
+            fillColor: Colors.transparent,
+            child: child,
+          ),
+        ),
+      ),
+    ),
+  );
+}
 
 /// The app's only navigation surface, in whichever form the window has room
 /// for.

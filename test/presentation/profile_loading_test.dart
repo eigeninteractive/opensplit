@@ -6,6 +6,8 @@ import 'package:material_ui/material_ui.dart';
 import 'package:opensplit/application/ledger_providers.dart';
 import 'package:opensplit/application/local_providers.dart';
 import 'package:opensplit/data/local/database.dart';
+import 'package:opensplit/application/session_providers.dart';
+import 'package:opensplit/presentation/screens/account_screen.dart';
 import 'package:opensplit/presentation/screens/avatar_picker_screen.dart';
 import 'package:opensplit/presentation/screens/edit_profile_screen.dart';
 import 'package:opensplit/presentation/widgets/sync_status_notice.dart';
@@ -32,6 +34,7 @@ void main() {
         overrides: [
           currentAccountIdProvider.overrideWithValue(_account),
           myProfileProvider.overrideWith((ref) => profile.stream),
+          accountProvider.overrideWith((ref) => Stream.value(null)),
         ],
         child: MaterialApp(home: screen),
       ),
@@ -76,5 +79,20 @@ void main() {
       isNull,
       reason: 'nothing has been changed yet',
     );
+  });
+
+  testWidgets('the account page does not show a saved name as unset', (
+    tester,
+  ) async {
+    final profile = await mount(tester, const AccountScreen());
+    await tester.pump();
+    expect(find.byType(SavedDataLoading), findsOneWidget);
+    expect(find.text('Add the name your groups see'), findsNothing);
+
+    profile.add(_saved);
+    await tester.pump();
+    await tester.pump();
+    expect(find.byType(SavedDataLoading), findsNothing);
+    expect(find.text('Ana Lima'), findsWidgets);
   });
 }

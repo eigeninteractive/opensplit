@@ -10,6 +10,8 @@ import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/presentation/app.dart';
 import 'package:opensplit/presentation/screens/entry_editor_screen.dart';
 import 'package:opensplit/presentation/screens/group_detail_screen.dart';
+import 'package:opensplit/presentation/screens/group_list_screen.dart';
+import 'package:opensplit/presentation/screens/settings_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../harness.dart';
@@ -64,6 +66,16 @@ Future<void> _swipeBack(WidgetTester tester) async {
   await send('commitBackGesture');
   await tester.pumpAndSettle();
 }
+
+/// How visible [screen] is, through every fade above it.
+double _opacityOf(WidgetTester tester, Type screen) => tester
+    .widgetList<FadeTransition>(
+      find.ancestor(
+        of: find.byType(screen, skipOffstage: false),
+        matching: find.byType(FadeTransition),
+      ),
+    )
+    .fold(1, (opacity, fade) => opacity * fade.opacity.value);
 
 /// A group with nothing in it, so there is something to drill into.
 Future<void> _seedGroup(AppDatabase db, {DateTime? archivedAt}) async {
@@ -150,6 +162,47 @@ void main() {
 
       expect(find.text('Flat 4B'), findsOneWidget);
 
+      await _unmount(tester);
+    });
+  });
+
+  group('switching destination', () {
+    testWidgets('fades through, the way Material moves between them', (
+      tester,
+    ) async {
+      await _pumpApp(tester, db);
+      await tester.tap(find.byTooltip('Open navigation menu'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Settings'));
+      await tester.pump();
+
+      // Partway: the list has faded out, and Settings is still fading in.
+      await tester.pump(const Duration(milliseconds: 150));
+      expect(_opacityOf(tester, GroupListScreen), 0);
+      expect(_opacityOf(tester, SettingsScreen), inExclusiveRange(0, 1));
+
+      await tester.pumpAndSettle();
+      expect(_opacityOf(tester, SettingsScreen), 1);
+      expect(find.byType(GroupListScreen), findsNothing);
+      await _unmount(tester);
+    });
+
+    testWidgets('cuts straight there when animations are turned off', (
+      tester,
+    ) async {
+      tester.platformDispatcher.accessibilityFeaturesTestValue =
+          const FakeAccessibilityFeatures(disableAnimations: true);
+      addTearDown(
+        tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
+      );
+      await _pumpApp(tester, db);
+      await tester.tap(find.byTooltip('Open navigation menu'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Settings'));
+      await tester.pump();
+
+      expect(find.byType(GroupListScreen), findsNothing);
+      expect(_opacityOf(tester, SettingsScreen), 1);
       await _unmount(tester);
     });
   });

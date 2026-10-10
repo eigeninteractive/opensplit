@@ -8,6 +8,7 @@ import 'package:in_app_update/in_app_update.dart';
 import '../application/local_providers.dart';
 import '../application/preferences_providers.dart';
 import '../application/push_providers.dart';
+import '../application/ledger_providers.dart';
 import '../application/router_provider.dart';
 import '../application/session_providers.dart';
 import '../application/sync_providers.dart';
@@ -64,6 +65,13 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
 
     // Built for each account, which starts its automatic sync.
     ref.listenManual(syncControllerProvider, (_, _) {}, fireImmediately: true);
+
+    // Your own profile is app state, so it is read at launch and kept current:
+    // the Account destination then has it on the frame it is first built,
+    // instead of drawing "no name yet" until it arrives. Building that branch
+    // early would not do it, because Riverpod pauses providers that only
+    // offstage widgets listen to.
+    ref.listenManual(myProfileProvider, (_, _) {});
 
     // A Google flow that left the page finishes here, on the one launch that is
     // a return from it.
