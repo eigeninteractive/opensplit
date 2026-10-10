@@ -58,50 +58,22 @@
     <meta name="twitter:image:alt" content="OpenSplit: split expenses with friends, free forever. Beside it, the app showing a trip's balances.">
 
     <style>
-    /* A real skeleton, not a spinner.
+    /* A splash, matching Android's: the mark, alone, on the colour the app
+     * paints its first frame in. It stays up until Flutter has a screen with
+     * real data on it (see lib/presentation/launch_hold.dart), so a launch is
+     * one wait, not a loader followed by placeholders followed by content.
      *
-     * The gap before the first frame is the worst impression the app makes,
-     * and on the web it is unavoidable — the engine has to download. A blank
-     * white page reads as broken; a spinner reads as slow. A layout that
-     * matches what is about to appear reads as loading, and the swap is barely
-     * perceptible because nothing moves.
-     *
-     * Every value below is a Material 3 one, taken from the same place the app
-     * takes it: the tones of ColorScheme.fromSeed(#00695C), the sizes of the
-     * M3 components, the metrics of the Roboto text styles. They are written
-     * out as literals because this has to paint on the first round trip,
-     * before any stylesheet or script is fetched — and they are pinned by a
-     * test (test/presentation/theme_test.dart) that reads this file and
-     * compares it against the running theme, so the two cannot drift.
-     *
-     * Anything the app shows that is genuinely constant — the title, the
-     * button's label, the shape and colour of every container — is drawn
-     * exactly. Only the parts that are still unknown are drawn as placeholders.
-     */
+     * The colours are literals because this has to paint on the first round
+     * trip, before any script runs. test/presentation/theme_test.dart compares
+     * them against the running theme, so the two cannot drift. */
     :root {
       --surface: #fcf8ff; /* ColorScheme.surface */
-      --placeholder: #e5e1e9; /* ColorScheme.surfaceContainerHighest */
-      --outline-variant: #c8c5d0; /* the Card border, and dividers */
-      --on-surface: #1c1b21; /* the app bar title */
-      --secondary-container: #e3e0f9; /* the group avatar */
-      --primary-container: #e3dfff; /* the extended FAB */
-      --on-primary-container: #434078;
       --primary: #5b5891; /* the brand mark */
-      --on-surface-variant: #47464f; /* the unselected rail label */
-      --surface-container: #f0ecf4; /* the navigation bar */
     }
     @media (prefers-color-scheme: dark) {
       :root {
         --surface: #131318;
-        --placeholder: #35343a;
-        --outline-variant: #47464f;
-        --on-surface: #e5e1e9;
-        --secondary-container: #464559;
-        --primary-container: #434078;
-        --on-primary-container: #e3dfff;
         --primary: #c4c0ff;
-        --on-surface-variant: #c8c5d0;
-        --surface-container: #201f25;
       }
     }
 
@@ -112,525 +84,42 @@
       height: 100%;
       background: var(--surface);
     }
-    body {
-      /* The app's own face first, so that a warm cache matches it exactly; the
-       * system face only stands in for the first paint of a first visit.
-       * Bundled, not fetched — see the `fonts:` block in pubspec.yaml. */
-      font-family: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-      color: var(--on-surface);
-    }
 
-    #skeleton {
+    #splash {
       position: fixed;
       inset: 0;
       z-index: 1;
-    }
-
-    /* Two shapes, because the app has two landing places and they look nothing
-     * alike. Signed in is the chrome below; signed out is WelcomeScreen, which
-     * is a bare Scaffold holding a centred column — no app bar, no rail, no
-     * button, no navigation bar.
-     *
-     * The chrome starts hidden and is turned on by the boot hint, so the
-     * default belongs to the visitor who has never been here. That is the
-     * right way round: they are signed out by definition, they have the
-     * emptiest cache, and they wait the longest to find out the loader was
-     * wrong. */
-    #chrome[hidden],
-    #intro[hidden] {
-      display: none;
-    }
-    #intro {
-      position: fixed;
-      inset: 0;
       display: flex;
-      flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 12px;
-    }
-    #intro .mark {
-      width: 56px;
-      height: 56px;
-      color: var(--primary);
-      flex: none;
-    }
-    /* textTheme.headlineMedium: the size WelcomeScreen titles itself with. */
-    #intro p {
-      margin: 0;
-      font-size: 28px;
-      line-height: 36px;
-      font-weight: 400;
-    }
-
-    /* SliverAppBar.large, expanded. On `surface`, and flat: M3 gave up the
-     * bottom rule and the drop shadow — an app bar only separates itself from
-     * the content when something scrolls under it, and then by changing tone,
-     * not by drawing a line.
-     *
-     * 152dp tall with the headline on its own line at the bottom, which is
-     * Material 3's large top app bar and what all three destinations use. The
-     * toolbar row across the top holds the navigation menu button; the
-     * headline sits 16dp from the left and 28dp up from the bottom, which is
-     * where the running app measures it.
-     *
-     * It used to draw the 56dp small bar, because that is what the app used to
-     * have. The app changed first and this followed it — the stylesheet is
-     * never the reason a screen keeps a shape. */
-    .bar {
-      height: 152px;
-      position: relative;
       background: var(--surface);
     }
-    /* The navigation menu button, which the app grows from its Scaffold's
-     * drawer. Only the glyph stands in. */
-    .bar .menu {
-      position: absolute;
-      left: 16px;
-      top: 20px;
-      width: 24px;
-      height: 24px;
-      border-radius: 4px;
-      background: var(--placeholder);
-    }
-    /* textTheme.headlineMedium, which is what a large bar sets its expanded
-     * headline in. 16dp from the left and 28dp up from the bottom. */
-    .bar h1 {
-      position: absolute;
-      left: 16px;
-      right: 16px;
-      bottom: 28px;
-      margin: 0;
-      height: 36px;
-      display: flex;
-      align-items: center;
-      font-size: 28px;
-      line-height: 36px;
-      font-weight: 400;
-      letter-spacing: 0;
-    }
-    /* The mark, at the size BrandLockup works out: headlineMedium is 28px, the
-     * mark's box is a little over 1.5x that, and the clear space beside it is
-     * the ratio measured off the designer's horizontal lockup. Inlined rather
-     * than linked so it paints on the first round trip, like everything else
-     * here — an <img> would also be a second request, and could not be tinted.
-     * See lib/presentation/widgets/brand_mark.dart. */
-    /* biome-ignore lint/style/noDescendingSpecificity: .bar is in #chrome, never in #intro. */
-    .bar .mark {
-      width: 44.7px;
-      height: 44.7px;
-      flex: none;
-      margin-right: 9.55px;
-      color: var(--primary);
-    }
-
-    /* DestinationScaffold insets the content by max(16, (width - 760) / 2) on
-     * each side, so the cards are 760 wide once there is room and 16 from each
-     * edge before that.
-     *
-     * 792 rather than 760 because the padding is inside the cap: border-box
-     * plus 16 either side leaves exactly 760 of card at every width above it,
-     * which is what the app lays out. Capping at 760 here would have left the
-     * cards 32 narrower than the ones replacing them, visible only on a screen
-     * wide enough for the cap to bind at all. */
-    .list {
-      box-sizing: border-box;
-      max-width: 792px;
-      margin: 0 auto;
-      padding: 8px 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    /* `display: flex` above outranks the user-agent rule for [hidden], so the
-     * attribute needs saying again here to actually hide anything. */
-    .list[hidden] {
-      display: none;
-    }
-
-    /* Card.outlined wrapping a two-line ListTile: elevation 0, 12dp radius, a
-     * hairline in outlineVariant, and a container the same colour as the page
-     * — the outline is the whole boundary.
-     *
-     * 72dp is ListTile's own height for a tile with a title and a subtitle,
-     * and it is not a number chosen here: a widget test renders the real
-     * skeleton card and asserts this stylesheet carries whatever it measured,
-     * so the two cannot drift. box-sizing because Flutter strokes a border
-     * inside the box and CSS lays it outside. */
-    .card {
-      box-sizing: border-box;
+    #splash .mark {
+      width: 72px;
       height: 72px;
-      background: var(--surface);
-      border: 1px solid var(--outline-variant);
-      border-radius: 12px;
-      padding: 0 16px;
-      display: flex;
-      align-items: center;
-      gap: 16px;
+      color: var(--primary);
     }
-    /* CircleAvatar's default 40dp, already the right colour — there is no
-     * version of this row without one, so it is not a placeholder. */
-    .avatar {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      background: var(--secondary-container);
-      flex: none;
-    }
-    /* 44dp: a titleMedium line box (24) plus a bodyMedium one (20), which is
-     * the block ListTile centres between its 16dp of vertical padding. Each
-     * bar is centred in its own line box, so the bars sit where the text will
-     * and the card does not resize under the swap. */
-    .lines {
-      flex: 1;
-      height: 44px;
-    }
-    .line {
-      border-radius: 4px;
-      background: var(--placeholder);
-    }
-    .line.title {
-      height: 16px;
-      margin-top: 4px;
-      width: 62%;
-    }
-    .line.detail {
-      height: 12px;
-      margin-top: 8px;
-      width: 40%;
-    }
-    .card:nth-child(2) .line.title {
-      width: 44%;
-    }
-    .card:nth-child(2) .line.detail {
-      width: 56%;
-    }
-    .card:nth-child(3) .line.title {
-      width: 55%;
-    }
-
-    /* FloatingActionButton.extended, 16dp clear of both edges: 56dp tall,
-     * 16dp radius, on primaryContainer, padded 16 before the icon and 20 after
-     * the label, with 8 between them. The label is real; only the icon is
-     * standing in, so the button is already its final width. */
-    .fab {
-      position: fixed;
-      right: 16px;
-      bottom: 16px;
-      height: 56px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 0 20px 0 16px;
-      border-radius: 16px;
-      background: var(--primary-container);
-      color: var(--on-primary-container);
-      /* Material's elevation 6, the extended FAB's resting shadow. */
-      box-shadow:
-        0 3px 5px -1px rgba(0, 0, 0, 0.2),
-        0 6px 10px 0 rgba(0, 0, 0, 0.14),
-        0 1px 18px 0 rgba(0, 0, 0, 0.12);
-    }
-    .fab .icon {
-      width: 24px;
-      height: 24px;
-      border-radius: 4px;
-      background: currentColor;
-      opacity: 0.35;
-    }
-    /* textTheme.labelLarge. */
-    .fab .label {
-      font-size: 14px;
-      line-height: 20px;
-      font-weight: 500;
-      letter-spacing: 0.1px;
-    }
-
-    /* At 840px — Material's medium-to-expanded boundary, and _railBreakpoint
-     * in router.dart — the app puts a NavigationRail on the left: 80dp of rail
-     * and then a 1dp divider.
-     *
-     * The rail is drawn here too, not just left as a gap. It used to be an
-     * empty 80dp column that filled with two destinations the moment Flutter
-     * painted, which is the one part of this screen that visibly appeared out
-     * of nothing.
-     *
-     * Every offset below is measured off the running app rather than derived:
-     * the selected indicator occupies y 8-40, its label's cap height sits at
-     * 48-57, the second destination's icon at 76-100 and its label at 111-121.
-     */
-    .rail {
-      display: none;
-    }
-
-    @media (min-width: 840px) {
-      #skeleton {
-        padding-left: 81px;
-      }
-      #skeleton::before {
-        content: "";
-        position: fixed;
-        left: 80px;
-        top: 0;
-        bottom: 0;
-        width: 1px;
-        background: var(--outline-variant);
-      }
-
-      .rail {
-        display: block;
-        position: fixed;
-        left: 0;
-        top: 0;
-        bottom: 0;
-        width: 80px;
-      }
-      .rail > * {
-        position: absolute;
-        left: 0;
-        width: 80px;
-        text-align: center;
-      }
-
-      /* The selected destination's indicator: 56x32 on secondaryContainer,
-       * which is exactly what the app draws and needs no placeholder. */
-      .rail .pill {
-        top: 8px;
-        height: 32px;
-        width: 56px;
-        left: 12px;
-        border-radius: 16px;
-        background: var(--secondary-container);
-      }
-      /* textTheme.labelMedium, the rail's label style. The words are real. */
-      .rail .label {
-        font-size: 12px;
-        line-height: 16px;
-        font-weight: 500;
-        letter-spacing: 0.5px;
-      }
-      .rail .selected {
-        top: 44px;
-        color: var(--on-surface);
-      }
-      .rail .u1 {
-        top: 108px;
-        color: var(--on-surface-variant);
-      }
-      .rail .u2 {
-        top: 172px;
-        color: var(--on-surface-variant);
-      }
-
-      /* Only the glyphs stand in; the labels are the real words. */
-      .rail .glyph {
-        width: 24px;
-        height: 24px;
-        left: 28px;
-        border-radius: 4px;
-        background: var(--placeholder);
-      }
-      .rail .g1 {
-        top: 12px;
-      }
-      .rail .g2 {
-        top: 76px;
-      }
-      .rail .g3 {
-        top: 140px;
-      }
-    }
-
-    /* Below the rail breakpoint the same three destinations are a
-     * NavigationBar along the bottom: 80dp tall on surfaceContainer, each
-     * destination a 64x32 indicator on secondaryContainer with a labelMedium
-     * beneath it. Drawn here for the same reason the rail is — it is chrome
-     * that is on screen from the first frame of the real app, so leaving a
-     * gap where it goes is the one thing that visibly pops into place. */
-    .nav {
-      display: flex;
-      position: fixed;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      height: 80px;
-      background: var(--surface-container);
-    }
-    .nav > div {
-      flex: 1;
-      position: relative;
-    }
-    .nav .pill {
-      position: absolute;
-      top: 12px;
-      left: 50%;
-      margin-left: -32px;
-      width: 64px;
-      height: 32px;
-      border-radius: 16px;
-      background: var(--secondary-container);
-    }
-    .nav .glyph {
-      position: absolute;
-      top: 16px;
-      left: 50%;
-      margin-left: -12px;
-      width: 24px;
-      height: 24px;
-      border-radius: 4px;
-      background: var(--placeholder);
-    }
-    /* textTheme.labelMedium, the navigation bar's label style. */
-    .nav .label {
-      position: absolute;
-      top: 48px;
-      left: 0;
-      right: 0;
-      text-align: center;
-      font-size: 12px;
-      line-height: 16px;
-      font-weight: 500;
-      letter-spacing: 0.5px;
-      color: var(--on-surface-variant);
-    }
-    .nav .selected .label {
-      color: var(--on-surface);
-    }
-
-    @media (min-width: 840px) {
-      .nav {
-        display: none;
-      }
-    }
-    /* The FAB clears the bar rather than sitting on it: 16dp above 80dp. */
-    @media (max-width: 839px) {
-      .fab {
-        bottom: 96px;
-      }
-    }
-
-    /* One slow pulse, on the placeholders only. Pulsing the card would fade
-     * its border and its avatar, which are not placeholders at all — they are
-     * already exactly what the app is about to draw. */
-    @keyframes breathe {
-      0%,
-      100% {
-        opacity: 1;
-      }
-      50% {
-        opacity: 0.45;
-      }
-    }
-    .line {
-      animation: breathe 1.8s ease-in-out infinite;
-    }
-    .card:nth-child(2) .line {
-      animation-delay: 0.15s;
-    }
-    .card:nth-child(3) .line {
-      animation-delay: 0.3s;
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      .line {
-        animation: none;
-      }
-      #skeleton.done {
-        transition: none;
-      }
-    }
-
-    #skeleton.done {
+    #splash.done {
       opacity: 0;
       transition: opacity 180ms ease-out;
       pointer-events: none;
     }
+    @media (prefers-reduced-motion: reduce) {
+      #splash.done {
+        transition: none;
+      }
+    }
     </style>
   </head>
   <body>
-    <div id="skeleton" aria-hidden="true">
-      <div id="chrome" hidden>
-        <div class="rail">
-          <div class="pill"></div>
-          <div class="glyph g1"></div>
-          <div class="label selected">Groups</div>
-          <div class="glyph g2"></div>
-          <div class="label u1">Account</div>
-          <div class="glyph g3"></div>
-          <div class="label u2">Settings</div>
-        </div>
-        <div class="bar">
-          <div class="menu"></div>
-          <h1>
-            <svg class="mark" viewBox="0 0 48 48" aria-hidden="true">
-              <mask id="slash">
-                <rect width="48" height="48" fill="#fff"></rect>
-                <rect x="20.75" y="-4" width="6.5" height="56" fill="#000" transform="rotate(24 24 24)"></rect>
-              </mask>
-              <circle cx="24" cy="24" r="17" fill="none" stroke="currentColor" stroke-width="6.5" mask="url(#slash)"></circle>
-            </svg>
-            <span>OpenSplit</span>
-          </h1>
-        </div>
-        <div class="list" id="cards" hidden>
-          <div class="card">
-            <div class="avatar"></div>
-            <div class="lines">
-              <div class="line title"></div>
-              <div class="line detail"></div>
-            </div>
-          </div>
-          <div class="card">
-            <div class="avatar"></div>
-            <div class="lines">
-              <div class="line title"></div>
-              <div class="line detail"></div>
-            </div>
-          </div>
-          <div class="card">
-            <div class="avatar"></div>
-            <div class="lines">
-              <div class="line title"></div>
-              <div class="line detail"></div>
-            </div>
-          </div>
-        </div>
-        <div class="fab">
-          <div class="icon"></div>
-          <div class="label">New group</div>
-        </div>
-        <div class="nav">
-          <div class="selected">
-            <div class="pill"></div>
-            <div class="glyph"></div>
-            <div class="label">Groups</div>
-          </div>
-          <div>
-            <div class="glyph"></div>
-            <div class="label">Account</div>
-          </div>
-          <div>
-            <div class="glyph"></div>
-            <div class="label">Settings</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- What somebody signed out is about to see. Both the mark and the word
-         are certain, so both are drawn outright; the three identity buttons
-         below them are not — whether Google is offered depends on the build —
-         and a placeholder for a button that never arrives is worse than the
-         space it would have taken. -->
-      <div id="intro">
-        <svg class="mark" viewBox="0 0 48 48" aria-hidden="true">
-          <mask id="slash-intro">
-            <rect width="48" height="48" fill="#fff"></rect>
-            <rect x="20.75" y="-4" width="6.5" height="56" fill="#000" transform="rotate(24 24 24)"></rect>
-          </mask>
-          <circle cx="24" cy="24" r="17" fill="none" stroke="currentColor" stroke-width="6.5" mask="url(#slash-intro)"></circle>
-        </svg>
-        <p>OpenSplit</p>
-      </div>
+    <div id="splash" aria-hidden="true">
+      <svg class="mark" viewBox="0 0 48 48" aria-hidden="true">
+        <mask id="slash">
+          <rect width="48" height="48" fill="#fff"></rect>
+          <rect x="20.75" y="-4" width="6.5" height="56" fill="#000" transform="rotate(24 24 24)"></rect>
+        </mask>
+        <circle cx="24" cy="24" r="17" fill="none" stroke="currentColor" stroke-width="6.5" mask="url(#slash)"></circle>
+      </svg>
     </div>
 
     <noscript>
@@ -638,47 +127,15 @@
     </noscript>
 
     <script>
-    // Placeholder cards are a promise that content is coming, and for a
-    // first-time visitor that promise is false: they have no groups, so the app
-    // opens on "No groups yet". They are also the ones who wait longest, with
-    // nothing cached — so the cards were least truthful exactly when they were
-    // most visible.
-    //
-    // The same was true one level up, and less obviously. This drew the app
-    // bar, the rail and the button for everybody, on the grounds that they are
-    // on the screen in every state — which is wrong for the one state that
-    // matters most here. Signed out lands on WelcomeScreen, a bare Scaffold
-    // with a centred column and none of that chrome, so a first-time visitor
-    // watched a whole app layout paint and then disappear.
-    //
-    // So two notes, not one (see lib/data/web/boot_hint.dart): whether anybody
-    // is signed in decides which of the two shapes to draw, and only then does
-    // whether they have groups decide about cards.
-    //
-    // Read synchronously, before first paint, so nothing moves afterwards.
-    // Wrapped because reading storage throws outright in some privacy modes.
-    try {
-      if (localStorage.getItem("opensplit.signedIn") === "1") {
-        document.getElementById("chrome").hidden = false;
-        document.getElementById("intro").hidden = true;
-
-        if (localStorage.getItem("opensplit.hasGroups") === "1") {
-          document.getElementById("cards").hidden = false;
-        }
-      }
-    } catch {
-      /* the mark alone, which is the safe default */
-    }
-
     // Flutter fires this once it has actually painted, so the swap happens
     // when there is something real underneath rather than on a timer that
     // guesses.
     window.addEventListener("flutter-first-frame", () => {
-      var skeleton = document.getElementById("skeleton");
-      if (!skeleton) return;
-      skeleton.classList.add("done");
+      var splash = document.getElementById("splash");
+      if (!splash) return;
+      splash.classList.add("done");
       setTimeout(() => {
-        skeleton.remove();
+        splash.remove();
       }, 200);
     });
     </script>

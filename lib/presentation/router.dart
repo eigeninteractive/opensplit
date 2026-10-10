@@ -234,7 +234,7 @@ class AdaptiveNavigation extends StatelessWidget {
   /// Material 3's own default destination width, and the rail's width outright:
   /// a destination is padded 8dp either side *within* this, and only pushes
   /// past it if a label needs more. None of the three labels is anywhere near,
-  /// so the rail is a fixed 80dp and the skeleton can count on it.
+  /// so the rail is a fixed 80dp.
   static const double _railWidth = 80;
 
   final StatefulNavigationShell shell;
@@ -262,10 +262,6 @@ class AdaptiveNavigation extends StatelessWidget {
           NavigationRail(
             selectedIndex: shell.currentIndex,
             labelType: NavigationRailLabelType.all,
-            // Material's own default, stated rather than inherited because the
-            // web loading skeleton draws a rail of exactly this width before
-            // Flutter starts — see the 840px block in web/index.html, and the
-            // test that holds the two numbers together.
             minWidth: _railWidth,
             onDestinationSelected: _select,
             destinations: [

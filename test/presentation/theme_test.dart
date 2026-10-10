@@ -5,7 +5,6 @@ import 'dart:math' as math;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:opensplit/presentation/theme.dart';
-import 'package:opensplit/presentation/widgets/group_skeleton.dart';
 
 /// Relative luminance, per WCAG 2.1.
 double _luminance(Color c) {
@@ -78,150 +77,8 @@ void main() {
     });
   });
 
-  group('the web loading skeleton', () {
-    test('uses the theme\'s own colours', _skeletonMatchesTheme);
-
-    testWidgets('uses the theme\'s own type', (tester) async {
-      late TextTheme resolved;
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: buildTheme(Brightness.light),
-          // Text geometry is applied by Theme.of, not by the ThemeData
-          // constructor, so the real sizes only exist inside a MaterialApp.
-          home: Builder(
-            builder: (context) {
-              resolved = Theme.of(context).textTheme;
-              return const SizedBox.shrink();
-            },
-          ),
-        ),
-      );
-
-      final css = File('web/index.html').readAsStringSync();
-
-      // The app bar headline.
-      final headline = resolved.headlineMedium!;
-      expect(css, contains('font-size: ${headline.fontSize!.round()}px'));
-      expect(css, contains('font-weight: ${headline.fontWeight!.value}'));
-
-      // The extended FAB's label.
-      final label = resolved.labelLarge!;
-      expect(css, contains('font-size: ${label.fontSize!.round()}px'));
-      expect(css, contains('font-weight: ${label.fontWeight!.value}'));
-    });
-
-    testWidgets('draws a card the size of the card that replaces it', (
-      tester,
-    ) async {
-      // Measured, not compared.
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: buildTheme(Brightness.light),
-          home: const Scaffold(
-            body: CustomScrollView(slivers: [GroupListSkeleton()]),
-          ),
-        ),
-      );
-      await tester.pump(const Duration(milliseconds: 50));
-
-      final card = tester.getSize(find.byType(SkeletonGroupCard).first);
-      final css = File('web/index.html').readAsStringSync();
-
-      expect(
-        css,
-        contains('height: ${card.height.round()}px'),
-        reason:
-            'web/index.html must draw a ${card.height.round()}dp card, which '
-            'is what a two-line ListTile inside Card.outlined comes to',
-      );
-    });
-
-    testWidgets('gives its app bar the height the app gives one', (
-      tester,
-    ) async {
-      // The other number with no published source.
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: buildTheme(Brightness.light),
-          home: const Scaffold(
-            body: CustomScrollView(
-              slivers: [
-                SliverAppBar.large(title: Text('Groups'), pinned: true),
-                SliverToBoxAdapter(
-                  child: SizedBox(key: Key('below'), height: 2000),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
-
-      // Read off where the content starts rather than off the bar's own box:
-      // SliverAppBar.large has no single widget whose size is the expanded
-      // height, and the number that matters is exactly how far down the page
-      // the first card begins.
-      final barHeight = tester
-          .getTopLeft(find.byKey(const Key('below')))
-          .dy
-          .round();
-      final css = File('web/index.html').readAsStringSync();
-
-      expect(
-        css,
-        contains('height: ${barHeight}px'),
-        reason: 'the skeleton bar must be as tall as an expanded large one',
-      );
-    });
-
-    test('agrees with the app on every boot-hint key', () {
-      // The loader decides which shape to draw, and whether to fill it, by
-      // reading keys the Dart side writes.
-      final keys = RegExp(r"""localStorage\.getItem\((['"])(.+?)\1\)""")
-          .allMatches(File('web/index.html').readAsStringSync())
-          .map((match) => match.group(2)!)
-          .toSet();
-
-      expect(
-        keys,
-        hasLength(2),
-        reason: 'the loader reads a session hint and a groups hint',
-      );
-
-      final dart = File('lib/data/web/boot_hint_web.dart').readAsStringSync();
-      for (final key in keys) {
-        expect(
-          dart,
-          contains("'$key'"),
-          reason: 'boot_hint_web.dart must write $key, which index.html reads',
-        );
-      }
-    });
-
-    test('puts its navigation rail where the app puts one', () {
-      // Two numbers in two languages describing the same edge.
-      final dart = RegExp(
-        r'_railBreakpoint\s*=\s*(\d+)',
-      ).firstMatch(File('lib/presentation/router.dart').readAsStringSync());
-      final width = RegExp(
-        r'_railWidth\s*=\s*(\d+)',
-      ).firstMatch(File('lib/presentation/router.dart').readAsStringSync());
-
-      expect(dart, isNotNull, reason: 'no _railBreakpoint in router.dart');
-      expect(width, isNotNull, reason: 'no _railWidth in router.dart');
-
-      final css = File('web/index.html').readAsStringSync();
-      expect(
-        css,
-        contains('@media (min-width: ${dart!.group(1)}px)'),
-        reason: 'web/index.html must show its rail at _railBreakpoint',
-      );
-      expect(
-        css,
-        contains('width: ${width!.group(1)}px'),
-        reason: 'the skeleton rail must be _railWidth wide',
-      );
-    });
+  group('the web splash', () {
+    test('uses the theme\'s own colours', _splashMatchesTheme);
 
     test('paints its launch background in the theme\'s surface', () {
       final surface = buildTheme(Brightness.light).colorScheme.surface;
@@ -249,7 +106,7 @@ void main() {
     });
   });
 
-  // The same problem the web skeleton has, on the other platform: Android
+  // The same problem the web splash has, on the other platform: Android
   // paints the window before a line of Dart runs — and on 12 and up paints a
   // system splash screen over it — from colours it can only read out of
   // resources and generator configs.
@@ -363,7 +220,7 @@ void main() {
   });
 }
 
-/// The colours the loading skeleton in `web/index.html` claims to be using.
+/// The colours the splash in `web/index.html` claims to be using.
 Map<String, String> _declaredColors(String css, int from) {
   final open = css.indexOf(':root {', from);
   expect(open, isNot(-1), reason: 'no :root block after offset $from');
@@ -383,7 +240,7 @@ String _hex(Color c) {
   return '#${channel(c.r)}${channel(c.g)}${channel(c.b)}';
 }
 
-void _skeletonMatchesTheme() {
+void _splashMatchesTheme() {
   final css = File('web/index.html').readAsStringSync();
 
   final darkBlock = css.indexOf('@media (prefers-color-scheme: dark)');
@@ -400,22 +257,14 @@ void _skeletonMatchesTheme() {
 
     final expected = <String, Color>{
       'surface': scheme.surface,
-      'placeholder': scheme.surfaceContainerHighest,
-      'outline-variant': scheme.outlineVariant,
-      'on-surface': scheme.onSurface,
-      'secondary-container': scheme.secondaryContainer,
-      'primary-container': scheme.primaryContainer,
-      'on-primary-container': scheme.onPrimaryContainer,
       'primary': scheme.primary,
-      'on-surface-variant': scheme.onSurfaceVariant,
-      'surface-container': scheme.surfaceContainer,
     };
 
     expect(
       declared.keys.toSet(),
       expected.keys.toSet(),
       reason:
-          'the ${entry.key} skeleton palette and this test disagree about '
+          'the ${entry.key} splash palette and this test disagree about '
           'which roles it uses',
     );
 

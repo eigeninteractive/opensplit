@@ -5,21 +5,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../application/sync_providers.dart';
 import '../launch_hold.dart';
 
-/// Indicates that the local database has not produced its first result yet.
+/// Stands in, invisibly, for saved content the local database has not
+/// returned yet.
+///
+/// At launch the splash covers it (see [LaunchHold]); after launch a local
+/// read finishes before a spinner would be worth drawing.
 class SavedDataLoading extends StatelessWidget {
   const SavedDataLoading({super.key, required this.label});
 
-  /// The saved content being opened, distinct from a network refresh.
+  /// The saved content being opened, for screen readers.
   final String label;
 
   @override
   Widget build(BuildContext context) => LaunchPlaceholder(
-    child: Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: CircularProgressIndicator(semanticsLabel: label),
-      ),
-    ),
+    child: Semantics(label: label, child: const SizedBox.expand()),
   );
 }
 
@@ -81,9 +80,9 @@ class InitialSyncProgress extends ConsumerWidget
 
 /// Keeps saved data visible while explaining a failed refresh or upload.
 ///
-/// Being offline gets a single quiet line rather than a card: for an app that
-/// works offline it is a normal state, not a problem to act on, and it fixes
-/// itself when the network comes back.
+/// Says nothing while offline: for an app that works offline that is a normal
+/// state, not a problem to act on, and [OfflineIndicator] in the app bar
+/// already says it.
 class SyncStatusBanner extends ConsumerWidget {
   const SyncStatusBanner({super.key, this.padding = EdgeInsets.zero});
 
@@ -97,12 +96,7 @@ class SyncStatusBanner extends ConsumerWidget {
     if (!status.enabled || (!refreshFailed && !changesWaiting)) {
       return const SizedBox.shrink();
     }
-    if (status.isOffline) {
-      return Padding(
-        padding: padding,
-        child: _OfflineNote(changesWaiting: changesWaiting),
-      );
-    }
+    if (status.isOffline) return const SizedBox.shrink();
     return Padding(
       padding: padding,
       child: _SyncProblem(
@@ -131,39 +125,6 @@ class _CheckingGroups extends StatelessWidget {
       ),
     ),
   );
-}
-
-class _OfflineNote extends StatelessWidget {
-  const _OfflineNote({required this.changesWaiting});
-
-  final bool changesWaiting;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = theme.colorScheme.onSurfaceVariant;
-    return Semantics(
-      liveRegion: true,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        child: Row(
-          children: [
-            Icon(Icons.cloud_off_outlined, size: 18, color: color),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                changesWaiting
-                    ? 'Offline. Your changes will sync when you are back '
-                          'online.'
-                    : 'Offline. Showing what is saved on this device.',
-                style: theme.textTheme.bodySmall?.copyWith(color: color),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _SyncProblem extends StatelessWidget {
@@ -209,15 +170,4 @@ Widget syncFailurePreview() => MaterialApp(
       onRetry: () {},
     ),
   ),
-);
-
-/// Previews the quiet line shown while the device is offline.
-@Preview(name: 'Offline', group: 'Sync', size: Size(360, 80))
-Widget offlinePreview() =>
-    const MaterialApp(home: Scaffold(body: _OfflineNote(changesWaiting: true)));
-
-/// Previews the local database loading state before any saved rows are ready.
-@Preview(name: 'Opening saved groups', group: 'Sync', size: Size(360, 240))
-Widget savedDataLoadingPreview() => const MaterialApp(
-  home: Scaffold(body: SavedDataLoading(label: 'Loading saved groups')),
 );

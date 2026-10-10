@@ -12,7 +12,6 @@ import '../application/router_provider.dart';
 import '../application/session_providers.dart';
 import '../application/sync_providers.dart';
 import '../data/platform/app_update_service.dart';
-import '../data/web/boot_hint.dart';
 import '../data/web/release_updates.dart';
 import '../domain/auth_service.dart';
 import '../l10n/app_localizations.dart';
@@ -65,12 +64,6 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
 
     // Built for each account, which starts its automatic sync.
     ref.listenManual(syncControllerProvider, (_, _) {}, fireImmediately: true);
-
-    ref.listenManual(signedInProvider, (_, signedIn) {
-      // Leaves a note for the next cold start, so the web loader draws the
-      // layout this session will actually land on.
-      recordSignedIn(signedIn);
-    }, fireImmediately: true);
 
     // A Google flow that left the page finishes here, on the one launch that is
     // a return from it.

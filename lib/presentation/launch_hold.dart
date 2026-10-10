@@ -7,12 +7,11 @@ import 'package:material_ui/material_ui.dart';
 /// is saved on this device, rather than a placeholder for it.
 ///
 /// Flutter takes down the Android splash, and fires the `flutter-first-frame`
-/// event that removes the web loader, when it renders its first frame. [begin]
+/// event that removes the web splash, when it renders its first frame. [begin]
 /// defers that frame. Widgets still build and lay out underneath, so each
 /// screen's own queries run exactly as they would otherwise; only the pixels
 /// wait. The frame is let through once a built frame contains no
-/// [LaunchPlaceholder], or after a time limit, so a slow disk falls back to the
-/// placeholder instead of a long splash.
+/// [LaunchPlaceholder], so a launch is one wait however long the disk takes.
 ///
 /// Only placeholders for local data take part. Anything waiting on the network
 /// draws as usual, because a launch screen held on a connection is the slow,
@@ -27,10 +26,12 @@ abstract final class LaunchHold {
 
   /// Defers the first frame. Call once, before `runApp`.
   ///
-  /// The [limit] is how long a launch may wait on the local database. Opening
-  /// it usually takes a fraction of that; the limit is for a cold disk or a
-  /// debug build.
-  static void begin({Duration limit = const Duration(milliseconds: 800)}) {
+  /// The [limit] is not a tuning knob. It is there so that a local query that
+  /// never answers shows the app, with its navigation and settings, instead of
+  /// a splash that cannot be told apart from a hang. It is longer than SQLite's
+  /// own five-second busy timeout, so a locked database reports its own error
+  /// first.
+  static void begin({Duration limit = const Duration(seconds: 10)}) {
     if (_holding) return;
     _holding = true;
     WidgetsBinding.instance.deferFirstFrame();

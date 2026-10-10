@@ -20,7 +20,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // The splash stays up while the first screen reads what is saved, so a launch
-  // goes straight to the groups instead of through placeholder cards.
+  // is one wait that ends on real content.
   LaunchHold.begin();
 
   // google_fonts falls back to downloading a face it cannot find in the bundle.

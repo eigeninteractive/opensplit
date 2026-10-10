@@ -16,7 +16,8 @@ import 'package:dio/dio.dart'
 import 'package:opensplit/data/sync/sync_engine.dart';
 import 'package:opensplit/presentation/screens/group_detail_screen.dart';
 import 'package:opensplit/presentation/screens/group_list_screen.dart';
-import 'package:opensplit/presentation/widgets/group_skeleton.dart';
+import 'package:opensplit/presentation/launch_hold.dart';
+import 'package:opensplit/presentation/widgets/offline_indicator.dart';
 import 'package:opensplit/presentation/widgets/pull_to_sync.dart';
 import 'package:opensplit/presentation/widgets/sync_refresh_button.dart';
 import 'package:opensplit/presentation/widgets/sync_status_notice.dart';
@@ -175,7 +176,7 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('opening saved groups has a loading state, not a blank body', (
+  testWidgets('opening saved groups holds the launch, not a placeholder', (
     tester,
   ) async {
     final groups = StreamController<List<Group>>();
@@ -186,16 +187,14 @@ void main() {
       const GroupListScreen(),
       groups: groups.stream,
     );
-    // The skeleton, not a spinner and not a blank body: the point of the
-    // assertion is that something group-shaped is on screen before the database
-    // has answered, which is what the web loader has already been drawing for
-    // the whole of the engine download.
-    expect(find.byType(GroupListSkeleton), findsOneWidget);
+    // Nothing group-shaped is drawn while the database has not answered: the
+    // splash covers that wait, and this marker is what keeps it up.
+    expect(find.byType(LaunchPlaceholder, skipOffstage: false), findsOneWidget);
     expect(find.text('No groups yet'), findsNothing);
     groups.add([_group]);
     await tester.pumpAndSettle();
     expect(find.text(_group.name), findsOneWidget);
-    expect(find.byType(GroupListSkeleton), findsNothing);
+    expect(find.byType(LaunchPlaceholder, skipOffstage: false), findsNothing);
   });
 
   testWidgets('an empty list shows at once while the first refresh runs', (
@@ -245,7 +244,7 @@ void main() {
     expect(find.byType(LinearProgressIndicator), findsNothing);
   });
 
-  testWidgets('offline is a quiet line, not a problem card', (tester) async {
+  testWidgets('offline is an app bar icon, not a problem card', (tester) async {
     final sync = _TestSync();
     await _mount(tester, sync, const GroupListScreen());
     await tester.pumpAndSettle();
@@ -267,13 +266,22 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text(_group.name), findsOneWidget);
+    expect(find.byType(OfflineIndicator), findsOneWidget);
+    expect(find.byIcon(Icons.cloud_off_outlined), findsOneWidget);
     expect(
-      find.text('Offline. Your changes will sync when you are back online.'),
+      find.byTooltip(
+        'Offline. Your changes are saved on this device and will sync when '
+        'you are back online.',
+      ),
       findsOneWidget,
     );
     expect(find.text('Could not refresh'), findsNothing);
     expect(find.text('Changes waiting to sync'), findsNothing);
     expect(find.text('Try again'), findsNothing);
+
+    sync.finish();
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.cloud_off_outlined), findsNothing);
   });
 
   testWidgets('the group list keeps its saved rows through refresh and error', (
