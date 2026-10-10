@@ -6,6 +6,7 @@ import '../../data/local/database.dart';
 import '../../domain/settle/upi.dart';
 import '../navigation.dart';
 import '../widgets/page_body.dart';
+import '../widgets/sync_status_notice.dart';
 
 /// Which field the editor opens on.
 enum ProfileField { name, upi }
@@ -116,6 +117,9 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final ready = _original != null;
+    // Still reading the device, as against waiting for a profile this device
+    // has never received: only the second is worth a spinner.
+    final readingSaved = !ref.watch(myProfileProvider).hasValue;
 
     return ListenableBuilder(
       listenable: Listenable.merge([_name, _upi]),
@@ -144,7 +148,13 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
           ),
           body: PageBody(
             child: !ready
-                ? const Center(child: CircularProgressIndicator())
+                ? readingSaved
+                      ? const SavedDataLoading(label: 'Loading your profile')
+                      : const Center(
+                          child: CircularProgressIndicator(
+                            semanticsLabel: 'Waiting for your profile',
+                          ),
+                        )
                 : Form(
                     key: _form,
                     child: ListView(
