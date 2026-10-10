@@ -32,6 +32,11 @@ What changed in each version of the app, newest first. The format is
 - Exchange-rate estimates only use a rate from within a week of the expense's day, and the server keeps a full year of rates to draw on.
 - Two people editing the same expense at once no longer quietly lose one edit: whichever arrives second is set aside, with the newer version shown, to be applied again on top of it.
 - Saving something syncs that group alone, and all your groups are read in one request, so syncing uses far less data and battery.
+- OpenSplit opens straight onto what is saved on this device, behind one launch screen, with a thin bar while it checks for changes.
+- When you are offline, a cloud icon at the top of the screen says so.
+- Moving between Groups, Account and Settings fades from one to the next.
+- The Android launch screen shows the logo without a tile behind it.
+- Text on screen is no longer selectable, as in other apps. Invite links can still be copied.
 
 ### Fixed
 - Settling up with somebody and then removing them while offline no longer leaves the removal refused once you are back online.
@@ -52,6 +57,9 @@ What changed in each version of the app, newest first. The format is
 - Nobody can add a new expense that charges somebody who has left a group.
 - An expense split among 26 or more people now saves; before, the server refused it and the app kept retrying.
 - In Settle up, making the person being paid the payer now clears "Who is being paid" on screen too, not just behind it.
+- Swiping back with the date or time picker open closes the picker, not the screen behind it.
+- The Account page opens with your name and UPI ID already showing, instead of filling them in a moment later.
+- Syncing tries again as soon as you are back online, rather than waiting for its next turn.
 
 ## [2.0.0] - 2026-10-01
 ### Changed
