@@ -11,6 +11,7 @@ import '../../domain/models/group_event.dart';
 import '../navigation.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/page_body.dart';
+import '../widgets/sync_status_notice.dart';
 
 /// What has happened to this group's expenses, and who did it.
 class ActivityScreen extends ConsumerWidget {
@@ -33,7 +34,7 @@ class ActivityScreen extends ConsumerWidget {
       ),
       body: PageBody(
         child: switch (events) {
-          null => const Center(child: CircularProgressIndicator()),
+          null => const SavedDataLoading(label: 'Loading activity'),
           [] => const _Empty(),
           _ => ListView.separated(
             padding: const EdgeInsets.symmetric(vertical: 8),

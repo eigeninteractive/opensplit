@@ -218,6 +218,35 @@ void main() {
     expect(coordinator.status.retryAt, isNull);
   });
 
+  testWidgets('a failed attempt is retried as soon as the network returns', (
+    tester,
+  ) async {
+    final online = StreamController<bool>();
+    addTearDown(online.close);
+    var fullRuns = 0;
+    final coordinator = SyncCoordinator(
+      syncAll: () async => ++fullRuns == 1 ? _failed : _clean,
+      syncGroups: (_) async => _clean,
+      online: online.stream,
+    );
+    addTearDown(coordinator.dispose);
+
+    coordinator.start();
+    await tester.pump();
+    expect(coordinator.status.error, isNotNull);
+
+    // Well inside both the back-off and the gap between automatic syncs.
+    online.add(true);
+    await tester.pump();
+    expect(fullRuns, 2);
+    expect(coordinator.status.error, isNull);
+
+    // A healthy device coming back online still respects the gap.
+    online.add(true);
+    await tester.pump();
+    expect(fullRuns, 2);
+  });
+
   testWidgets('permanent refusals do not schedule automatic retries', (
     tester,
   ) async {

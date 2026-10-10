@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
+import '../data/sync/api_client.dart';
 import '../data/sync/sync_engine.dart';
 
 @immutable
@@ -25,6 +26,10 @@ class SyncStatus {
   final DateTime? retryAt;
 
   Object? get error => lastReport?.error;
+
+  /// Whether the last attempt failed because no server could be reached,
+  /// which is the ordinary state of an offline device rather than a fault.
+  bool get isOffline => isUnreachable(error);
 }
 
 /// Decides when to sync, runs one sync at a time, and reports status.
@@ -72,7 +77,14 @@ class SyncCoordinator extends ChangeNotifier {
     _subscriptions
       ..add(
         _online.listen((isOnline) {
-          if (isOnline) resumed();
+          if (!isOnline) return;
+          // A failed attempt is retried as soon as the network is back, not
+          // when its back-off ends or the usual gap has passed.
+          if (_status.error == null) {
+            resumed();
+          } else {
+            unawaited(syncAll());
+          }
         }),
       )
       ..add(_writes.listen((_) => _writeQueued()));

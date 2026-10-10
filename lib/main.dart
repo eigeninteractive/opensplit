@@ -14,9 +14,14 @@ import 'application/preferences_providers.dart';
 import 'config.dart';
 import 'data/auth/session_store.dart';
 import 'presentation/app.dart';
+import 'presentation/launch_hold.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // The splash stays up while the first screen reads what is saved, so a launch
+  // goes straight to the groups instead of through placeholder cards.
+  LaunchHold.begin();
 
   // google_fonts falls back to downloading a face it cannot find in the bundle.
   GoogleFonts.config.allowRuntimeFetching = false;

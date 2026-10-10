@@ -1,6 +1,8 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/widget_previews.dart';
 
+import '../launch_hold.dart';
+
 /// The group list as it looks before the local database has answered.
 class GroupListSkeleton extends StatefulWidget {
   const GroupListSkeleton({super.key, this.cards = 3});
@@ -44,23 +46,25 @@ class _GroupListSkeletonState extends State<GroupListSkeleton>
     // turned off is exactly the kind of motion this setting exists to stop.
     final still = MediaQuery.disableAnimationsOf(context);
 
-    return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(0, 8, 0, 96),
-      sliver: SliverList.separated(
-        itemCount: widget.cards,
-        separatorBuilder: (_, _) => const SizedBox(height: 8),
-        itemBuilder: (context, index) {
-          final (title, detail) = _widths[index % _widths.length];
-          return SkeletonGroupCard(
-            breathe: _breathe,
-            cycles: _cycles,
-            // 0.15s apart at 1.8s a cycle.
-            phase: still ? 0 : (index % _widths.length) * (0.15 / 1.8),
-            animate: !still,
-            titleWidth: title,
-            detailWidth: detail,
-          );
-        },
+    return LaunchPlaceholder(
+      child: SliverPadding(
+        padding: const EdgeInsets.fromLTRB(0, 8, 0, 96),
+        sliver: SliverList.separated(
+          itemCount: widget.cards,
+          separatorBuilder: (_, _) => const SizedBox(height: 8),
+          itemBuilder: (context, index) {
+            final (title, detail) = _widths[index % _widths.length];
+            return SkeletonGroupCard(
+              breathe: _breathe,
+              cycles: _cycles,
+              // 0.15s apart at 1.8s a cycle.
+              phase: still ? 0 : (index % _widths.length) * (0.15 / 1.8),
+              animate: !still,
+              titleWidth: title,
+              detailWidth: detail,
+            );
+          },
+        ),
       ),
     );
   }

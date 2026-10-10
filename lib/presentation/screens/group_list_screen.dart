@@ -8,6 +8,7 @@ import '../../application/sync_providers.dart';
 import '../../data/local/database.dart';
 import '../../data/repositories/drift_group_repository.dart';
 import '../../data/web/boot_hint.dart';
+import '../launch_hold.dart';
 import '../widgets/avatar_view.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/conflicting_edit_banner.dart';
@@ -180,7 +181,7 @@ class _GroupTile extends ConsumerWidget {
       title: Text(group.name, overflow: TextOverflow.ellipsis),
       titleTextStyle: Theme.of(context).textTheme.titleMedium,
       subtitle: ledger == null
-          ? const SizedBox(height: 20)
+          ? const LaunchPlaceholder(child: SizedBox(height: 20))
           : GroupStanding(ledger: ledger, currencies: currencies),
     );
   }

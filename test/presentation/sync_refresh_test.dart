@@ -11,6 +11,8 @@ import 'package:opensplit/application/sync_coordinator.dart';
 import 'package:opensplit/application/sync_providers.dart';
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';
+import 'package:dio/dio.dart'
+    show DioException, DioExceptionType, RequestOptions;
 import 'package:opensplit/data/sync/sync_engine.dart';
 import 'package:opensplit/presentation/screens/group_detail_screen.dart';
 import 'package:opensplit/presentation/screens/group_list_screen.dart';
@@ -241,6 +243,37 @@ void main() {
     expect(find.text('No groups yet'), findsOneWidget);
     expect(find.text('Could not refresh'), findsOneWidget);
     expect(find.byType(LinearProgressIndicator), findsNothing);
+  });
+
+  testWidgets('offline is a quiet line, not a problem card', (tester) async {
+    final sync = _TestSync();
+    await _mount(tester, sync, const GroupListScreen());
+    await tester.pumpAndSettle();
+
+    sync.show(
+      SyncStatus(
+        hasCompletedFullSync: true,
+        lastReport: SyncReport(
+          pushed: 0,
+          pulled: 0,
+          failed: 0,
+          error: DioException(
+            requestOptions: RequestOptions(path: '/api/sync'),
+            type: DioExceptionType.connectionError,
+          ),
+          nextPushAt: DateTime.utc(2026, 10, 10),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(_group.name), findsOneWidget);
+    expect(
+      find.text('Offline. Your changes will sync when you are back online.'),
+      findsOneWidget,
+    );
+    expect(find.text('Could not refresh'), findsNothing);
+    expect(find.text('Changes waiting to sync'), findsNothing);
+    expect(find.text('Try again'), findsNothing);
   });
 
   testWidgets('the group list keeps its saved rows through refresh and error', (
