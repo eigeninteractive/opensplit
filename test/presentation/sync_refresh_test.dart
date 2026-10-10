@@ -196,6 +196,53 @@ void main() {
     expect(find.byType(GroupListSkeleton), findsNothing);
   });
 
+  testWidgets('an empty list shows at once while the first refresh runs', (
+    tester,
+  ) async {
+    final sync = _TestSync(initial: const SyncStatus(isSyncing: true));
+    await _mount(
+      tester,
+      sync,
+      const GroupListScreen(),
+      groups: Stream.value(const []),
+    );
+    await tester.pump();
+    expect(find.text('No groups yet'), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+
+    sync.finish();
+    await tester.pumpAndSettle();
+    expect(find.text('No groups yet'), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+  });
+
+  testWidgets('an empty list keeps its empty state through a failed refresh', (
+    tester,
+  ) async {
+    final sync = _TestSync(initial: const SyncStatus(isSyncing: true));
+    await _mount(
+      tester,
+      sync,
+      const GroupListScreen(),
+      groups: Stream.value(const []),
+    );
+    await tester.pump();
+    sync.show(
+      SyncStatus(
+        lastReport: SyncReport(
+          pushed: 0,
+          pulled: 0,
+          failed: 0,
+          error: StateError('connection unavailable'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('No groups yet'), findsOneWidget);
+    expect(find.text('Could not refresh'), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+  });
+
   testWidgets('the group list keeps its saved rows through refresh and error', (
     tester,
   ) async {

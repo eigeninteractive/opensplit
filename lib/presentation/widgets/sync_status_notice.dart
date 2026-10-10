@@ -48,6 +48,34 @@ class InitialSyncGate extends ConsumerWidget {
   }
 }
 
+/// A thin bar under the app bar while this session's first full refresh runs.
+///
+/// Saved data is shown as soon as the device has read it; this only says that
+/// more may still arrive from the server. Later refreshes stay quiet, so a
+/// write or a return to the foreground does not flash it. The bar's height is
+/// reserved even while idle, so content does not shift when it disappears.
+class InitialSyncProgress extends ConsumerWidget
+    implements PreferredSizeWidget {
+  const InitialSyncProgress({super.key, required this.label});
+
+  /// What is being checked, for screen readers.
+  final String label;
+
+  @override
+  Size get preferredSize => const Size.fromHeight(4);
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final status = ref.watch(syncControllerProvider);
+    final checking =
+        status.enabled && status.isSyncing && !status.hasCompletedFullSync;
+    return SizedBox.fromSize(
+      size: preferredSize,
+      child: checking ? LinearProgressIndicator(semanticsLabel: label) : null,
+    );
+  }
+}
+
 /// Keeps saved data visible while explaining a failed refresh or upload.
 class SyncStatusBanner extends ConsumerWidget {
   const SyncStatusBanner({super.key, this.padding = EdgeInsets.zero});

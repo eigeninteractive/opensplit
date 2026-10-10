@@ -54,6 +54,11 @@ class GroupListScreen extends ConsumerWidget {
     return DestinationScaffold(
       titleWidget: const BrandLockup(),
       actions: [if (kIsWeb) const SyncRefreshButton.everything()],
+      // The empty state is shown at once rather than held back until the
+      // server confirms it, so an empty list says when it may yet fill.
+      bottom: groups.isEmpty
+          ? const InitialSyncProgress(label: 'Checking for your groups')
+          : null,
       // Disabled until the device has learned what a currency is, which is only
       // ever true during a brand-new install's first sweep or on a rebuilt
       // device with no connection.
@@ -102,12 +107,12 @@ abstract final class _GroupList {
           const UnsyncedChangesBanner(padding: _noticeGap),
           const ConflictingEditBanner(padding: _noticeGap),
           const LinkAccountPrompt(padding: _noticeGap),
-          if (groups.isNotEmpty) const SyncStatusBanner(padding: _noticeGap),
+          const SyncStatusBanner(padding: _noticeGap),
         ],
       ),
     ),
     if (groups.isEmpty)
-      const SliverToBoxAdapter(child: InitialSyncGate(child: _EmptyState()))
+      const SliverToBoxAdapter(child: _EmptyState())
     else
       SliverPadding(
         padding: const EdgeInsets.only(top: 8),

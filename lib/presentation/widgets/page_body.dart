@@ -34,6 +34,7 @@ class DestinationScaffold extends StatelessWidget {
     this.titleWidget,
     required this.slivers,
     this.actions,
+    this.bottom,
     this.floatingActionButton,
     this.wrap,
     this.maxWidth = 760,
@@ -49,6 +50,11 @@ class DestinationScaffold extends StatelessWidget {
   final Widget? titleWidget;
 
   final List<Widget>? actions;
+
+  /// A strip along the app bar's lower edge, such as a progress bar, that
+  /// stays put while the page scrolls under it.
+  final PreferredSizeWidget? bottom;
+
   final Widget? floatingActionButton;
 
   /// Wraps the scroll view, for the destination that pulls to sync.
@@ -78,6 +84,7 @@ class DestinationScaffold extends StatelessWidget {
           SliverAppBar.large(
             title: titleWidget ?? Text(title!),
             actions: actions,
+            bottom: bottom,
             // Collapses into the small bar and stays there, which is what
             // Material 3 specifies for a large top app bar: the headline is
             // worth the height when you arrive and worth none of it while you
