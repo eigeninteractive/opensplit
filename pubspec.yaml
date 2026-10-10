@@ -43,7 +43,7 @@ dependencies:
   qr_flutter: ^4.1.0
   riverpod_annotation: ^4.0.7
   shared_preferences: ^2.5.5
-  url_launcher: ^6.3.2
+  url_launcher: ^6.3.3
   uuid: ^4.6.0
   google_sign_in: ^7.2.0
   # Named directly, unusually for an endorsed federated plugin, because the web
