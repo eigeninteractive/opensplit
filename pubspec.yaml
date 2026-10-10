@@ -7,7 +7,7 @@ publish_to: "none"
 # never by hand (see "Versions" in docs/runbook.md). There is no `+build`
 # here on purpose. The release workflow numbers every build itself, and a
 # number written here would only be a second, stale answer.
-version: 2.0.0
+version: 3.0.0
 
 environment:
   sdk: ^3.12.2
