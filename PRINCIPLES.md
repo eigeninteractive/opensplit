@@ -25,10 +25,10 @@ who you go with, and what you can afford. It is not a dataset.
 
 ### 4. No venture funding
 
-Splitwise did not paywall because its founders turned bad. It took money that
-mandated growth, growth mandated revenue, and revenue mandated extraction. The
-structure produced the outcome. Refusing that structure is the actual defence
-here; every other principle on this page is downstream of it.
+Apps like this one rarely start paywalling because their founders turn bad.
+Venture money mandates growth, growth mandates revenue, and revenue mandates
+extraction. The structure produces the outcome. Refusing that structure is the
+actual defence here; every other principle on this page is downstream of it.
 
 ### 5. You can always leave, and take everything with you
 
