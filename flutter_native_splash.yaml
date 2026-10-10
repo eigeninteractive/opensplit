@@ -1,8 +1,8 @@
 # Regenerate with: dart run flutter_native_splash:create
 #
 # Colours here are ColorScheme values written out as literals, because none of
-# this runs Dart — the same duplication the web loading skeleton has, and pinned
-# the same way, by a test.
+# this runs Dart — the same duplication the web splash has, and pinned the same
+# way, by a test.
 #
 # #FCF8FF is ColorScheme.surface in the light scheme, #131318 in the dark.
 # The brand kit quotes the light one as #FBF8FF; this is what
@@ -17,11 +17,14 @@ flutter_native_splash:
   # Android 12 replaced the full-bleed splash image with an icon in a masked
   # circle. splash-icon.png is 1152px with the mark at 640px specifically to
   # survive that crop.
+  #
+  # No icon_background_color: the mark sits directly on the surface, as it does
+  # below Android 12 and on the web. A background is drawn in the launcher's
+  # icon shape, which varies by manufacturer, and in a container colour too
+  # close to the surface to read as deliberate.
   android_12:
     image: assets/splash/splash-icon.png
     image_dark: assets/splash/splash-icon-dark.png
-    icon_background_color: "#E3DFFF"
-    icon_background_color_dark: "#1F1F25"
 
   android: true
   android_gravity: center
@@ -29,7 +32,6 @@ flutter_native_splash:
   # No iOS target in this repo.
   ios: false
 
-  # The web has its own loading state, written by hand in web/index.html: a
-  # skeleton of the screen that is about to appear, drawn in the theme's own
-  # colours. This generator would inject a centred logo above it and fight it.
+  # The web's splash is written by hand in web/index.html, as inline SVG so it
+  # paints on the first round trip and fades out on Flutter's first frame.
   web: false
