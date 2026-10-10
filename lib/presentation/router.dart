@@ -72,149 +72,173 @@ GoRouter buildRouter({
 }) => GoRouter(
   initialLocation: '/',
   refreshListenable: refresh,
-  errorBuilder: (context, state) =>
-      NotFoundScreen(location: state.uri.toString()),
+  errorBuilder: _selectable(
+    (context, state) => NotFoundScreen(location: state.uri.toString()),
+  ),
 
   /// Nothing above the welcome screen works without a session.
   redirect: (context, state) =>
       redirectAppRoute(state.uri, signedIn: isSignedIn()),
+  // Every screen that can be pushed is a page on the one root navigator,
+  // which is also where dialogs, date and time pickers and most sheets open.
+  // A second navigator around these, as a ShellRoute would add, makes two
+  // stacks with two tops: the system back gesture then pops the page that is
+  // top of its own stack while a picker sits over it on the other. The
+  // destinations' branches below are the only nested navigators, and each
+  // holds just its destination, so there is never anything in them to pop.
   routes: [
-    // One shell around everything, for one reason: SelectionArea.
-    ShellRoute(
-      builder: (context, state, child) => SelectionArea(child: child),
+    // No transition, in both directions.
+    GoRoute(
+      path: '/welcome',
+      pageBuilder: (context, state) =>
+          const NoTransitionPage(child: SelectionArea(child: WelcomeScreen())),
+    ),
+    // The link a friend sends.
+    GoRoute(
+      path: '/join/:token',
+      builder: _selectable(
+        (context, state) => JoinScreen(token: state.pathParameters['token']!),
+      ),
+    ),
+    GoRoute(
+      path: '/archived',
+      builder: _selectable((context, state) => const ArchivedGroupsScreen()),
+    ),
+    // Above the shell rather than inside Settings' branch, so it arrives
+    // with a back arrow instead of a menu button -- it is a screen reached
+    // from a destination, not a destination.
+    GoRoute(
+      path: '/about',
+      builder: _selectable((context, state) => const AboutScreen()),
+    ),
+    // Reached from the Account destination, above the shell for the same
+    // reason as About.
+    GoRoute(
+      path: '/account/edit',
+      builder: _selectable(
+        (context, state) => EditProfileScreen(
+          focus:
+              ProfileField.values
+                  .asNameMap()[state.uri.queryParameters['field']] ??
+              ProfileField.name,
+        ),
+      ),
+    ),
+    GoRoute(
+      path: '/account/save',
+      builder: _selectable((context, state) => const SaveAccountScreen()),
+    ),
+    GoRoute(
+      path: '/account/picture',
+      builder: _selectable(
+        (context, state) => const AvatarPickerScreen.profile(),
+      ),
+    ),
+    GoRoute(
+      path: '/g/:groupId',
+      builder: _selectable(
+        (context, state) =>
+            GroupDetailScreen(groupId: state.pathParameters['groupId']!),
+      ),
       routes: [
-        // No transition, in both directions.
         GoRoute(
-          path: '/welcome',
-          pageBuilder: (context, state) =>
-              const NoTransitionPage(child: WelcomeScreen()),
-        ),
-        // The link a friend sends.
-        GoRoute(
-          path: '/join/:token',
-          builder: (context, state) =>
-              JoinScreen(token: state.pathParameters['token']!),
-        ),
-        GoRoute(
-          path: '/archived',
-          builder: (context, state) => const ArchivedGroupsScreen(),
-        ),
-        // Above the shell rather than inside Settings' branch, so it arrives
-        // with a back arrow instead of a menu button -- it is a screen reached
-        // from a destination, not a destination.
-        GoRoute(
-          path: '/about',
-          builder: (context, state) => const AboutScreen(),
-        ),
-        // Reached from the Account destination, above the shell for the same
-        // reason as About.
-        GoRoute(
-          path: '/account/edit',
-          builder: (context, state) => EditProfileScreen(
-            focus:
-                ProfileField.values
-                    .asNameMap()[state.uri.queryParameters['field']] ??
-                ProfileField.name,
+          path: 'add',
+          builder: _selectable(
+            (context, state) =>
+                EntryEditorScreen(groupId: state.pathParameters['groupId']!),
           ),
         ),
         GoRoute(
-          path: '/account/save',
-          builder: (context, state) => const SaveAccountScreen(),
+          path: 'activity',
+          builder: _selectable(
+            (context, state) =>
+                ActivityScreen(groupId: state.pathParameters['groupId']!),
+          ),
         ),
         GoRoute(
-          path: '/account/picture',
-          builder: (context, state) => const AvatarPickerScreen.profile(),
+          path: 'insights',
+          builder: _selectable(
+            (context, state) =>
+                InsightsScreen(groupId: state.pathParameters['groupId']!),
+          ),
         ),
         GoRoute(
-          path: '/g/:groupId',
-          builder: (context, state) =>
-              GroupDetailScreen(groupId: state.pathParameters['groupId']!),
+          path: 'settings',
+          builder: _selectable(
+            (context, state) =>
+                GroupSettingsScreen(groupId: state.pathParameters['groupId']!),
+          ),
+        ),
+        GoRoute(
+          path: 'members',
+          builder: _selectable(
+            (context, state) =>
+                MembersScreen(groupId: state.pathParameters['groupId']!),
+          ),
+        ),
+        GoRoute(
+          path: 'picture',
+          builder: _selectable(
+            (context, state) => AvatarPickerScreen.group(
+              groupId: state.pathParameters['groupId']!,
+            ),
+          ),
+        ),
+        GoRoute(
+          path: 'settle',
+          builder: _selectable(
+            (context, state) => SettleUpScreen(
+              groupId: state.pathParameters['groupId']!,
+              fromMemberId: state.uri.queryParameters['from'],
+              toMemberId: state.uri.queryParameters['to'],
+              amountMinor: int.tryParse(
+                state.uri.queryParameters['amount'] ?? '',
+              ),
+              currency: state.uri.queryParameters['currency'],
+            ),
+          ),
+        ),
+        GoRoute(
+          path: 'e/:entryId',
+          builder: _selectable(
+            (context, state) => EntryEditorScreen(
+              groupId: state.pathParameters['groupId']!,
+              entryId: state.pathParameters['entryId'],
+            ),
+          ),
+        ),
+      ],
+    ),
+    // The other half of that, and the half that actually does the work: an
+    // outgoing page is only removed once the *incoming* one has finished
+    // arriving, so silencing the welcome screen alone changed nothing while
+    // the destinations still animated in over it.
+    StatefulShellRoute.indexedStack(
+      pageBuilder: (context, state, shell) =>
+          NoTransitionPage(child: AdaptiveNavigation(shell: shell)),
+      branches: [
+        StatefulShellBranch(
           routes: [
             GoRoute(
-              path: 'add',
-              builder: (context, state) =>
-                  EntryEditorScreen(groupId: state.pathParameters['groupId']!),
-            ),
-            GoRoute(
-              path: 'activity',
-              builder: (context, state) =>
-                  ActivityScreen(groupId: state.pathParameters['groupId']!),
-            ),
-            GoRoute(
-              path: 'insights',
-              builder: (context, state) =>
-                  InsightsScreen(groupId: state.pathParameters['groupId']!),
-            ),
-            GoRoute(
-              path: 'settings',
-              builder: (context, state) => GroupSettingsScreen(
-                groupId: state.pathParameters['groupId']!,
-              ),
-            ),
-            GoRoute(
-              path: 'members',
-              builder: (context, state) =>
-                  MembersScreen(groupId: state.pathParameters['groupId']!),
-            ),
-            GoRoute(
-              path: 'picture',
-              builder: (context, state) => AvatarPickerScreen.group(
-                groupId: state.pathParameters['groupId']!,
-              ),
-            ),
-            GoRoute(
-              path: 'settle',
-              builder: (context, state) => SettleUpScreen(
-                groupId: state.pathParameters['groupId']!,
-                fromMemberId: state.uri.queryParameters['from'],
-                toMemberId: state.uri.queryParameters['to'],
-                amountMinor: int.tryParse(
-                  state.uri.queryParameters['amount'] ?? '',
-                ),
-                currency: state.uri.queryParameters['currency'],
-              ),
-            ),
-            GoRoute(
-              path: 'e/:entryId',
-              builder: (context, state) => EntryEditorScreen(
-                groupId: state.pathParameters['groupId']!,
-                entryId: state.pathParameters['entryId'],
-              ),
+              path: '/',
+              builder: _selectable((context, state) => const GroupListScreen()),
             ),
           ],
         ),
-        // The other half of that, and the half that actually does the work: an
-        // outgoing page is only removed once the *incoming* one has finished
-        // arriving, so silencing the welcome screen alone changed nothing while
-        // the destinations still animated in over it.
-        StatefulShellRoute.indexedStack(
-          pageBuilder: (context, state, shell) =>
-              NoTransitionPage(child: AdaptiveNavigation(shell: shell)),
-          branches: [
-            StatefulShellBranch(
-              routes: [
-                GoRoute(
-                  path: '/',
-                  builder: (context, state) => const GroupListScreen(),
-                ),
-              ],
+        // A top-level destination, not a detail reached from Settings.
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/account',
+              builder: _selectable((context, state) => const AccountScreen()),
             ),
-            // A top-level destination, not a detail reached from Settings.
-            StatefulShellBranch(
-              routes: [
-                GoRoute(
-                  path: '/account',
-                  builder: (context, state) => const AccountScreen(),
-                ),
-              ],
-            ),
-            StatefulShellBranch(
-              routes: [
-                GoRoute(
-                  path: '/settings',
-                  builder: (context, state) => const SettingsScreen(),
-                ),
-              ],
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/settings',
+              builder: _selectable((context, state) => const SettingsScreen()),
             ),
           ],
         ),
@@ -222,6 +246,14 @@ GoRouter buildRouter({
     ),
   ],
 );
+
+/// Builds a screen whose text can be selected and copied.
+///
+/// One [SelectionArea] per route, as Flutter recommends: it needs the
+/// route's overlay for its handles and toolbar, and a selection never runs
+/// from a dialog into the page beneath it.
+GoRouterWidgetBuilder _selectable(GoRouterWidgetBuilder build) =>
+    (context, state) => SelectionArea(child: build(context, state));
 
 /// The app's only navigation surface, in whichever form the window has room
 /// for.

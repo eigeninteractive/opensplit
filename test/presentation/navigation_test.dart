@@ -1,12 +1,15 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 // `group` here is the Riverpod provider function, which collides with the
 // test framework's group().
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/presentation/app.dart';
+import 'package:opensplit/presentation/screens/entry_editor_screen.dart';
+import 'package:opensplit/presentation/screens/group_detail_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../harness.dart';
@@ -38,6 +41,29 @@ Future<void> _chooseDestination(WidgetTester tester, String label) async {
 /// The router in scope, for asking what the navigation stack looks like.
 GoRouter _router(WidgetTester tester) =>
     GoRouter.of(tester.element(find.byType(Scaffold).first));
+
+/// Swipes back from the screen's edge, as Android's predictive back does.
+///
+/// Unlike a back button press, a gesture is claimed by the page that is top of
+/// its own navigator, which is what lets a page under a dialog take it.
+Future<void> _swipeBack(WidgetTester tester) async {
+  Future<void> send(String method, [Object? arguments]) =>
+      tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+        'flutter/backgesture',
+        const StandardMethodCodec().encodeMethodCall(
+          MethodCall(method, arguments),
+        ),
+        (_) {},
+      );
+  await send('startBackGesture', {
+    'touchOffset': [5.0, 300.0],
+    'progress': 0.0,
+    'swipeEdge': 0,
+  });
+  await tester.pump();
+  await send('commitBackGesture');
+  await tester.pumpAndSettle();
+}
 
 /// A group with nothing in it, so there is something to drill into.
 Future<void> _seedGroup(AppDatabase db, {DateTime? archivedAt}) async {
@@ -158,6 +184,37 @@ void main() {
 
       await _unmount(tester);
     });
+  });
+
+  group('back closes what is on top', () {
+    testWidgets(
+      'a swipe back closes the date picker, not the editor under it',
+      (tester) async {
+        await _seedGroup(db);
+        await _pumpApp(tester, db);
+        _router(tester).go('/g/g1/add');
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byTooltip('Change the day'));
+        await tester.pumpAndSettle();
+        expect(find.byType(DatePickerDialog), findsOneWidget);
+
+        // The editor is top of its stack whichever navigator it is on, so the
+        // only thing that keeps it from taking this gesture is the picker
+        // being on the same stack, above it.
+        await _swipeBack(tester);
+        expect(find.byType(DatePickerDialog), findsNothing);
+        expect(find.byType(EntryEditorScreen), findsOneWidget);
+
+        await tester.tap(find.byType(CloseButton));
+        await tester.pumpAndSettle();
+        expect(find.byType(EntryEditorScreen), findsNothing);
+        expect(find.byType(GroupDetailScreen), findsOneWidget);
+
+        await _unmount(tester);
+      },
+      variant: TargetPlatformVariant.only(TargetPlatform.android),
+    );
   });
 
   group('archived groups', () {
