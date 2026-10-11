@@ -53,6 +53,13 @@ upstream defects that a dependency bump would remove:
   compatibility. Neither changes into a safe default through a routine bump.
 - `server/src/chunked.ts`: bounded SQL parameter batches respect the database
   platform's limits and remain safe when the ORM changes.
+- `android/gradle.properties`: the release build still warns that
+  `firebase_core` 4.15.0 and `in_app_review` 2.0.12 apply the legacy Kotlin
+  Gradle plugin. These are their current published releases. Keep
+  `android.builtInKotlin=false` until both plugins migrate; Flutter's
+  [migration guide](https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin)
+  describes this as temporary AGP 9 compatibility. Removing it is a separate
+  toolchain task, not part of these native plugin patches.
 
 The notification prerelease, its Android toolchain requirements, and the
 coupled connectivity update remain deferred. The separate Drizzle prerelease
