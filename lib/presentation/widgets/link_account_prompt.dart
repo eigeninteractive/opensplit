@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../application/ledger_providers.dart';
 import '../../application/session_providers.dart';
+import 'inline_notice.dart';
 
 /// Asks a guest to attach a real account as soon as they are in any group:
 /// from then on the server holds something only this session can reach, and
@@ -26,53 +27,22 @@ class LinkAccountPrompt extends ConsumerWidget {
     final dismissed = ref.watch(promptDismissedProvider);
     if (groups.isEmpty || dismissed) return const SizedBox.shrink();
 
-    final scheme = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-
     return Padding(
       padding: padding,
-      child: MaterialBanner(
-        backgroundColor: scheme.tertiaryContainer,
-        // Material's own banner padding assumes a single line of content beside
-        // the icon.
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-        dividerColor: Colors.transparent,
-        contentTextStyle: text.bodyMedium?.copyWith(
-          color: scheme.onTertiaryContainer,
-        ),
-        leading: Icon(
-          Icons.warning_amber_rounded,
-          color: scheme.onTertiaryContainer,
-        ),
-        content: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Protect access to this guest account',
-              style: text.titleSmall?.copyWith(
-                color: scheme.onTertiaryContainer,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              kIsWeb
-                  ? 'Your groups synchronize, but this browser holds the only '
-                        'way back in. Clearing its data can leave you unable to '
-                        'reach the guest account.'
-                  : 'Your groups synchronize, but this phone holds the only '
-                        'way back in. Losing it or reinstalling can leave you '
-                        'unable to reach the guest account.',
-            ),
-          ],
-        ),
+      child: InlineNotice(
+        icon: Icons.lock_outline,
+        title: 'Protect access to this guest account',
+        message: kIsWeb
+            ? 'Your groups synchronize, but this browser holds the only '
+                  'way back in. Clearing its data can leave you unable to '
+                  'reach the guest account.'
+            : 'Your groups synchronize, but this phone holds the only '
+                  'way back in. Losing it or reinstalling can leave you '
+                  'unable to reach the guest account.',
         actions: [
           TextButton(
             onPressed: () =>
                 ref.read(promptDismissedProvider.notifier).dismiss(),
-            style: TextButton.styleFrom(
-              foregroundColor: scheme.onTertiaryContainer,
-            ),
             child: const Text('Not now'),
           ),
           FilledButton(

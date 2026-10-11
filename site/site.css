@@ -3,7 +3,7 @@
  * its own sections in a <style> block, since nothing else has them.
  *
  * Colours are the app's own light scheme, as ColorScheme.fromSeed derives it
- * from #5B5891 (lib/presentation/theme.dart), so the page and the screenshots
+ * from #3F51B5 (lib/presentation/theme.dart), so the page and the screenshots
  * on it are the same palette rather than a near miss. See docs/brand/.
  *
  * The fonts are the ones the app bundles, copied to /fonts by
@@ -12,50 +12,50 @@
  */
 
 @font-face {
-  font-family: "Instrument Sans";
+  font-family: "Google Sans Flex";
   font-weight: 400;
   font-display: swap;
-  src: url("/fonts/InstrumentSans-Regular.ttf") format("truetype");
+  src: url("/fonts/GoogleSansFlex-Regular.ttf") format("truetype");
 }
 @font-face {
-  font-family: "Instrument Sans";
+  font-family: "Google Sans Flex";
   font-weight: 500;
   font-display: swap;
-  src: url("/fonts/InstrumentSans-Medium.ttf") format("truetype");
+  src: url("/fonts/GoogleSansFlex-Medium.ttf") format("truetype");
 }
 @font-face {
-  font-family: "Instrument Sans";
+  font-family: "Google Sans Flex";
   font-weight: 600 700;
   font-display: swap;
-  src: url("/fonts/InstrumentSans-SemiBold.ttf") format("truetype");
+  src: url("/fonts/GoogleSansFlex-SemiBold.ttf") format("truetype");
 }
 
 :root {
   /* surface, onSurface, onSurfaceVariant, outline, outlineVariant */
-  --paper: #fcf8ff;
-  --ink: #1c1b21;
-  --slate: #47464f;
-  --muted: #625f6b;
-  --line: #e4e0ea;
-  --edge: #c8c5d0;
+  --paper: #fbf8ff;
+  --ink: #1b1b21;
+  --slate: #46464f;
+  --muted: #46464f;
+  --line: #e4e1e9;
+  --edge: #c7c5d0;
   /* surfaceContainerLow, surfaceContainer */
-  --wash: #f6f2fa;
-  --wash-strong: #f0ecf4;
+  --wash: #f5f2fa;
+  --wash-strong: #efedf4;
   /* primary, onPrimaryContainer, primaryContainer */
-  --violet: #5b5891;
-  --violet-deep: #434078;
-  --lilac: #e3dfff;
+  --primary: #515b92;
+  --on-primary-container: #394379;
+  --primary-container: #dee0ff;
 
-  --sans: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --sans: "Google Sans Flex", system-ui, -apple-system, "Segoe UI", sans-serif;
   /* The reader's own monospace: inline code is the only thing set in it. */
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   --measure: 1160px;
   --gutter: clamp(16px, 5vw, 40px);
 
-  /* Shadow tinted with the brand's deep violet rather than grey, layered so a
+  /* Shadow tinted with the brand's onPrimaryContainer rather than grey, layered so a
      screen reads as lifted off the page rather than outlined. */
-  --lift: 0 1px 2px rgb(67 64 120 / 0.08), 0 8px 24px -8px rgb(67 64 120 / 0.16), 0 32px 64px -24px rgb(67 64 120 / 0.24);
+  --lift: 0 1px 2px rgb(57 67 121 / 0.08), 0 8px 24px -8px rgb(57 67 121 / 0.16), 0 32px 64px -24px rgb(57 67 121 / 0.24);
 }
 
 *,
@@ -87,23 +87,23 @@ img {
 }
 
 a {
-  color: var(--violet);
+  color: var(--primary);
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
 }
 a:hover {
-  color: var(--violet-deep);
+  color: var(--on-primary-container);
 }
 
 :focus-visible {
-  outline: 2px solid var(--violet);
+  outline: 2px solid var(--primary);
   outline-offset: 3px;
   border-radius: 6px;
 }
 
 ::selection {
-  background: var(--lilac);
+  background: var(--primary-container);
 }
 
 .skip {
@@ -194,7 +194,7 @@ a:hover {
   min-height: 48px;
   padding: 0 24px;
   border-radius: 999px;
-  border: 1px solid var(--violet);
+  border: 1px solid var(--primary);
   font-size: 16px;
   font-weight: 600;
   line-height: 1;
@@ -212,12 +212,12 @@ a:hover {
 }
 
 .button-filled {
-  background: var(--violet);
+  background: var(--primary);
   color: #fff;
 }
 .button-filled:hover {
-  background: var(--violet-deep);
-  border-color: var(--violet-deep);
+  background: var(--on-primary-container);
+  border-color: var(--on-primary-container);
   color: #fff;
 }
 
@@ -228,7 +228,7 @@ a:hover {
 }
 .button-outlined:hover {
   background: var(--wash);
-  border-color: var(--violet);
+  border-color: var(--primary);
   color: var(--ink);
 }
 
@@ -377,7 +377,7 @@ a:hover {
   text-decoration: none;
 }
 .sitefooter-top a:hover {
-  color: var(--violet);
+  color: var(--primary);
 }
 
 .sitefooter-base {

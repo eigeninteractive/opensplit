@@ -9,6 +9,8 @@ import '../../domain/avatar.dart';
 import '../navigation.dart';
 import '../theme.dart';
 import '../widgets/avatar_view.dart';
+import '../widgets/group_avatar_hero.dart';
+import '../widgets/shared_element.dart';
 import '../widgets/page_body.dart';
 import '../widgets/sync_status_notice.dart';
 
@@ -31,7 +33,7 @@ class AvatarPickerScreen extends ConsumerStatefulWidget {
 }
 
 /// What the picker needs to know about whoever it is picturing.
-typedef _Subject = ({Avatar avatar, String name, String id});
+typedef _Subject = ({Avatar avatar, String name, String id, Group? group});
 
 class _AvatarPickerScreenState extends ConsumerState<AvatarPickerScreen> {
   Avatar? _original;
@@ -47,7 +49,12 @@ class _AvatarPickerScreenState extends ConsumerState<AvatarPickerScreen> {
       final group = ref.watch(groupProvider(groupId)).value;
       return group == null
           ? null
-          : (avatar: group.avatar, name: group.name, id: group.id);
+          : (
+              avatar: group.avatar,
+              name: group.name,
+              id: group.id,
+              group: group,
+            );
     }
     final id = ref.watch(currentAccountIdProvider);
     if (id == null) return null;
@@ -60,6 +67,7 @@ class _AvatarPickerScreenState extends ConsumerState<AvatarPickerScreen> {
       avatar: profile?.avatar ?? const InitialsAvatar(),
       name: profile?.displayName ?? '',
       id: id,
+      group: null,
     );
   }
 
@@ -152,25 +160,43 @@ class _Picker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    final hue = chosen.color ?? hueFor(subject.id);
+    final palette = AvatarPalette.of(context);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
       children: [
         Center(
-          child: AvatarView(
-            avatar: chosen,
-            name: subject.name,
-            id: subject.id,
-            radius: 56,
-          ),
+          child: switch (subject.group) {
+            final group? => GroupAvatarHero(
+              group: group,
+              radius: 56,
+              avatar: chosen,
+            ),
+            null => AvatarView(
+              avatar: chosen,
+              name: subject.name,
+              id: subject.id,
+              radius: 56,
+            ),
+          },
         ),
         const SizedBox(height: 12),
-        Text(
-          subject.name.isEmpty ? 'No name yet' : subject.name,
-          textAlign: TextAlign.center,
-          style: textTheme.titleMedium,
-        ),
+        if (subject.group case final group?)
+          Center(
+            child: SharedText(
+              tag: ('group-name', group.id),
+              text: group.name,
+              style: textTheme.titleMedium!.copyWith(
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+            ),
+          )
+        else
+          Text(
+            subject.name.isEmpty ? 'No name yet' : subject.name,
+            textAlign: TextAlign.center,
+            style: textTheme.titleMedium,
+          ),
         const SizedBox(height: 24),
         Center(
           child: SegmentedButton<_Kind>(
@@ -198,7 +224,11 @@ class _Picker extends StatelessWidget {
         const SizedBox(height: 24),
         _Heading('Colour'),
         _Hues(
-          selected: hue,
+          selected: chosen.color,
+          automaticScheme: palette.forAvatar(
+            chosen.withColor(null),
+            subject.id,
+          ),
           onSelected: (hue) => onChanged(chosen.withColor(hue)),
         ),
         ...switch (chosen) {
@@ -255,10 +285,15 @@ class _Heading extends StatelessWidget {
 
 /// One filled button per hue, the hue itself as its colour.
 class _Hues extends StatelessWidget {
-  const _Hues({required this.selected, required this.onSelected});
+  const _Hues({
+    required this.selected,
+    required this.automaticScheme,
+    required this.onSelected,
+  });
 
-  final AvatarColor selected;
-  final ValueChanged<AvatarColor> onSelected;
+  final AvatarColor? selected;
+  final ColorScheme automaticScheme;
+  final ValueChanged<AvatarColor?> onSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -267,6 +302,17 @@ class _Hues extends StatelessWidget {
       spacing: 8,
       runSpacing: 8,
       children: [
+        IconButton.filled(
+          tooltip: 'Automatic',
+          isSelected: selected == null,
+          onPressed: () => onSelected(null),
+          style: IconButton.styleFrom(
+            backgroundColor: automaticScheme.primaryContainer,
+            foregroundColor: automaticScheme.onPrimaryContainer,
+          ),
+          icon: const Icon(Icons.palette_outlined),
+          selectedIcon: const Icon(Icons.check),
+        ),
         for (final hue in avatarHues)
           IconButton.filled(
             tooltip: _hueName(hue),

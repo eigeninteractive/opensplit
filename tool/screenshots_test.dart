@@ -22,6 +22,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:opensplit/application/entry_form.dart';
+import 'package:opensplit/application/ledger_providers.dart';
 import 'package:opensplit/application/router_provider.dart';
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
@@ -30,6 +32,7 @@ import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:opensplit/presentation/app.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:opensplit_api/opensplit_api.dart' show SplitKind;
 
 import '../test/harness.dart';
 
@@ -95,6 +98,53 @@ void main() {
     router.go('/g/$trip');
     await shoot('web-app');
 
+    if (const bool.fromEnvironment('RENDER_SPLIT_REVIEW')) {
+      _resize(tester, _phone);
+      router.go('/g/$trip/add');
+      await _settle(tester);
+      await _fillExpense(tester);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(OpenSplitApp)),
+      );
+      final ledger = container.read(groupLedgerProvider(trip))!;
+      final form = container.read(entryFormProvider(trip).notifier);
+      final selected = ledger.members.take(3).toList();
+      form
+        ..chooseCurrency('INR')
+        ..setAmount('300')
+        ..chooseSplitKind(SplitKind.exact);
+      for (final member in ledger.members.skip(3)) {
+        form.setInSplit(member.id, included: false);
+      }
+      await _settle(tester);
+      await Scrollable.ensureVisible(
+        tester.element(find.text('Split')),
+        alignment: 0.15,
+      );
+      await _capture(
+        tester,
+        frame,
+        'automatic-splits-initial',
+        output: 'build/ui-review',
+      );
+      form.setExactAmount(selected.first.id, '120');
+      await _capture(
+        tester,
+        frame,
+        'automatic-splits-override',
+        output: 'build/ui-review',
+      );
+      form
+        ..chooseSplitKind(SplitKind.percent)
+        ..setPercent(selected.first.id, '40');
+      await _capture(
+        tester,
+        frame,
+        'automatic-percent-override',
+        output: 'build/ui-review',
+      );
+    }
+
     await tester.runAsync(db.close);
     debugDisableShadows = true;
   });
@@ -117,7 +167,12 @@ Future<void> _settle(WidgetTester tester) async {
   }
 }
 
-Future<void> _capture(WidgetTester tester, GlobalKey frame, String name) async {
+Future<void> _capture(
+  WidgetTester tester,
+  GlobalKey frame,
+  String name, {
+  String output = _output,
+}) async {
   await _settle(tester);
   final boundary = frame.currentContext!.findRenderObject()!;
   await tester.runAsync(() async {
@@ -126,7 +181,7 @@ Future<void> _capture(WidgetTester tester, GlobalKey frame, String name) async {
     );
     final png = await image.toByteData(format: ui.ImageByteFormat.png);
     image.dispose();
-    File('$_output/$name.png')
+    File('$output/$name.png')
       ..createSync(recursive: true)
       ..writeAsBytesSync(png!.buffer.asUint8List());
   });
@@ -139,7 +194,7 @@ Future<void> _fillExpense(WidgetTester tester) async {
       .first;
 
   await tester.enterText(field('What was it?'), 'Sunset sail on the Tagus');
-  await tester.enterText(field('How much?'), '180');
+  await tester.enterText(field('Amount'), '180');
   await tester.tap(find.text('Uncategorised'));
   await _settle(tester);
   final category = find.text('Activities & outings');
@@ -160,8 +215,8 @@ Future<void> _fillExpense(WidgetTester tester) async {
 /// Loads every font the app bundles, and a fallback for the glyphs they lack.
 ///
 /// A test renders with nothing but the fonts it is given. On a phone, a
-/// character Instrument Sans does not have — the `≈` on an estimate, the `₹`
-/// — comes from the system font; here it would be a box. google_fonts names
+/// glyph missing from the bundled face comes from a system font; here it
+/// would be a box. google_fonts names
 /// the family's bare name as the fallback for its styles, so the SDK's copy of
 /// Roboto, Android's system font, is registered under that name to stand in
 /// for the system.
@@ -180,7 +235,7 @@ Future<void> _loadFonts() async {
     '${Platform.environment['FLUTTER_ROOT']}'
     '/bin/cache/artifacts/material_fonts',
   );
-  final fallback = FontLoader('InstrumentSans');
+  final fallback = FontLoader('GoogleSansFlex');
   for (final weight in ['Regular', 'Medium']) {
     final file = File('${roboto.path}/Roboto-$weight.ttf');
     fallback.addFont(file.readAsBytes().then(ByteData.sublistView));

@@ -8,7 +8,9 @@ import '../../application/sync_providers.dart';
 import '../../data/local/database.dart';
 import '../../data/repositories/drift_group_repository.dart';
 import '../launch_hold.dart';
-import '../widgets/avatar_view.dart';
+import '../widgets/group_avatar_hero.dart';
+import '../widgets/group_cover.dart';
+import '../widgets/shared_element.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/conflicting_edit_banner.dart';
 import '../widgets/create_group_sheet.dart';
@@ -57,6 +59,7 @@ class GroupListScreen extends ConsumerWidget {
       // ever true during a brand-new install's first sweep or on a rebuilt
       // device with no connection.
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: null,
         onPressed: ref.watch(referenceDataProvider).value ?? false
             ? () => showCreateGroupSheet(context)
             : null,
@@ -120,7 +123,13 @@ abstract final class _GroupList {
           itemBuilder: (context, index) => Segment(
             index: index,
             count: groups.length,
-            child: _GroupTile(group: groups[index]),
+            child: _GroupTile(
+              group: groups[index],
+              borderRadius: Segment.radiusAt(
+                index: index,
+                count: groups.length,
+              ),
+            ),
           ),
         ),
       ),
@@ -154,9 +163,10 @@ class _ArchivedRow extends StatelessWidget {
 }
 
 class _GroupTile extends ConsumerWidget {
-  const _GroupTile({required this.group});
+  const _GroupTile({required this.group, required this.borderRadius});
 
   final Group group;
+  final BorderRadius borderRadius;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -164,20 +174,44 @@ class _GroupTile extends ConsumerWidget {
     final currencies = ref.watch(currenciesProvider).value ?? const {};
 
     // A real ListTile, for its touch target, density and large-font growth.
-    return ListTile(
-      onTap: () => context.push('/g/${group.id}'),
-      contentPadding: const EdgeInsetsDirectional.fromSTEB(16, 8, 24, 8),
-      leading: AvatarView(
-        avatar: group.avatar,
-        name: group.name,
-        id: group.id,
-        radius: 24,
-      ),
-      title: Text(group.name, overflow: TextOverflow.ellipsis),
-      titleTextStyle: Theme.of(context).textTheme.titleMedium,
-      subtitle: ledger == null
-          ? const LaunchPlaceholder(child: SizedBox(height: 20))
-          : GroupStanding(ledger: ledger, currencies: currencies),
+    return Stack(
+      children: [
+        if (ledger != null)
+          Positioned.fill(
+            child: GroupCoverHero(
+              ledger: ledger,
+              borderRadius: borderRadius,
+              patternFade: 1,
+            ),
+          ),
+        Material(
+          type: MaterialType.transparency,
+          child: ListTile(
+            onTap: () => context.push('/g/${group.id}'),
+            contentPadding: const EdgeInsetsDirectional.fromSTEB(
+              16,
+              12,
+              24,
+              12,
+            ),
+            leading: CircleAvatar(
+              radius: 24,
+              backgroundColor: Theme.of(context).colorScheme.surface,
+              child: GroupAvatarHero(group: group, radius: 22),
+            ),
+            title: SharedText(
+              tag: ('group-name', group.id),
+              text: group.name,
+              style: Theme.of(context).textTheme.titleMedium!.copyWith(
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+            ),
+            subtitle: ledger == null
+                ? const LaunchPlaceholder(child: SizedBox(height: 20))
+                : GroupStanding(ledger: ledger, currencies: currencies),
+          ),
+        ),
+      ],
     );
   }
 }

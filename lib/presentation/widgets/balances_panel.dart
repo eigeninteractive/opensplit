@@ -16,6 +16,7 @@ import 'balance_arrow.dart';
 import 'empty_state.dart';
 import 'group_pane.dart';
 import 'segmented_list.dart';
+import 'shared_element.dart';
 
 /// Per-currency balances and, when the group wants them, the payments that
 /// would settle it.
@@ -320,9 +321,18 @@ class _TransferTile extends StatelessWidget {
     );
 
     final scheme = Theme.of(context).colorScheme;
+    final textStyle = Theme.of(
+      context,
+    ).textTheme.bodyLarge!.copyWith(color: scheme.onSurface);
     final words = isMine
         ? 'You pay $to'
         : '$from pays ${transfer.toMemberId == ledger.me?.id ? 'you' : to}';
+    final identity = (
+      ledger.group.id,
+      transfer.fromMemberId,
+      transfer.toMemberId,
+      transfer.currency,
+    );
     void settle() => context.push(
       '/g/${ledger.group.id}/settle'
       '?from=${transfer.fromMemberId}'
@@ -340,22 +350,43 @@ class _TransferTile extends StatelessWidget {
         leading: other == null
             ? null
             : MemberAvatar(ledger: ledger, member: other),
-        title: Row(
-          children: [
-            Flexible(child: Text(words, overflow: TextOverflow.ellipsis)),
-            const SizedBox(width: 6),
-            ExcludeSemantics(
-              child: Icon(
-                Icons.help_outline,
-                size: 16,
-                color: scheme.onSurfaceVariant,
+        title: Semantics(
+          label: words,
+          excludeSemantics: true,
+          child: Row(
+            children: [
+              Flexible(
+                child: SharedText(
+                  tag: ('settlement-from', identity),
+                  text: isMine ? 'You' : from,
+                  style: textStyle,
+                ),
               ),
-            ),
-          ],
+              Text(isMine ? ' pay ' : ' pays '),
+              Flexible(
+                child: SharedText(
+                  tag: ('settlement-to', identity),
+                  text: transfer.toMemberId == ledger.me?.id ? 'you' : to,
+                  style: textStyle,
+                ),
+              ),
+              const SizedBox(width: 6),
+              ExcludeSemantics(
+                child: Icon(
+                  Icons.help_outline,
+                  size: 16,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
         ),
-        subtitle: Text(
-          formatMoney(currency, transfer.amountMinor),
-          style: moneyStyle(Theme.of(context).textTheme.titleMedium!),
+        subtitle: SharedText(
+          tag: ('settlement-amount', identity),
+          text: formatMoney(currency, transfer.amountMinor),
+          style: moneyStyle(
+            Theme.of(context).textTheme.titleMedium!,
+          ).copyWith(color: scheme.onSurface),
         ),
         trailing: FilledButton.tonal(
           onPressed: settle,

@@ -22,6 +22,7 @@ Future<void> _pumpPrompt(
   WidgetTester tester,
   AppDatabase db, {
   required bool guest,
+  double textScale = 1,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -32,7 +33,17 @@ Future<void> _pumpPrompt(
           (ref) => Stream.value(_account(guest: guest)),
         ),
       ],
-      child: const MaterialApp(home: Scaffold(body: LinkAccountPrompt())),
+      child: MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
+        ),
+        home: const Scaffold(
+          body: SingleChildScrollView(child: LinkAccountPrompt()),
+        ),
+      ),
     ),
   );
   for (var beat = 0; beat < 10; beat++) {
@@ -61,6 +72,30 @@ void main() {
   tearDown(() => db.close());
 
   group('the prompt to save a guest account', () {
+    testWidgets('actions remain usable at large text on a narrow phone', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await _joinAGroup(db);
+      await _pumpPrompt(tester, db, guest: true, textScale: 2);
+
+      expect(tester.takeException(), isNull);
+      final defer = find.widgetWithText(TextButton, 'Not now');
+      final save = find.widgetWithText(FilledButton, 'Save my account');
+      expect(
+        tester.getTopLeft(save).dy,
+        greaterThan(tester.getBottomLeft(defer).dy),
+      );
+      await tester.ensureVisible(defer);
+      await tester.tap(defer);
+      await tester.pump();
+      expect(find.text('Protect access to this guest account'), findsNothing);
+      await _teardown(tester);
+    });
+
     testWidgets('shows as soon as the guest is in any group', (tester) async {
       await _joinAGroup(db);
       await _pumpPrompt(tester, db, guest: true);

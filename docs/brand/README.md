@@ -10,26 +10,32 @@ below; nothing here is built or served.
 
 ## Colour
 
-The seed is `#5B5891`, a muted violet: `_seed` in
+The seed is Material indigo 500, `Colors.indigo` (`#3F51B5`): `_seed` in
 `lib/presentation/theme.dart`, expanded by `ColorScheme.fromSeed` for both
 brightnesses. On Android 12 and later a wallpaper scheme replaces it unless the
 user turns that off, harmonised so error and the money colours shift toward
 the wallpaper too.
 
 Hex values are written out only where a build config cannot call Dart: the
-adaptive icon background (`#E3DFFF`, light `primaryContainer`), the splash and
+adaptive icon background (`#DEE0FF`, light `primaryContainer`), the splash and
 web loader backgrounds, the web `theme-color`, the static site's tokens at the
 top of `site/site.css`, and `tool/store_graphics.py`. Each is the generated value,
-not the kit's: the kit quotes the light surface as `#FBF8FF`, where
-`fromSeed` produces `#FCF8FF`, and the generated one wins.
+from `ColorScheme.fromSeed`, including light surface `#FBF8FF` and dark
+surface `#121318`. The seed is a source colour; the generated primary is
+`#515B92` in light mode and `#BAC3FF` in dark mode.
 
 Money has two colours of its own, `BalanceColors` in the same file. Owed to you
 is a green harmonised toward the seed, and you owe is the scheme's `error`.
 
+Automatic avatars use a stable choice of the app's primary, secondary, or
+tertiary container. They follow wallpaper colours. Choosing a hue explicitly
+keeps that personal choice, harmonised with the current app palette. The
+picture picker offers **Automatic** to return to the theme.
+
 ## Type
 
-- All text is **Instrument Sans**, applied to Material 3's unmodified type scale.
-- Every amount is Instrument Sans with **tabular figures**, through
+- All text is **Google Sans Flex**, applied to Material 3's unmodified type scale.
+- Every amount is Google Sans Flex with **tabular figures**, through
   `moneyStyle`, so amounts line up in a column and hold still as they change.
   An amount's prominence comes from the type scale step it is set in, not
   from a second face.
@@ -48,16 +54,16 @@ shows through it.
 
 | File | Use |
 |---|---|
-| `assets/brand/mark.svg` | brand violet |
+| `assets/brand/mark.svg` | generated brand primary (`#515B92`) |
 | `assets/brand/mark-mono.svg` | `currentColor`, tinted at runtime; the only variant bundled into the app (`BrandMark`) |
 | `assets/brand/mark-neutral.svg` | pre-stroked `#E4E1E9`, a light neutral |
-| `assets/brand/mark-on-dark.svg` | pre-stroked `#C4C0FF`, for dark surfaces |
-| `assets/brand/mark-on-primary-container.svg` | pre-stroked `#E3DFFF` |
+| `assets/brand/mark-on-dark.svg` | pre-stroked `#BAC3FF`, for dark surfaces |
+| `assets/brand/mark-on-primary-container.svg` | pre-stroked `#DEE0FF` |
 | `assets/brand/mark-1024-light.png`, `-dark.png` | rasters for the icon and splash generators |
 | `assets/brand/lockup-horizontal.svg`, `lockup-vertical.svg` | mark and wordmark: "Open" regular, "Split" semibold |
 | `site/favicon.svg` | the browser tab |
 
-The lockups name Instrument Sans rather than carrying outlines, so convert the
+The lockups name Google Sans Flex rather than carrying outlines, so convert the
 text to outlines before using one anywhere the font is not loaded: a store
 listing, a social preview.
 
@@ -71,8 +77,9 @@ Generated, never edited by hand:
 
 | Command | Writes | From |
 |---|---|---|
+| `python3 tool/brand_artwork.py` | the PNG sources in `assets/brand/`, `assets/icon/` and `assets/splash/` | the canonical mark SVG and the generated palette |
 | `dart run flutter_launcher_icons` | Android, iOS and web icons | `assets/icon/`, configured in `flutter_launcher_icons.yaml` |
-| `dart run tool/brand_icons.dart` | the favicon and the notification icon, after the command above | the transparent artwork in `assets/icon/` |
+| `dart run tool/brand_icons.dart` | root web icons, the favicon and the notification icon, after the command above | the transparent artwork in `assets/icon/` |
 | `dart run flutter_native_splash:create` | the native splash screens | `assets/splash/`, configured in `flutter_native_splash.yaml` |
 | `flutter test tool/screenshots_test.dart` | `site/store/screenshot-*.png` and `web-app.png` | the real screens over demo data |
 | `python3 tool/store_graphics.py` | `site/store/og-card.png` and `feature-graphic.jpg`, and `site/email/wordmark.png` for the sign-in email | the balances screenshot, the mark's geometry and the bundled font |
@@ -109,8 +116,9 @@ point at the committed assets above.
 
 They are where the brand started, not where the site is now: the landing page,
 the document pages and the store images have since been redesigned in code, in
-`site/` and the two generators above. The mark, colours and type they set out
-are unchanged.
+`site/` and the generators above. The October 2026 update keeps the mark and
+uses indigo with Google Sans Flex. The original canvases remain historical
+references; this document describes the shipped identity.
 
 | File | What it is |
 |---|---|

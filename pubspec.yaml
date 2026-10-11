@@ -124,21 +124,21 @@ flutter:
   # It cares about the name and nothing else. So the name is declared, and it
   # points at the face this app actually uses. That is not a trick played on the
   # engine: the entry means "the family to fall back to", the engine spells that
-  # "Roboto", and answering with Instrument Sans is more nearly correct than
+  # "Roboto", and answering with Google Sans Flex is more nearly correct than
   # shipping a second unrelated typeface would be — anything that falls through
   # lands on the app's own face instead of a stray Roboto. Nothing in this app
   # asks for "Roboto" by name.
   #
   # `assets:` is the separate mechanism package:google_fonts scans, and it is
   # how the brand faces are found. google_fonts registers them under its own
-  # family names (InstrumentSans_regular and so on), so the declaration below
+  # family names (GoogleSansFlex_regular and so on), so the declaration below
   # cannot collide with them even though it names the same file. With the files
   # present it resolves from the bundle, and allowRuntimeFetching is off in
   # main.dart so a packaging miss throws instead of reaching for the network.
   #
   # The brand face needs no `fonts:` entry of its own: google_fonts matches it
   # by filename, and these names are the ones it builds out of its own font
-  # descriptors. Instrument Sans carries 400 and 500 for Material 3's type scale
+  # descriptors. Google Sans Flex carries 400 and 500 for Material 3's type scale
   # plus 600, the one weight this app asks for by hand. See
   # assets/google_fonts/LICENSE for provenance.
   assets:
@@ -153,7 +153,7 @@ flutter:
   fonts:
     - family: Roboto
       fonts:
-        - asset: assets/google_fonts/InstrumentSans-Regular.ttf
+        - asset: assets/google_fonts/GoogleSansFlex-Regular.ttf
           weight: 400
 
 # cider's links in CHANGELOG.md. The release workflow tags each version as

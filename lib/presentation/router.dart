@@ -73,8 +73,9 @@ GoRouter buildRouter({
 }) => GoRouter(
   initialLocation: '/',
   refreshListenable: refresh,
-  errorBuilder: (context, state) =>
-      NotFoundScreen(location: state.uri.toString()),
+  errorBuilder: (context, state) => _ReadingOrderScreen(
+    child: NotFoundScreen(location: state.uri.toString()),
+  ),
 
   /// Nothing above the welcome screen works without a session.
   redirect: (context, state) =>
@@ -90,95 +91,120 @@ GoRouter buildRouter({
     // No transition, in both directions.
     GoRoute(
       path: '/welcome',
-      pageBuilder: (context, state) =>
-          const NoTransitionPage(child: WelcomeScreen()),
+      pageBuilder: (context, state) => const NoTransitionPage(
+        child: _ReadingOrderScreen(child: WelcomeScreen()),
+      ),
     ),
     // The link a friend sends.
     GoRoute(
       path: '/join/:token',
-      builder: (context, state) =>
-          JoinScreen(token: state.pathParameters['token']!),
+      builder: (context, state) => _ReadingOrderScreen(
+        child: JoinScreen(token: state.pathParameters['token']!),
+      ),
     ),
     GoRoute(
       path: '/archived',
-      builder: (context, state) => const ArchivedGroupsScreen(),
+      builder: (context, state) =>
+          const _ReadingOrderScreen(child: ArchivedGroupsScreen()),
     ),
     // Above the shell rather than inside Settings' branch, so it arrives
     // with a back arrow instead of a menu button -- it is a screen reached
     // from a destination, not a destination.
-    GoRoute(path: '/about', builder: (context, state) => const AboutScreen()),
+    GoRoute(
+      path: '/about',
+      builder: (context, state) =>
+          const _ReadingOrderScreen(child: AboutScreen()),
+    ),
     // Reached from the Account destination, above the shell for the same
     // reason as About.
     GoRoute(
       path: '/account/edit',
-      builder: (context, state) => EditProfileScreen(
-        focus:
-            ProfileField.values
-                .asNameMap()[state.uri.queryParameters['field']] ??
-            ProfileField.name,
+      builder: (context, state) => _ReadingOrderScreen(
+        child: EditProfileScreen(
+          focus:
+              ProfileField.values
+                  .asNameMap()[state.uri.queryParameters['field']] ??
+              ProfileField.name,
+        ),
       ),
     ),
     GoRoute(
       path: '/account/save',
-      builder: (context, state) => const SaveAccountScreen(),
+      builder: (context, state) =>
+          const _ReadingOrderScreen(child: SaveAccountScreen()),
     ),
     GoRoute(
       path: '/account/picture',
-      builder: (context, state) => const AvatarPickerScreen.profile(),
+      builder: (context, state) =>
+          const _ReadingOrderScreen(child: AvatarPickerScreen.profile()),
     ),
     GoRoute(
       path: '/g/:groupId',
-      builder: (context, state) =>
-          GroupDetailScreen(groupId: state.pathParameters['groupId']!),
+      builder: (context, state) => _ReadingOrderScreen(
+        child: GroupDetailScreen(groupId: state.pathParameters['groupId']!),
+      ),
       routes: [
         GoRoute(
           path: 'add',
-          builder: (context, state) =>
-              EntryEditorScreen(groupId: state.pathParameters['groupId']!),
+          builder: (context, state) => _ReadingOrderScreen(
+            child: EntryEditorScreen(groupId: state.pathParameters['groupId']!),
+          ),
         ),
         GoRoute(
           path: 'activity',
-          builder: (context, state) =>
-              ActivityScreen(groupId: state.pathParameters['groupId']!),
+          builder: (context, state) => _ReadingOrderScreen(
+            child: ActivityScreen(groupId: state.pathParameters['groupId']!),
+          ),
         ),
         GoRoute(
           path: 'insights',
-          builder: (context, state) =>
-              InsightsScreen(groupId: state.pathParameters['groupId']!),
+          builder: (context, state) => _ReadingOrderScreen(
+            child: InsightsScreen(groupId: state.pathParameters['groupId']!),
+          ),
         ),
         GoRoute(
           path: 'settings',
-          builder: (context, state) =>
-              GroupSettingsScreen(groupId: state.pathParameters['groupId']!),
+          builder: (context, state) => _ReadingOrderScreen(
+            child: GroupSettingsScreen(
+              groupId: state.pathParameters['groupId']!,
+            ),
+          ),
         ),
         GoRoute(
           path: 'members',
-          builder: (context, state) =>
-              MembersScreen(groupId: state.pathParameters['groupId']!),
+          builder: (context, state) => _ReadingOrderScreen(
+            child: MembersScreen(groupId: state.pathParameters['groupId']!),
+          ),
         ),
         GoRoute(
           path: 'picture',
-          builder: (context, state) => AvatarPickerScreen.group(
-            groupId: state.pathParameters['groupId']!,
+          builder: (context, state) => _ReadingOrderScreen(
+            child: AvatarPickerScreen.group(
+              groupId: state.pathParameters['groupId']!,
+            ),
           ),
         ),
         GoRoute(
           path: 'settle',
-          builder: (context, state) => SettleUpScreen(
-            groupId: state.pathParameters['groupId']!,
-            fromMemberId: state.uri.queryParameters['from'],
-            toMemberId: state.uri.queryParameters['to'],
-            amountMinor: int.tryParse(
-              state.uri.queryParameters['amount'] ?? '',
+          builder: (context, state) => _ReadingOrderScreen(
+            child: SettleUpScreen(
+              groupId: state.pathParameters['groupId']!,
+              fromMemberId: state.uri.queryParameters['from'],
+              toMemberId: state.uri.queryParameters['to'],
+              amountMinor: int.tryParse(
+                state.uri.queryParameters['amount'] ?? '',
+              ),
+              currency: state.uri.queryParameters['currency'],
             ),
-            currency: state.uri.queryParameters['currency'],
           ),
         ),
         GoRoute(
           path: 'e/:entryId',
-          builder: (context, state) => EntryEditorScreen(
-            groupId: state.pathParameters['groupId']!,
-            entryId: state.pathParameters['entryId'],
+          builder: (context, state) => _ReadingOrderScreen(
+            child: EntryEditorScreen(
+              groupId: state.pathParameters['groupId']!,
+              entryId: state.pathParameters['entryId'],
+            ),
           ),
         ),
       ],
@@ -197,7 +223,8 @@ GoRouter buildRouter({
           routes: [
             GoRoute(
               path: '/',
-              builder: (context, state) => const GroupListScreen(),
+              builder: (context, state) =>
+                  const _ReadingOrderScreen(child: GroupListScreen()),
             ),
           ],
         ),
@@ -206,7 +233,8 @@ GoRouter buildRouter({
           routes: [
             GoRoute(
               path: '/account',
-              builder: (context, state) => const AccountScreen(),
+              builder: (context, state) =>
+                  const _ReadingOrderScreen(child: AccountScreen()),
             ),
           ],
         ),
@@ -214,7 +242,8 @@ GoRouter buildRouter({
           routes: [
             GoRoute(
               path: '/settings',
-              builder: (context, state) => const SettingsScreen(),
+              builder: (context, state) =>
+                  const _ReadingOrderScreen(child: SettingsScreen()),
             ),
           ],
         ),
@@ -222,6 +251,18 @@ GoRouter buildRouter({
     ),
   ],
 );
+
+/// Keeps each screen's Tab sequence in visual reading order. The outer app
+/// group orders route scopes without measuring their transitional geometry.
+class _ReadingOrderScreen extends StatelessWidget {
+  const _ReadingOrderScreen({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) =>
+      FocusTraversalGroup(policy: ReadingOrderTraversalPolicy(), child: child);
+}
 
 /// Shows the selected destination, fading through from the last one.
 ///
@@ -306,20 +347,25 @@ class _Branch extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => Offstage(
-    offstage: !selected && !leaving,
-    child: TickerMode(
-      enabled: selected,
-      child: IgnorePointer(
-        ignoring: !selected,
-        child: ExcludeSemantics(
-          excluding: !selected,
-          child: FadeThroughTransition(
-            animation: selected ? fade : kAlwaysCompleteAnimation,
-            secondaryAnimation: leaving ? fade : kAlwaysDismissedAnimation,
-            // The one fill is painted behind every branch, by the parent.
-            fillColor: Colors.transparent,
-            child: child,
+  Widget build(BuildContext context) => HeroMode(
+    // The root navigator can collect heroes from nested navigators. Only the
+    // active destination should participate in a pushed page's transition.
+    enabled: selected,
+    child: Offstage(
+      offstage: !selected && !leaving,
+      child: TickerMode(
+        enabled: selected,
+        child: IgnorePointer(
+          ignoring: !selected,
+          child: ExcludeSemantics(
+            excluding: !selected,
+            child: FadeThroughTransition(
+              animation: selected ? fade : kAlwaysCompleteAnimation,
+              secondaryAnimation: leaving ? fade : kAlwaysDismissedAnimation,
+              // The one fill is painted behind every branch, by the parent.
+              fillColor: Colors.transparent,
+              child: child,
+            ),
           ),
         ),
       ),
@@ -356,28 +402,30 @@ class AdaptiveNavigation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Narrow: nothing here at all.
-    if (MediaQuery.sizeOf(context).width < _railBreakpoint) return shell;
-
+    final wide = MediaQuery.sizeOf(context).width >= _railBreakpoint;
     final l10n = AppLocalizations.of(context);
+    // Keep the navigator's ancestry stable across the drawer/rail breakpoint.
+    // Reparenting it while a route restores keyboard focus can leave traversal
+    // trying to measure a render object that has just been detached.
     return Scaffold(
       body: Row(
         children: [
-          NavigationRail(
-            selectedIndex: shell.currentIndex,
-            labelType: NavigationRailLabelType.all,
-            minWidth: _railWidth,
-            onDestinationSelected: _select,
-            destinations: [
-              for (final destination in _destinations)
-                NavigationRailDestination(
-                  icon: Icon(destination.icon),
-                  selectedIcon: Icon(destination.selectedIcon),
-                  label: Text(destination.label(l10n)),
-                ),
-            ],
-          ),
-          const VerticalDivider(width: 1),
+          if (wide)
+            NavigationRail(
+              selectedIndex: shell.currentIndex,
+              labelType: NavigationRailLabelType.all,
+              minWidth: _railWidth,
+              onDestinationSelected: _select,
+              destinations: [
+                for (final destination in _destinations)
+                  NavigationRailDestination(
+                    icon: Icon(destination.icon),
+                    selectedIcon: Icon(destination.selectedIcon),
+                    label: Text(destination.label(l10n)),
+                  ),
+              ],
+            ),
+          if (wide) const VerticalDivider(width: 1),
           Expanded(child: shell),
         ],
       ),

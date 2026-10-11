@@ -87,7 +87,11 @@ cd server && pnpm dev                # the Worker, on localhost:8787
 
 Open **`http://localhost:8787/app`**, with `localhost` rather than
 `127.0.0.1`, because the session cookie and `APP_ORIGIN` in `.dev.vars` are for
-`localhost`. Rebuild after changing Dart code; this path has no hot reload.
+`localhost`. This path has no hot reload. After changing Dart code, stop
+`pnpm dev`, rebuild, and start it again. The builder replaces `build/web`;
+restarting Wrangler refreshes its asset manifest instead of retaining 404s for
+the replaced files. If the browser offers an update, use **Restart** to switch
+its service worker to the rebuilt release.
 
 - **Signing in.** Continue as a guest, or use an email address: the code is
   printed in the `pnpm dev` terminal. Google sign-in has no credentials

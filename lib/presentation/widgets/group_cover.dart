@@ -17,20 +17,25 @@ import 'category_icon.dart';
 /// categories, so a trip fills with flights and dinners and a flat with bills
 /// and groceries, and the picture follows the group as it goes on. Before
 /// anything is spent it uses the group's own avatar. The layout is seeded by
-/// the group's id, so the same group looks the same on every device.
+/// the group's id, so the same group looks the same on every device. Both the
+/// list card and header crop the same fixed composition, including in flight.
 class GroupCover extends ConsumerWidget {
-  const GroupCover({super.key, required this.ledger});
+  const GroupCover({super.key, required this.ledger, this.patternFade = 0});
 
   final GroupLedger ledger;
 
+  /// Softens the pattern under list text: zero in the header, one in a row.
+  final double patternFade;
+
   /// How many of the most frequent categories make up the pattern.
   static const _motifs = 5;
+  static const _artworkSize = Size(640, 192);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final group = ledger.group;
     final avatar = group.avatar;
-    final scheme = AvatarPalette.of(context)[avatar.color ?? hueFor(group.id)];
+    final scheme = AvatarPalette.of(context).forAvatar(avatar, group.id);
     final categories = <String, Category>{
       for (final category
           in ref.watch(categoriesProvider).value ?? const <Category>[])
@@ -60,11 +65,28 @@ class GroupCover extends ConsumerWidget {
       child: ColoredBox(
         color: scheme.primaryContainer,
         child: IconTheme.merge(
-          data: IconThemeData(color: scheme.inversePrimary),
-          child: ClipRect(
-            child: LayoutBuilder(
-              builder: (context, constraints) => Stack(
-                children: _pattern(constraints.biggest, motifs, group.id),
+          data: IconThemeData(
+            color: scheme.onPrimaryContainer.withValues(alpha: 0.18),
+          ),
+          child: ShaderMask(
+            blendMode: BlendMode.dstIn,
+            shaderCallback: (bounds) => LinearGradient(
+              colors: [
+                Colors.black.withValues(alpha: 1 - 0.65 * patternFade),
+                Colors.black.withValues(alpha: 1 - 0.65 * patternFade),
+                Colors.black.withValues(alpha: 1 - 0.2 * patternFade),
+              ],
+              stops: const [0, 0.6, 1],
+            ).createShader(bounds),
+            child: ClipRect(
+              child: FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox.fromSize(
+                  size: _artworkSize,
+                  child: Stack(
+                    children: _pattern(_artworkSize, motifs, group.id),
+                  ),
+                ),
               ),
             ),
           ),
@@ -84,7 +106,10 @@ class GroupCover extends ConsumerWidget {
       counts.update(category, (n) => n + 1, ifAbsent: () => 1);
     }
     final ranked = counts.keys.toList()
-      ..sort((a, b) => counts[b]!.compareTo(counts[a]!));
+      ..sort((a, b) {
+        final frequency = counts[b]!.compareTo(counts[a]!);
+        return frequency == 0 ? a.compareTo(b) : frequency;
+      });
     return [
       for (final id in ranked.take(_motifs))
         if (categories[id] case final category?) categoryIcon(category.icon),
@@ -98,7 +123,7 @@ class GroupCover extends ConsumerWidget {
     List<Widget Function(double size)> motifs,
     String seed,
   ) {
-    const cell = 64.0;
+    const cell = 80.0;
     final random = Random(stableHash(seed));
     final columns = (size.width / cell).ceil() + 1;
     final rows = (size.height / cell).ceil() + 1;
@@ -121,7 +146,7 @@ class GroupCover extends ConsumerWidget {
     List<Widget Function(double size)> motifs,
     Offset origin,
   ) {
-    final size = 24.0 + random.nextInt(3) * 8;
+    final size = 32.0 + random.nextInt(3) * 8;
     final motif = motifs[random.nextInt(motifs.length)];
     return Positioned(
       left: origin.dx + random.nextDouble() * 16,
@@ -132,4 +157,59 @@ class GroupCover extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Shares the entire cover, with its thumbnail corners opening into the header.
+class GroupCoverHero extends StatelessWidget {
+  const GroupCoverHero({
+    super.key,
+    required this.ledger,
+    this.borderRadius = BorderRadius.zero,
+    this.patternFade = 0,
+  });
+
+  final GroupLedger ledger;
+  final BorderRadius borderRadius;
+  final double patternFade;
+
+  @override
+  Widget build(BuildContext context) => HeroMode(
+    enabled: !MediaQuery.disableAnimationsOf(context),
+    child: Hero(
+      tag: ('group-cover', ledger.group.id),
+      transitionOnUserGestures: true,
+      flightShuttleBuilder: (context, animation, direction, from, to) {
+        final source = (from.widget as Hero).child as ClipRRect;
+        final destination = (to.widget as Hero).child as ClipRRect;
+        final sourceCover = source.child! as GroupCover;
+        final destinationCover = destination.child! as GroupCover;
+        return AnimatedBuilder(
+          animation: animation,
+          builder: (context, _) {
+            final progress = direction == HeroFlightDirection.push
+                ? animation.value
+                : 1 - animation.value;
+            return ClipRRect(
+              borderRadius: BorderRadiusGeometry.lerp(
+                source.borderRadius,
+                destination.borderRadius,
+                progress,
+              )!,
+              child: GroupCover(
+                ledger: destinationCover.ledger,
+                patternFade:
+                    sourceCover.patternFade +
+                    (destinationCover.patternFade - sourceCover.patternFade) *
+                        progress,
+              ),
+            );
+          },
+        );
+      },
+      child: ClipRRect(
+        borderRadius: borderRadius,
+        child: GroupCover(ledger: ledger, patternFade: patternFade),
+      ),
+    ),
+  );
 }

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../application/local_providers.dart';
 import '../../application/sync_providers.dart';
 import '../../data/sync/outbox_queue.dart';
+import 'inline_notice.dart';
 
 /// Says out loud that something recorded on this device never reached anyone.
 class UnsyncedChangesBanner extends ConsumerWidget {
@@ -18,45 +19,22 @@ class UnsyncedChangesBanner extends ConsumerWidget {
     final failures = ref.watch(failedWritesProvider).value ?? const [];
     if (failures.isEmpty) return const SizedBox.shrink();
 
-    final scheme = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
     final count = failures.length;
-
     return Padding(
       padding: padding,
-      // Material's banner: "an important, succinct message with actions,
-      // that requires a user action to dismiss".
-      child: MaterialBanner(
-        backgroundColor: scheme.errorContainer,
-        contentTextStyle: text.bodyMedium?.copyWith(
-          color: scheme.onErrorContainer,
-        ),
-        leading: Icon(
-          Icons.sync_problem_rounded,
-          color: scheme.onErrorContainer,
-        ),
-        content: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              count == 1
-                  ? 'One change could not be saved'
-                  : '$count changes could not be saved',
-              style: text.titleSmall?.copyWith(color: scheme.onErrorContainer),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              count == 1
-                  ? '“${failures.single.label}” is on this device only. Nobody '
-                        'else in the group can see it, and it is not counted '
-                        'in their balances.'
-                  : 'They are on this device only. Nobody else in the group '
-                        'can see them, and they are not counted in their '
-                        'balances.',
-            ),
-          ],
-        ),
+      child: InlineNotice(
+        isError: true,
+        icon: Icons.sync_problem_rounded,
+        title: count == 1
+            ? 'One change could not be saved'
+            : '$count changes could not be saved',
+        message: count == 1
+            ? '“${failures.single.label}” is on this device only. Nobody '
+                  'else in the group can see it, and it is not counted '
+                  'in their balances.'
+            : 'They are on this device only. Nobody else in the group '
+                  'can see them, and they are not counted in their '
+                  'balances.',
         actions: [
           TextButton(
             onPressed: () => _showDetails(context, failures),

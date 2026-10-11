@@ -3,6 +3,9 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:opensplit/data/local/database.dart';
+import 'package:opensplit/data/repositories/drift_entry_repository.dart';
+import 'package:opensplit/domain/entry_draft.dart';
+import 'package:opensplit_api/opensplit_api.dart' show EntryKind;
 import 'package:opensplit/presentation/app.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -93,7 +96,12 @@ String _textOf(WidgetTester tester, Finder field) =>
 /// Opens the picker labelled [label] and picks [name] from its menu, not
 /// from another picker that happens to be showing the same name.
 Future<void> _choose(WidgetTester tester, String label, String name) async {
-  await tester.tap(find.text(label));
+  await tester.tap(
+    find.ancestor(
+      of: find.text(label),
+      matching: find.byType(DropdownMenu<String>),
+    ),
+  );
   await _beats(tester);
   await tester.tap(find.widgetWithText(MenuItemButton, name).last);
   await _beats(tester);
@@ -117,6 +125,141 @@ void main() {
   });
 
   tearDown(() => db.close());
+
+  testWidgets('the entry URL opens a payment editor and saves a payment', (
+    tester,
+  ) async {
+    final repository = DriftEntryRepository(db);
+    final payment = (await tester.runAsync(
+      () => repository.create(
+        EntryDraft.settlement(
+          groupId: 'g1',
+          currency: 'INR',
+          amountMinor: 120000,
+          fromMemberId: 'm-priya',
+          toMemberId: 'm-ravi',
+          entryDate: DateTime.utc(2026, 8, 20),
+          notes: 'Paid in cash',
+        ),
+        createdBy: 'm-priya',
+      ),
+    ))!;
+    await _open(tester, db, '/g/g1/e/${payment.id}');
+    expect(find.text('Edit payment'), findsOneWidget);
+    expect(find.text('Priya paid Ravi'), findsOneWidget);
+    expect(find.text('What was it?'), findsNothing);
+    expect(find.text('Split'), findsNothing);
+    expect(find.text('Pay by UPI'), findsNothing);
+    expect(find.text('History'), findsOneWidget);
+    expect(_shownIn(tester, 'Paid by'), 'Priya');
+    expect(_shownIn(tester, 'Paid to'), 'Ravi (you)');
+    Finder field(String label) =>
+        find.ancestor(of: find.text(label), matching: find.byType(TextField));
+    await tester.enterText(field('Amount'), '900');
+    await tester.enterText(field('Payment note (optional)'), 'Bank transfer');
+    await _choose(tester, 'Paid to', 'Arun');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await _beats(tester);
+    final saved = (await tester.runAsync(
+      () => repository.getEntry(payment.id),
+    ))!;
+    expect(saved.row.kind, EntryKind.settlement);
+    expect(saved.isSpend, isFalse);
+    expect(saved.row.amountMinor, 90000);
+    expect(saved.payers.single.amountMinor, 90000);
+    expect(saved.shares.single.amountMinor, 90000);
+    expect(saved.shares.single.memberId, 'm-arun');
+    expect(saved.row.notes, 'Bank transfer');
+    expect(saved.row.entryDate, payment.row.entryDate);
+    expect(find.text('Priya paid Arun'), findsOneWidget);
+    await _unmount(tester);
+  });
+
+  testWidgets('a stale payment edit keeps the draft and explains the failure', (
+    tester,
+  ) async {
+    final repository = DriftEntryRepository(db);
+    final payment = (await tester.runAsync(
+      () => repository.create(
+        EntryDraft.settlement(
+          groupId: 'g1',
+          currency: 'INR',
+          amountMinor: 500,
+          fromMemberId: 'm-priya',
+          toMemberId: 'm-ravi',
+        ),
+        createdBy: 'm-priya',
+      ),
+    ))!;
+    await _open(tester, db, '/g/g1/e/${payment.id}');
+    await tester.enterText(
+      find.ancestor(
+        of: find.text('Payment note (optional)'),
+        matching: find.byType(TextField),
+      ),
+      'My draft',
+    );
+    await tester.runAsync(
+      () => repository.update(
+        payment.id,
+        EntryDraft.settlement(
+          groupId: 'g1',
+          currency: 'INR',
+          amountMinor: 500,
+          fromMemberId: 'm-priya',
+          toMemberId: 'm-ravi',
+          notes: 'Another device',
+        ),
+        actorId: 'm-ravi',
+        expected: payment,
+      ),
+    );
+    await _beats(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await _beats(tester);
+    expect(find.text('Edit payment'), findsOneWidget);
+    expect(find.textContaining('changed while you were editing'), findsWidgets);
+    expect(find.text('My draft'), findsOneWidget);
+    final stored = (await tester.runAsync(
+      () => repository.getEntry(payment.id),
+    ))!;
+    expect(stored.row.notes, 'Another device');
+    expect(stored.row.kind, EntryKind.settlement);
+    await _unmount(tester);
+  });
+
+  for (final brightness in Brightness.values) {
+    testWidgets(
+      'payment editing fits 320px at 200% text in ${brightness.name}',
+      (tester) async {
+        final payment = (await tester.runAsync(
+          () => DriftEntryRepository(db).create(
+            EntryDraft.settlement(
+              groupId: 'g1',
+              currency: 'INR',
+              amountMinor: 500,
+              fromMemberId: 'm-priya',
+              toMemberId: 'm-ravi',
+            ),
+            createdBy: 'm-priya',
+          ),
+        ))!;
+        tester.platformDispatcher
+          ..textScaleFactorTestValue = 2
+          ..platformBrightnessTestValue = brightness;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+        await _open(tester, db, '/g/g1/e/${payment.id}');
+        tester.view.physicalSize = const Size(320, 640);
+        await _beats(tester);
+        expect(tester.takeException(), isNull);
+        await tester.drag(find.byType(ListView).first, const Offset(0, -400));
+        await _beats(tester);
+        expect(tester.takeException(), isNull);
+        await _unmount(tester);
+      },
+    );
+  }
 
   testWidgets('choosing another payee hands over their UPI ID, not the last '
       "one's", (tester) async {

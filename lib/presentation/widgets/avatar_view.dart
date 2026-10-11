@@ -27,7 +27,7 @@ class AvatarView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = AvatarPalette.of(context)[avatar.color ?? hueFor(id)];
+    final scheme = AvatarPalette.of(context).forAvatar(avatar, id);
     final textTheme = Theme.of(context).textTheme;
 
     final child = switch (avatar) {

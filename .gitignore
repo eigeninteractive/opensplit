@@ -34,6 +34,10 @@ migrate_working_dir/
 /build/
 /coverage/
 
+# Launcher generator intermediates; tool/brand_icons.dart publishes site/icons.
+/web/icons/
+/web/favicon.png
+
 # Browser-test server serves test/, so copy the shipped SQLite assets here.
 /test/browser/sqlite3.wasm
 /test/browser/drift_worker.js

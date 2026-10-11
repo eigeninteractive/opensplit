@@ -6,6 +6,7 @@ import '../../application/ledger_providers.dart';
 import '../../application/local_providers.dart';
 import '../../data/repositories/drift_conflict_repository.dart';
 import '../../domain/money_format.dart';
+import 'inline_notice.dart';
 
 /// Says that an edit did not apply, and what the expense says instead.
 class ConflictingEditBanner extends ConsumerWidget {
@@ -20,39 +21,16 @@ class ConflictingEditBanner extends ConsumerWidget {
     final conflicts = ref.watch(pendingConflictsProvider).value ?? const [];
     if (conflicts.isEmpty) return const SizedBox.shrink();
 
-    final scheme = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
     final first = conflicts.first;
     final count = conflicts.length;
-
     return Padding(
       padding: padding,
-      child: MaterialBanner(
-        backgroundColor: scheme.tertiaryContainer,
-        contentTextStyle: text.bodyMedium?.copyWith(
-          color: scheme.onTertiaryContainer,
-        ),
-        leading: Icon(
-          Icons.published_with_changes_rounded,
-          color: scheme.onTertiaryContainer,
-        ),
-        content: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              count == 1
-                  ? 'Your change to “${first.attempted.description}” did not '
-                        'apply'
-                  : '$count of your changes did not apply',
-              style: text.titleSmall?.copyWith(
-                color: scheme.onTertiaryContainer,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(_explain(ref, first, count)),
-          ],
-        ),
+      child: InlineNotice(
+        icon: Icons.published_with_changes_rounded,
+        title: count == 1
+            ? 'Your change to “${first.attempted.description}” did not apply'
+            : '$count of your changes did not apply',
+        message: _explain(ref, first, count),
         actions: [
           TextButton(
             onPressed: () =>

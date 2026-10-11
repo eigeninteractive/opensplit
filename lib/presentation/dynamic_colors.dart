@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
@@ -18,7 +20,18 @@ final wallpaperSchemesProvider = FutureProvider<WallpaperSchemes?>((ref) async {
         dark: palette.toColorScheme(brightness: Brightness.dark),
       );
     }
+  } on PlatformException catch (error, stackTrace) {
+    developer.log(
+      'Could not read the wallpaper palette',
+      name: 'opensplit.appearance',
+      error: error,
+      stackTrace: stackTrace,
+    );
+  }
 
+  // The accent is a separate platform capability. A failure to read the
+  // Android palette must not prevent a desktop accent from being used.
+  try {
     final accent = await DynamicColorPlugin.getAccentColor();
     if (accent != null) {
       return (
@@ -29,9 +42,13 @@ final wallpaperSchemesProvider = FutureProvider<WallpaperSchemes?>((ref) async {
         ),
       );
     }
-  } on PlatformException {
-    // A platform that has the plugin but refused to answer. Indistinguishable
-    // from not having one, as far as this app is concerned.
+  } on PlatformException catch (error, stackTrace) {
+    developer.log(
+      'Could not read the system accent',
+      name: 'opensplit.appearance',
+      error: error,
+      stackTrace: stackTrace,
+    );
   }
   return null;
 });

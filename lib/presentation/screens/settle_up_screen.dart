@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -14,16 +15,17 @@ import '../../application/sync_providers.dart';
 import '../../data/local/database.dart';
 import '../../domain/money_format.dart';
 import '../../domain/settle/upi.dart';
-import '../amount_input.dart';
 import '../navigation.dart';
-import '../widgets/currency_picker.dart';
+import '../feedback.dart';
+import '../widgets/amount_card.dart';
+import '../widgets/entry_history.dart';
 import '../widgets/page_body.dart';
+import '../widgets/shared_element.dart';
 
-/// Records a payment between two members, optionally handing off to a UPI app
-/// first.
+/// Records or edits a payment between two members.
 ///
-/// Holds no state of its own: what has been chosen and typed lives in
-/// [SettlementForm].
+/// UPI handoff is available when recording a new payment. Editing changes the
+/// existing record, with the state held by [SettlementForm].
 class SettleUpScreen extends ConsumerWidget {
   const SettleUpScreen({
     super.key,
@@ -32,6 +34,7 @@ class SettleUpScreen extends ConsumerWidget {
     this.toMemberId,
     this.amountMinor,
     this.currency,
+    this.entryId,
   });
 
   final String groupId;
@@ -39,6 +42,7 @@ class SettleUpScreen extends ConsumerWidget {
   final String? toMemberId;
   final int? amountMinor;
   final String? currency;
+  final String? entryId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -48,7 +52,16 @@ class SettleUpScreen extends ConsumerWidget {
       toId: toMemberId,
       amountMinor: amountMinor,
       currency: currency,
+      entryId: entryId,
     );
+    ref.listen(provider, (previous, next) {
+      final error = next.value?.error;
+      if (error != null && error != previous?.value?.error) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error)));
+      }
+    });
 
     // Started on the way in, so this device's zone is known by the time a
     // settlement is recorded.
@@ -67,6 +80,13 @@ class SettleUpScreen extends ConsumerWidget {
       ledger: ledger,
       form: form,
       controller: ref.read(provider.notifier),
+      transferIdentity:
+          fromMemberId != null &&
+              toMemberId != null &&
+              currency != null &&
+              amountMinor != null
+          ? (groupId, fromMemberId!, toMemberId!, currency!)
+          : null,
     );
   }
 }
@@ -76,20 +96,52 @@ class _SettleUp extends ConsumerWidget {
     required this.ledger,
     required this.form,
     required this.controller,
+    required this.transferIdentity,
   });
 
   final GroupLedger ledger;
   final SettlementFormState form;
   final SettlementForm controller;
+  final Object? transferIdentity;
 
   Future<void> _record(BuildContext context, WidgetRef ref) async {
     if (!await controller.record() || !context.mounted) return;
     goBack(context, '/g/${ledger.group.id}');
+    if (form.isEditing) return;
 
     // The one place the app asks for a review: a debt has just been cleared,
     // which is the app finishing the thing it exists to do.
     final review = ref.read(reviewPromptProvider);
     unawaited(review.isDue().then((due) => due ? review.ask() : null));
+  }
+
+  Future<void> _delete(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete this payment?'),
+        content: const Text(
+          'This removes the payment from the balances and keeps its history.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              confirmedIrreversibly();
+              Navigator.of(context).pop(true);
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    if (await controller.delete() && context.mounted) {
+      goBack(context, '/g/${ledger.group.id}');
+    }
   }
 
   @override
@@ -99,21 +151,96 @@ class _SettleUp extends ConsumerWidget {
     final payee = form.toId == null ? null : ledger.memberById(form.toId!);
     final payeeName = payee == null ? '' : ledger.nameOfMember(payee);
     final (from, to) = (form.fromId, form.toId);
+    final editing = form.editing;
+    final ready = !form.saving && currency != null;
+    // Keep a recorded payment's participants selectable even after they left
+    // and their balance reached zero.
+    final members = <String, Member>{
+      for (final member in ledger.settleable) member.id: member,
+      if (editing != null)
+        for (final id in [
+          ...editing.payers.map((p) => p.memberId),
+          ...editing.shares.map((s) => s.memberId),
+        ])
+          id: ?ledger.memberById(id),
+    }.values.toList();
 
     return Scaffold(
       appBar: AppBar(
         leading: BackButton(
           onPressed: () => goBack(context, '/g/${ledger.group.id}'),
         ),
-        title: const Text('Settle up'),
+        title: Text(form.isEditing ? 'Edit payment' : 'Settle up'),
+        actions: [
+          if (form.isEditing) ...[
+            IconButton(
+              tooltip: 'Delete payment',
+              onPressed: form.saving ? null : () => _delete(context),
+              icon: const Icon(Icons.delete_outline),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: FilledButton(
+                onPressed: ready ? () => _record(context, ref) : null,
+                child: const Text('Save'),
+              ),
+            ),
+          ],
+        ],
       ),
       body: PageBody(
+        maxWidth: 640,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
           children: [
+            if (editing != null) ...[
+              Row(
+                children: [
+                  SharedElement(
+                    tag: ('entry-category', editing.id),
+                    child: Icon(
+                      Icons.handshake_outlined,
+                      color: Theme.of(context).colorScheme.onTertiaryContainer,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SharedText(
+                      tag: ('entry-description', editing.id),
+                      text:
+                          '${ledger.nameOf(from ?? '')} paid '
+                          '${ledger.nameOf(to ?? '')}',
+                      style: Theme.of(context).textTheme.titleLarge!.copyWith(
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                      maxLines: 2,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+            ],
+            AmountCard(
+              heroTag: editing != null
+                  ? ('entry-amount', editing.id)
+                  : transferIdentity == null
+                  ? null
+                  : ('settlement-amount', transferIdentity!),
+              currency: currency,
+              currencyCode: form.currencyCode,
+              amount: form.amount,
+              label: 'Amount',
+              error: form.error,
+              onAmountChanged: controller.setAmount,
+              onCurrencyChanged: controller.chooseCurrency,
+            ),
+            const SizedBox(height: 24),
             _MemberDropdown(
-              label: 'Who is paying',
-              members: ledger.settleable,
+              heroTag: transferIdentity == null
+                  ? null
+                  : ('settlement-from', transferIdentity!),
+              label: form.isEditing ? 'Paid by' : 'Who is paying',
+              members: members,
               nameOf: ledger.nameOfMember,
               meId: ledger.me?.id,
               value: from,
@@ -121,8 +248,11 @@ class _SettleUp extends ConsumerWidget {
             ),
             const SizedBox(height: 16),
             _MemberDropdown(
-              label: 'Who is being paid',
-              members: ledger.settleable,
+              heroTag: transferIdentity == null
+                  ? null
+                  : ('settlement-to', transferIdentity!),
+              label: form.isEditing ? 'Paid to' : 'Who is being paid',
+              members: members,
               nameOf: ledger.nameOfMember,
               meId: ledger.me?.id,
               value: to,
@@ -130,27 +260,10 @@ class _SettleUp extends ConsumerWidget {
               onChanged: controller.choosePayee,
             ),
             const SizedBox(height: 16),
-            CurrencyPicker(
-              value: form.currencyCode,
-              onChanged: controller.chooseCurrency,
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              initialValue: form.amount,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              inputFormatters: [DecimalInputFormatter.amount(currency)],
-              decoration: InputDecoration(
-                labelText: 'Amount',
-                prefixText: currency?.symbol == null
-                    ? null
-                    : '${currency!.symbol} ',
-                errorText: form.error,
-              ),
-              onChanged: controller.setAmount,
-            ),
-            if (from != null && to != null && currency != null) ...[
+            if (!form.isEditing &&
+                from != null &&
+                to != null &&
+                currency != null) ...[
               const SizedBox(height: 8),
               _OutstandingHint(
                 ledger: ledger,
@@ -159,8 +272,12 @@ class _SettleUp extends ConsumerWidget {
                 currency: currency,
               ),
             ],
+            const SizedBox(height: 8),
+            _PaymentDetails(form: form, controller: controller),
             const SizedBox(height: 24),
-            if (currency != null && currency.code == 'INR') ...[
+            if (!form.isEditing &&
+                currency != null &&
+                currency.code == 'INR') ...[
               _UpiSection(
                 payeeName: payeeName,
                 // A new payee, or their handle arriving with their profile,
@@ -179,22 +296,126 @@ class _SettleUp extends ConsumerWidget {
               ),
               const SizedBox(height: 24),
             ],
-            FilledButton.icon(
-              onPressed: form.saving || currency == null
-                  ? null
-                  : () => _record(context, ref),
-              icon: const Icon(Icons.check),
-              label: const Text('Record this payment'),
-            ),
+            if (!form.isEditing)
+              FilledButton.icon(
+                onPressed: form.saving || currency == null
+                    ? null
+                    : () => _record(context, ref),
+                icon: const Icon(Icons.check),
+                label: const Text('Record this payment'),
+              ),
             const SizedBox(height: 12),
             Text(
               'OpenSplit does not move or check money. Recording a payment '
               'here only updates the balances in this app.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
+            if (editing != null) ...[
+              const SizedBox(height: 24),
+              EntryHistory(entryId: editing.id, ledger: ledger),
+            ],
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The optional context shared by recording and editing a payment.
+class _PaymentDetails extends ConsumerWidget {
+  const _PaymentDetails({required this.form, required this.controller});
+
+  final SettlementFormState form;
+  final SettlementForm controller;
+
+  Future<void> _pickDay(BuildContext context) async {
+    final day = form.day ?? DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime(day.year, day.month, day.day),
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked != null) controller.chooseDay(picked);
+  }
+
+  Future<void> _pickTime(BuildContext context, String zone) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(
+        form.occurredAt?.toLocal() ?? DateTime.now(),
+      ),
+    );
+    if (picked != null) {
+      controller.chooseTime(
+        hour: picked.hour,
+        minute: picked.minute,
+        zone: zone,
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final deviceZone = ref.watch(deviceZoneProvider).value;
+    final time = form.includeTime ? form.occurredAt?.toLocal() : null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: ActionChip(
+            avatar: const Icon(Icons.event_outlined),
+            label: Text(DateFormat.yMMMd().format(form.day ?? DateTime.now())),
+            tooltip: 'Change the day',
+            onPressed: () => _pickDay(context),
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          initialValue: form.notes,
+          textCapitalization: TextCapitalization.sentences,
+          maxLength: 2000,
+          minLines: 1,
+          maxLines: 3,
+          decoration: const InputDecoration(
+            labelText: 'Payment note (optional)',
+            hintText: 'Paid in cash, bank reference…',
+            counterText: '',
+          ),
+          onChanged: controller.setNotes,
+        ),
+        const SizedBox(height: 8),
+        ExpansionTile(
+          title: const Text('Time (optional)'),
+          subtitle: Text(
+            time == null ? 'Date only' : DateFormat.jm().format(time),
+          ),
+          leading: const Icon(Icons.schedule_outlined),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          expandedCrossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (time == null)
+              ActionChip(
+                avatar: const Icon(Icons.schedule_outlined),
+                label: const Text('Add a time'),
+                onPressed: deviceZone == null
+                    ? null
+                    : () => _pickTime(context, deviceZone),
+              )
+            else
+              InputChip(
+                avatar: const Icon(Icons.schedule_outlined),
+                label: Text(DateFormat.jm().format(time)),
+                onPressed: deviceZone == null
+                    ? null
+                    : () => _pickTime(context, deviceZone),
+                onDeleted: controller.clearTime,
+                deleteButtonTooltipMessage: 'Remove the time',
+              ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -387,6 +608,7 @@ class _MemberDropdown extends StatelessWidget {
     required this.onChanged,
     this.meId,
     this.excludeId,
+    this.heroTag,
   });
 
   final String label;
@@ -399,6 +621,7 @@ class _MemberDropdown extends StatelessWidget {
   final String? value;
   final String? meId;
   final String? excludeId;
+  final Object? heroTag;
   final ValueChanged<String?> onChanged;
 
   @override
@@ -408,7 +631,7 @@ class _MemberDropdown extends StatelessWidget {
         if (member.id != excludeId) member,
     ];
 
-    return DropdownMenu<String>(
+    final dropdown = DropdownMenu<String>(
       // DropdownMenu reads its selection once, and on later changes only
       // follows one it can find among its entries: cleared to nobody, it
       // would go on showing the last name. Keyed by the value, a different
@@ -428,6 +651,16 @@ class _MemberDropdown extends StatelessWidget {
           ),
       ],
       onSelected: onChanged,
+    );
+    final selected = options.where((member) => member.id == value).firstOrNull;
+    if (heroTag == null || selected == null) return dropdown;
+    return SharedText(
+      tag: heroTag!,
+      text: nameOf(selected) + (selected.id == meId ? ' (you)' : ''),
+      style: Theme.of(context).textTheme.bodyLarge!.copyWith(
+        color: Theme.of(context).colorScheme.onSurface,
+      ),
+      child: dropdown,
     );
   }
 }

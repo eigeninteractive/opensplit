@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:opensplit/presentation/theme.dart';
+import 'package:opensplit/domain/avatar.dart';
 
 /// Relative luminance, per WCAG 2.1.
 double _luminance(Color c) {
@@ -23,6 +24,36 @@ double _contrast(Color a, Color b) {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  group('avatar contrast', () {
+    for (final brightness in Brightness.values) {
+      for (final seed in [const Color(0xFF5B5891), const Color(0xFF006B5F)]) {
+        test(
+          'automatic and chosen avatars are readable in $brightness / $seed',
+          () {
+            final theme = buildTheme(
+              brightness,
+              ColorScheme.fromSeed(seedColor: seed, brightness: brightness),
+            );
+            final palette = theme.extension<AvatarPalette>()!;
+            final schemes = [
+              for (final hue in avatarHues) palette[hue],
+              for (final id in ['alex', 'sam', 'maya', 'ravi', 'priya'])
+                palette.forAvatar(const InitialsAvatar(), id),
+            ];
+            for (final scheme in schemes) {
+              expect(
+                _contrast(scheme.onPrimaryContainer, scheme.primaryContainer),
+                greaterThanOrEqualTo(4.5),
+                reason: 'initials and icons must remain legible on the avatar',
+              );
+            }
+          },
+        );
+      }
+    }
+  });
+
   group('balance colours', () {
     // The bug this guards: a single hardcoded light-mode green was used in both
     // themes, landing around 3.4:1 on a dark surface — below AA — on the one

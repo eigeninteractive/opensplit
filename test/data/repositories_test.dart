@@ -7,7 +7,7 @@ import 'package:opensplit/domain/balance/balance_fold.dart';
 import 'package:opensplit/domain/balance/member_balance.dart';
 import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/split/splitter.dart';
-import 'package:opensplit_api/opensplit_api.dart' show SplitKind;
+import 'package:opensplit_api/opensplit_api.dart' show EntryKind, SplitKind;
 import 'package:test/test.dart';
 
 import '../harness.dart';
@@ -185,6 +185,30 @@ void main() {
       expect(entry.shares.map((s) => s.amountMinor), [80000, 80000, 80000]);
     });
 
+    test('a reserved identity cannot overwrite an existing entry', () async {
+      EntryDraft draft(String description) => EntryDraft(
+        groupId: groupId,
+        currency: 'INR',
+        amountMinor: 5,
+        description: description,
+        split: EqualSplit([ravi, priya, arun]),
+        payerAmounts: {ravi: 5},
+      );
+      final saved = await entries.create(
+        draft('Dinner'),
+        id: 'reserved-entry',
+        createdBy: ravi,
+      );
+      expect(saved.id, 'reserved-entry');
+      await expectLater(
+        entries.create(draft('Another entry'), id: saved.id, createdBy: ravi),
+        throwsA(isA<SplitException>()),
+      );
+      expect((await entries.getEntry(saved.id))!.row.description, 'Dinner');
+      expect(await entries.getEntries(groupId), hasLength(1));
+      expect(await db.select(db.groupEvents).get(), hasLength(1));
+    });
+
     test('multiple payers on one bill round-trip through storage', () async {
       await entries.create(
         EntryDraft(
@@ -354,6 +378,64 @@ void main() {
         throwsA(isA<SplitException>()),
       );
     });
+
+    test('an edit cannot turn a payment into spending', () async {
+      final payment = await entries.create(
+        EntryDraft.settlement(
+          groupId: groupId,
+          currency: 'INR',
+          amountMinor: 100,
+          fromMemberId: priya,
+          toMemberId: ravi,
+        ),
+        createdBy: priya,
+      );
+      await expectLater(
+        entries.update(
+          payment.id,
+          EntryDraft(
+            groupId: groupId,
+            currency: 'INR',
+            amountMinor: 100,
+            split: ExactSplit({ravi: 100}),
+            payerAmounts: {priya: 100},
+          ),
+          actorId: ravi,
+          expected: payment,
+        ),
+        throwsA(isA<SplitException>()),
+      );
+      final stored = (await entries.getEntry(payment.id))!;
+      expect(stored.row.kind, EntryKind.settlement);
+      expect(stored.isSpend, isFalse);
+    });
+
+    test(
+      'a hand-built payment must also have exactly two different parties',
+      () async {
+        for (final (payers, split) in [
+          ({ravi: 100}, ExactSplit({ravi: 100})),
+          ({ravi: 50, priya: 50}, ExactSplit({ravi: 100})),
+          ({ravi: 100}, ExactSplit({ravi: 50, priya: 50})),
+        ]) {
+          await expectLater(
+            entries.create(
+              EntryDraft(
+                groupId: groupId,
+                currency: 'INR',
+                amountMinor: 100,
+                kind: EntryKind.settlement,
+                split: split,
+                payerAmounts: payers,
+              ),
+              createdBy: ravi,
+            ),
+            throwsA(isA<SplitException>()),
+          );
+        }
+        expect(await entries.getEntries(groupId), isEmpty);
+      },
+    );
 
     test('foreign keys stop a share pointing outside the group', () async {
       await expectLater(

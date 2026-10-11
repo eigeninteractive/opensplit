@@ -2,6 +2,88 @@ import { describe, expect, it } from "vitest";
 
 import { deleteEntry, draftOf, editGroup, editMember, evenly, expense, freshId, makeGroup, ok, PRIYA, RAVI, refusal, restoreEntry, saveEntry, stub, sumOf } from "./group";
 
+describe("a recorded payment", () => {
+  it("updates the amount and note while remaining a settlement", async () => {
+    const { groupId, ravi, priya } = await makeGroup();
+    const object = stub(groupId);
+    const first = ok(
+      await saveEntry(
+        object,
+        expense({
+          id: freshId("e"),
+          kind: "settlement",
+          amountMinor: 1200,
+          splitKind: "exact",
+          payers: [{ memberId: priya.id, amountMinor: 1200 }],
+          shares: [{ memberId: ravi.id, amountMinor: 1200, weightMicros: null }],
+          notes: "Paid in cash",
+        }),
+        RAVI,
+      ),
+    );
+    const updated = ok(
+      await saveEntry(
+        object,
+        draftOf(first, {
+          amountMinor: 900,
+          notes: "Bank transfer",
+          payers: [{ memberId: priya.id, amountMinor: 900 }],
+          shares: [{ memberId: ravi.id, amountMinor: 900, weightMicros: null }],
+        }),
+        RAVI,
+      ),
+    );
+    expect(updated.kind).toBe("settlement");
+    expect(updated.amountMinor).toBe(900);
+    expect(updated.notes).toBe("Bank transfer");
+    expect(updated.createdAt).toBe(first.createdAt);
+    expect(updated.createdBy).toBe(first.createdBy);
+  });
+
+  it.each(["expense", "settlement"] as const)("refuses to reclassify an existing %s", async (kind) => {
+    const { groupId, ravi, priya } = await makeGroup();
+    const object = stub(groupId);
+    const first = ok(
+      await saveEntry(
+        object,
+        expense({
+          id: freshId("e"),
+          kind,
+          amountMinor: 500,
+          payers: [{ memberId: priya.id, amountMinor: 500 }],
+          shares: [{ memberId: ravi.id, amountMinor: 500, weightMicros: null }],
+        }),
+        RAVI,
+      ),
+    );
+    const changed = draftOf(first, { kind: kind === "expense" ? "settlement" : "expense" });
+    expect(refusal(await saveEntry(object, changed, RAVI)).code).toBe("malformed");
+    const page = ok(await object.changes(RAVI, 0, 500));
+    expect(page.entries.find((row) => row.id === first.id)?.kind).toBe(kind);
+  });
+
+  it.each(["self", "multiple senders", "multiple recipients"] as const)("refuses a balanced payment with %s", async (shape) => {
+    const { groupId, ravi, priya } = await makeGroup();
+    const payers =
+      shape === "multiple senders"
+        ? [
+            { memberId: ravi.id, amountMinor: 250 },
+            { memberId: priya.id, amountMinor: 250 },
+          ]
+        : [{ memberId: priya.id, amountMinor: 500 }];
+    const shares =
+      shape === "multiple recipients"
+        ? [
+            { memberId: ravi.id, amountMinor: 250, weightMicros: null },
+            { memberId: priya.id, amountMinor: 250, weightMicros: null },
+          ]
+        : [{ memberId: shape === "self" ? priya.id : ravi.id, amountMinor: 500, weightMicros: null }];
+    const result = await saveEntry(stub(groupId), expense({ id: freshId("e"), kind: "settlement", amountMinor: 500, payers, shares }), RAVI);
+    expect(refusal(result).code).toBe("malformed");
+    expect(ok(await stub(groupId).changes(RAVI, 0, 500)).entries).toHaveLength(0);
+  });
+});
+
 /** The invariant and the write path: an expense that does not add up, a hard delete, an idempotent retry, and the stale-base rule. */
 describe("an expense has to add up", () => {
   it("accepts one that does", async () => {

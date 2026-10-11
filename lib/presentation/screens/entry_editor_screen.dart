@@ -1,24 +1,26 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:opensplit_api/opensplit_api.dart' show SplitKind;
+import 'package:opensplit_api/opensplit_api.dart' show EntryKind, SplitKind;
 
 import '../../application/entry_form.dart';
 import '../../application/ledger_providers.dart';
 import '../../application/local_providers.dart';
-import '../../application/sync_providers.dart';
 import '../../data/local/database.dart';
-import '../../domain/activity/activity_text.dart';
 import '../../domain/decimal_text.dart';
-import '../../domain/models/group_event.dart';
 import '../../domain/money_format.dart';
 import '../amount_input.dart';
 import '../feedback.dart';
 import '../navigation.dart';
 import '../theme.dart';
+import '../widgets/amount_card.dart';
+import '../widgets/entry_history.dart';
 import '../widgets/avatar_view.dart';
 import '../widgets/category_icon.dart';
+import '../widgets/shared_element.dart';
 import '../widgets/page_body.dart';
+import '../widgets/remainder_field.dart';
+import 'settle_up_screen.dart';
 
 /// Creates or edits an expense.
 ///
@@ -35,7 +37,20 @@ class EntryEditorScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ledger = ref.watch(groupLedgerProvider(groupId));
-    final form = ref.watch(entryFormProvider(groupId, entryId: entryId)).value;
+    final entry = ledger?.entries.where((e) => e.id == entryId).firstOrNull;
+    if (entry?.row.kind == EntryKind.settlement) {
+      return SettleUpScreen(groupId: groupId, entryId: entryId);
+    }
+    final provider = entryFormProvider(groupId, entryId: entryId);
+    ref.listen(provider, (previous, next) {
+      final error = next.value?.error;
+      if (error != null && error != previous?.value?.error) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error)));
+      }
+    });
+    final form = ref.watch(provider).value;
 
     if (ledger == null || form == null) {
       return Scaffold(appBar: AppBar(leading: const BackButton()));
@@ -43,9 +58,7 @@ class EntryEditorScreen extends ConsumerWidget {
     return _Editor(
       ledger: ledger,
       form: form,
-      controller: ref.read(
-        entryFormProvider(groupId, entryId: entryId).notifier,
-      ),
+      controller: ref.read(provider.notifier),
     );
   }
 }
@@ -142,7 +155,7 @@ class _Editor extends ConsumerWidget {
           if (form.isEditing)
             IconButton(
               tooltip: 'Delete',
-              onPressed: () => _delete(context),
+              onPressed: ready ? () => _delete(context) : null,
               icon: const Icon(Icons.delete_outline),
             ),
           Padding(
@@ -154,125 +167,140 @@ class _Editor extends ConsumerWidget {
           ),
         ],
       ),
-      body: PageBody(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 48),
-          children: [
-            // The amount is what the whole screen is for, so it is the
-            // largest thing on it.
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+      body: ExcludeFocus(
+        excluding: form.saving,
+        child: AbsorbPointer(
+          absorbing: form.saving,
+          child: PageBody(
+            maxWidth: 640,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 48),
               children: [
-                _CurrencyButton(
-                  code: form.currencyCode,
-                  onChanged: controller.chooseCurrency,
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: TextFormField(
-                    initialValue: form.amount,
-                    autofocus: !form.isEditing,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    inputFormatters: [DecimalInputFormatter.amount(currency)],
-                    textInputAction: TextInputAction.next,
-                    style: moneyStyle(textTheme.displaySmall!),
-                    decoration: InputDecoration(
-                      labelText: 'How much?',
-                      hintText: currency == null
-                          ? '0'
-                          : currency.formatPlain(0),
-                      prefixText: currency?.symbol == null
-                          ? null
-                          : '${currency!.symbol} ',
-                      border: InputBorder.none,
-                    ),
-                    onChanged: controller.setAmount,
-                  ),
-                ),
-              ],
-            ),
-            if (currency != null &&
-                currency.code != ledger.group.defaultCurrency)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  'Stored in ${currency.code}. Balances in a group are '
-                  'always kept per currency, never converted.',
-                  style: textTheme.bodySmall,
-                ),
-              ),
-            const SizedBox(height: 16),
-            TextFormField(
-              initialValue: form.description,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(
-                labelText: 'What was it?',
-                hintText: 'Dinner at Toit',
-              ),
-              onChanged: controller.setDescription,
-            ),
-            const SizedBox(height: 16),
-            // The details most expenses leave as they are, as chips rather
-            // than a field each.
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _CategoryChip(
-                  value: form.categoryId,
-                  onChanged: controller.chooseCategory,
-                ),
-                ActionChip(
-                  avatar: const Icon(Icons.event_outlined),
-                  label: Text(_dayName(form.day)),
-                  tooltip: 'Change the day',
-                  onPressed: () => _pickDay(context),
-                ),
-                _TimeChip(
-                  shown: form.occurredAt?.toLocal(),
-                  onPick: device == null
+                AmountCard(
+                  heroTag: form.editing == null
                       ? null
-                      : () => _pickTime(context, device),
-                  onClear: controller.clearTime,
+                      : ('entry-amount', form.editing!.id),
+                  currency: currency,
+                  currencyCode: form.currencyCode,
+                  amount: form.amount,
+                  autofocus: !form.isEditing,
+                  onAmountChanged: controller.setAmount,
+                  onCurrencyChanged: controller.chooseCurrency,
                 ),
-              ],
-            ),
-            const SizedBox(height: 32),
-            _PayerSection(
-              ledger: ledger,
-              currency: currency,
-              form: form,
-              controller: controller,
-            ),
-            const SizedBox(height: 32),
-            _SplitSection(
-              ledger: ledger,
-              currency: currency,
-              form: form,
-              controller: controller,
-            ),
-            if (form.error case final error?) ...[
-              const SizedBox(height: 16),
-              Card.filled(
-                color: Theme.of(context).colorScheme.errorContainer,
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Text(
-                    error,
-                    style: textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onErrorContainer,
+                if (currency != null &&
+                    currency.code != ledger.group.defaultCurrency)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Stored in ${currency.code}. Balances in a group are '
+                      'always kept per currency, never converted.',
+                      style: textTheme.bodySmall,
                     ),
                   ),
+                const SizedBox(height: 16),
+                SharedText(
+                  tag: (
+                    'entry-description',
+                    form.editing?.id ?? ('draft', ledger.group.id),
+                  ),
+                  text: form.description,
+                  style: textTheme.bodyLarge!.copyWith(
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                  child: TextFormField(
+                    initialValue: form.description,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: const InputDecoration(
+                      labelText: 'What was it?',
+                      hintText: 'Dinner at Toit',
+                    ),
+                    onChanged: controller.setDescription,
+                  ),
                 ),
-              ),
-            ],
-            if (form.editing case final editing?) ...[
-              const SizedBox(height: 32),
-              _History(entryId: editing.id, ledger: ledger),
-            ],
-          ],
+                const SizedBox(height: 16),
+                // The details most expenses leave as they are, as chips rather
+                // than a field each.
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _CategoryChip(
+                      heroTag: form.editing == null
+                          ? null
+                          : ('entry-category', form.editing!.id),
+                      value: form.categoryId,
+                      onChanged: controller.chooseCategory,
+                    ),
+                    ActionChip(
+                      avatar: const Icon(Icons.event_outlined),
+                      label: Text(_dayName(form.day)),
+                      tooltip: 'Change the day',
+                      onPressed: () => _pickDay(context),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                _EditorCard(
+                  child: _PayerSection(
+                    ledger: ledger,
+                    currency: currency,
+                    form: form,
+                    controller: controller,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _EditorCard(
+                  child: _SplitSection(
+                    ledger: ledger,
+                    currency: currency,
+                    form: form,
+                    controller: controller,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ExpansionTile(
+                  title: const Text('Time of expense'),
+                  subtitle: Text(
+                    form.occurredAt == null
+                        ? 'Date only'
+                        : DateFormat.jm().format(form.occurredAt!.toLocal()),
+                  ),
+                  leading: const Icon(Icons.schedule_outlined),
+                  tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+                  childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _TimeChip(
+                      shown: form.occurredAt?.toLocal(),
+                      onPick: device == null
+                          ? null
+                          : () => _pickTime(context, device),
+                      onClear: controller.clearTime,
+                    ),
+                  ],
+                ),
+                if (form.error case final error?) ...[
+                  const SizedBox(height: 16),
+                  Card.filled(
+                    color: Theme.of(context).colorScheme.errorContainer,
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Text(
+                        error,
+                        style: textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onErrorContainer,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+                if (form.editing case final editing?) ...[
+                  const SizedBox(height: 32),
+                  EntryHistory(entryId: editing.id, ledger: ledger),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -288,6 +316,19 @@ class _Editor extends ConsumerWidget {
       _ => DateFormat.yMMMEd().format(local),
     };
   }
+}
+
+/// Separates a money decision from the expense's supporting details.
+class _EditorCard extends StatelessWidget {
+  const _EditorCard({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Card.filled(
+    color: Theme.of(context).colorScheme.surfaceContainerLow,
+    child: Padding(padding: const EdgeInsets.all(16), child: child),
+  );
 }
 
 /// A section of the editor, named.
@@ -307,12 +348,7 @@ class _SectionTitle extends StatelessWidget {
           Expanded(
             child: Semantics(
               header: true,
-              child: Text(
-                text,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  color: theme.colorScheme.primary,
-                ),
-              ),
+              child: Text(text, style: theme.textTheme.titleMedium),
             ),
           ),
           ?action,
@@ -320,6 +356,19 @@ class _SectionTitle extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Original participants remain editable even if they have since left.
+List<Member> _membersForEntry(GroupLedger ledger, EntryFormState form) {
+  final original = {
+    ...?form.editing?.shares.map((share) => share.memberId),
+    ...?form.editing?.payers.map((payer) => payer.memberId),
+  };
+  return [
+    ...ledger.members,
+    for (final member in ledger.pastMembers)
+      if (original.contains(member.id)) member,
+  ];
 }
 
 class _PayerSection extends StatelessWidget {
@@ -337,6 +386,9 @@ class _PayerSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final currency = this.currency;
+    final allocation = currency == null ? null : form.paidAllocation(currency);
+    final members = _membersForEntry(ledger, form);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -352,10 +404,8 @@ class _PayerSection extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              for (final member in ledger.members)
+              for (final member in members)
                 ChoiceChip(
-                  // The person's own picture says which one is chosen better
-                  // than a tick would.
                   showCheckmark: false,
                   avatar: MemberAvatar(
                     ledger: ledger,
@@ -371,56 +421,38 @@ class _PayerSection extends StatelessWidget {
                 ),
             ],
           )
-        else
-          Column(
-            children: [
-              for (final member in ledger.members)
-                Row(
-                  children: [
-                    Expanded(
-                      child: CheckboxListTile(
-                        contentPadding: EdgeInsets.zero,
-                        controlAffinity: ListTileControlAffinity.leading,
-                        value: form.payers.contains(member.id),
-                        title: Text(ledger.nameOfMember(member)),
-                        onChanged: (checked) => controller.setPaying(
-                          member.id,
-                          paying: checked ?? false,
-                        ),
-                      ),
+        else ...[
+          for (final member in members)
+            _AllocationRow(
+              title: ledger.nameOfMember(member),
+              selected: form.payers.contains(member.id),
+              onChanged: (checked) =>
+                  controller.setPaying(member.id, paying: checked),
+              input: !form.payers.contains(member.id)
+                  ? null
+                  : RemainderField(
+                      key: ValueKey(('paid', member.id)),
+                      label: 'Paid amount',
+                      memberName: ledger.nameOfMember(member),
+                      manualText: form.paidAmounts[member.id],
+                      automaticText: switch (allocation?.values[member.id]) {
+                        final value? => currency?.formatPlain(value),
+                        null => null,
+                      },
+                      prefixText: currency?.symbol,
+                      invalid: allocation?.invalid.contains(member.id) ?? false,
+                      inputFormatters: [DecimalInputFormatter.amount(currency)],
+                      onChanged: (text) =>
+                          controller.setPaidAmount(member.id, text),
                     ),
-                    SizedBox(
-                      width: 110,
-                      child: TextFormField(
-                        key: ValueKey(('paid', member.id)),
-                        initialValue: form.paidAmounts[member.id],
-                        enabled: form.payers.contains(member.id),
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        inputFormatters: [
-                          DecimalInputFormatter.amount(currency),
-                        ],
-                        decoration: InputDecoration(
-                          isDense: true,
-                          prefixText: currency?.symbol,
-                        ),
-                        onChanged: (text) =>
-                            controller.setPaidAmount(member.id, text),
-                      ),
-                    ),
-                  ],
-                ),
-              const SizedBox(height: 4),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'The amounts paid have to add up to the total.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
-            ],
+            ),
+          _AllocationStatus(
+            error: currency == null ? null : form.paidError(currency),
+            hasOverrides: form.payers.any(form.paidAmounts.containsKey),
+            onReset: controller.resetPaid,
+            resetLabel: 'Divide evenly',
           ),
+        ],
       ],
     );
   }
@@ -443,106 +475,233 @@ class _SplitSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final currency = this.currency;
     final preview = currency == null ? null : form.preview(currency);
+    final allocation = switch (form.splitKind) {
+      SplitKind.exact =>
+        currency == null ? null : form.exactAllocation(currency),
+      SplitKind.percent => form.percentAllocation(),
+      _ => null,
+    };
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const _SectionTitle('Split'),
-        SegmentedButton<SplitKind>(
-          segments: const [
-            ButtonSegment(value: SplitKind.equal, label: Text('Equally')),
-            ButtonSegment(value: SplitKind.exact, label: Text('Amounts')),
-            ButtonSegment(value: SplitKind.shares, label: Text('Shares')),
-            ButtonSegment(value: SplitKind.percent, label: Text('%')),
-          ],
-          selected: {form.splitKind},
-          onSelectionChanged: (set) => controller.chooseSplitKind(set.first),
-          showSelectedIcon: false,
+        LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth < 360 ||
+                MediaQuery.textScalerOf(context).scale(16) > 24) {
+              return DropdownMenu<SplitKind>(
+                key: ValueKey(form.splitKind),
+                label: const Text('Split method'),
+                initialSelection: form.splitKind,
+                expandedInsets: EdgeInsets.zero,
+                requestFocusOnTap: false,
+                enableSearch: false,
+                dropdownMenuEntries: const [
+                  DropdownMenuEntry(value: SplitKind.equal, label: 'Equally'),
+                  DropdownMenuEntry(value: SplitKind.exact, label: 'Amounts'),
+                  DropdownMenuEntry(value: SplitKind.shares, label: 'Shares'),
+                  DropdownMenuEntry(value: SplitKind.percent, label: '%'),
+                ],
+                onSelected: (kind) {
+                  if (kind != null) controller.chooseSplitKind(kind);
+                },
+              );
+            }
+            return SegmentedButton<SplitKind>(
+              segments: const [
+                ButtonSegment(value: SplitKind.equal, label: Text('Equally')),
+                ButtonSegment(value: SplitKind.exact, label: Text('Amounts')),
+                ButtonSegment(value: SplitKind.shares, label: Text('Shares')),
+                ButtonSegment(value: SplitKind.percent, label: Text('%')),
+              ],
+              selected: {form.splitKind},
+              onSelectionChanged: (set) =>
+                  controller.chooseSplitKind(set.first),
+              showSelectedIcon: false,
+            );
+          },
         ),
         const SizedBox(height: 8),
-        for (final member in ledger.members)
-          Row(
-            children: [
-              Expanded(
-                child: CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  value: form.participants.contains(member.id),
-                  title: Text(
-                    ledger.nameOfMember(member) +
-                        (member.id == ledger.me?.id ? ' (you)' : ''),
-                  ),
-                  subtitle: switch (preview?[member.id]) {
-                    final owed? => Text(
-                      formatMoney(currency, owed),
-                      style: moneyStyle(Theme.of(context).textTheme.bodySmall!),
-                    ),
+        for (final member in _membersForEntry(ledger, form))
+          _AllocationRow(
+            title:
+                ledger.nameOfMember(member) +
+                (member.id == ledger.me?.id ? ' (you)' : ''),
+            selected: form.participants.contains(member.id),
+            subtitle: form.splitKind == SplitKind.exact
+                ? null
+                : switch (preview?[member.id]) {
+                    final owed? => formatMoney(currency, owed),
                     null => null,
                   },
-                  onChanged: (checked) => controller.setInSplit(
-                    member.id,
-                    included: checked ?? false,
-                  ),
-                ),
-              ),
-              if (form.participants.contains(member.id))
-                // Keyed by kind as well as person: an amount and a percentage
-                // sit in the same place, and must not share a field's text.
-                switch (form.splitKind) {
-                  SplitKind.exact => SizedBox(
-                    width: 110,
-                    child: TextFormField(
+            onChanged: (checked) =>
+                controller.setInSplit(member.id, included: checked),
+            input: !form.participants.contains(member.id)
+                ? null
+                : switch (form.splitKind) {
+                    SplitKind.exact => RemainderField(
                       key: ValueKey(('exact', member.id)),
-                      initialValue: form.exactAmounts[member.id],
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
+                      label: 'Amount',
+                      memberName: ledger.nameOfMember(member),
+                      manualText: form.exactAmounts[member.id],
+                      automaticText: switch (allocation?.values[member.id]) {
+                        final value? => currency?.formatPlain(value),
+                        null => null,
+                      },
+                      prefixText: currency?.symbol,
+                      invalid: allocation?.invalid.contains(member.id) ?? false,
                       inputFormatters: [DecimalInputFormatter.amount(currency)],
-                      decoration: InputDecoration(
-                        isDense: true,
-                        prefixText: currency?.symbol,
-                      ),
                       onChanged: (text) =>
                           controller.setExactAmount(member.id, text),
                     ),
-                  ),
-                  SplitKind.percent => SizedBox(
-                    width: 90,
-                    child: TextFormField(
+                    SplitKind.percent => RemainderField(
                       key: ValueKey(('percent', member.id)),
-                      initialValue: form.percents[member.id],
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
+                      label: 'Percent',
+                      memberName: ledger.nameOfMember(member),
+                      manualText: form.percents[member.id],
+                      automaticText: switch (allocation?.values[member.id]) {
+                        final value? => formatPercentMicros(value),
+                        null => null,
+                      },
+                      suffixText: '%',
+                      invalid: allocation?.invalid.contains(member.id) ?? false,
                       inputFormatters: [
                         DecimalInputFormatter(percentInputPattern),
                       ],
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        suffixText: '%',
-                      ),
                       onChanged: (text) =>
                           controller.setPercent(member.id, text),
                     ),
-                  ),
-                  SplitKind.shares => Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.remove_circle_outline),
-                        onPressed: () => controller.nudgeShares(member.id, -1),
-                      ),
-                      Text('${form.shareCountOf(member.id)}'),
-                      IconButton(
-                        icon: const Icon(Icons.add_circle_outline),
-                        onPressed: () => controller.nudgeShares(member.id, 1),
-                      ),
-                    ],
-                  ),
-                  SplitKind.equal ||
-                  SplitKind.unknownDefaultOpenApi => const SizedBox.shrink(),
-                },
-            ],
+                    SplitKind.shares => Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          tooltip:
+                              'Fewer shares for ${ledger.nameOfMember(member)}',
+                          icon: const Icon(Icons.remove_circle_outline),
+                          onPressed: () =>
+                              controller.nudgeShares(member.id, -1),
+                        ),
+                        Text('${form.shareCountOf(member.id)}'),
+                        IconButton(
+                          tooltip:
+                              'More shares for ${ledger.nameOfMember(member)}',
+                          icon: const Icon(Icons.add_circle_outline),
+                          onPressed: () => controller.nudgeShares(member.id, 1),
+                        ),
+                      ],
+                    ),
+                    _ => null,
+                  },
+          ),
+        if (form.splitKind == SplitKind.exact ||
+            form.splitKind == SplitKind.percent)
+          _AllocationStatus(
+            error: currency == null ? null : form.splitError(currency),
+            hasOverrides: form.participants.any(
+              (form.splitKind == SplitKind.exact
+                      ? form.exactAmounts
+                      : form.percents)
+                  .containsKey,
+            ),
+            onReset: controller.resetSplit,
+          ),
+      ],
+    );
+  }
+}
+
+/// A selection and its field wrap vertically when text needs more room.
+class _AllocationRow extends StatelessWidget {
+  const _AllocationRow({
+    required this.title,
+    required this.selected,
+    required this.onChanged,
+    this.subtitle,
+    this.input,
+  });
+
+  final String title;
+  final bool selected;
+  final ValueChanged<bool> onChanged;
+  final String? subtitle;
+  final Widget? input;
+
+  @override
+  Widget build(BuildContext context) {
+    final selection = CheckboxListTile(
+      contentPadding: EdgeInsets.zero,
+      controlAffinity: ListTileControlAffinity.leading,
+      value: selected,
+      title: Text(title),
+      subtitle: subtitle == null
+          ? null
+          : Text(
+              subtitle!,
+              style: moneyStyle(Theme.of(context).textTheme.bodySmall!),
+            ),
+      onChanged: (checked) => onChanged(checked ?? false),
+    );
+    final input = this.input;
+    if (input == null) return selection;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final stacked =
+            constraints.maxWidth < 320 ||
+            MediaQuery.textScalerOf(context).scale(16) > 20;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: stacked
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [selection, input],
+                )
+              : Row(
+                  children: [
+                    Expanded(child: selection),
+                    SizedBox(width: 168, child: input),
+                  ],
+                ),
+        );
+      },
+    );
+  }
+}
+
+class _AllocationStatus extends StatelessWidget {
+  const _AllocationStatus({
+    required this.error,
+    required this.hasOverrides,
+    required this.onReset,
+    this.resetLabel = 'Split evenly',
+  });
+
+  final String? error;
+  final bool hasOverrides;
+  final VoidCallback onReset;
+  final String resetLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (error case final message?)
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              message,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.error,
+              ),
+            ),
+          ),
+        if (hasOverrides)
+          TextButton.icon(
+            onPressed: onReset,
+            icon: const Icon(Icons.restart_alt),
+            label: Text(resetLabel),
           ),
       ],
     );
@@ -551,10 +710,15 @@ class _SplitSection extends StatelessWidget {
 
 /// The category, as a chip that opens the fixed global list.
 class _CategoryChip extends ConsumerWidget {
-  const _CategoryChip({required this.value, required this.onChanged});
+  const _CategoryChip({
+    required this.value,
+    required this.onChanged,
+    this.heroTag,
+  });
 
   final String? value;
   final ValueChanged<String?> onChanged;
+  final Object? heroTag;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -562,10 +726,14 @@ class _CategoryChip extends ConsumerWidget {
         ref.watch(categoriesProvider).value ?? const <Category>[];
     final chosen = categories.where((c) => c.id == value).firstOrNull;
 
+    final icon = Icon(
+      chosen == null ? Icons.category_outlined : categoryIcon(chosen.icon),
+      color: Theme.of(context).colorScheme.primary,
+    );
     return ActionChip(
-      avatar: Icon(
-        chosen == null ? Icons.category_outlined : categoryIcon(chosen.icon),
-      ),
+      avatar: heroTag == null
+          ? icon
+          : SharedElement(tag: heroTag!, child: icon),
       label: Text(chosen?.name ?? 'Uncategorised'),
       tooltip: 'Change the category',
       onPressed: () async {
@@ -612,106 +780,6 @@ class _CategorySheet extends StatelessWidget {
             option(category.id, categoryIcon(category.icon), category.name),
         ],
       ),
-    );
-  }
-}
-
-/// The currency, as a tonal button beside the amount, opening Material's
-/// search view over every currency the device knows.
-class _CurrencyButton extends ConsumerWidget {
-  const _CurrencyButton({required this.code, required this.onChanged});
-
-  final String code;
-  final ValueChanged<String> onChanged;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final currencies = ref.watch(currenciesProvider).value ?? const {};
-    final codes = currencies.keys.toList()..sort();
-
-    return SearchAnchor(
-      viewHintText: 'Search currencies',
-      builder: (context, controller) => FilledButton.tonalIcon(
-        onPressed: controller.openView,
-        iconAlignment: IconAlignment.end,
-        icon: const Icon(Icons.arrow_drop_down),
-        label: Text(code),
-      ),
-      suggestionsBuilder: (context, controller) {
-        final query = controller.text.trim().toLowerCase();
-        return [
-          for (final option in codes)
-            if (query.isEmpty ||
-                option.toLowerCase().contains(query) ||
-                currencies[option]!.name.toLowerCase().contains(query))
-              ListTile(
-                title: Text(currencies[option]!.name),
-                leading: SizedBox(width: 48, child: Text(option)),
-                selected: option == code,
-                onTap: () {
-                  controller.closeView(option);
-                  onChanged(option);
-                },
-              ),
-        ];
-      },
-    );
-  }
-}
-
-/// What has already happened to this expense.
-class _History extends ConsumerWidget {
-  const _History({required this.entryId, required this.ledger});
-
-  final String entryId;
-  final GroupLedger ledger;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final events = ref.watch(entryActivityProvider(entryId)).value;
-    if (events == null || events.isEmpty) return const SizedBox.shrink();
-
-    final theme = Theme.of(context);
-    final currency = ref
-        .watch(currenciesProvider)
-        .value?[ledger.group.defaultCurrency];
-
-    // See the note in ActivityScreen: a build with nowhere to sync to must not
-    // mark every line as unsynced.
-    final syncs = ref.watch(syncEngineProvider) != null;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('History', style: theme.textTheme.titleSmall),
-        const SizedBox(height: 8),
-        // Narrowed rather than switched: watchEntry asks only for this
-        // expense's own snapshots, so anything else here would be a bug in the
-        // query rather than a kind to render.
-        for (final event in events.whereType<EntryChanged>())
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${ledger.nameOfActor(event.actorId)} '
-                  '${describeKind(event.kind)}'
-                  '${syncs && event.isProvisional ? ' — not synced yet' : ''}',
-                  style: theme.textTheme.bodyMedium,
-                ),
-                for (final change in event.changes)
-                  Text(
-                    '· '
-                    '${describeChange(change, currency: currency, memberNames: ledger.memberNames)}',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-      ],
     );
   }
 }
