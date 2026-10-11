@@ -22,8 +22,9 @@ export const SessionSchema = z
   .openapi("Session");
 
 /**
- * What attaching an identity did. Flat rather than a union because the Dart
- * generator cannot read `oneOf`; `strandedUserId` is set exactly when
+ * What attaching an identity did. Flat rather than a union because the
+ * configured Dart-Dio/json_serializable client has no verified working
+ * `oneOf` path for this model; `strandedUserId` is set exactly when
  * `outcome` is `replaced`.
  */
 export const IdentityOutcomeSchema = z

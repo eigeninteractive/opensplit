@@ -60,9 +60,10 @@ class OutboxQueue {
 
   /// Queues a row as part of the caller's active database transaction.
   ///
-  /// The local write and its queue row must commit together. A separate
-  /// transaction would nest on browsers, where Drift holds one Web Lock for
-  /// the outer transaction.
+  /// The local write and its queue row must commit together. Reuse the
+  /// caller's transaction so it owns that atomic boundary, without an
+  /// unnecessary nested transaction. Drift 2.35.2 fixes the earlier OPFS
+  /// nesting regression; this API still makes transaction ownership explicit.
   Future<void> enqueueInTransaction(
     OutboxTarget target,
     String targetId,
