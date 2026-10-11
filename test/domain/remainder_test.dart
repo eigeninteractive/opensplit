@@ -122,12 +122,18 @@ void main() {
   });
 
   test('large sums cannot overflow into a valid allocation', () {
+    // 3 × 2^61 is exactly representable by native ints and JavaScript.
+    // Two overrides wrap a native sum negative, falsely leaving a positive
+    // remainder if the calculation stops using BigInt.
+    const largeOverride = 0x6000000000000000;
     final allocation = RemainderAllocation(
       total: 100,
       memberIds: members,
-      overrides: {'alex': 0x7fffffffffffffff, 'sam': 0x7fffffffffffffff},
+      overrides: {'alex': largeOverride, 'sam': largeOverride},
     );
     expect(allocation.problem, RemainderProblem.overallocated);
+    expect(allocation.remaining, isNegative);
+    expect(allocation.values, {'alex': largeOverride, 'sam': largeOverride});
   });
 
   test(
