@@ -124,13 +124,12 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "Building $version ($number)."
       # Before the slow build, so a changelog Play would refuse fails in
-      # seconds. Into the runner's temporary directory, not the checkout.
-      - name: Write the Play release notes
+      # seconds. Package the notes and artwork into the runner's temporary
+      # directory, leaving the checkout and generated screenshots untouched.
+      - name: Prepare the Play listing and release notes
         run: |
-          notes="$RUNNER_TEMP/play-release-notes/en-US/changelogs"
-          mkdir -p "$notes"
-          dart run tool/release_notes.dart > "$notes/default.txt"
-          cat "$notes/default.txt"
+          dart run tool/play_metadata.dart --output="$RUNNER_TEMP/play-metadata"
+          cat "$RUNNER_TEMP/play-metadata/en-US/changelogs/default.txt"
       - run: dart run build_runner build
       - name: Build the web bundle
         env:
@@ -167,6 +166,12 @@ jobs:
             build/app/outputs/bundle/release/app-release.aab
             build/app/outputs/mapping/release
             build/debug-info/android
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v7
+        with:
+          name: opensplit-play-metadata-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/play-metadata
           if-no-files-found: error
           retention-days: 30
 
@@ -246,9 +251,10 @@ jobs:
           # update; 4 and up interrupt testers with a blocking flow, which is
           # for a build the server can no longer talk to an older client from.
           PLAY_UPDATE_PRIORITY: ${{ inputs.update_priority || vars.PLAY_UPDATE_PRIORITY || '0' }}
-          # Written above, from CHANGELOG.md. en-US is the store listing's
-          # language; Play refuses notes in one the listing does not have.
-          PLAY_RELEASE_NOTES_DIR: ${{ runner.temp }}/play-release-notes
+          # Written above, from CHANGELOG.md and the committed artwork.
+          # en-US is the store listing's language; images affect the listing
+          # across tracks, even though the bundle goes to closed testing.
+          PLAY_METADATA_DIR: ${{ runner.temp }}/play-metadata
         run: bundle exec fastlane android closed
       - name: Remove temporary upload key
         if: always()

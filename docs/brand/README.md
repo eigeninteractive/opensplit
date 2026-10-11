@@ -98,9 +98,23 @@ splash for the same reason.
 | Feature graphic | 1024 × 500, JPEG | `site/store/feature-graphic.jpg` |
 | Phone screenshots | 1080 × 1920, PNG | `site/store/screenshot-1-groups.png` to `-5-insights.png`, in that order |
 
-All of it is generated (above), and the listing is uploaded by hand: the release
-lane sends the bundle and its notes, never images. Feature graphics are JPEG
-because Play rejects a PNG with an alpha channel, even a fully opaque one.
+All of it is generated (above). To package the committed assets and Cider notes:
+
+```sh
+dart run tool/play_metadata.dart --output=build/play-metadata
+```
+
+The tool uses Fastlane's `en-US` metadata layout, resizing the icon to an opaque
+512 × 512 PNG. The release workflow prepares this tree before building and
+saves it as a separate release artifact. Fastlane uploads the artwork with the
+bundle and notes, skipping unchanged images by checksum. The screenshots replace the
+phone gallery in their listed order. Listing images apply across Play tracks,
+even when the bundle is sent to closed testing; listing text is left alone.
+
+The output must be new or empty, so stale images cannot slip into a release.
+The tool checks image dimensions and opacity and fails if anything is missing.
+Feature graphics are JPEG because Play rejects a PNG with an alpha channel,
+even a fully opaque one.
 
 The screenshots are the app itself, rendered by a widget test with the bundled
 fonts, so a UI change is a rerun rather than a redesign. The demo data is a

@@ -326,13 +326,15 @@ A push to `main` runs `.github/workflows/release.yml`:
 
 1. CI, the same jobs as on a pull request.
 2. The resource-id check, before anything slow.
-3. The build number, and Play's release notes from `CHANGELOG.md` (see
-   *Versions*).
+3. The build number, and Play metadata: release notes from `CHANGELOG.md`
+   (see *Versions*) plus the committed icon, feature graphic and screenshots.
 4. The web bundle and the signed Android bundle, both carrying that number,
-   uploaded as artifacts.
+   uploaded as artifacts alongside the prepared Play metadata.
 5. `wrangler d1 migrations apply opensplit --remote`: whatever is pending.
 6. `wrangler deploy`: the script and the bundle, together, as one version.
-7. A wait for `/api/health`, then Play closed testing, with the notes.
+7. A wait for `/api/health`, then Play closed testing, with the notes and listing
+   artwork. Fastlane skips unchanged images by checksum and preserves listing
+   text. The listing artwork is shared across tracks.
 8. A `v<version>` tag, the first time a build of that version ships.
 
 D1 migrations are applied before the Worker that needs them goes live.
@@ -405,6 +407,15 @@ literally, and keeps whole entries up to Play's 500 characters, counting the
 rest on a last line. The notes are in `en-US`, the store listing's language,
 because Play refuses notes in a language the listing lacks. Add a language to
 the listing, and the workflow has to write that language too.
+
+**Play's artwork.** `tool/play_metadata.dart` packages the notes and the current
+committed artwork into a fresh `en-US` supply tree. It checks all inputs before
+writing, resizes the icon to 512 × 512 and retains the feature graphic and
+screenshots byte-for-byte. The workflow passes that directory as
+`PLAY_METADATA_DIR`; the lane refuses incomplete artwork. See
+`docs/brand/README.md` for the source files and generation commands. Run
+`bundle exec ruby test/tool/fastlane_test.rb` to exercise the upload configuration
+locally without contacting Play.
 
 **Tags.** The first build of each version tags its commit `v1.2.0`, and later
 builds leave the tag where it was. The compare links at the foot of
@@ -498,6 +509,12 @@ Anything else means links open in a browser instead of the app, silently.
 `site/.well-known/README.md` explains which certificates belong in that file.
 
 ## Play Console
+
+The release service account needs the app-level
+[Manage store presence](https://support.google.com/googleplay/android-developer/answer/9844686)
+permission as well as access to release on testing tracks, so Fastlane can
+update the listing artwork. The upload does not change listing text or promote
+the bundle to production. Play review and availability still apply.
 
 Under *App content*, the three URLs, each a real static file answering 200 with
 no redirect, and the same constants the app's Settings screen opens

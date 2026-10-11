@@ -208,6 +208,8 @@ jobs:
           bundler-cache: true
       - run: ruby -c fastlane/Fastfile
       - run: bundle exec fastlane lanes
+      - name: Test the Play upload configuration without publishing
+        run: bundle exec ruby test/tool/fastlane_test.rb
       - name: Check tools did not mutate the checkout
         run: |
           git diff --exit-code

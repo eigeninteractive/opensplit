@@ -18,15 +18,20 @@ const playLimit = 500;
 
 Future<void> main() async {
   try {
-    final unreleased = await _describe();
-    final body = unreleased.trim().isNotEmpty
-        ? unreleased
-        : await _describe(await _cider(['version']));
-    stdout.write(playReleaseNotes(body));
+    stdout.write(await currentPlayReleaseNotes());
   } catch (error) {
     stderr.writeln('Release notes failed: $error');
     exitCode = 1;
   }
+}
+
+/// This checkout's tester-facing notes, read through the pinned Cider version.
+Future<String> currentPlayReleaseNotes() async {
+  final unreleased = await _describe();
+  final body = unreleased.trim().isNotEmpty
+      ? unreleased
+      : await _describe(await _cider(['version']));
+  return playReleaseNotes(body);
 }
 
 /// One changelog section's entries as plain text, at most [limit] characters.
