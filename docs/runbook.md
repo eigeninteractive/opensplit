@@ -348,6 +348,33 @@ builds the artifacts without deploying anything.
 
 ---
 
+## Dependency updates
+
+Dependabot opens one weekly `routine-dependencies` pull request across the
+Flutter app, generated API package, Worker, service worker, GitHub Actions and
+Fastlane. Minor and patch updates share the full CI matrix and one merge to
+`main`, which triggers one release. Grouping does not enable automatic merging.
+The configuration is in [`.github/dependabot.yml`](../.github/dependabot.yml);
+see GitHub's [multi-ecosystem grouping documentation](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/configuring-multi-ecosystem-updates).
+
+Major upgrades are excluded from the routine batch and assessed manually.
+Read the release notes even for patch updates: authentication changes can
+affect sign-ins in progress, and native plugins can raise build requirements.
+Drizzle's next 1.0 release candidates are held for an explicit database review;
+update the ORM and migration tool together when that review is complete.
+Security updates can arrive separately from the weekly batch, so an urgent
+fix does not wait for a scheduled maintenance release.
+The [upstream workaround review](upstream-workarounds.md) records fixes and
+remaining constraints found in the app's source comments.
+
+Before merging a dependency batch, regenerate the files affected by it and
+review the diff. For Wrangler, run `pnpm cf-typegen` in `server/`. For Drift,
+refresh its generated contracts and run `dart run tool/update_drift_web_assets.dart`
+from the root. CI checks these outputs, the API client, the server schemas and
+migrations, native tests, Chrome/WASM database tests, and the web bundle.
+An Android plugin update also needs an Android release build and device checks
+for the behaviour it changes; the PR's web build cannot establish that.
+
 ## Versions
 
 A build has two numbers, and only one of them is written down.

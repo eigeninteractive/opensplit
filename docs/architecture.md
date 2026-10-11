@@ -152,7 +152,8 @@ Drizzle tables ──drizzle-orm/zod──▶ Zod rows, and request bodies picke
   `unknownDefaultOpenApi`.
 - **An event carries its payload in a typed field per shape** — `entry`,
   `member`, `group`, `link`, exactly one set, chosen by `kind` — rather than one
-  untyped `payload`. The generator cannot read `oneOf`; separate nullable
+  untyped `payload`. The configured Dart-Dio/json_serializable generator has
+  no verified working `oneOf` path for these models; separate nullable
   fields give the app a generated class for each without it. The object stores
   them the same way, so the table *is* the wire row.
 - **The push message is a contract type** (`PushData`), registered as a
@@ -183,11 +184,13 @@ as nullable before any route uses them.
 
 ### Required, nullable, optional
 
-**Every body field is required, and `null` is the only way to say "none".** A
-generated Dart client cannot send "absent" as distinct from null (it drops a
-null optional field), so an optional field would have three states on the
-server and two on the device. Every write is therefore a `PUT` of the whole
-row at the id the device minted — `PUT /groups/{g}`, `/members/{m}`,
+**Every body field is required, and `null` is the only way to say "none".**
+With our current generator configuration, null optional fields are omitted,
+so an optional field would have three states on the server and two on the
+device. Dart-Dio's `useOptional` option can preserve that distinction with an
+`Optional<T>` wrapper, but this API deliberately uses whole-row writes for
+simple retry semantics. Every write is a `PUT` of the whole row at the id
+the device minted — `PUT /groups/{g}`, `/members/{m}`,
 `/entries/{e}` — which creates it or replaces it, so a retry is the same
 request. Soft deletion is a field of that row (`deletedAt` set or null; the
 server stamps its own time), not a separate verb. Optional exists only for

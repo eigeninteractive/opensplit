@@ -4,6 +4,13 @@ What changed in each version of the app, newest first. The format is
 [Semantic Versioning](https://semver.org/), and the file is kept by
 [cider](https://pub.dev/packages/cider): see "Versions" in docs/runbook.md.
 
+## [Unreleased]
+### Fixed
+- Improved browser database transaction reliability.
+
+### Security
+- Updated sign-in protections.
+
 ## [3.1.0] - 2026-10-11
 ### Added
 - Amount and percentage splits, and multiple payers, start evenly and share the remainder as you edit. Saved splits keep their values.
@@ -90,6 +97,7 @@ What changed in each version of the app, newest first. The format is
 ### Added
 - The first build, to Play internal testing.
 
+[Unreleased]: https://github.com/eigeninteractive/opensplit/compare/v3.1.0...HEAD
 [3.1.0]: https://github.com/eigeninteractive/opensplit/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/eigeninteractive/opensplit/compare/v2.0.0...v3.0.0
 [2.0.0]: https://github.com/eigeninteractive/opensplit/compare/v1.0.0...v2.0.0

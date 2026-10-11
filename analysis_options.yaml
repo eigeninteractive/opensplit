@@ -30,12 +30,10 @@ plugins:
   riverpod_lint:
     version: ^3.1.8
 
-    # Rules turned off, and this map rather than `// ignore:` comments because
-    # ignores do not work on plugin diagnostics. The analyzer parses them -- it
-    # will even tell you an ignore is redundant -- and then reports the
-    # diagnostic anyway, which is worth knowing before spending an afternoon
-    # adding them. It is all or nothing per rule, so each of these is a
-    # project-wide decision rather than a local exemption.
+    # Project-wide rule decisions belong here. Local exemptions use the
+    # qualified diagnostic, for example:
+    # // ignore: riverpod_lint/scoped_providers_should_specify_dependencies
+    # The earlier plugin-ignore bug was fixed upstream in dart-lang/sdk#62131.
     diagnostics:
       # Off because it cannot be satisfied here, not because it is unwelcome.
       #

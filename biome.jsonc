@@ -4,7 +4,7 @@
 // One config at the root, so the CLI from server/ (`pnpm lint`, which CI runs)
 // and an editor opened here read the same rules.
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
   "root": true,
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "files": {
