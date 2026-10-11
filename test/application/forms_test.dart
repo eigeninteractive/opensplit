@@ -10,6 +10,7 @@ import 'package:opensplit/application/preferences_providers.dart';
 import 'package:opensplit/application/session_providers.dart';
 import 'package:opensplit/application/settlement_form.dart';
 import 'package:opensplit/data/local/database.dart';
+import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:opensplit_api/opensplit_api.dart' show EntryKind, SplitKind;
@@ -97,11 +98,12 @@ void main() {
         GroupLedger ledger,
       })
     >
-    open({String? toId, int? amountMinor}) async {
+    open({String? toId, int? amountMinor, String? entryId}) async {
       final provider = settlementFormProvider(
         'g1',
         toId: toId,
         amountMinor: amountMinor,
+        entryId: entryId,
       );
       container.listen(provider, (_, _) {});
       await container.read(provider.future);
@@ -166,6 +168,90 @@ void main() {
       settle.form.choosePayee('m-priya');
       expect(settle.state().error, isNull);
     });
+
+    test('editing preserves the payment and updates its whole amount', () async {
+      final repository = DriftEntryRepository(db);
+      final original = await repository.create(
+        EntryDraft.settlement(
+          groupId: 'g1',
+          currency: 'INR',
+          amountMinor: 120000,
+          fromMemberId: 'm-priya',
+          toMemberId: 'm-ravi',
+          entryDate: now,
+          occurredAt: now.add(const Duration(hours: 10)),
+          timeZone: testZone,
+          notes: 'Paid in cash',
+          description: 'Older payment label',
+        ),
+        createdBy: 'm-priya',
+      );
+      final edit = await open(entryId: original.id);
+      expect(edit.state().notes, 'Paid in cash');
+      expect(await edit.form.record(), isTrue);
+      var saved = (await repository.getEntry(original.id))!;
+      expect(saved.row.kind, EntryKind.settlement);
+      expect(saved.isSpend, isFalse);
+      expect(saved.row.entryDate, original.row.entryDate);
+      expect(saved.row.occurredAt, original.row.occurredAt);
+      expect(saved.row.timeZone, testZone);
+      expect(saved.row.notes, 'Paid in cash');
+      expect(saved.row.description, 'Older payment label');
+      expect(saved.row.createdAt, original.row.createdAt);
+      expect(saved.row.createdBy, original.row.createdBy);
+
+      // A real editor is closed after saving; reopen against the latest value.
+      container.invalidate(settlementFormProvider('g1', entryId: original.id));
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      final reopened = await open(entryId: original.id);
+      reopened.form
+        ..setAmount('900')
+        ..setNotes('Bank transfer');
+      expect(await reopened.form.record(), isTrue);
+      saved = (await repository.getEntry(original.id))!;
+      expect(saved.row.kind, EntryKind.settlement);
+      expect(saved.row.amountMinor, 90000);
+      expect(saved.payers.single.amountMinor, 90000);
+      expect(saved.shares.single.amountMinor, 90000);
+      expect(saved.row.notes, 'Bank transfer');
+    });
+
+    test(
+      'changing a payment date clears its time, and delete keeps history',
+      () async {
+        final repository = DriftEntryRepository(db);
+        final original = await repository.create(
+          EntryDraft.settlement(
+            groupId: 'g1',
+            currency: 'INR',
+            amountMinor: 500,
+            fromMemberId: 'm-priya',
+            toMemberId: 'm-ravi',
+            occurredAt: now,
+            timeZone: testZone,
+          ),
+          createdBy: 'm-priya',
+        );
+        final edit = await open(entryId: original.id);
+        edit.form.chooseDay(DateTime.utc(2026, 8, 20));
+        expect(edit.state().includeTime, isFalse);
+        expect(await edit.form.record(), isTrue);
+        final saved = (await repository.getEntry(original.id))!;
+        expect(saved.row.entryDate, DateTime.utc(2026, 8, 20));
+        expect(saved.row.occurredAt, isNull);
+        expect(saved.row.timeZone, isNull);
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+        container.invalidate(
+          settlementFormProvider('g1', entryId: original.id),
+        );
+        final reopened = await open(entryId: original.id);
+        expect(await reopened.form.delete(), isTrue);
+        final deleted = (await repository.getEntry(original.id))!;
+        expect(deleted.isDeleted, isTrue);
+        expect(deleted.row.kind, EntryKind.settlement);
+        expect(await db.select(db.groupEvents).get(), isNotEmpty);
+      },
+    );
   });
 
   group('an expense', () {
@@ -220,15 +306,93 @@ void main() {
       final expense = await open();
       expense.form
         ..setAmount('300')
-        ..chooseSplitKind(SplitKind.exact);
+        ..chooseSplitKind(SplitKind.exact)
+        ..setExactAmount('m-ravi', '.');
 
       expect(await expense.form.save(), isFalse);
       expect(
         expense.state().error,
-        'Check the split — some amounts are missing.',
+        'Enter a valid amount or clear this value.',
       );
       expect(await db.select(db.entries).get(), isEmpty);
     });
+
+    for (final kind in [
+      SplitKind.equal,
+      SplitKind.exact,
+      SplitKind.percent,
+      SplitKind.shares,
+    ]) {
+      test(
+        '$kind saves precisely the previewed values and reserved id',
+        () async {
+          final expense = await open();
+          expense.form
+            ..setAmount('0.05')
+            ..chooseSplitKind(kind);
+          final before = expense.state();
+          final preview = before.preview(inr());
+          final saving = expense.form.save();
+          expect(expense.state().saving, isTrue);
+          expense.form.setAmount('500');
+          expect(expense.state().amount, '0.05');
+          expect(await expense.form.save(), isFalse);
+          expect(await saving, isTrue);
+          final saved =
+              (await container.read(entryRepositoryProvider).getEntries('g1'))
+                  .single;
+          expect(saved.id, before.newEntryId);
+          expect({
+            for (final share in saved.shares) share.memberId: share.amountMinor,
+          }, preview);
+          final editing = await open(entryId: saved.id);
+          expect(editing.state().preview(inr()), preview);
+          expect(await editing.form.save(), isTrue);
+          expect(
+            (await container.read(entryRepositoryProvider).getEntry(saved.id))!
+                .shares,
+            saved.shares,
+          );
+        },
+      );
+    }
+
+    test(
+      'clear and reset release overrides without disturbing another method',
+      () async {
+        final expense = await open();
+        expense.form
+          ..setAmount('300')
+          ..chooseSplitKind(SplitKind.exact)
+          ..setExactAmount('m-ravi', '120')
+          ..setInSplit('m-ravi', included: false)
+          ..setInSplit('m-ravi', included: true);
+        expect(expense.state().preview(inr())!['m-ravi'], 12000);
+        expense.form
+          ..chooseSplitKind(SplitKind.percent)
+          ..setPercent('m-ravi', '40')
+          ..resetSplit();
+        expect(expense.state().percents, isEmpty);
+        expect(expense.state().exactAmounts['m-ravi'], '120');
+        expense.form
+          ..chooseSplitKind(SplitKind.exact)
+          ..setExactAmount('m-ravi', '');
+        expect(expense.state().exactAmounts, isEmpty);
+        expense.form
+          ..setSeveralPayers(true)
+          ..setPaying('m-priya', paying: true)
+          ..setPaidAmount('m-ravi', '120');
+        expect(expense.state().paidAllocation(inr())!.values, {
+          'm-ravi': 12000,
+          'm-priya': 18000,
+        });
+        expense.form.resetPaid();
+        expect(expense.state().paidAllocation(inr())!.values, {
+          'm-ravi': 15000,
+          'm-priya': 15000,
+        });
+      },
+    );
 
     test('going back to one payer keeps the first of several', () async {
       final expense = await open();

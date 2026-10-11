@@ -14,9 +14,9 @@ real screenshot:
   so the one place the brand's type has to survive Gmail is a picture of it.
 
 One composition at two sizes: the headline and wordmark on the left, and on the
-right the brand mark drawn large in lilac with the app's balances screen across
-its cut, as the hero sets it. Everything is drawn here from the brand's own
-values (docs/brand/README.md) and the bundled Instrument Sans, at four times
+right the brand mark in its primary container colour, with the balances screen
+across its cut, as the hero sets it. Everything is drawn here from the brand's own
+values (docs/brand/README.md) and the bundled Google Sans Flex, at four times
 the size and scaled down, which is how PIL gets antialiased edges.
 
 Pinned by test/site_meta_test.dart, because a wrong-sized image fails silently:
@@ -28,16 +28,16 @@ import os
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-PAPER = (252, 248, 255)     # #FCF8FF, surface
-INK = (28, 27, 33)          # #1C1B21, onSurface
-SLATE = (71, 70, 79)        # #47464F, onSurfaceVariant
-VIOLET = (91, 88, 145)      # #5B5891, the seed
-LILAC = (227, 223, 255)     # #E3DFFF, primaryContainer
-SHADOW = (67, 64, 120)      # #434078, onPrimaryContainer
+PAPER = (251, 248, 255)     # #FBF8FF, surface
+INK = (27, 27, 33)          # #1B1B21, onSurface
+SLATE = (70, 70, 79)        # #46464F, onSurfaceVariant
+PRIMARY = (81, 91, 146)      # #515B92, primary
+PRIMARY_CONTAINER = (222, 224, 255)     # #DEE0FF, primaryContainer
+SHADOW = (57, 67, 121)      # #394379, onPrimaryContainer
 
 FONTS = 'assets/google_fonts'
-REGULAR = f'{FONTS}/InstrumentSans-Regular.ttf'
-SEMIBOLD = f'{FONTS}/InstrumentSans-SemiBold.ttf'
+REGULAR = f'{FONTS}/GoogleSansFlex-Regular.ttf'
+SEMIBOLD = f'{FONTS}/GoogleSansFlex-SemiBold.ttf'
 
 SCREEN = 'site/store/screenshot-3-balances.png'
 
@@ -80,7 +80,7 @@ def rounded(image, radius):
 
 
 def lifted(canvas, image, at, radius):
-    """Pastes [image] with the page's layered violet shadow under it."""
+    """Pastes [image] with the page's layered tonal shadow under it."""
     x, y = at
     w, h = image.size
     for offset, blur, alpha in [(2 * S, 3 * S, 22), (10 * S, 24 * S, 40),
@@ -99,7 +99,7 @@ def wordmark(draw, at, size):
     glyph = size * 1.25
     r = glyph * 17 / 48
     mark(draw, (x + glyph / 2, baseline - size * 0.36), r, glyph * 6.5 / 48,
-         VIOLET, PAPER)
+         PRIMARY, PAPER)
     x += glyph + size * 0.4
     regular = ImageFont.truetype(REGULAR, round(size))
     semibold = ImageFont.truetype(SEMIBOLD, round(size))
@@ -118,7 +118,7 @@ def compose(width, height, layout):
     # the screen so the shape still reads as the mark behind it.
     radius = layout['ring'] * H
     centre = (W - layout['ring_right'] * H, H * 0.56)
-    mark(draw, centre, radius, radius * 6.5 / 17, LILAC, PAPER)
+    mark(draw, centre, radius, radius * 6.5 / 17, PRIMARY_CONTAINER, PAPER)
 
     # The balances screen, its top portion: the part that says what the app
     # does, cropped where a phone would run off the bottom of the image.

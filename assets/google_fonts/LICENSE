@@ -1,11 +1,11 @@
 Fonts bundled with OpenSplit, so that the app never fetches one from a
 third-party host at runtime.
 
-Instrument Sans
+Google Sans Flex
     SIL Open Font License 1.1
 
-    InstrumentSans-Regular.ttf, InstrumentSans-Medium.ttf and
-    InstrumentSans-SemiBold.ttf are the exact files package:google_fonts
+    GoogleSansFlex-Regular.ttf, GoogleSansFlex-Medium.ttf and
+    GoogleSansFlex-SemiBold.ttf are the exact files package:google_fonts
     would otherwise download: each was fetched from the URL that package
     builds and checked against the SHA-256 and byte length recorded in its
     own font descriptors.
@@ -20,7 +20,7 @@ Instrument Sans
 Roboto
     Not bundled. Flutter's web engine needs a font family named "Roboto" to
     exist or it downloads one from fonts.gstatic.com; pubspec.yaml satisfies
-    that name with Instrument Sans, so no Roboto file ships with this app.
+    that name with Google Sans Flex, so no Roboto file ships with this app.
 
 Nothing here is part of OpenSplit's own AGPL-3.0 licence, which covers the code
 and not the typefaces it sets text in.
@@ -28,8 +28,7 @@ and not the typefaces it sets text in.
 
 COPYRIGHT NOTICES
 
-Copyright 2022 The Instrument Sans Project Authors
-(https://github.com/Instrument/instrument-sans)
+Copyright 2015 Google LLC. All Rights Reserved.
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:

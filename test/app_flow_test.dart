@@ -48,6 +48,7 @@ void main() {
   testWidgets('a flatmate group can be settled end to end, offline', (
     tester,
   ) async {
+    final semantics = tester.ensureSemantics();
     // Phone-shaped: below the 840dp breakpoint, so this exercises the tabbed
     // layout rather than the side-by-side one.
     tester.view.physicalSize = const Size(600, 1800);
@@ -95,7 +96,7 @@ void main() {
     await _settle(tester);
 
     await _enterInto(tester, 'What was it?', 'Groceries');
-    await _enterInto(tester, 'How much?', '2400');
+    await _enterInto(tester, 'Amount', '2400');
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await _settle(tester);
 
@@ -108,11 +109,12 @@ void main() {
     expect(find.textContaining('is owed ₹1,200.00'), findsOneWidget);
     expect(find.textContaining('owes ₹1,200.00'), findsOneWidget);
     expect(
-      find.text('You pay Ravi'),
+      find.bySemanticsLabel(RegExp('You pay Ravi')),
       findsNothing,
       reason: 'Ravi is owed money, so he is not the one paying',
     );
-    expect(find.textContaining('Priya pays you'), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('Priya pays you')), findsOneWidget);
+    semantics.dispose();
 
     // ---- The simplified debt is explainable ------------------------------
     await tester.tap(find.byIcon(Icons.help_outline));
@@ -129,7 +131,32 @@ void main() {
     await _settle(tester);
 
     // ---- Settle up -------------------------------------------------------
+    final transferRow = find.ancestor(
+      of: find.widgetWithText(FilledButton, 'Settle').first,
+      matching: find.byType(ListTile),
+    );
+    final transferTags = tester
+        .widgetList<Hero>(
+          find.descendant(of: transferRow, matching: find.byType(Hero)),
+        )
+        .map((hero) => hero.tag)
+        .toSet();
+    expect(transferTags, hasLength(3));
     await tester.tap(find.widgetWithText(FilledButton, 'Settle').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    for (final tag in transferTags) {
+      expect(
+        find.descendant(
+          of: find.byWidgetPredicate(
+            (widget) => widget is Hero && widget.tag == tag,
+          ),
+          matching: find.byType(Text),
+        ),
+        findsNothing,
+        reason: 'payer, recipient and amount fly into their fields',
+      );
+    }
     await _settle(tester);
 
     expect(find.text('Settle up'), findsWidgets);
@@ -188,7 +215,7 @@ void main() {
     await tester.tap(find.text('Groceries'));
     await _settle(tester);
 
-    await _enterInto(tester, 'How much?', '2000');
+    await _enterInto(tester, 'Amount', '2000');
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await _settle(tester);
 

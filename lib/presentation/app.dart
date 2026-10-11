@@ -27,7 +27,8 @@ class OpenSplitApp extends ConsumerStatefulWidget {
   ConsumerState<OpenSplitApp> createState() => _OpenSplitAppState();
 }
 
-class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
+class _OpenSplitAppState extends ConsumerState<OpenSplitApp>
+    with WidgetsBindingObserver {
   /// A messenger above the router, because the update offer outlives whichever
   /// screen happened to be open when Play answered.
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
@@ -46,6 +47,7 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _lifecycle = AppLifecycleListener(onResume: _onResume);
 
     // Not in initState directly: Riverpod's scope is inherited state, which is
@@ -100,6 +102,9 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
   /// Coming back to the foreground asks both questions worth asking: what has
   /// the group been doing, and is there a new version of the app.
   void _onResume() {
+    // One UI can change its palette while the app is in the background.
+    // Re-read the plugin; brightness and the palette are separate settings.
+    ref.invalidate(wallpaperSchemesProvider);
     if (ref.read(signedInProvider)) {
       unawaited(ref.read(appDatabaseProvider).noticeWritesElsewhere());
     }
@@ -108,7 +113,13 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
   }
 
   @override
+  void didChangePlatformBrightness() {
+    ref.invalidate(wallpaperSchemesProvider);
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _lifecycle.dispose();
     super.dispose();
   }
@@ -193,6 +204,12 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp> {
       // Defaults to following the platform — see [ThemeModeController].
       themeMode: ref.watch(themeModeProvider),
       routerConfig: ref.watch(routerProvider),
+      // Order route scopes without measuring their transitional geometry.
+      // Each screen retains standard visual reading order within its scope.
+      builder: (context, child) => FocusTraversalGroup(
+        policy: WidgetOrderTraversalPolicy(),
+        child: child!,
+      ),
     );
   }
 }

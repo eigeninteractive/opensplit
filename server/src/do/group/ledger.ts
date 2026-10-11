@@ -59,7 +59,11 @@ export function putEntry(tx: Tx, id: string, input: EntryInput, { now, actor }: 
   if (stored) {
     if (JSON.stringify(comparable(stored)) === JSON.stringify(comparable(input))) return stored;
     assertBaseIsCurrent(stored, input);
+    if (stored.kind !== input.kind) {
+      refuse("malformed", "An expense cannot become a payment, or a payment an expense.");
+    }
   }
+  assertSettlement(input);
   assertDepartedOnlySettle(tx, stored, input);
 
   const seq = nextSeq(tx);
@@ -105,6 +109,14 @@ function assertBalanced(input: EntryInput): void {
   const owed = input.shares.reduce((sum, share) => sum + share.amountMinor, 0);
   if (paid !== input.amountMinor || owed !== input.amountMinor) {
     refuse("unbalanced", `This expense does not add up: ${input.amountMinor} recorded, ${paid} paid, ${owed} owed.`);
+  }
+}
+
+/** A live payment transfers the whole amount between two different people. */
+function assertSettlement(input: EntryInput): void {
+  if (input.kind !== "settlement" || input.deletedAt !== null) return;
+  if (input.payers.length !== 1 || input.shares.length !== 1 || input.payers[0]?.memberId === input.shares[0]?.memberId) {
+    refuse("malformed", "A payment needs one sender and one different recipient.");
   }
 }
 

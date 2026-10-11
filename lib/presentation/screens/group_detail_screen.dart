@@ -1,3 +1,5 @@
+import 'dart:math' show max;
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -13,12 +15,13 @@ import '../../domain/models/entry.dart';
 import '../../domain/money_format.dart';
 import '../navigation.dart';
 import '../theme.dart';
-import '../widgets/avatar_view.dart';
+import '../widgets/group_avatar_hero.dart';
 import '../widgets/balance_arrow.dart';
 import '../widgets/balances_panel.dart';
 import '../widgets/category_icon.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/group_cover.dart';
+import '../widgets/shared_element.dart';
 import '../widgets/group_pane.dart';
 import '../widgets/group_standing.dart';
 import '../widgets/offline_indicator.dart';
@@ -70,6 +73,7 @@ class GroupDetailScreen extends ConsumerWidget {
 
     final scaffold = Scaffold(
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: null,
         onPressed: () => context.push('/g/$groupId/add'),
         icon: const Icon(Icons.add),
         label: const Text('Add expense'),
@@ -113,9 +117,9 @@ class GroupDetailScreen extends ConsumerWidget {
       ),
     );
 
-    // A TabBar needs a controller in scope, but only the narrow layout has
-    // tabs at all; the wide one shows both panes at once.
-    return wide ? scaffold : DefaultTabController(length: 2, child: scaffold);
+    // Keep the app bar and its focus nodes mounted across the breakpoint,
+    // including when this page is resizing during its exit transition.
+    return DefaultTabController(length: 2, child: scaffold);
   }
 }
 
@@ -142,9 +146,11 @@ class _GroupAppBar extends StatelessWidget {
 
     return SliverAppBar(
       pinned: true,
-      expandedHeight: _GroupHeader.height + (tabs ? kTextTabBarHeight : 0),
+      expandedHeight:
+          _GroupHeader.height(context) + (tabs ? kTextTabBarHeight : 0),
       leading: BackButton(onPressed: () => goBack(context, '/')),
-      title: Text(ledger.group.name),
+      // FlexibleSpaceBar already supplies the scroll expansion state.
+      title: _CollapsedGroupName(name: ledger.group.name),
       actions: [
         const OfflineIndicator(),
         if (kIsWeb) SyncRefreshButton.group(groupId),
@@ -182,14 +188,41 @@ class _GroupAppBar extends StatelessWidget {
           measure: measure,
         ),
       ),
-      bottom: tabs
-          ? const TabBar(
-              tabs: [
-                Tab(text: 'Expenses'),
-                Tab(text: 'Balances'),
-              ],
-            )
-          : null,
+      // AppBar changes its toolbar ancestry when bottom becomes null.
+      // Keep the slot present so a resize preserves its focused controls.
+      bottom: PreferredSize(
+        preferredSize: Size.fromHeight(tabs ? kTextTabBarHeight : 0),
+        child: Visibility(
+          visible: tabs,
+          maintainState: true,
+          child: const TabBar(
+            tabs: [
+              Tab(text: 'Expenses'),
+              Tab(text: 'Balances'),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The expanded name owns the shared element; only the collapsed toolbar
+/// repeats it. Keeping this widget mounted also preserves app-bar focus.
+class _CollapsedGroupName extends StatelessWidget {
+  const _CollapsedGroupName({required this.name});
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = context
+        .dependOnInheritedWidgetOfExactType<FlexibleSpaceBarSettings>();
+    final collapsed =
+        settings == null || settings.currentExtent <= settings.minExtent + 8;
+    return Offstage(
+      offstage: !collapsed,
+      child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
     );
   }
 }
@@ -219,11 +252,16 @@ class _GroupHeader extends ConsumerWidget {
   static const _coverBelowToolbar = 64.0;
   static const _avatarRadius = 32.0;
 
-  /// Room for the standing, under the cover.
-  static const _standingHeight = 72.0;
-
   /// The expanded height, toolbar included and tabs not.
-  static const height = 64 + _coverBelowToolbar + _standingHeight;
+  static double height(BuildContext context) =>
+      64 +
+      _coverBelowToolbar +
+      max(
+        112,
+        MediaQuery.textScalerOf(context).scale(24) * 2.4 +
+            MediaQuery.textScalerOf(context).scale(16) * 2.4 +
+            24,
+      );
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -244,7 +282,7 @@ class _GroupHeader extends ConsumerWidget {
           left: 0,
           right: 0,
           height: coverHeight,
-          child: GroupCover(ledger: ledger),
+          child: GroupCoverHero(ledger: ledger),
         ),
         PositionedDirectional(
           start: start,
@@ -257,12 +295,7 @@ class _GroupHeader extends ConsumerWidget {
               child: CircleAvatar(
                 radius: _avatarRadius + ring,
                 backgroundColor: scheme.surface,
-                child: AvatarView(
-                  avatar: group.avatar,
-                  name: group.name,
-                  id: group.id,
-                  radius: _avatarRadius,
-                ),
+                child: GroupAvatarHero(group: group, radius: _avatarRadius),
               ),
             ),
           ),
@@ -272,10 +305,20 @@ class _GroupHeader extends ConsumerWidget {
           end: 16,
           top: coverHeight + 12,
           bottom: bottomInset,
-          child: GroupStanding(
-            ledger: ledger,
-            currencies: currencies,
-            style: Theme.of(context).textTheme.titleMedium,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SharedText(
+                tag: ('group-name', group.id),
+                text: group.name,
+                style: Theme.of(
+                  context,
+                ).textTheme.headlineSmall!.copyWith(color: scheme.onSurface),
+                maxLines: 2,
+              ),
+              const SizedBox(height: 4),
+              GroupStanding(ledger: ledger, currencies: currencies),
+            ],
           ),
         ),
       ],
@@ -400,6 +443,7 @@ class _EntryTile extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final me = ledger.me;
     final isSettlement = entry.row.kind == EntryKind.settlement;
+    final largeText = MediaQuery.textScalerOf(context).scale(12) > 16;
 
     // What this entry did to your position: what you paid, less what you owe.
     var myDelta = 0;
@@ -430,10 +474,10 @@ class _EntryTile extends StatelessWidget {
     final when = at == null ? '' : ' · ${DateFormat.jm().format(at.toLocal())}';
     final String subtitle;
     if (isSettlement) {
-      final payee = entry.shares.isEmpty
-          ? '—'
-          : ledger.nameOf(entry.shares.first.memberId);
-      subtitle = '$payerNames paid $payee$when';
+      final note = entry.row.notes?.trim();
+      final legacy = entry.row.description.trim();
+      final detail = note?.isNotEmpty == true ? note! : legacy;
+      subtitle = detail.isEmpty ? 'Payment$when' : '$detail$when';
     } else {
       subtitle = '$payerNames paid$when';
     }
@@ -449,32 +493,57 @@ class _EntryTile extends StatelessWidget {
       leading: CircleAvatar(
         backgroundColor: background,
         foregroundColor: foreground,
-        child: Icon(
-          isSettlement
-              ? Icons.handshake_outlined
-              : categoryIcon(category?.icon ?? ''),
+        child: SharedElement(
+          tag: ('entry-category', entry.id),
+          child: Icon(
+            isSettlement
+                ? Icons.handshake_outlined
+                : categoryIcon(category?.icon ?? ''),
+            color: foreground,
+          ),
         ),
       ),
-      title: Text(
-        isSettlement && entry.row.description.isEmpty
-            ? 'Settlement'
+      title: SharedText(
+        tag: ('entry-description', entry.id),
+        text: isSettlement
+            ? '$payerNames paid ${entry.shares.isEmpty ? '—' : ledger.nameOf(entry.shares.first.memberId)}'
             : entry.row.description.isEmpty
             ? 'Expense'
             : entry.row.description,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+        style: Theme.of(
+          context,
+        ).textTheme.titleMedium!.copyWith(color: scheme.onSurface),
       ),
-      subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+      isThreeLine: largeText && me != null && myDelta != 0,
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+          if (largeText && me != null && myDelta != 0)
+            BalanceAmount(
+              balanceMinor: myDelta,
+              text: myDeltaWords,
+              semanticsLabel: myDeltaWords,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
+            ),
+        ],
+      ),
       trailing: Column(
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Text(
-            formatMoney(currency, entry.row.amountMinor),
-            style: moneyStyle(Theme.of(context).textTheme.titleMedium!),
+          SharedText(
+            tag: ('entry-amount', entry.id),
+            text: formatMoney(currency, entry.row.amountMinor),
+            style: moneyStyle(
+              Theme.of(context).textTheme.titleMedium!,
+            ).copyWith(color: scheme.onSurface),
           ),
-          if (me != null && myDelta != 0)
+          if (!largeText && me != null && myDelta != 0)
             BalanceAmount(
               balanceMinor: myDelta,
               text: myDeltaWords,

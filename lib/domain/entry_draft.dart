@@ -37,6 +37,7 @@ class EntryDraft {
     DateTime? occurredAt,
     String? timeZone,
     String? notes,
+    String description = '',
   }) {
     if (fromMemberId == toMemberId) {
       throw const SplitException('A settlement needs two different people.');
@@ -46,6 +47,7 @@ class EntryDraft {
       currency: currency,
       amountMinor: amountMinor,
       kind: EntryKind.settlement,
+      description: description,
       split: ExactSplit({toMemberId: amountMinor}),
       payerAmounts: {fromMemberId: amountMinor},
       entryDate: entryDate,
@@ -115,6 +117,15 @@ Entry composeEntry(
     totalMinor: draft.amountMinor,
     amountsByMemberId: draft.payerAmounts,
   );
+
+  if (draft.kind == EntryKind.settlement &&
+      (payers.length != 1 ||
+          shares.length != 1 ||
+          payers.single.memberId == shares.single.memberId)) {
+    throw const SplitException(
+      'A payment needs one sender and one different recipient.',
+    );
+  }
 
   return Entry(
     EntryRow(

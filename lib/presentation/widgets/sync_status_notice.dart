@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/sync_providers.dart';
 import '../launch_hold.dart';
+import 'inline_notice.dart';
 
 /// Stands in, invisibly, for saved content the local database has not
 /// returned yet.
@@ -139,24 +140,17 @@ class _SyncProblem extends StatelessWidget {
   final VoidCallback? onRetry;
 
   @override
-  Widget build(BuildContext context) => Card.outlined(
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Text(message),
-          const SizedBox(height: 8),
-          TextButton.icon(
-            onPressed: onRetry,
-            icon: const Icon(Icons.refresh),
-            label: Text(onRetry == null ? 'Retrying…' : 'Try again'),
-          ),
-        ],
+  Widget build(BuildContext context) => InlineNotice(
+    icon: Icons.sync_problem_rounded,
+    title: title,
+    message: message,
+    actions: [
+      TextButton.icon(
+        onPressed: onRetry,
+        icon: const Icon(Icons.refresh),
+        label: Text(onRetry == null ? 'Retrying…' : 'Try again'),
       ),
-    ),
+    ],
   );
 }
 

@@ -10,8 +10,8 @@
     <!-- ColorScheme.surface, the colour the app bar and the page both sit on.
        Anything else here shows as a seam between the browser chrome and the
        first pixel of the app. -->
-    <meta name="theme-color" content="#fcf8ff" media="(prefers-color-scheme: light)">
-    <meta name="theme-color" content="#131318" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#fbf8ff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#121318" media="(prefers-color-scheme: dark)">
 
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -67,13 +67,13 @@
      * trip, before any script runs. test/presentation/theme_test.dart compares
      * them against the running theme, so the two cannot drift. */
     :root {
-      --surface: #fcf8ff; /* ColorScheme.surface */
-      --primary: #5b5891; /* the brand mark */
+      --surface: #fbf8ff; /* ColorScheme.surface */
+      --primary: #515b92; /* the brand mark */
     }
     @media (prefers-color-scheme: dark) {
       :root {
-        --surface: #131318;
-        --primary: #c4c0ff;
+        --surface: #121318;
+        --primary: #bac3ff;
       }
     }
 

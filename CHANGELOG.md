@@ -4,6 +4,22 @@ What changed in each version of the app, newest first. The format is
 [Semantic Versioning](https://semver.org/), and the file is kept by
 [cider](https://pub.dev/packages/cider): see "Versions" in docs/runbook.md.
 
+## [3.1.0] - 2026-10-11
+### Added
+- Amount and percentage splits, and multiple payers, start evenly and share the remainder as you edit. Saved splits keep their values.
+
+### Changed
+- A refreshed Material design with indigo colours, Google Sans Flex, consistent fields and clearer expense entry.
+- Groups share their cover art and name as they open, with transitions that respect reduced motion.
+- Recorded payments open in a dedicated editor showing who paid whom, with an optional note.
+- Custom split values have a small pin and an even-split reset.
+- The launch screen, landing page, emails and Play artwork match the new design.
+
+### Fixed
+- Android device colours refresh when you return to the app or switch light and dark mode. Settings can check colour availability again.
+- A saved payment keeps its sender, recipient and payment type while editing.
+- Expense previews and saved splits assign leftover cents to the same people.
+
 ## [3.0.0] - 2026-10-10
 ### Added
 - On the web, notifications now arrive when OpenSplit isn't open, and tapping one opens the group.
@@ -74,6 +90,7 @@ What changed in each version of the app, newest first. The format is
 ### Added
 - The first build, to Play internal testing.
 
+[3.1.0]: https://github.com/eigeninteractive/opensplit/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/eigeninteractive/opensplit/compare/v2.0.0...v3.0.0
 [2.0.0]: https://github.com/eigeninteractive/opensplit/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/eigeninteractive/opensplit/releases/tag/v1.0.0

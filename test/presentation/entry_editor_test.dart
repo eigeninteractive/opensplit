@@ -7,20 +7,28 @@ import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/presentation/app.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:opensplit_api/opensplit_api.dart' show SplitKind;
 
 import '../harness.dart';
 
 /// The editor seeds itself from asynchronous data, and hands its two sections
 /// read-only copies of the selection which come back as new values through
 /// callbacks.
-Future<void> _pumpApp(WidgetTester tester, AppDatabase db) async {
+Future<void> _pumpApp(
+  WidgetTester tester,
+  AppDatabase db, {
+  Size size = const Size(400, 1600),
+  double textScale = 1,
+}) async {
   SharedPreferences.setMockInitialValues({});
   final prefs = await SharedPreferences.getInstance();
 
   // A tall phone rather than the default 800x600.
-  tester.view.physicalSize = const Size(400, 1600);
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
+  tester.platformDispatcher.textScaleFactorTestValue = textScale;
   addTearDown(tester.view.reset);
+  addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
 
   await tester.pumpWidget(
     signedInApp(db: db, prefs: prefs, child: const OpenSplitApp()),
@@ -107,7 +115,29 @@ Future<void> _type(
   required String amount,
 }) async {
   await tester.enterText(_field('What was it?'), what);
-  await tester.enterText(_field('How much?'), amount);
+  await tester.enterText(_field('Amount'), amount);
+  await _beats(tester);
+}
+
+Finder _allocationField(String kind, String id) => find.descendant(
+  of: find.byKey(ValueKey((kind, id))),
+  matching: find.byType(TextField),
+);
+
+String _allocationText(WidgetTester tester, String kind, String id) =>
+    tester.widget<TextField>(_allocationField(kind, id)).controller!.text;
+
+Future<void> _chooseMethod(WidgetTester tester, String label) async {
+  final dropdown = find.byType(DropdownMenu<SplitKind>);
+  if (dropdown.evaluate().isNotEmpty) {
+    await tester.ensureVisible(dropdown);
+    await tester.tap(dropdown);
+    await _beats(tester);
+    await tester.tap(find.widgetWithText(MenuItemButton, label).last);
+  } else {
+    await tester.ensureVisible(find.text(label));
+    await tester.tap(find.text(label));
+  }
   await _beats(tester);
 }
 
@@ -120,6 +150,117 @@ void main() {
     await seedReferenceData(db);
   });
   tearDown(() => db.close());
+
+  testWidgets('save errors remain visible at phone height', (tester) async {
+    await _seed(db);
+    await _pumpApp(tester, db, size: const Size(360, 640));
+    await _openEditor(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await _beats(tester);
+    expect(find.byType(SnackBar), findsOneWidget);
+    expect(find.text('Add expense'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await _unmount(tester);
+  });
+
+  for (final (size, textScale) in [
+    (const Size(360, 640), 1.0),
+    (const Size(360, 640), 2.0),
+    (const Size(1280, 900), 1.0),
+  ]) {
+    testWidgets('payer and split controls work at $size / $textScale text', (
+      tester,
+    ) async {
+      await _seed(db);
+      await _pumpApp(tester, db, size: size, textScale: textScale);
+      await _openEditor(tester);
+      await _type(tester, what: 'Dinner', amount: '300');
+      expect(tester.takeException(), isNull);
+      await Scrollable.ensureVisible(
+        tester.element(find.text('Several people')),
+        alignment: 0.5,
+      );
+      await _beats(tester);
+      await tester.tap(find.text('Several people'));
+      await _beats(tester);
+      expect(tester.takeException(), isNull);
+      for (final (label, kind) in [
+        ('Amounts', SplitKind.exact),
+        ('Shares', SplitKind.shares),
+        ('%', SplitKind.percent),
+        ('Equally', SplitKind.equal),
+      ]) {
+        await tester.scrollUntilVisible(
+          find.text('Split'),
+          200,
+          scrollable: find
+              .descendant(
+                of: find.byType(ListView).first,
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        await _beats(tester);
+        if (find.text('Split method').evaluate().isNotEmpty) {
+          final dropdown = find.byType(DropdownMenu<SplitKind>);
+          await Scrollable.ensureVisible(
+            tester.element(dropdown),
+            alignment: 0.5,
+          );
+          await _beats(tester);
+          await tester.tap(dropdown);
+          await _beats(tester);
+          await tester.tap(find.widgetWithText(MenuItemButton, label).last);
+          await _beats(tester);
+          expect(
+            tester.widget<DropdownMenu<SplitKind>>(dropdown).initialSelection,
+            kind,
+          );
+        } else {
+          await Scrollable.ensureVisible(
+            tester.element(find.text(label)),
+            alignment: 0.5,
+          );
+          await _beats(tester);
+          await tester.tap(find.text(label));
+          await _beats(tester);
+          expect(
+            tester
+                .widget<SegmentedButton<SplitKind>>(
+                  find.byType(SegmentedButton<SplitKind>),
+                )
+                .selected,
+            {kind},
+          );
+        }
+        await _beats(tester);
+        expect(tester.takeException(), isNull);
+      }
+      await tester.scrollUntilVisible(
+        find.text('Time of expense'),
+        200,
+        scrollable: find
+            .descendant(
+              of: find.byType(ListView).first,
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await Scrollable.ensureVisible(
+        tester.element(find.widgetWithText(ExpansionTile, 'Time of expense')),
+        alignment: 0.5,
+      );
+      await _beats(tester);
+      await tester.tap(find.text('Time of expense'));
+      await _beats(tester);
+      await tester.ensureVisible(find.byTooltip('Remove the time'));
+      await tester.tap(find.byTooltip('Remove the time'));
+      await _beats(tester);
+      expect(find.text('Date only'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await _unmount(tester);
+    });
+  }
 
   testWidgets('a new expense starts with everyone in the split', (
     tester,
@@ -198,6 +339,9 @@ void main() {
 
     await _openEditor(tester);
     await _type(tester, what: 'Snacks', amount: '60');
+    await tester.ensureVisible(find.text('Time of expense'));
+    await tester.tap(find.text('Time of expense'));
+    await _beats(tester);
     await tester.tap(find.byTooltip('Remove the time'));
     await _beats(tester);
     expect(find.text('Add a time'), findsOneWidget);
@@ -241,7 +385,7 @@ void main() {
     await tester.tap(find.text('Groceries'));
     await _beats(tester);
     await tester.enterText(_field('What was it?'), 'Beers');
-    await tester.enterText(_field('How much?'), '600');
+    await tester.enterText(_field('Amount'), '600');
     await _beats(tester);
     expect(
       find.text('Groceries'),
@@ -310,8 +454,146 @@ void main() {
       'Chai',
     );
     expect(
-      tester.widget<TextField>(_field('How much?')).controller?.text,
+      tester.widget<TextField>(_field('Amount')).controller?.text,
       '90.00',
+    );
+    await _unmount(tester);
+  });
+
+  testWidgets('amount overrides redistribute, reset and save what is shown', (
+    tester,
+  ) async {
+    await _seed(db);
+    await _pumpApp(tester, db);
+    await _openEditor(tester);
+    await _type(tester, what: 'Dinner', amount: '300');
+    await _chooseMethod(tester, 'Amounts');
+    for (final id in ['m-ravi', 'm-priya', 'm-arun']) {
+      expect(_allocationText(tester, 'exact', id), '100.00');
+    }
+    await tester.enterText(_allocationField('exact', 'm-ravi'), '120');
+    await _beats(tester);
+    expect(_allocationText(tester, 'exact', 'm-ravi'), '120');
+    expect(_allocationText(tester, 'exact', 'm-priya'), '90.00');
+    expect(_allocationText(tester, 'exact', 'm-arun'), '90.00');
+    expect(find.text('Auto'), findsNothing);
+    expect(find.text('Manual'), findsNothing);
+    expect(find.byIcon(Icons.push_pin_outlined), findsOneWidget);
+    await tester.tap(find.byTooltip("Let Ravi's value adjust"));
+    await _beats(tester);
+    expect(_allocationText(tester, 'exact', 'm-ravi'), '100.00');
+    await tester.enterText(_allocationField('exact', 'm-ravi'), '120');
+    await tester.enterText(_allocationField('exact', 'm-priya'), '80');
+    await _beats(tester);
+    expect(_allocationText(tester, 'exact', 'm-arun'), '100.00');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await _beats(tester);
+    final saved = (await DriftEntryRepository(db).getEntries('g1')).single;
+    expect(saved.row.splitKind, SplitKind.exact);
+    expect(
+      {for (final share in saved.shares) share.memberId: share.amountMinor},
+      {'m-ravi': 12000, 'm-priya': 8000, 'm-arun': 10000},
+    );
+    await tester.tap(find.text('Dinner'));
+    await _beats(tester);
+    expect(find.byIcon(Icons.push_pin_outlined), findsNWidgets(3));
+    expect(_allocationText(tester, 'exact', 'm-ravi'), '120.00');
+    await tester.enterText(_field('Amount').first, '350');
+    await _beats(tester);
+    expect(_allocationText(tester, 'exact', 'm-arun'), '100.00');
+    expect(find.textContaining('50.00 left to assign'), findsOneWidget);
+    await tester.tap(find.byTooltip("Let Arun's value adjust"));
+    await _beats(tester);
+    expect(_allocationText(tester, 'exact', 'm-arun'), '150.00');
+    expect(find.textContaining('left to assign'), findsNothing);
+    await tester.tap(find.widgetWithText(TextButton, 'Split evenly'));
+    await _beats(tester);
+    expect(find.byIcon(Icons.push_pin_outlined), findsNothing);
+    expect(find.text('Split evenly'), findsNothing);
+    expect(
+      [
+        'm-ravi',
+        'm-priya',
+        'm-arun',
+      ].map((id) => _allocationText(tester, 'exact', id)).toList()..sort(),
+      ['116.66', '116.67', '116.67'],
+    );
+    await _unmount(tester);
+  });
+
+  testWidgets(
+    'percentage remainder updates immediately and invalid inputs do not save',
+    (tester) async {
+      await _seed(db);
+      await _pumpApp(tester, db);
+      await _openEditor(tester);
+      await _type(tester, what: 'Dinner', amount: '300');
+      await _chooseMethod(tester, '%');
+      final initial = [
+        for (final id in ['m-ravi', 'm-priya', 'm-arun'])
+          _allocationText(tester, 'percent', id),
+      ]..sort();
+      expect(initial, ['33.333333', '33.333333', '33.333334']);
+      await tester.enterText(_allocationField('percent', 'm-ravi'), '40,');
+      await _beats(tester);
+      expect(_allocationText(tester, 'percent', 'm-ravi'), '40,');
+      expect(_allocationText(tester, 'percent', 'm-priya'), '30');
+      expect(_allocationText(tester, 'percent', 'm-arun'), '30');
+      await tester.enterText(_allocationField('percent', 'm-ravi'), '101');
+      await _beats(tester);
+      expect(find.textContaining('1% over 100%'), findsOneWidget);
+      expect(_allocationText(tester, 'percent', 'm-priya'), '');
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await _beats(tester);
+      expect(await DriftEntryRepository(db).getEntries('g1'), isEmpty);
+      await tester.enterText(_allocationField('percent', 'm-ravi'), '40');
+      await _beats(tester);
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await _beats(tester);
+      final saved = (await DriftEntryRepository(db).getEntries('g1')).single;
+      expect(saved.row.splitKind, SplitKind.percent);
+      expect(
+        {for (final share in saved.shares) share.memberId: share.amountMinor},
+        {'m-ravi': 12000, 'm-priya': 9000, 'm-arun': 9000},
+      );
+      await _unmount(tester);
+    },
+  );
+
+  testWidgets('multiple payers divide only selected, unedited payer amounts', (
+    tester,
+  ) async {
+    await _seed(db);
+    await _pumpApp(tester, db);
+    await _openEditor(tester);
+    await _type(tester, what: 'Dinner', amount: '300');
+    await tester.tap(find.text('Several people'));
+    await _beats(tester);
+    expect(_allocationText(tester, 'paid', 'm-ravi'), '300.00');
+    expect(_allocationField('paid', 'm-priya'), findsNothing);
+    await tester.tap(_splitRow('Priya').first);
+    await _beats(tester);
+    expect(_allocationText(tester, 'paid', 'm-ravi'), '150.00');
+    expect(_allocationText(tester, 'paid', 'm-priya'), '150.00');
+    await tester.enterText(_allocationField('paid', 'm-ravi'), '120');
+    await _beats(tester);
+    expect(_allocationText(tester, 'paid', 'm-priya'), '180.00');
+    await tester.tap(find.widgetWithText(TextButton, 'Divide evenly'));
+    await _beats(tester);
+    expect(_allocationText(tester, 'paid', 'm-ravi'), '150.00');
+    expect(_allocationText(tester, 'paid', 'm-priya'), '150.00');
+    await tester.enterText(_allocationField('paid', 'm-ravi'), '120');
+    await _beats(tester);
+    await tester.tap(_splitRow('Arun').first);
+    await _beats(tester);
+    expect(_allocationText(tester, 'paid', 'm-priya'), '90.00');
+    expect(_allocationText(tester, 'paid', 'm-arun'), '90.00');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await _beats(tester);
+    final saved = (await DriftEntryRepository(db).getEntries('g1')).single;
+    expect(
+      {for (final payer in saved.payers) payer.memberId: payer.amountMinor},
+      {'m-ravi': 12000, 'm-priya': 9000, 'm-arun': 9000},
     );
     await _unmount(tester);
   });

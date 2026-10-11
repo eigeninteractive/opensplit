@@ -69,7 +69,7 @@ class BalanceAmount extends StatelessWidget {
               size: (resolved.fontSize ?? 14) * 1.1,
             ),
             if (balanceMinor != 0) const SizedBox(width: 2),
-            Text(text, style: resolved),
+            Flexible(child: Text(text, style: resolved)),
           ],
         ),
       ),

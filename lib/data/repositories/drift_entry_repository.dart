@@ -6,6 +6,7 @@ import '../../domain/activity/snapshot_diff.dart';
 import '../../domain/entry_draft.dart';
 import '../../domain/models/entry.dart';
 import '../../domain/models/entry_snapshot.dart';
+import '../../domain/split/splitter.dart';
 import '../local/database.dart';
 import '../local/entry_writer.dart';
 import '../local/tables.dart';
@@ -180,9 +181,13 @@ final class DriftEntryRepository {
   }
 
   /// Resolves [draft] into a balanced entry and stores it.
+  ///
+  /// A locally generated [id] keeps preview rounding consistent with the write.
+  /// An existing identity is refused rather than used as an implicit edit.
   Future<Entry> create(
     EntryDraft draft, {
     required String createdBy,
+    String? id,
     DateTime? now,
   }) async {
     // Composed before the transaction opens: if the split does not resolve, no
@@ -190,12 +195,17 @@ final class DriftEntryRepository {
     final at = now ?? _clock();
     final entry = composeEntry(
       draft,
-      id: _uuid.v4(),
+      id: id ?? _uuid.v4(),
       createdBy: createdBy,
       now: at,
     );
 
     await _db.transaction(() async {
+      if (await getEntry(entry.id) != null) {
+        throw const SplitException(
+          'This expense is already recorded. Reopen it to make changes.',
+        );
+      }
       await _unarchive(entry.row.groupId);
       await _writeWithSnapshot(after: entry, actorId: createdBy, at: at);
     });
@@ -223,6 +233,11 @@ final class DriftEntryRepository {
       throw StateError('Entry $entryId does not exist');
     }
     _checkExpected(existing, expected);
+    if (existing.row.kind != draft.kind) {
+      throw const SplitException(
+        'An expense cannot become a payment, or a payment an expense.',
+      );
+    }
 
     final at = now ?? _clock();
     // Recomposed rather than patched, so an edit goes through exactly the same

@@ -30,7 +30,7 @@ Future<void> main() async {
   // The faces ship with their licence, and the app can show it.
   LicenseRegistry.addLicense(() async* {
     yield LicenseEntryWithLineBreaks(const [
-      'Instrument Sans',
+      'Google Sans Flex',
     ], await rootBundle.loadString('assets/google_fonts/LICENSE'));
   });
 

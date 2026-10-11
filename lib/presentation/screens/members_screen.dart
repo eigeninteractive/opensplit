@@ -29,6 +29,7 @@ class MembersScreen extends ConsumerWidget {
         title: const Text('People'),
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: null,
         onPressed: () => _addMember(context, ref),
         icon: const Icon(Icons.person_add_outlined),
         label: const Text('Add person'),

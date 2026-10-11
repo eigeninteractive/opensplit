@@ -2,6 +2,7 @@ import 'package:drift/native.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 // `group` here is the Riverpod provider function, which collides with the
 // test framework's group().
 import 'package:opensplit/data/local/database.dart';
@@ -81,6 +82,33 @@ void main() {
 
   // One set of destinations, two presentations of it.
   group('the navigation surface', () {
+    testWidgets('appearance choices work at 200% text on a phone', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await _pumpApp(tester, db);
+      GoRouter.of(tester.element(find.byType(Scaffold).first)).go('/settings');
+      await _beats(tester);
+      await tester.scrollUntilVisible(
+        find.text('Dark'),
+        150,
+        scrollable: find.byType(Scrollable).last,
+      );
+      await _beats(tester);
+      await tester.tap(find.text('Dark'));
+      await _beats(tester);
+      expect(tester.takeException(), isNull);
+      expect(
+        Theme.of(tester.element(find.byType(Scaffold).first)).brightness,
+        Brightness.dark,
+      );
+      await _unmount(tester);
+    });
+
     testWidgets('stays usable on a small screen at 200% text scale', (
       tester,
     ) async {

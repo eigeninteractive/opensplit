@@ -45,20 +45,23 @@ class Segment extends StatelessWidget {
   /// The gap between two items of one group.
   static const gap = 2.0;
 
+  /// The same outline for the material surface and its shared cover art.
+  static BorderRadius radiusAt({required int index, required int count}) =>
+      BorderRadius.vertical(
+        top: index == 0 ? _outer : _inner,
+        bottom: index == count - 1 ? _outer : _inner,
+      );
+
   @override
   Widget build(BuildContext context) {
     final first = index == 0;
-    final last = index == count - 1;
     return Padding(
       padding: EdgeInsets.only(top: first ? 0 : gap),
       child: Material(
         color: Theme.of(context).colorScheme.surfaceContainer,
         clipBehavior: Clip.antiAlias,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(
-            top: first ? _outer : _inner,
-            bottom: last ? _outer : _inner,
-          ),
+          borderRadius: radiusAt(index: index, count: count),
         ),
         child: child,
       ),

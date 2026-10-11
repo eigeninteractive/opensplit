@@ -4,13 +4,10 @@
 # this runs Dart — the same duplication the web splash has, and pinned the same
 # way, by a test.
 #
-# #FCF8FF is ColorScheme.surface in the light scheme, #131318 in the dark.
-# The brand kit quotes the light one as #FBF8FF; this is what
-# ColorScheme.fromSeed actually produces, and the generated value is the one
-# the app is built against.
+# #FBF8FF is ColorScheme.surface in the light scheme, #121318 in the dark.
 flutter_native_splash:
-  color: "#FCF8FF"
-  color_dark: "#131318"
+  color: "#FBF8FF"
+  color_dark: "#121318"
   image: assets/splash/splash-icon.png
   image_dark: assets/splash/splash-icon-dark.png
 

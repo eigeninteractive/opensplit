@@ -6,8 +6,8 @@ import 'package:opensplit_api/opensplit_api.dart'
 /// What stands for a person or a group wherever there is no room for a name.
 ///
 /// One of four kinds, each carrying only what it shows. [color] is the hue
-/// behind initials, an emoji or an icon; null until somebody picks one, and
-/// then [hueFor] derives one from the owner's id so it never moves by itself.
+/// behind initials, an emoji or an icon; null uses the current theme's accent
+/// containers, with the owner's id keeping the choice stable across devices.
 @immutable
 sealed class Avatar {
   const Avatar({this.color});
@@ -121,7 +121,7 @@ final List<AvatarColor> avatarHues = [
     if (color != AvatarColor.unknownDefaultOpenApi) color,
 ];
 
-/// The hue an avatar has before anybody picks one.
+/// A stable hue from the full palette, independent of an app theme.
 AvatarColor hueFor(String id) => avatarHues[stableHash(id) % avatarHues.length];
 
 /// A hash of [text] that is the same on every device and every run, which

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -234,23 +235,41 @@ class _WallpaperSetting extends ConsumerWidget {
 
     // Still asking the platform. A single frame in practice, and showing
     // "not available" during it would be a lie that then corrects itself.
-    if (schemes.isLoading) return const SizedBox.shrink();
+    if (schemes.isLoading && !schemes.hasValue) {
+      return const SizedBox.shrink();
+    }
 
     final available = schemes.value;
     if (available == null) {
-      return ListTile(
-        contentPadding: EdgeInsets.zero,
-        leading: const Icon(Icons.palette_outlined),
-        title: const Text('Wallpaper colours are not available here'),
-        subtitle: const Text(
-          'Android 12 and later hand apps a palette taken from your '
-          'wallpaper. This device does not offer one, so OpenSplit uses its '
-          'own — which is also what every browser gets.',
-        ),
-        isThreeLine: true,
-        enabled: false,
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.palette_outlined),
+            title: const Text('Using OpenSplit colours'),
+            subtitle: Text(
+              kIsWeb
+                  ? 'Browsers use OpenSplit colours. The Android app can '
+                        'use your device palette.'
+                  : 'Your device has not provided a colour palette. On '
+                        'Samsung, check Settings → Wallpaper and style → '
+                        'Colour palette.',
+            ),
+          ),
+          if (!kIsWeb)
+            TextButton.icon(
+              onPressed: () => ref.invalidate(wallpaperSchemesProvider),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Check again'),
+            ),
+        ],
       );
     }
+
+    final palette = Theme.of(context).brightness == Brightness.dark
+        ? available.dark
+        : available.light;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -262,10 +281,7 @@ class _WallpaperSetting extends ConsumerWidget {
               ref.read(wallpaperColorsProvider.notifier).set(enabled: wanted),
           secondary: const Icon(Icons.palette_outlined),
           title: const Text('Match my wallpaper'),
-          subtitle: const Text(
-            'Use the colours Android takes from your wallpaper, instead of '
-            "OpenSplit's own.",
-          ),
+          subtitle: const Text('Use your device palette throughout OpenSplit.'),
         ),
         const SizedBox(height: 8),
         // The palette itself, so that "it is on and nothing changed" is
@@ -273,10 +289,10 @@ class _WallpaperSetting extends ConsumerWidget {
         Row(
           children: [
             for (final swatch in [
-              available.light.primary,
-              available.light.primaryContainer,
-              available.light.secondary,
-              available.light.tertiary,
+              palette.primary,
+              palette.primaryContainer,
+              palette.secondary,
+              palette.tertiary,
             ])
               Container(
                 width: 28,
@@ -290,8 +306,8 @@ class _WallpaperSetting extends ConsumerWidget {
             Expanded(
               child: Text(
                 enabled
-                    ? "What your wallpaper offers, and what you are seeing."
-                    : 'What your wallpaper offers. Not in use.',
+                    ? 'Your device colours are in use.'
+                    : 'Your device colours. OpenSplit colours are in use.',
                 style: text.bodySmall?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),

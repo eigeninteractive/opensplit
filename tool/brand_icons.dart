@@ -12,13 +12,35 @@
 //
 // Both are pinned by tests, so regenerating the launcher icons and forgetting
 // this step fails rather than quietly shipping the wrong thing.
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:image/image.dart';
 
 void main() {
+  _webIcons();
   _favicon();
   _notificationIcon();
+}
+
+/// The static root serves the icons referenced by the app's document.
+void _webIcons() {
+  for (final icon in Directory('web/icons').listSync().whereType<File>()) {
+    icon.copySync('site/icons/${icon.uri.pathSegments.last}');
+  }
+  // flutter_launcher_icons writes paths relative to /app/. The public icon
+  // URLs live at the static root, shared with the landing page and offline
+  // precache, so keep the manifest pointed there after every regeneration.
+  final manifest = File('web/manifest.json');
+  final data = jsonDecode(manifest.readAsStringSync()) as Map<String, dynamic>;
+  for (final icon in (data['icons'] as List).cast<Map<String, dynamic>>()) {
+    final name = Uri.parse(icon['src'] as String).pathSegments.last;
+    icon['src'] = '/icons/$name';
+  }
+  manifest.writeAsStringSync(
+    '${const JsonEncoder.withIndent('  ').convert(data)}\n',
+  );
+  stdout.writeln('brand_icons: launcher icons copied to site/icons');
 }
 
 /// The browser tab icon.

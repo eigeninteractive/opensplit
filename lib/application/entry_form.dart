@@ -5,8 +5,9 @@ library;
 import 'dart:async';
 
 import 'package:freezed_annotation/freezed_annotation.dart';
-import 'package:opensplit_api/opensplit_api.dart' show SplitKind;
+import 'package:opensplit_api/opensplit_api.dart' show EntryKind, SplitKind;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:uuid/uuid.dart';
 
 import '../data/local/database.dart';
 import '../domain/calendar_date.dart';
@@ -17,6 +18,7 @@ import '../domain/fx/fx_quote.dart';
 import '../domain/models/entry.dart';
 import '../domain/money_format.dart';
 import '../domain/split/allocation.dart';
+import '../domain/split/remainder.dart';
 import '../domain/split/splitter.dart';
 import 'ledger_providers.dart';
 import 'local_providers.dart';
@@ -36,6 +38,10 @@ abstract class EntryFormState with _$EntryFormState {
     /// The expense as it was when the editor opened; null for a new one.
     /// Saving refuses if it has changed since.
     Entry? editing,
+
+    /// Generated locally before previewing; nothing is stored until Save.
+    /// The saved entry uses this identity to keep rounding consistent.
+    String? newEntryId,
     required String currencyCode,
     @Default('') String amount,
     @Default('') String description,
@@ -58,13 +64,13 @@ abstract class EntryFormState with _$EntryFormState {
     /// Whole shares per person, for a split by shares. One when unset.
     @Default(<String, int>{}) Map<String, int> shareCounts,
 
-    /// Typed per person, for a split by amounts or percentages.
+    /// Manual overrides only. An absent member shares the remainder.
     @Default(<String, String>{}) Map<String, String> exactAmounts,
     @Default(<String, String>{}) Map<String, String> percents,
     @Default(<String>{}) Set<String> payers,
     @Default(false) bool severalPayers,
 
-    /// Typed per payer, when several people paid.
+    /// Manual payer overrides. Unedited payers share the remainder.
     @Default(<String, String>{}) Map<String, String> paidAmounts,
     @Default(false) bool saving,
     String? error,
@@ -77,6 +83,7 @@ abstract class EntryFormState with _$EntryFormState {
   factory EntryFormState.blank(GroupLedger ledger, {required DateTime now}) {
     final me = ledger.me?.id ?? ledger.members.firstOrNull?.id;
     return EntryFormState(
+      newEntryId: const Uuid().v4(),
       currencyCode: ledger.group.defaultCurrency,
       day: calendarDay(now),
       // It happened now, here, unless the time is taken off.
@@ -103,28 +110,37 @@ abstract class EntryFormState with _$EntryFormState {
       participants: {for (final share in entry.shares) share.memberId},
       shareCounts: {
         for (final share in entry.shares)
-          if (share.weightMicros case final weight?)
-            share.memberId: (weight / weightScale).round(),
+          if (entry.row.splitKind == SplitKind.shares)
+            if (share.weightMicros case final weight?)
+              share.memberId: (weight / weightScale).round(),
       },
       exactAmounts: {
-        for (final share in entry.shares)
-          share.memberId: typed(share.amountMinor),
+        if (entry.row.splitKind == SplitKind.exact)
+          for (final share in entry.shares)
+            share.memberId: typed(share.amountMinor),
       },
       percents: {
-        for (final share in entry.shares)
-          if (share.weightMicros case final weight?)
-            share.memberId: formatPercentMicros(weight),
+        if (entry.row.splitKind == SplitKind.percent)
+          for (final share in entry.shares)
+            share.memberId: switch (share.weightMicros) {
+              final weight? => formatPercentMicros(weight),
+              null => '',
+            },
       },
       payers: {for (final payer in entry.payers) payer.memberId},
       severalPayers: entry.payers.length > 1,
       paidAmounts: {
-        for (final payer in entry.payers)
-          payer.memberId: typed(payer.amountMinor),
+        if (entry.payers.length > 1)
+          for (final payer in entry.payers)
+            payer.memberId: typed(payer.amountMinor),
       },
     );
   }
 
   bool get isEditing => editing != null;
+
+  /// Identity shared by preview rounding and the eventual write.
+  String? get allocationSeed => editing?.id ?? newEntryId;
 
   /// The total in [currency], once what was typed reads as one.
   int? totalIn(Currency currency) {
@@ -134,27 +150,113 @@ abstract class EntryFormState with _$EntryFormState {
 
   int shareCountOf(String memberId) => shareCounts[memberId] ?? 1;
 
-  /// What each person ends up owing, for splits that can be worked out before
-  /// anything else is typed. Null for the rest, or until there is a total.
+  /// What each person owes, from the same rule and seed used when saving.
   Map<String, int>? preview(Currency currency) {
     final total = totalIn(currency);
     if (total == null || participants.isEmpty) return null;
-    final spec = switch (splitKind) {
-      SplitKind.equal => EqualSplit(participants.toList()),
-      SplitKind.shares => SharesSplit({
-        for (final id in participants) id: shareCountOf(id),
-      }),
-      _ => null,
-    };
+    final spec = _split(currency);
     if (spec == null) return null;
     try {
       return {
-        for (final share in spec.resolve(total))
+        for (final share in spec.resolve(total, seed: allocationSeed))
           share.memberId: share.amountMinor,
       };
     } on SplitException {
       return null;
     }
+  }
+
+  /// Selected participants' amounts, preserving manual overrides.
+  RemainderAllocation? exactAllocation(Currency currency) =>
+      _moneyAllocation(currency, participants, exactAmounts);
+
+  /// Selected participants' percentages, which must total exactly 100.
+  RemainderAllocation percentAllocation() => RemainderAllocation(
+    total: PercentSplit.fullPercentMicros,
+    memberIds: participants,
+    overrides: {
+      for (final entry in percents.entries)
+        entry.key: parsePercentMicros(entry.value),
+    },
+    seed: allocationSeed,
+  );
+
+  /// Selected payers' amounts, using the same remainder calculation.
+  RemainderAllocation? paidAllocation(Currency currency) =>
+      _moneyAllocation(currency, payers, paidAmounts);
+
+  RemainderAllocation? _moneyAllocation(
+    Currency currency,
+    Set<String> members,
+    Map<String, String> overrides,
+  ) {
+    final total = totalIn(currency);
+    if (total == null) return null;
+    return RemainderAllocation(
+      total: total,
+      memberIds: members,
+      overrides: {
+        for (final entry in overrides.entries)
+          entry.key: currency.parseToMinor(entry.value),
+      },
+      seed: allocationSeed,
+    );
+  }
+
+  /// An actionable split error, also displayed beside the split inputs.
+  String? splitError(Currency currency) => switch (splitKind) {
+    SplitKind.exact => allocationError(exactAllocation(currency), currency),
+    SplitKind.percent => allocationError(
+      percentAllocation(),
+      currency,
+      percent: true,
+    ),
+    SplitKind.equal || SplitKind.shares =>
+      participants.isEmpty ? 'Choose at least one participant.' : null,
+    SplitKind.unknownDefaultOpenApi => 'This split method is not supported.',
+  };
+
+  /// An actionable payer error, including zero amounts that cannot be paid.
+  String? paidError(Currency currency) {
+    if (!severalPayers) {
+      return payers.isEmpty ? 'Choose who paid.' : null;
+    }
+    final allocation = paidAllocation(currency);
+    final error = allocationError(allocation, currency, paying: true);
+    if (error != null) return error;
+    if (allocation?.values.values.any((amount) => amount <= 0) ?? false) {
+      return 'Each selected payer must pay more than zero. '
+          'Remove a payer or adjust the amounts.';
+    }
+    return null;
+  }
+
+  /// Describes why an allocation cannot yet be recorded.
+  static String? allocationError(
+    RemainderAllocation? allocation,
+    Currency currency, {
+    bool percent = false,
+    bool paying = false,
+  }) {
+    if (allocation == null) return null;
+    String shown(int value) => percent
+        ? '${formatPercentMicros(value.abs())}%'
+        : formatMoney(currency, value.abs());
+    return switch (allocation.problem) {
+      RemainderProblem.noMembers =>
+        paying ? 'Choose who paid.' : 'Choose at least one participant.',
+      RemainderProblem.invalidOverrides =>
+        percent
+            ? 'Enter a valid percentage or clear this value.'
+            : 'Enter a valid amount or clear this value.',
+      RemainderProblem.overallocated =>
+        '${shown(allocation.remaining)} over ${percent ? '100%' : 'the total'}. '
+            'Reduce a value or divide evenly.',
+      RemainderProblem.unallocated =>
+        '${shown(allocation.remaining)} left to assign. '
+            'Adjust a value or clear one to share the rest.',
+      null => null,
+    };
   }
 
   /// The expense this form describes in [groupId], or what is still missing
@@ -165,6 +267,9 @@ abstract class EntryFormState with _$EntryFormState {
     FxQuote? fx,
     String? deviceZone,
   }) {
+    if (editing?.row.kind == EntryKind.settlement) {
+      return const DraftIncomplete('Use the payment editor for this payment.');
+    }
     final total = totalIn(currency);
     if (total == null) {
       return DraftIncomplete(
@@ -174,12 +279,21 @@ abstract class EntryFormState with _$EntryFormState {
                   'places.',
       );
     }
+    final splitProblem = splitError(currency);
+    if (splitProblem != null) return DraftIncomplete(splitProblem);
     final split = _split(currency);
     if (split == null) {
       return const DraftIncomplete(
         'Check the split — some amounts are missing.',
       );
     }
+    try {
+      split.resolve(total, seed: allocationSeed);
+    } on SplitException catch (error) {
+      return DraftIncomplete(error.message);
+    }
+    final paidProblem = paidError(currency);
+    if (paidProblem != null) return DraftIncomplete(paidProblem);
     final paid = _paid(currency, total);
     if (paid == null) {
       return const DraftIncomplete(
@@ -215,31 +329,22 @@ abstract class EntryFormState with _$EntryFormState {
     final ids = participants.toList();
     if (ids.isEmpty) return null;
 
-    Map<String, int>? each(
-      int? Function(String text) parse,
-      Map<String, String> typed,
-    ) {
-      final values = <String, int>{};
-      for (final id in ids) {
-        final value = parse(typed[id] ?? '');
-        if (value == null) return null;
-        values[id] = value;
-      }
-      return values;
-    }
-
     return switch (splitKind) {
       SplitKind.equal => EqualSplit(ids),
       SplitKind.shares => SharesSplit({
         for (final id in ids) id: shareCountOf(id),
       }),
-      SplitKind.exact => switch (each(currency.parseToMinor, exactAmounts)) {
-        final amounts? => ExactSplit(amounts),
-        null => null,
+      SplitKind.exact => switch (exactAllocation(currency)) {
+        final allocation? when allocation.isBalanced => ExactSplit(
+          allocation.values,
+        ),
+        _ => null,
       },
-      SplitKind.percent => switch (each(parsePercentMicros, percents)) {
-        final percents? => PercentSplit(percents),
-        null => null,
+      SplitKind.percent => switch (percentAllocation()) {
+        final allocation when allocation.isBalanced => PercentSplit(
+          allocation.values,
+        ),
+        _ => null,
       },
       // A split rule from a newer server: saving would have to guess it.
       SplitKind.unknownDefaultOpenApi => null,
@@ -251,13 +356,12 @@ abstract class EntryFormState with _$EntryFormState {
       final only = payers.firstOrNull;
       return only == null ? null : {only: total};
     }
-    final amounts = <String, int>{};
-    for (final id in payers) {
-      final amount = currency.parseToMinor(paidAmounts[id] ?? '');
-      if (amount == null || amount <= 0) return null;
-      amounts[id] = amount;
-    }
-    return amounts.isEmpty ? null : amounts;
+    final allocation = paidAllocation(currency);
+    return allocation != null &&
+            allocation.isBalanced &&
+            allocation.values.values.every((amount) => amount > 0)
+        ? allocation.values
+        : null;
   }
 }
 
@@ -274,8 +378,9 @@ class EntryForm extends _$EntryForm {
   final _ratesAsked = <String>{};
 
   @override
-  Future<EntryFormState> build(String groupId, {String? entryId}) {
+  FutureOr<EntryFormState> build(String groupId, {String? entryId}) {
     final seeded = Completer<EntryFormState>();
+    EntryFormState? ready;
     void seed() {
       if (seeded.isCompleted) return;
       final ledger = ref.read(groupLedgerProvider(groupId));
@@ -283,20 +388,26 @@ class EntryForm extends _$EntryForm {
       if (ledger == null || currencies == null) return;
 
       if (entryId == null) {
-        seeded.complete(EntryFormState.blank(ledger, now: DateTime.now()));
+        ready = EntryFormState.blank(ledger, now: DateTime.now());
+        seeded.complete(ready);
         return;
       }
       final entry = ledger.entries.where((e) => e.id == entryId).firstOrNull;
       if (entry != null) {
-        seeded.complete(
-          EntryFormState.of(entry, currencies[entry.row.currency]),
-        );
+        ready = EntryFormState.of(entry, currencies[entry.row.currency]);
+        seeded.complete(ready);
       }
     }
 
     ref.listen(groupLedgerProvider(groupId), (_, _) => seed());
     ref.listen(currenciesProvider, (_, _) => seed());
     seed();
+    // Saved local data needs no loading frame. This also lets route Heroes
+    // connect to the actual fields as soon as the editor is mounted.
+    if (ready case final form?) {
+      unawaited(_askForRateIfMissing(form));
+      return form;
+    }
     return seeded.future.then((form) {
       unawaited(_askForRateIfMissing(form));
       return form;
@@ -305,8 +416,10 @@ class EntryForm extends _$EntryForm {
 
   EntryFormState get _form => state.requireValue;
 
-  void _change(EntryFormState Function(EntryFormState form) change) =>
-      state = AsyncData(change(_form).copyWith(error: null));
+  void _change(EntryFormState Function(EntryFormState form) change) {
+    if (_form.saving) return;
+    state = AsyncData(change(_form).copyWith(error: null));
+  }
 
   void setAmount(String text) => _change((form) => form.copyWith(amount: text));
 
@@ -379,13 +492,31 @@ class EntryForm extends _$EntryForm {
   );
 
   void setExactAmount(String memberId, String text) => _change(
-    (form) =>
-        form.copyWith(exactAmounts: {...form.exactAmounts, memberId: text}),
+    (form) => form.copyWith(
+      exactAmounts: _override(form.exactAmounts, memberId, text),
+    ),
   );
 
   void setPercent(String memberId, String text) => _change(
-    (form) => form.copyWith(percents: {...form.percents, memberId: text}),
+    (form) => form.copyWith(percents: _override(form.percents, memberId, text)),
   );
+
+  /// Releases all overrides of the current amounts or percentage method.
+  void resetSplit() => _change(
+    (form) => switch (form.splitKind) {
+      SplitKind.exact => form.copyWith(exactAmounts: {}),
+      SplitKind.percent => form.copyWith(percents: {}),
+      _ => form,
+    },
+  );
+
+  Map<String, String> _override(
+    Map<String, String> previous,
+    String id,
+    String text,
+  ) => text.trim().isEmpty
+      ? ({...previous}..remove(id))
+      : {...previous, id: text};
 
   /// The one person who paid it all.
   void choosePayer(String memberId) =>
@@ -408,8 +539,12 @@ class EntryForm extends _$EntryForm {
   );
 
   void setPaidAmount(String memberId, String text) => _change(
-    (form) => form.copyWith(paidAmounts: {...form.paidAmounts, memberId: text}),
+    (form) =>
+        form.copyWith(paidAmounts: _override(form.paidAmounts, memberId, text)),
   );
+
+  /// Releases all manual payer amounts in this draft.
+  void resetPaid() => _change((form) => form.copyWith(paidAmounts: {}));
 
   /// Saves the expense, and says whether it was saved. When it was not, the
   /// state says why.
@@ -418,27 +553,26 @@ class EntryForm extends _$EntryForm {
     final form = _form;
     final currency = ref.read(currenciesProvider).value?[form.currencyCode];
     if (ledger == null || currency == null || form.saving) return false;
-
-    final fx = await _quote(form, ledger.group.defaultCurrency);
-    if (!ref.mounted) return false;
-    final check = form.check(
-      currency,
-      groupId: groupId,
-      fx: fx,
-      deviceZone: ref.read(deviceZoneProvider).value,
-    );
-    final EntryDraft draft;
-    switch (check) {
-      case DraftIncomplete(:final reason):
-        state = AsyncData(form.copyWith(error: reason));
-        return false;
-      case DraftReady(draft: final ready):
-        draft = ready;
-    }
-
     state = AsyncData(form.copyWith(saving: true, error: null));
-    final repository = ref.read(entryRepositoryProvider);
     try {
+      final fx = await _quote(form, ledger.group.defaultCurrency);
+      if (!ref.mounted) return false;
+      final check = form.check(
+        currency,
+        groupId: groupId,
+        fx: fx,
+        deviceZone: ref.read(deviceZoneProvider).value,
+      );
+      final EntryDraft draft;
+      switch (check) {
+        case DraftIncomplete(:final reason):
+          state = AsyncData(form.copyWith(error: reason));
+          return false;
+        case DraftReady(draft: final ready):
+          draft = ready;
+      }
+
+      final repository = ref.read(entryRepositoryProvider);
       if (form.editing case final editing?) {
         // Who is editing, which need not be who created it: that difference
         // is most of what makes a feed line worth reading.
@@ -451,6 +585,7 @@ class EntryForm extends _$EntryForm {
       } else {
         await repository.create(
           draft,
+          id: form.newEntryId,
           createdBy: ledger.me?.id ?? draft.payerAmounts.keys.first,
         );
       }
@@ -469,7 +604,8 @@ class EntryForm extends _$EntryForm {
   /// Deletes the expense being edited, and says whether it was deleted.
   Future<bool> delete() async {
     final editing = _form.editing;
-    if (editing == null) return false;
+    if (editing == null || _form.saving) return false;
+    state = AsyncData(_form.copyWith(saving: true, error: null));
     try {
       await ref
           .read(entryRepositoryProvider)

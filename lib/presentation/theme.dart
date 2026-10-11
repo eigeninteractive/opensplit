@@ -6,10 +6,10 @@ import 'package:opensplit_api/opensplit_api.dart' show AvatarColor;
 import '../domain/avatar.dart';
 
 /// The app's visual identity.
-const _seed = Color(0xFF5B5891);
+const _seed = Colors.indigo;
 
 /// Source colour for "owed to you", before harmonisation.
-const _creditSource = Color(0xFF2E7D32);
+final _creditSource = Colors.green.shade800;
 
 /// Colours for a balance figure, which [ColorScheme] has no role for.
 @immutable
@@ -53,7 +53,7 @@ class BalanceColors extends ThemeExtension<BalanceColors> {
 /// roles from it: an avatar its `primaryContainer` pair, a cover more.
 @immutable
 class AvatarPalette extends ThemeExtension<AvatarPalette> {
-  const AvatarPalette(this._schemes);
+  const AvatarPalette(this._schemes, this._appScheme);
 
   factory AvatarPalette.from(ColorScheme scheme) => AvatarPalette({
     for (final hue in avatarHues)
@@ -61,9 +61,25 @@ class AvatarPalette extends ThemeExtension<AvatarPalette> {
         seedColor: _hueSources[hue]!.harmonizeWith(scheme.primary),
         brightness: scheme.brightness,
       ),
-  });
+  }, scheme);
 
   final Map<AvatarColor, ColorScheme> _schemes;
+  final ColorScheme _appScheme;
+
+  /// Automatic avatars use the app's accent containers, including wallpaper
+  /// colours. An explicitly chosen hue keeps its own harmonised palette.
+  ColorScheme forAvatar(Avatar avatar, String id) {
+    if (avatar.color case final hue?) return this[hue];
+    final (container, onContainer) = switch (stableHash(id) % 3) {
+      0 => (_appScheme.primaryContainer, _appScheme.onPrimaryContainer),
+      1 => (_appScheme.secondaryContainer, _appScheme.onSecondaryContainer),
+      _ => (_appScheme.tertiaryContainer, _appScheme.onTertiaryContainer),
+    };
+    return _appScheme.copyWith(
+      primaryContainer: container,
+      onPrimaryContainer: onContainer,
+    );
+  }
 
   /// The scheme for [hue].
   ColorScheme operator [](AvatarColor hue) =>
@@ -86,20 +102,20 @@ class AvatarPalette extends ThemeExtension<AvatarPalette> {
     return AvatarPalette({
       for (final hue in avatarHues)
         hue: ColorScheme.lerp(this[hue], other[hue], t),
-    });
+    }, ColorScheme.lerp(_appScheme, other._appScheme, t));
   }
 }
 
-/// Source colours for the avatar hues, before harmonisation.
-const _hueSources = {
-  AvatarColor.purple: Color(0xFF7E57C2),
-  AvatarColor.blue: Color(0xFF1E88E5),
-  AvatarColor.teal: Color(0xFF00897B),
-  AvatarColor.green: Color(0xFF43A047),
-  AvatarColor.olive: Color(0xFF9E9D24),
-  AvatarColor.amber: Color(0xFFFFB300),
-  AvatarColor.orange: Color(0xFFF4511E),
-  AvatarColor.pink: Color(0xFFD81B60),
+/// Material swatches for the avatar hues, before harmonisation.
+final _hueSources = {
+  AvatarColor.purple: Colors.deepPurple.shade400,
+  AvatarColor.blue: Colors.blue.shade600,
+  AvatarColor.teal: Colors.teal.shade600,
+  AvatarColor.green: Colors.green.shade600,
+  AvatarColor.olive: Colors.lime.shade800,
+  AvatarColor.amber: Colors.amber.shade600,
+  AvatarColor.orange: Colors.deepOrange.shade600,
+  AvatarColor.pink: Colors.pink.shade600,
 };
 
 /// Builds the theme, optionally from a wallpaper-derived scheme.
@@ -108,11 +124,19 @@ ThemeData buildTheme(Brightness brightness, [ColorScheme? dynamicScheme]) {
       dynamicScheme?.harmonized() ??
       ColorScheme.fromSeed(seedColor: _seed, brightness: brightness);
 
+  // DropdownMenu has its own decoration defaults and does not inherit the
+  // app's field theme. Supply the same policy to both component families.
+  const fields = InputDecorationThemeData(
+    filled: true,
+    border: UnderlineInputBorder(),
+    helperMaxLines: 3,
+    errorMaxLines: 3,
+  );
+
   final base = ThemeData(
     colorScheme: scheme,
     visualDensity: VisualDensity.adaptivePlatformDensity,
     extensions: [BalanceColors.of(scheme), AvatarPalette.from(scheme)],
-    // No surfaceTintColor.
     appBarTheme: const AppBarThemeData(centerTitle: false),
     // Deliberately says nothing about elevation, colour or shape.
     cardTheme: const CardThemeData(
@@ -126,17 +150,17 @@ ThemeData buildTheme(Brightness brightness, [ColorScheme? dynamicScheme]) {
     iconButtonTheme: const IconButtonThemeData(
       variant: StyleVariant.material3Expressive,
     ),
-    // Outlined, not filled.
-    inputDecorationTheme: const InputDecorationThemeData(
-      border: OutlineInputBorder(),
+    inputDecorationTheme: fields,
+    dropdownMenuTheme: const DropdownMenuThemeData(
+      inputDecorationTheme: fields,
     ),
   );
 
-  // Instrument Sans, resolved from the bundle rather than the network — see the
+  // Google Sans Flex, resolved from the bundle rather than the network — see the
   // `fonts:`/`assets:` pair in pubspec.yaml and allowRuntimeFetching in
   // main.dart.
   return base.copyWith(
-    textTheme: GoogleFonts.instrumentSansTextTheme(base.textTheme),
+    textTheme: GoogleFonts.googleSansFlexTextTheme(base.textTheme),
   );
 }
 
