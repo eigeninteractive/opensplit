@@ -213,82 +213,80 @@ void main() {
 
   // The other half of the same rule.
   group('drilling down leaves something to come back to', () {
-    testWidgets(
-      'group picture, name and cover fly across the navigator and back',
-      (tester) async {
-        await _seedGroup(db);
-        await _pumpApp(tester, db);
-        final avatar = find.byWidgetPredicate(
-          (widget) => widget is AvatarView && widget.id == 'g1',
-        );
-        final sharedAvatar = find.byType(GroupAvatarHero);
-        final source = tester.getRect(avatar);
-        final tile = find.ancestor(
+    testWidgets('group picture, name and sparse cover fly together and back', (
+      tester,
+    ) async {
+      await _seedGroup(db);
+      await _pumpApp(tester, db);
+      final avatar = find.byWidgetPredicate(
+        (widget) => widget is AvatarView && widget.id == 'g1',
+      );
+      final sharedAvatar = find.byType(GroupAvatarHero);
+      final source = tester.getRect(avatar);
+      final tile = find.ancestor(
+        of: find.text('Flat 4B'),
+        matching: find.byType(ListTile),
+      );
+      expect(find.ancestor(of: tile, matching: find.byType(Card)), findsOne);
+      expect(
+        tester.getRect(find.byType(GroupCover)),
+        tester.getRect(tile),
+        reason: 'the quiet artwork fills the card behind its identity',
+      );
+
+      await tester.tap(find.text('Flat 4B'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // The moving avatar is in the root overlay, outside either endpoint.
+      expect(avatar, findsOneWidget);
+      expect(find.ancestor(of: avatar, matching: sharedAvatar), findsNothing);
+      expect(
+        find.ancestor(
+          of: find.byType(GroupCover),
+          matching: find.byType(GroupCoverHero),
+        ),
+        findsNothing,
+        reason: 'the cover flies with the shared name and avatar',
+      );
+      expect(
+        find.ancestor(
           of: find.text('Flat 4B'),
-          matching: find.byType(ListTile),
-        );
-        expect(
-          tester.getRect(find.byType(GroupCover)),
-          tester.getRect(tile),
-          reason: 'the artwork fills the entire row, not just its avatar',
-        );
+          matching: find.byType(SharedText),
+        ),
+        findsNothing,
+        reason: 'the shared name flies outside either endpoint',
+      );
+      final flight = tester.getRect(avatar);
+      await tester.pumpAndSettle();
+      final destination = tester.getRect(avatar);
+      expect(flight, isNot(source));
+      expect(flight, isNot(destination));
+      expect(
+        GoRouterState.of(
+          tester.element(find.byType(GroupDetailScreen)),
+        ).uri.path,
+        '/g/g1',
+      );
 
-        await tester.tap(find.text('Flat 4B'));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 100));
-
-        // The moving avatar is in the root overlay, outside either endpoint.
-        expect(avatar, findsOneWidget);
-        expect(find.ancestor(of: avatar, matching: sharedAvatar), findsNothing);
-        expect(
-          find.ancestor(
-            of: find.byType(GroupCover),
-            matching: find.byType(GroupCoverHero),
-          ),
-          findsNothing,
-          reason: 'the cover flies as one surface in the root overlay',
-        );
-        expect(
-          find.ancestor(
-            of: find.text('Flat 4B'),
-            matching: find.byType(SharedText),
-          ),
-          findsNothing,
-          reason: 'the shared name flies outside either endpoint',
-        );
-        final flight = tester.getRect(avatar);
-        await tester.pumpAndSettle();
-        final destination = tester.getRect(avatar);
-        expect(flight, isNot(source));
-        expect(flight, isNot(destination));
-        expect(
-          GoRouterState.of(
-            tester.element(find.byType(GroupDetailScreen)),
-          ).uri.path,
-          '/g/g1',
-        );
-
-        await tester.tap(find.byType(BackButton));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 100));
-        expect(find.ancestor(of: avatar, matching: sharedAvatar), findsNothing);
-        expect(
-          find.ancestor(
-            of: find.byType(GroupCover),
-            matching: find.byType(GroupCoverHero),
-          ),
-          findsNothing,
-        );
-        await tester.pumpAndSettle();
-        expect(tester.getRect(avatar), source);
-        expect(
-          _router(tester).routerDelegate.currentConfiguration.uri.path,
-          '/',
-        );
-        expect(tester.takeException(), isNull);
-        await _unmount(tester);
-      },
-    );
+      await tester.tap(find.byType(BackButton));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.ancestor(of: avatar, matching: sharedAvatar), findsNothing);
+      expect(
+        find.ancestor(
+          of: find.byType(GroupCover),
+          matching: find.byType(GroupCoverHero),
+        ),
+        findsNothing,
+      );
+      await tester.pumpAndSettle();
+      expect(tester.getRect(avatar), source);
+      expect(find.byType(GroupCover), findsOneWidget);
+      expect(_router(tester).routerDelegate.currentConfiguration.uri.path, '/');
+      expect(tester.takeException(), isNull);
+      await _unmount(tester);
+    });
 
     testWidgets('reduced motion keeps the avatar on its page', (tester) async {
       tester.platformDispatcher.accessibilityFeaturesTestValue =

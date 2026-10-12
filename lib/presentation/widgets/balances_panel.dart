@@ -439,24 +439,22 @@ class _TransferExplanation extends StatelessWidget {
     final isMe = debtor == ledger.me?.id;
 
     // Lifted out of the widget tree rather than written inline.
-    final rest = transfer.amountMinor == net.abs()
-        ? ''
-        : ', plus the other suggested payments';
+    final completion = transfer.amountMinor == net.abs()
+        ? 'settles this balance'
+        : 'covers part of this balance';
     final why = simplified
         ? '${isMe ? 'You owe' : '$name owes'} '
-              '${formatMoneyAbs(currency, net)} in total across this group. '
-              'Rather than paying several people separately, that whole amount '
-              'is cleared by paying ${ledger.nameOf(creditor)} '
-              '${formatMoney(currency, transfer.amountMinor)}$rest.'
+              '${formatMoneyAbs(currency, net)} overall. This '
+              '${formatMoney(currency, transfer.amountMinor)} payment to '
+              '${ledger.nameOf(creditor)} $completion.'
         : '${isMe ? 'You owe' : '$name owes'} ${ledger.nameOf(creditor)} '
-              '${formatMoney(currency, transfer.amountMinor)}, from the '
-              'expenses the two of you shared, each way netted against the '
-              'other.';
+              '${formatMoney(currency, transfer.amountMinor)} after '
+              'offsetting your shared expenses.';
     final caveat = simplified
-        ? 'This can name someone you never directly owed. It is the shortest '
-              'set of payments that leaves everybody square.'
-        : 'Only the expenses these two shared count here. Turn on "Suggest '
-              'the fewest payments" in group settings to settle in fewer steps.';
+        ? 'Simplifying debts keeps the same balances. You may pay someone '
+              'you did not directly owe.'
+        : 'Only shared expenses count. Enable "Suggest the fewest payments" '
+              'in group settings for fewer steps.';
 
     return DraggableScrollableSheet(
       expand: false,

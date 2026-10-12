@@ -3,6 +3,7 @@ import 'dart:ui' show ViewFocusDirection, ViewFocusEvent, ViewFocusState;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:opensplit/application/router_provider.dart';
@@ -120,6 +121,11 @@ void main() {
     expect(onCover(Icons.flight_rounded), findsWidgets);
     expect(onCover(Icons.restaurant_rounded), findsWidgets);
     expect(
+      find.descendant(of: find.byType(GroupCover), matching: find.byType(Icon)),
+      findsNWidgets(6),
+      reason: 'a sparse cover keeps group identity more prominent than its art',
+    );
+    expect(
       onCover(Icons.receipt_long_rounded),
       findsNothing,
       reason: 'the stand-in is only for a group that has spent nothing',
@@ -158,6 +164,15 @@ void main() {
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
       await open(tester, '/');
       expect(tester.takeException(), isNull);
+      expect(
+        tester
+            .renderObject<RenderParagraph>(
+              find.text('A long summer holiday with friends and family'),
+            )
+            .didExceedMaxLines,
+        isFalse,
+        reason: 'the group name must remain readable at large text sizes',
+      );
       await tester.tap(
         find.text('A long summer holiday with friends and family'),
       );

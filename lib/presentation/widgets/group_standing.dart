@@ -21,11 +21,15 @@ class GroupStanding extends StatelessWidget {
     required this.ledger,
     required this.currencies,
     this.style,
+    this.overflow = TextOverflow.ellipsis,
   });
 
   final GroupLedger ledger;
   final Map<String, Currency> currencies;
   final TextStyle? style;
+
+  /// Use [TextOverflow.clip] in rows that can grow to fit wrapped balances.
+  final TextOverflow overflow;
 
   @override
   Widget build(BuildContext context) {
@@ -61,6 +65,7 @@ class GroupStanding extends StatelessWidget {
             figures: owed,
             direction: 1,
             style: base,
+            overflow: overflow,
           ),
         if (owing.isNotEmpty)
           _Direction(
@@ -68,6 +73,7 @@ class GroupStanding extends StatelessWidget {
             figures: owing,
             direction: -1,
             style: base,
+            overflow: overflow,
           ),
       ],
     );
@@ -82,6 +88,7 @@ class _Direction extends StatelessWidget {
     required this.figures,
     required this.direction,
     required this.style,
+    required this.overflow,
   });
 
   final String lead;
@@ -93,6 +100,7 @@ class _Direction extends StatelessWidget {
   final int direction;
 
   final TextStyle style;
+  final TextOverflow overflow;
 
   @override
   Widget build(BuildContext context) {
@@ -123,7 +131,7 @@ class _Direction extends StatelessWidget {
                     TextSpan(text: joined, style: figureStyle),
                   ],
                 ),
-                overflow: TextOverflow.ellipsis,
+                overflow: overflow,
                 style: style.copyWith(color: scheme.onSurfaceVariant),
               ),
             ),

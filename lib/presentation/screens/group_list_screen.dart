@@ -120,16 +120,11 @@ abstract final class _GroupList {
         // be folding balances.
         sliver: SliverList.builder(
           itemCount: groups.length,
-          itemBuilder: (context, index) => Segment(
-            index: index,
-            count: groups.length,
-            child: _GroupTile(
-              group: groups[index],
-              borderRadius: Segment.radiusAt(
-                index: index,
-                count: groups.length,
-              ),
+          itemBuilder: (context, index) => Padding(
+            padding: EdgeInsets.only(
+              bottom: index == groups.length - 1 ? 0 : 12,
             ),
+            child: _GroupTile(group: groups[index]),
           ),
         ),
       ),
@@ -163,55 +158,82 @@ class _ArchivedRow extends StatelessWidget {
 }
 
 class _GroupTile extends ConsumerWidget {
-  const _GroupTile({required this.group, required this.borderRadius});
+  const _GroupTile({required this.group});
 
   final Group group;
-  final BorderRadius borderRadius;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ledger = ref.watch(groupLedgerProvider(group.id));
     final currencies = ref.watch(currenciesProvider).value ?? const {};
+    final theme = Theme.of(context);
+    const corners = BorderRadius.all(Radius.circular(20));
 
-    // A real ListTile, for its touch target, density and large-font growth.
-    return Stack(
-      children: [
-        if (ledger != null)
-          Positioned.fill(
-            child: GroupCoverHero(
-              ledger: ledger,
-              borderRadius: borderRadius,
-              patternFade: 1,
-            ),
-          ),
-        Material(
-          type: MaterialType.transparency,
-          child: ListTile(
-            onTap: () => context.push('/g/${group.id}'),
-            contentPadding: const EdgeInsetsDirectional.fromSTEB(
-              16,
-              12,
-              24,
-              12,
-            ),
-            leading: CircleAvatar(
-              radius: 24,
-              backgroundColor: Theme.of(context).colorScheme.surface,
-              child: GroupAvatarHero(group: group, radius: 22),
-            ),
-            title: SharedText(
-              tag: ('group-name', group.id),
-              text: group.name,
-              style: Theme.of(context).textTheme.titleMedium!.copyWith(
-                color: Theme.of(context).colorScheme.onSurface,
+    // Stock cards and tiles retain Material's ink, focus and touch behaviour.
+    return Card.filled(
+      color: theme.colorScheme.surfaceContainerLow,
+      shape: const RoundedRectangleBorder(borderRadius: corners),
+      child: Stack(
+        children: [
+          if (ledger != null)
+            Positioned.fill(
+              child: GroupCoverHero(
+                ledger: ledger,
+                borderRadius: corners,
+                patternFade: 1,
               ),
             ),
-            subtitle: ledger == null
-                ? const LaunchPlaceholder(child: SizedBox(height: 20))
-                : GroupStanding(ledger: ledger, currencies: currencies),
+          Material(
+            type: MaterialType.transparency,
+            child: ListTile(
+              onTap: () => context.push('/g/${group.id}'),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 12,
+              ),
+              minLeadingWidth: 56,
+              titleAlignment: ListTileTitleAlignment.top,
+              leading: GroupAvatarHero(group: group, radius: 28),
+              title: SharedText(
+                tag: ('group-name', group.id),
+                text: group.name,
+                maxLines: null,
+                style: theme.textTheme.titleLarge!.copyWith(
+                  color: theme.colorScheme.onSurface,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              subtitle: ledger == null
+                  ? const LaunchPlaceholder(child: SizedBox(height: 20))
+                  : Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (ledger.me != null) ...[
+                            Text(
+                              '${ledger.members.length} '
+                              '${ledger.members.length == 1 ? 'member' : 'members'}',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                          ],
+                          GroupStanding(
+                            ledger: ledger,
+                            currencies: currencies,
+                            style: theme.textTheme.bodyLarge,
+                            overflow: TextOverflow.clip,
+                          ),
+                        ],
+                      ),
+                    ),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -223,9 +245,7 @@ class _EmptyState extends StatelessWidget {
   Widget build(BuildContext context) => const EmptyState(
     icon: Icons.groups_outlined,
     title: 'No groups yet',
-    message:
-        'Make one for a trip, a flat, or a single dinner. '
-        'You can add people who do not have the app.',
+    message: 'Create a group for a trip, flat or dinner.',
   );
 }
 

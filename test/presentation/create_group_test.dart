@@ -51,6 +51,31 @@ void main() {
   });
   tearDown(() => db.close());
 
+  testWidgets('new group stays usable with large text and the keyboard', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await _pump(tester, db);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+    await tester.tap(find.byType(FloatingActionButton));
+    await _settle(tester);
+    expect(tester.takeException(), isNull);
+    final scroll = find.descendant(
+      of: find.byType(BottomSheet),
+      matching: find.byType(SingleChildScrollView),
+    );
+    await tester.drag(scroll, const Offset(0, -1000));
+    await tester.pumpAndSettle();
+    final create = find.widgetWithText(FilledButton, 'Create group');
+    expect(tester.getBottomRight(create).dy, lessThanOrEqualTo(360));
+    expect(tester.takeException(), isNull);
+    await _unmount(tester);
+  });
+
   group('one name, asked for once', () {
     testWidgets('an account with no name is asked, and only then', (
       tester,
@@ -70,7 +95,16 @@ void main() {
             'nobody has said who this is yet, so this is the one moment '
             'it is worth asking',
       );
-      expect(find.text('How everyone in your groups will see you.'), findsOne);
+      expect(find.text('Your name in all groups.'), findsOne);
+      final nameField = find.ancestor(
+        of: find.text('Group name'),
+        matching: find.byType(InputDecorator),
+      );
+      expect(
+        tester.getTopLeft(find.text('Group name')).dy,
+        greaterThanOrEqualTo(tester.getTopLeft(nameField).dy),
+        reason: 'the floating label stays inside the filled field',
+      );
 
       await _enterInto(tester, 'Group name', 'Goa trip');
       await _enterInto(tester, 'Your name', 'Seenu');

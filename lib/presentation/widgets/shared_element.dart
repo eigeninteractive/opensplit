@@ -35,7 +35,9 @@ class SharedText extends StatelessWidget {
   final Object tag;
   final String text;
   final TextStyle style;
-  final int maxLines;
+
+  /// The visible line limit; null lets the label wrap without truncation.
+  final int? maxLines;
   final Widget? child;
 
   @override
@@ -101,7 +103,7 @@ class _TextEndpoint extends StatelessWidget {
   final String text;
   final TextStyle style;
   final TextScaler textScaler;
-  final int maxLines;
+  final int? maxLines;
   final Widget? child;
 
   @override
@@ -114,7 +116,9 @@ class _TextEndpoint extends StatelessWidget {
           style: style,
           textScaler: textScaler,
           maxLines: maxLines,
-          overflow: TextOverflow.ellipsis,
+          overflow: maxLines == null
+              ? TextOverflow.clip
+              : TextOverflow.ellipsis,
         ),
   );
 }

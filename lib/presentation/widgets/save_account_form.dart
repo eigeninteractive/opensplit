@@ -96,15 +96,12 @@ class _SaveAccountFormState extends ConsumerState<SaveAccountForm> {
         title: Text('Sign in as $who?'),
         content: Text(
           count > 0
-              ? 'That already has an OpenSplit account, so this signs you in '
-                    'to it and this guest account ends.\n\n'
-                    'Your place in ${count == 1 ? 'your group' : 'all $count '
-                              'groups'} comes with you, balances and all. In '
-                    'any group that account is already in, your guest place '
-                    'stays behind as a placeholder under its name.'
-              : 'That already has an OpenSplit account, so this signs you in '
-                    'to it and this guest account ends. It is in no groups, '
-                    'so there is nothing to bring along.',
+              ? 'Signing in ends your guest account. Your '
+                    '${count == 1 ? 'group' : '$count groups'} and balances '
+                    'carry over.\n\nWhere that account is already a member, '
+                    'your guest place remains as a placeholder.'
+              : 'Signing in ends your guest account. It has no groups '
+                    'to transfer.',
         ),
         actions: [
           TextButton(

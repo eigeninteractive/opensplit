@@ -17,12 +17,9 @@ Future<void> offerNotifications(BuildContext context, WidgetRef ref) async {
     context: context,
     builder: (context) => AlertDialog(
       icon: const Icon(Icons.notifications_none),
-      title: const Text('Get told when they add something?'),
+      title: const Text('Group notifications?'),
       content: const Text(
-        'Now that someone else is in this group, OpenSplit can let you know '
-        'when they add an expense or settle up.\n\n'
-        'The server only ever sends an id. The notification text is put '
-        'together on your device, so nothing about what you spend leaves it.',
+        'Get notified when someone adds an expense or records a payment.',
       ),
       actions: [
         TextButton(

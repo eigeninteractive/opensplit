@@ -55,6 +55,19 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
+        InputDecoration amountDecoration() => tester
+            .widget<InputDecorator>(
+              find.descendant(
+                of: find.byType(TextFormField),
+                matching: find.byType(InputDecorator),
+              ),
+            )
+            .decoration;
+        expect(
+          amountDecoration().enabledBorder ?? amountDecoration().border,
+          isA<UnderlineInputBorder>(),
+          reason: 'form-field styling must not change the amount headline',
+        );
         expect(
           tester
               .widget<EditableText>(find.byType(EditableText))
@@ -68,6 +81,10 @@ void main() {
         expect(tester.getSize(find.text('0.00')).height, greaterThan(0));
         await tester.tapAt(tester.getCenter(find.text('0.00')));
         await tester.pump();
+        expect(
+          amountDecoration().focusedBorder ?? amountDecoration().border,
+          isA<UnderlineInputBorder>(),
+        );
         expect(
           tester
               .widget<EditableText>(find.byType(EditableText))

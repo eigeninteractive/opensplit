@@ -168,10 +168,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                           autofillHints: const [AutofillHints.name],
                           decoration: const InputDecoration(
                             labelText: 'Name',
-                            helperText:
-                                'What everybody in your groups sees. Changing '
-                                'it here changes it everywhere, including for '
-                                'them.',
+                            helperText: 'Your name in all groups.',
                             helperMaxLines: 3,
                           ),
                           // A blank name would look saved while the member
@@ -193,10 +190,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                           decoration: const InputDecoration(
                             labelText: 'UPI ID (optional)',
                             hintText: 'you@bank',
-                            helperText:
-                                'Lets people in your groups open their UPI app '
-                                'to pay you. OpenSplit never handles the '
-                                'money.',
+                            helperText: 'Receive payments in your UPI app.',
                             helperMaxLines: 3,
                           ),
                           validator: (value) {

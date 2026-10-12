@@ -281,7 +281,7 @@ class _WallpaperSetting extends ConsumerWidget {
               ref.read(wallpaperColorsProvider.notifier).set(enabled: wanted),
           secondary: const Icon(Icons.palette_outlined),
           title: const Text('Match my wallpaper'),
-          subtitle: const Text('Use your device palette throughout OpenSplit.'),
+          subtitle: const Text('Use your device’s colours.'),
         ),
         const SizedBox(height: 8),
         // The palette itself, so that "it is on and nothing changed" is
@@ -373,12 +373,7 @@ class _NotificationSettingState extends ConsumerState<_NotificationSetting> {
           value: enabled,
           onChanged: _busy ? null : _toggle,
           title: const Text('Tell me about group activity'),
-          subtitle: const Text(
-            'A quiet notification when someone adds an expense or settles up. '
-            'The message is put together on your device — the server only '
-            'sends an id, never an amount.',
-          ),
-          isThreeLine: true,
+          subtitle: const Text('New expenses and payments in your groups.'),
         ),
       ],
     );

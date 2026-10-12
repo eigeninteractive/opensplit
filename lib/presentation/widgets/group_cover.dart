@@ -17,18 +17,17 @@ import 'category_icon.dart';
 /// categories, so a trip fills with flights and dinners and a flat with bills
 /// and groceries, and the picture follows the group as it goes on. Before
 /// anything is spent it uses the group's own avatar. The layout is seeded by
-/// the group's id, so the same group looks the same on every device. Both the
-/// list card and header crop the same fixed composition, including in flight.
+/// the group's id. Cards and headers share one sparse composition in flight.
 class GroupCover extends ConsumerWidget {
   const GroupCover({super.key, required this.ledger, this.patternFade = 0});
 
   final GroupLedger ledger;
 
-  /// Softens the pattern under list text: zero in the header, one in a row.
+  /// Softens the pattern beneath overlaid content; zero keeps full contrast.
   final double patternFade;
 
   /// How many of the most frequent categories make up the pattern.
-  static const _motifs = 5;
+  static const _motifs = 3;
   static const _artworkSize = Size(640, 192);
 
   @override
@@ -63,18 +62,20 @@ class GroupCover extends ConsumerWidget {
 
     return ExcludeSemantics(
       child: ColoredBox(
-        color: scheme.primaryContainer,
+        color: Color.lerp(
+          scheme.primaryContainer,
+          scheme.surfaceContainerLow,
+          patternFade,
+        )!,
         child: IconTheme.merge(
-          data: IconThemeData(
-            color: scheme.onPrimaryContainer.withValues(alpha: 0.18),
-          ),
+          data: IconThemeData(color: scheme.onPrimaryContainer),
           child: ShaderMask(
             blendMode: BlendMode.dstIn,
             shaderCallback: (bounds) => LinearGradient(
               colors: [
-                Colors.black.withValues(alpha: 1 - 0.65 * patternFade),
-                Colors.black.withValues(alpha: 1 - 0.65 * patternFade),
-                Colors.black.withValues(alpha: 1 - 0.2 * patternFade),
+                Colors.black.withValues(alpha: 0.16 * (1 - 0.65 * patternFade)),
+                Colors.black.withValues(alpha: 0.16 * (1 - 0.65 * patternFade)),
+                Colors.black.withValues(alpha: 0.16 * (1 - 0.2 * patternFade)),
               ],
               stops: const [0, 0.6, 1],
             ).createShader(bounds),
@@ -116,38 +117,40 @@ class GroupCover extends ConsumerWidget {
     ];
   }
 
-  /// A staggered grid with each motif nudged, turned and sized by a generator
-  /// seeded from [seed].
+  /// Six accents, with small variations seeded from the group's identity.
   static List<Widget> _pattern(
     Size size,
     List<Widget Function(double size)> motifs,
     String seed,
   ) {
-    const cell = 80.0;
+    const positions = [
+      (0.11, 0.18),
+      (0.33, 0.70),
+      (0.47, 0.13),
+      (0.64, 0.67),
+      (0.81, 0.22),
+      (0.90, 0.71),
+    ];
     final random = Random(stableHash(seed));
-    final columns = (size.width / cell).ceil() + 1;
-    final rows = (size.height / cell).ceil() + 1;
     return [
-      for (var row = 0; row < rows; row++)
-        for (var column = 0; column < columns; column++)
-          _placed(
-            random,
-            motifs,
-            Offset(
-              column * cell + (row.isOdd ? cell / 2 : 0) - cell / 2,
-              row * cell - cell / 4,
-            ),
+      for (var index = 0; index < positions.length; index++)
+        _placed(
+          random,
+          motifs[index % motifs.length],
+          Offset(
+            positions[index].$1 * size.width,
+            positions[index].$2 * size.height,
           ),
+        ),
     ];
   }
 
   static Widget _placed(
     Random random,
-    List<Widget Function(double size)> motifs,
+    Widget Function(double size) motif,
     Offset origin,
   ) {
     final size = 32.0 + random.nextInt(3) * 8;
-    final motif = motifs[random.nextInt(motifs.length)];
     return Positioned(
       left: origin.dx + random.nextDouble() * 16,
       top: origin.dy + random.nextDouble() * 16,
@@ -159,7 +162,7 @@ class GroupCover extends ConsumerWidget {
   }
 }
 
-/// Shares the entire cover, with its thumbnail corners opening into the header.
+/// Shares a cover between routes, animating its corners and pattern contrast.
 class GroupCoverHero extends StatelessWidget {
   const GroupCoverHero({
     super.key,

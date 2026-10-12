@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart';
+import 'package:opensplit/presentation/widgets/brand_mark.dart';
 
 /// What the static site says about itself to crawlers, link previews and
 /// Play: the parts nobody on this side of the link ever sees.
@@ -16,6 +17,20 @@ void main() {
   String? meta(String property) => RegExp(
     '<meta (?:property|name)="$property" content="([^"]*)">',
   ).firstMatch(landing)?.group(1);
+
+  test('the app and website share one product tagline', () {
+    expect(landing, contains('<h1>$brandTagline</h1>'));
+    for (final file in Directory('site').listSync().whereType<File>()) {
+      if (!file.path.endsWith('.html')) continue;
+      final page = file.readAsStringSync();
+      if (!page.contains('sitefooter-tagline')) continue;
+      expect(
+        page,
+        contains('class="sitefooter-tagline">$brandTagline</p>'),
+        reason: '${file.path} must use the shared product tagline',
+      );
+    }
+  });
 
   test('the card is the size Open Graph asks for', () {
     final card = decodePng(File('site/store/og-card.png').readAsBytesSync());

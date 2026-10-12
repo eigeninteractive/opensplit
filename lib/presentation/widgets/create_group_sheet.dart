@@ -94,65 +94,66 @@ class _CreateGroupSheetState extends ConsumerState<_CreateGroupSheet> {
         _name.text.trim().isNotEmpty &&
         (!needsName || _yourName.text.trim().isNotEmpty);
 
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + insets.bottom),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('New group', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 20),
-          TextField(
-            controller: _name,
-            autofocus: true,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(
-              labelText: 'Group name',
-              hintText: 'Goa trip, Flat 4B, …',
-            ),
-            onChanged: (_) => setState(() {}),
-          ),
-          if (needsName) ...[
-            const SizedBox(height: 16),
+    return SingleChildScrollView(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + insets.bottom),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('New group', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 20),
             TextField(
-              controller: _yourName,
+              controller: _name,
+              autofocus: true,
               textCapitalization: TextCapitalization.words,
               decoration: const InputDecoration(
-                labelText: 'Your name',
-                // Said out loud, because it is true: this is not a field about
-                // this group.
-                helperText: 'How everyone in your groups will see you.',
+                labelText: 'Group name',
+                hintText: 'Goa trip, Flat 4B, …',
               ),
               onChanged: (_) => setState(() {}),
             ),
-          ],
-          const SizedBox(height: 16),
-          CurrencyPicker(
-            value: _currency,
-            label: 'Default currency',
-            onChanged: (code) => setState(() => _currency = code),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Expenses can be in any currency. This is only what totals are '
-            'summarised in.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 12),
-            Text(
-              _error!,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.error,
+            if (needsName) ...[
+              const SizedBox(height: 16),
+              TextField(
+                controller: _yourName,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(
+                  labelText: 'Your name',
+                  // Said out loud, because it is true: this is not a field about
+                  // this group.
+                  helperText: 'Your name in all groups.',
+                ),
+                onChanged: (_) => setState(() {}),
               ),
+            ],
+            const SizedBox(height: 16),
+            CurrencyPicker(
+              value: _currency,
+              label: 'Default currency',
+              onChanged: (code) => setState(() => _currency = code),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Summary currency. Expenses can use any currency.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _error!,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.error,
+                ),
+              ),
+            ],
+            const SizedBox(height: 20),
+            FilledButton(
+              onPressed: _saving || !ready ? null : () => _create(accountName),
+              child: const Text('Create group'),
             ),
           ],
-          const SizedBox(height: 20),
-          FilledButton(
-            onPressed: _saving || !ready ? null : () => _create(accountName),
-            child: const Text('Create group'),
-          ),
-        ],
+        ),
       ),
     );
   }

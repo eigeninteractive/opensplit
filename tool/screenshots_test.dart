@@ -3,6 +3,9 @@
 //
 //     flutter test tool/screenshots_test.dart
 //
+// Set SCREENSHOT_OUTPUT to a review directory and RENDER_FORM_REVIEW=true via
+// --dart-define to include light/dark form previews without changing store art.
+//
 // A widget test rather than a device capture, so anyone can rerun it after a
 // UI change and get the same five screens back, with no emulator and no
 // account. It sits in tool/ rather than test/ so that `flutter test` does not
@@ -31,16 +34,25 @@ import 'package:opensplit/data/repositories/drift_group_repository.dart';
 import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:opensplit/presentation/app.dart';
+import 'package:opensplit/presentation/screens/welcome_screen.dart';
+import 'package:opensplit/presentation/theme.dart';
+import 'package:opensplit/presentation/theme_mode.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:opensplit_api/opensplit_api.dart' show SplitKind;
 
 import '../test/harness.dart';
 
 /// Where the images go: served by the site, uploaded to Play by hand.
-const _output = 'site/store';
+const _output = String.fromEnvironment(
+  'SCREENSHOT_OUTPUT',
+  defaultValue: 'site/store',
+);
 
 /// A 1080 × 1920 phone, the size Play asks for, at a common Android density.
 const _phone = (size: Size(1080, 1920), pixelRatio: 2.625);
+
+/// A 20:9 phone for reviewing complete group and form layouts.
+const _reviewPhone = (size: Size(1080, 2400), pixelRatio: 2.625);
 
 /// A laptop-sized browser window, wide enough for the side-by-side layout.
 const _desktop = (size: Size(2560, 1600), pixelRatio: 2.0);
@@ -65,7 +77,10 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final prefs = (await tester.runAsync(SharedPreferences.getInstance))!;
 
-    _resize(tester, _phone);
+    _resize(
+      tester,
+      const bool.fromEnvironment('RENDER_FORM_REVIEW') ? _reviewPhone : _phone,
+    );
     final frame = GlobalKey();
     await tester.pumpWidget(
       RepaintBoundary(
@@ -145,6 +160,54 @@ void main() {
       );
     }
 
+    if (const bool.fromEnvironment('RENDER_FORM_REVIEW')) {
+      _resize(tester, _reviewPhone);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(OpenSplitApp)),
+      );
+      router.go('/');
+      await _settle(tester);
+      await tester.tap(find.widgetWithText(FloatingActionButton, 'New group'));
+      await shoot('new-group-light');
+      Navigator.of(tester.element(find.byType(BottomSheet))).pop();
+      await _settle(tester);
+      router.go('/g/$trip/settings');
+      await shoot('group-settings-light');
+      router.go('/about');
+      await shoot('about-light');
+      await container.read(themeModeProvider.notifier).set(ThemeMode.dark);
+      router.go('/');
+      await shoot('groups-dark');
+      await tester.tap(find.widgetWithText(FloatingActionButton, 'New group'));
+      await shoot('new-group-dark');
+      Navigator.of(tester.element(find.byType(BottomSheet))).pop();
+      await _settle(tester);
+      router.go('/g/$trip/add');
+      await _settle(tester);
+      await _fillExpense(tester);
+      await shoot('add-expense-dark');
+
+      for (final brightness in Brightness.values) {
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: frame,
+            child: signedInApp(
+              db: db,
+              prefs: prefs,
+              child: MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: buildTheme(brightness),
+                home: const WelcomeScreen(),
+              ),
+            ),
+          ),
+        );
+        await shoot('sign-in-${brightness.name}');
+      }
+    }
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _settle(tester);
     await tester.runAsync(db.close);
     debugDisableShadows = true;
   });

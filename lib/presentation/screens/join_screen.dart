@@ -218,10 +218,7 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
     children: [
       BrandHeader(
         title: 'Rejoin ${preview.groupName}',
-        subtitle:
-            'You were in this group before. Rejoining brings back your place '
-            'as it was, with everything you paid and owed, and you get '
-            'updates again.',
+        subtitle: 'Restore your membership, expenses and balances.',
       ),
       const SizedBox(height: 32),
       ..._errorIfAny(theme),
@@ -345,10 +342,6 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
               // Not joined yet, deliberately.
               if (mounted) setState(() {});
             },
-            guestNote:
-                'You will join straight away and the group will synchronize. '
-                'This device is the only way back into the guest account '
-                'until you add an email address or Google account.',
           )
         else
           _ChoosePlace(
@@ -529,13 +522,7 @@ class _Claim extends ConsumerWidget {
     // Nobody yet. The three ways to become somebody, then the claim happens
     // against whichever one they picked.
     if (account == null) {
-      return IdentityChoices(
-        onSignedIn: onJoin,
-        guestNote:
-            'You will join straight away and the group will synchronize. This '
-            'device is the only way back into the guest account until you add '
-            'an email address or Google account.',
-      );
+      return IdentityChoices(onSignedIn: onJoin);
     }
 
     final me = ref.watch(myProfileProvider).value;
