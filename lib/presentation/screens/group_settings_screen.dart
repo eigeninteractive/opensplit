@@ -224,10 +224,8 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
                             ),
                   title: const Text('Suggest the fewest payments'),
                   subtitle: const Text(
-                    'On: as few payments as settle the group, which can mean '
-                    'paying someone you never shared an expense with. Off: '
-                    'each person settles with each person they owe. Either '
-                    'way, everyone ends up square.',
+                    'Fewer payments, same balances. You may pay someone '
+                    'you did not directly owe.',
                   ),
                 ),
 
@@ -238,8 +236,7 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
                       : (value) => _setArchived(ledger, archived: value),
                   title: const Text('Archive'),
                   subtitle: const Text(
-                    'Hides it from your list. Nothing is deleted, everyone stays '
-                    'in it, and un-archiving brings it straight back.',
+                    'Hide this group without deleting its expenses.',
                   ),
                 ),
               ],
@@ -251,8 +248,7 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
                   leading: const Icon(Icons.ios_share),
                   title: const Text('Export this group'),
                   subtitle: const Text(
-                    'A spreadsheet to read, or a full backup that keeps every '
-                    'split, rate and change.',
+                    'Download a spreadsheet or full backup.',
                   ),
                   isThreeLine: true,
                   trailing: ExportButton(groupId: widget.groupId),
@@ -263,8 +259,7 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
 
             if (me == null)
               Text(
-                'You are not a member of this group, so there is nothing here '
-                'to leave.',
+                'You are not a member of this group.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: scheme.onSurfaceVariant,
                 ),
@@ -278,19 +273,14 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
                       'Leave group',
                       style: TextStyle(color: scheme.error),
                     ),
-                    subtitle: const Text(
-                      'Your past expenses stay in the group. You stop appearing in '
-                      'new ones.',
-                    ),
+                    subtitle: const Text('Past expenses stay in the group.'),
                     onTap: _busy ? null : () => _leave(ledger, me),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
               Text(
-                'A group cannot be deleted once it has expenses in it, by '
-                'design — somebody else\'s record of who paid for what is not '
-                'yours to remove. Archive it instead.',
+                'Groups with expenses cannot be deleted. Archive them instead.',
                 style: Theme.of(
                   context,
                 ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),

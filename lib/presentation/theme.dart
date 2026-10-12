@@ -126,9 +126,25 @@ ThemeData buildTheme(Brightness brightness, [ColorScheme? dynamicScheme]) {
 
   // DropdownMenu has its own decoration defaults and does not inherit the
   // app's field theme. Supply the same policy to both component families.
-  const fields = InputDecorationThemeData(
+  const fieldBorder = UnderlineInputBorder(
+    borderRadius: BorderRadius.all(Radius.circular(12)),
+    borderSide: BorderSide.none,
+  );
+  final fields = InputDecorationThemeData(
     filled: true,
-    border: UnderlineInputBorder(),
+    fillColor: scheme.surfaceContainerHigh,
+    border: fieldBorder,
+    enabledBorder: fieldBorder,
+    disabledBorder: fieldBorder,
+    focusedBorder: fieldBorder.copyWith(
+      borderSide: BorderSide(color: scheme.primary, width: 2),
+    ),
+    errorBorder: fieldBorder.copyWith(
+      borderSide: BorderSide(color: scheme.error),
+    ),
+    focusedErrorBorder: fieldBorder.copyWith(
+      borderSide: BorderSide(color: scheme.error, width: 2),
+    ),
     helperMaxLines: 3,
     errorMaxLines: 3,
   );
@@ -151,9 +167,7 @@ ThemeData buildTheme(Brightness brightness, [ColorScheme? dynamicScheme]) {
       variant: StyleVariant.material3Expressive,
     ),
     inputDecorationTheme: fields,
-    dropdownMenuTheme: const DropdownMenuThemeData(
-      inputDecorationTheme: fields,
-    ),
+    dropdownMenuTheme: DropdownMenuThemeData(inputDecorationTheme: fields),
   );
 
   // Google Sans Flex, resolved from the bundle rather than the network — see the

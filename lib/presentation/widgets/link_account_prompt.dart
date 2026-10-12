@@ -33,12 +33,10 @@ class LinkAccountPrompt extends ConsumerWidget {
         icon: Icons.lock_outline,
         title: 'Protect access to this guest account',
         message: kIsWeb
-            ? 'Your groups synchronize, but this browser holds the only '
-                  'way back in. Clearing its data can leave you unable to '
-                  'reach the guest account.'
-            : 'Your groups synchronize, but this phone holds the only '
-                  'way back in. Losing it or reinstalling can leave you '
-                  'unable to reach the guest account.',
+            ? 'Clearing browser data can lock you out. Add email or Google '
+                  'for recovery.'
+            : 'Losing this phone or reinstalling can lock you out. Add email '
+                  'or Google for recovery.',
         actions: [
           TextButton(
             onPressed: () =>

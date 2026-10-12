@@ -53,10 +53,8 @@ class _Unsaved extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'Your groups are synchronized, but this device is the only way back '
-          'into this guest account, and only while you open OpenSplit at '
-          'least once a year. Adding an email address lets you recover it and '
-          'use OpenSplit on more than one device.',
+          'Guest access depends on this device and yearly use. Add an email '
+          'to recover your account and sign in on other devices.',
           style: theme.textTheme.bodyMedium?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),

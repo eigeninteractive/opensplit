@@ -36,10 +36,7 @@ class AboutScreen extends StatelessWidget {
           children: [
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 24),
-              child: BrandHeader(
-                title: 'OpenSplit',
-                subtitle: 'Shared expenses, without the extraction.',
-              ),
+              child: BrandHeader(title: 'OpenSplit', subtitle: brandTagline),
             ),
             const _Version(),
             const Divider(height: 40),
@@ -47,21 +44,19 @@ class AboutScreen extends StatelessWidget {
             _Link(
               icon: Icons.code,
               title: 'Source code',
-              subtitle: 'Every line of this app, and the server behind it.',
+              subtitle: 'App and server.',
               url: repositoryUrl,
             ),
             _Link(
               icon: Icons.bug_report_outlined,
               title: 'Report an issue',
-              subtitle: 'Bugs, and things that work but should not.',
+              subtitle: 'Bugs and suggestions.',
               url: issuesUrl,
             ),
             _Link(
               icon: Icons.balance_outlined,
               title: 'Licence — AGPL-3.0',
-              subtitle:
-                  'Anyone can use, change and share the code, and what is '
-                  'built from it stays open source too.',
+              subtitle: 'Use, modify and share. Keep changes open source.',
               url: licenseUrl,
             ),
 
@@ -70,10 +65,7 @@ class AboutScreen extends StatelessWidget {
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.inventory_outlined),
               title: const Text('Open-source licences'),
-              subtitle: const Text(
-                'The packages and typefaces this app is built on, and their '
-                'terms.',
-              ),
+              subtitle: const Text('Packages and fonts.'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => showLicensePage(
                 context: context,
@@ -84,10 +76,7 @@ class AboutScreen extends StatelessWidget {
 
             const Divider(height: 40),
             Text(
-              'Free for everyone, open source, with no ads, no analytics SDK '
-              'and no venture funding. Those are commitments rather than '
-              'features — they are written down in the repository so they can '
-              'be held against us.',
+              'Open source. No ads, analytics SDKs or venture funding.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),

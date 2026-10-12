@@ -25,9 +25,7 @@ class WelcomeScreen extends ConsumerWidget {
                   children: [
                     const BrandHeader(
                       title: 'OpenSplit',
-                      subtitle:
-                          'Split expenses with the people you actually spend '
-                          'money with.',
+                      subtitle: brandTagline,
                     ),
                     const SizedBox(height: 40),
 

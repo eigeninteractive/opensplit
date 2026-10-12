@@ -5,6 +5,9 @@ What changed in each version of the app, newest first. The format is
 [cider](https://pub.dev/packages/cider): see "Versions" in docs/runbook.md.
 
 ## [Unreleased]
+### Changed
+- Groups have larger names and avatars with quieter cover art. Forms use consistent filled fields, and app wording is shorter.
+
 ### Fixed
 - Improved browser database transaction reliability.
 

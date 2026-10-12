@@ -200,8 +200,6 @@ class _Empty extends StatelessWidget {
   Widget build(BuildContext context) => const EmptyState(
     icon: Icons.history,
     title: 'Nothing has happened here yet',
-    message:
-        'Every expense added, edited or deleted in this group shows up '
-        'here, with who did it.',
+    message: 'Expense changes and who made them appear here.',
   );
 }

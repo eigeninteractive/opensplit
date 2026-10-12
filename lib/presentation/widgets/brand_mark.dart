@@ -1,6 +1,9 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+/// The shared product tagline, matching the landing-page headline.
+const brandTagline = 'Split expenses with friends, free forever.';
+
 /// The OpenSplit mark: a ring with one diagonal cut through it.
 class BrandMark extends StatelessWidget {
   const BrandMark({super.key, this.size = 24, this.color, this.semanticsLabel});

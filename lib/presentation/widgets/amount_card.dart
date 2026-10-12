@@ -41,28 +41,37 @@ class AmountCard extends StatelessWidget {
     final valueStyle = moneyStyle(
       theme.textTheme.displaySmall!,
     ).copyWith(color: foreground);
-    final amountField = TextFormField(
-      initialValue: amount,
-      autofocus: autofocus,
-      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      inputFormatters: [DecimalInputFormatter.amount(currency)],
-      textInputAction: TextInputAction.next,
-      style: valueStyle,
-      decoration: InputDecoration(
-        labelText: label,
-        errorText: error,
-        floatingLabelBehavior: FloatingLabelBehavior.always,
-        prefixStyle: valueStyle,
-        hintText: currency?.formatPlain(0) ?? '0',
-        prefixText: currency?.symbol == null ? null : '${currency!.symbol} ',
-        labelStyle: TextStyle(color: foreground),
-        floatingLabelStyle: TextStyle(color: foreground),
-        hintStyle: valueStyle,
-        filled: false,
-        border: const UnderlineInputBorder(),
-        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+    // The monetary headline keeps its underline independently of form fields.
+    final amountField = InputDecorationTheme(
+      data: const InputDecorationThemeData(
+        filled: true,
+        border: UnderlineInputBorder(),
+        helperMaxLines: 3,
+        errorMaxLines: 3,
       ),
-      onChanged: onAmountChanged,
+      child: TextFormField(
+        initialValue: amount,
+        autofocus: autofocus,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        inputFormatters: [DecimalInputFormatter.amount(currency)],
+        textInputAction: TextInputAction.next,
+        style: valueStyle,
+        decoration: InputDecoration(
+          labelText: label,
+          errorText: error,
+          floatingLabelBehavior: FloatingLabelBehavior.always,
+          prefixStyle: valueStyle,
+          hintText: currency?.formatPlain(0) ?? '0',
+          prefixText: currency?.symbol == null ? null : '${currency!.symbol} ',
+          labelStyle: TextStyle(color: foreground),
+          floatingLabelStyle: TextStyle(color: foreground),
+          hintStyle: valueStyle,
+          filled: false,
+          border: const UnderlineInputBorder(),
+          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+        ),
+        onChanged: onAmountChanged,
+      ),
     );
     final field = heroTag == null
         ? amountField

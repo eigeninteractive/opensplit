@@ -93,7 +93,7 @@ Widget emptyStateDarkPreview() => MaterialApp(
     body: EmptyState(
       icon: Icons.groups_outlined,
       title: 'No groups yet',
-      message: 'Make one for a trip, a flat, or a single dinner.',
+      message: 'Create a group for a trip, flat or dinner.',
     ),
   ),
 );

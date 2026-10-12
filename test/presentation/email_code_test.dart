@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:opensplit/application/session_providers.dart';
 import 'package:opensplit/domain/auth_service.dart';
+import 'package:opensplit/presentation/theme.dart';
 import 'package:opensplit/presentation/widgets/save_account_form.dart';
 import 'package:opensplit/presentation/widgets/identity_choices.dart';
 import 'package:opensplit_api/opensplit_api.dart' show Account, EmailFlow;
@@ -24,6 +25,7 @@ void main() {
               accountProvider.overrideWith((ref) => Stream.value(_guest)),
             ],
             child: MaterialApp(
+              theme: buildTheme(Brightness.light),
               home: Scaffold(
                 body: SingleChildScrollView(
                   child: linking

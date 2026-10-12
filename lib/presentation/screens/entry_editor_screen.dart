@@ -192,8 +192,7 @@ class _Editor extends ConsumerWidget {
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
                     child: Text(
-                      'Stored in ${currency.code}. Balances in a group are '
-                      'always kept per currency, never converted.',
+                      '${currency.code} balances stay separate.',
                       style: textTheme.bodySmall,
                     ),
                   ),
