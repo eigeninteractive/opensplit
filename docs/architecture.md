@@ -70,21 +70,15 @@ lost response is.
 
 ## What each store holds
 
-**The group object** (`server/src/db/group/schema.ts`) — `members`, `entries`,
-`entry_payers`, `entry_shares`, `events`, `invites`, `group_link`, plus four
-tables that exist because the object is a little machine as well as a table:
-`counter` (the sequence allocator), `meta` (the group row itself), `tombstone`
-(what is left after a purge, so a device that still holds a copy is told to drop
-it rather than being refused forever), `outbox` (writes owed to D1),
-`schedule` (the dormancy alarm) and `activity` (when a member last changed
-anything, which is what quiet is measured from; housekeeping never writes it).
+**The group object** (`server/src/db/group/schema.ts`) holds shared group,
+membership and financial rows, events and invite links. Only active account
+members can read or edit it; leaving removes access without copying history.
 
-A purge happens when a group is archived, settled in every currency and quiet
-for a year, or at once when its last account holder deletes their account.
-Dropping it on the device is not a soft delete: `applyGroupChanges` deletes the
-local group row and the foreign keys cascade to its members, expenses, payers,
-shares and activity. An edit that device never pushed goes with it. The copy
-that survives is whatever somebody exported beforehand.
+`counter` allocates shared sequence numbers, `tombstone` reports a permanently
+deleted group, `outbox` carries derived index writes to D1, and `schedule`
+retries those writes. A group is deleted when its last active account holder
+leaves or deletes their account. Inactivity does not affect retention.
+See [Group lifecycle](group-lifecycle.md).
 
 **D1** (`server/src/db/d1/schema.ts`) — `profiles`, `memberships`,
 `device_tokens`, `link_tokens`, `counters` (the profile feed's version), plus
@@ -159,7 +153,7 @@ Drizzle tables ──drizzle-orm/zod──▶ Zod rows, and request bodies picke
 - **The push message is a contract type** (`PushData`), registered as a
   component though no route returns it, and parsed on the device with the
   generated class.
-- **Every session operation is an `/api/identity/*` route** returning contract
+- **Every session operation is an `/identity/*` route** returning contract
   types (`Session`, `IdentityOutcome`, `GoogleRedirect`), each calling Better
   Auth's server API. Better Auth's own HTTP handler is mounted only for the
   OAuth callback Google redirects to. Its `openAPI()` plugin emits 3.1 with
@@ -306,8 +300,11 @@ holds a bearer token. The token arrives in the `set-auth-token` **response
 header**; the `token` field in the response body is the unsigned first half of
 one and is not a credential.
 
-**The identity endpoints are ours, not Better Auth's** — `/api/identity/
-guest`, `/session`, `/sign-out`, `/google`, `/google/redirect`, `/email`,
+Operation paths are relative to the base in `server/src/paths.ts`. The same
+base is emitted as OpenAPI `servers.url` and used by the generated client.
+
+**The identity endpoints are ours, not Better Auth's** — under `/identity`,
+`/guest`, `/session`, `/sign-out`, `/google`, `/google/redirect`, `/email`,
 `/email/verify`, `/reauth`, `/reauth/verify`. Attaching an identity to a guest
 session and signing in to an existing account are opposite outcomes: one keeps
 the account id, the other replaces the session. Better Auth's own endpoints will
@@ -370,12 +367,9 @@ older than a day does not answer for that day, on the server or the device.
 accounts (over ninety days old, in no group, no session used in ninety days) and
 finishes any account deletion a request started and did not complete.
 
-There is deliberately no nightly dormancy sweep. A Durable Object sets its own
-alarm, so each group carries its own clock: one wake-up in three months rather
-than ninety nightly scans that find nothing to do. The alternative — a cron
-that asks every group whether it has gone quiet — is a fan-out proportional to
-the number of groups, paid every night, to discover that almost none of them
-have.
+Group history has no inactivity deadline. Durable Object alarms retry pending
+index work. Existing archive and purge deadlines are removed by the lifecycle
+migration; they cannot erase history belonging to an account.
 
 ---
 

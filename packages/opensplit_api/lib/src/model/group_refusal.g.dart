@@ -49,6 +49,7 @@ const _$ErrorCodeEnumMap = {
   ErrorCode.malformed: 'malformed',
   ErrorCode.noSession: 'no_session',
   ErrorCode.notFound: 'not_found',
+  ErrorCode.updateRequired: 'update_required',
   ErrorCode.internal: 'internal',
   ErrorCode.identityAlreadyInUse: 'identity_already_in_use',
   ErrorCode.authFailed: 'auth_failed',

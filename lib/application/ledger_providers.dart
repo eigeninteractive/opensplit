@@ -15,6 +15,7 @@ import '../domain/member_identity.dart';
 import '../domain/models/entry.dart';
 import '../domain/models/group_event.dart';
 import 'local_providers.dart';
+import 'backend_providers.dart';
 
 part 'ledger_providers.g.dart';
 
@@ -106,6 +107,11 @@ Stream<List<Member>> members(Ref ref, String groupId) =>
 Stream<List<Entry>> entries(Ref ref, String groupId) =>
     ref.watch(entryRepositoryProvider).watchEntries(groupId);
 
+/// One historical entry, including records removed from current balances.
+@riverpod
+Stream<Entry?> entryRecord(Ref ref, String entryId) =>
+    ref.watch(entryRepositoryProvider).watchEntry(entryId);
+
 /// Everything a group screen needs, folded once.
 class GroupLedger {
   const GroupLedger({
@@ -118,6 +124,7 @@ class GroupLedger {
     required this.me,
     required this.profiles,
     required this.brokenEntries,
+    this.updatesAllowed = true,
   });
 
   final Group group;
@@ -141,8 +148,14 @@ class GroupLedger {
   /// pair's own debt to each other.
   final List<Transfer> transfers;
 
-  /// This device's member in the group, if it has one.
+  /// This account's member, including a locally queued departure.
   final Member? me;
+
+  /// Whether the running app is allowed to write to this server.
+  final bool updatesAllowed;
+
+  /// Whether this account can change the shared ledger right now.
+  bool get canEdit => updatesAllowed && me != null && me!.isActive;
 
   /// Accounts belonging to the members of this group, keyed by profile id.
   final Map<String, Profile> profiles;
@@ -237,6 +250,7 @@ GroupLedger? groupLedger(Ref ref, String groupId) {
   final broken = unbalancedEntries(entryList);
 
   return GroupLedger(
+    updatesAllowed: !ref.watch(requiresAppUpdateProvider),
     group: group,
     members: memberList,
     pastMembers: [
@@ -248,7 +262,7 @@ GroupLedger? groupLedger(Ref ref, String groupId) {
     transfers: group.simplifyDebts
         ? simplifyDebts(balances)
         : pairwiseDebts(entryList),
-    me: memberList.where((m) => m.profileId == accountId).firstOrNull,
+    me: everyone.where((m) => m.profileId == accountId).firstOrNull,
     profiles: profiles,
     brokenEntries: broken,
   );

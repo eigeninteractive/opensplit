@@ -27,7 +27,6 @@ String groupToJson({
       'default_currency': group.defaultCurrency,
       'simplify_debts': group.simplifyDebts,
       'created_at': group.createdAt.toIso8601String(),
-      'archived_at': group.archivedAt?.toIso8601String(),
     },
     'members': [
       for (final member in members)

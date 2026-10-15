@@ -468,7 +468,7 @@ describe("an expense shared by a crowd", () => {
     const object = stub(groupId);
     const people = [ravi.id];
     for (let index = 0; index < 39; index++) {
-      people.push(ok(await object.putMember(freshId("m"), { displayName: `Guest ${index}`, upiVpa: null, leftAt: null }, RAVI)).id);
+      people.push(ok(await object.putMember(freshId("m"), { displayName: `Guest ${index}`, upiVpa: null, leftAt: null, baseSeq: null }, RAVI)).id);
     }
 
     const wedding = expense({

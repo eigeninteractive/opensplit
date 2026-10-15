@@ -26,6 +26,7 @@ import '../widgets/group_pane.dart';
 import '../widgets/group_standing.dart';
 import '../widgets/offline_indicator.dart';
 import '../widgets/page_body.dart';
+import '../widgets/group_access.dart';
 import '../widgets/segmented_list.dart';
 import '../widgets/sync_refresh_button.dart';
 import '../widgets/sync_status_notice.dart';
@@ -69,15 +70,19 @@ class GroupDetailScreen extends ConsumerWidget {
       );
     }
 
+    if (ledger.me?.isActive != true) return const GroupUnavailableScreen();
+
     final wide = MediaQuery.sizeOf(context).width >= _wideBreakpoint;
 
     final scaffold = Scaffold(
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: null,
-        onPressed: () => context.push('/g/$groupId/add'),
-        icon: const Icon(Icons.add),
-        label: const Text('Add expense'),
-      ),
+      floatingActionButton: !ledger.canEdit
+          ? null
+          : FloatingActionButton.extended(
+              heroTag: null,
+              onPressed: () => context.push('/g/$groupId/add'),
+              icon: const Icon(Icons.add),
+              label: const Text('Add expense'),
+            ),
       body: NestedScrollView(
         headerSliverBuilder: (context, scrolled) => [
           SliverOverlapAbsorber(
@@ -154,11 +159,12 @@ class _GroupAppBar extends StatelessWidget {
       actions: [
         const OfflineIndicator(),
         if (kIsWeb) SyncRefreshButton.group(groupId),
-        IconButton(
-          tooltip: 'Settle up',
-          onPressed: () => open('settle'),
-          icon: const Icon(Icons.handshake_outlined),
-        ),
+        if (ledger.canEdit)
+          IconButton(
+            tooltip: 'Settle up',
+            onPressed: () => open('settle'),
+            icon: const Icon(Icons.handshake_outlined),
+          ),
         IconButton(
           tooltip: 'People',
           onPressed: () => open('members'),
@@ -290,7 +296,9 @@ class _GroupHeader extends ConsumerWidget {
           child: Tooltip(
             message: 'Group picture',
             child: InkResponse(
-              onTap: () => context.push('/g/${group.id}/picture'),
+              onTap: ledger.canEdit
+                  ? () => context.push('/g/${group.id}/picture')
+                  : null,
               radius: _avatarRadius + ring,
               child: CircleAvatar(
                 radius: _avatarRadius + ring,
@@ -359,9 +367,9 @@ class _EntriesPane extends ConsumerWidget {
       storageKey: 'expenses',
       slivers: [
         if (ledger.entries.isEmpty)
-          const SliverFillRemaining(
+          SliverFillRemaining(
             hasScrollBody: false,
-            child: _EmptyEntries(),
+            child: _EmptyEntries(canEdit: ledger.canEdit),
           )
         else
           SliverList.builder(
@@ -559,12 +567,16 @@ class _EntryTile extends StatelessWidget {
 }
 
 class _EmptyEntries extends StatelessWidget {
-  const _EmptyEntries();
+  const _EmptyEntries({required this.canEdit});
+
+  final bool canEdit;
 
   @override
-  Widget build(BuildContext context) => const EmptyState(
+  Widget build(BuildContext context) => EmptyState(
     icon: Icons.receipt_long_outlined,
-    title: 'Nothing yet',
-    message: 'Add the first expense and balances appear straight away.',
+    title: canEdit ? 'Nothing yet' : 'No expenses',
+    message: canEdit
+        ? 'Add the first expense and balances appear straight away.'
+        : 'There are no active expenses in this saved history.',
   );
 }

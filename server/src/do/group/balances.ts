@@ -4,8 +4,8 @@ import type { Tx } from "./store";
 
 /**
  * The one thing the server computes about money, for the two decisions a
- * device cannot be trusted with: removing somebody else, and collecting a
- * dormant group. Per currency; only non-zero positions, so no rows is settled.
+ * device cannot be trusted with: removing somebody else, and closing a group when its
+ * last account holder leaves. Per currency; only non-zero positions, so no rows is settled.
  */
 const positions = sql`
   select member_id as memberId, currency, sum(delta) as balanceMinor

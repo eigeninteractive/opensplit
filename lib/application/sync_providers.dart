@@ -2,6 +2,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../data/network/network_signal.dart';
 import '../data/sync/sync_engine.dart';
+import '../data/sync/api_client.dart';
 import 'backend_providers.dart';
 import 'local_providers.dart';
 import 'sync_coordinator.dart';
@@ -14,6 +15,7 @@ SyncEngine? syncEngine(Ref ref) {
   if (client == null) return null;
   final engine = SyncEngine(
     db: ref.watch(appDatabaseProvider),
+    access: ref.watch(apiAccessProvider),
     client: client,
     outbox: ref.watch(outboxQueueProvider),
     accountId: ref.watch(currentAccountIdProvider),
@@ -46,6 +48,16 @@ class SyncController extends _$SyncController {
     final accountId = ref.watch(currentAccountIdProvider);
     final engine = accountId == null ? null : ref.watch(syncEngineProvider);
     _coordinator = null;
+    if (ref.watch(requiresAppUpdateProvider)) {
+      return const SyncStatus(
+        lastReport: SyncReport(
+          pushed: 0,
+          pulled: 0,
+          failed: 0,
+          error: ApiFailure.updateRequired(),
+        ),
+      );
+    }
     if (engine == null) return const SyncStatus(enabled: false);
 
     final coordinator = SyncCoordinator(
@@ -71,11 +83,13 @@ class SyncController extends _$SyncController {
   void resumed() => _coordinator?.resumed();
 
   Future<void> retryFailed() async {
+    ref.read(apiAccessProvider).requireWritable();
     await ref.read(outboxQueueProvider).retryDeadLetters();
     await syncAll();
   }
 
   Future<void> discardFailed() async {
+    ref.read(apiAccessProvider).requireWritable();
     await ref.read(syncEngineProvider)?.discardRefused();
     await syncAll();
   }

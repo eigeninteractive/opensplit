@@ -3,6 +3,7 @@ import 'package:flutter/widget_previews.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/sync_providers.dart';
+import '../../application/backend_providers.dart';
 import '../launch_hold.dart';
 import 'inline_notice.dart';
 
@@ -32,6 +33,14 @@ class InitialSyncGate extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (ref.watch(requiresAppUpdateProvider)) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text('Update OpenSplit to sync your groups.'),
+        ),
+      );
+    }
     final status = ref.watch(syncControllerProvider);
     if (!status.enabled) return child;
     if (status.isSyncing ||
@@ -91,6 +100,7 @@ class SyncStatusBanner extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (ref.watch(requiresAppUpdateProvider)) return const SizedBox.shrink();
     final status = ref.watch(syncControllerProvider);
     final refreshFailed = status.error != null;
     final changesWaiting = status.lastReport?.nextPushAt != null;

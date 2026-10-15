@@ -13,6 +13,22 @@ import '../domain/auth_service.dart';
 
 part 'backend_providers.g.dart';
 
+/// One compatibility gate for requests, local writes and the update notice.
+@Riverpod(keepAlive: true)
+ApiAccess apiAccess(Ref ref) {
+  final access = ApiAccess();
+  ref.onDispose(access.dispose);
+  return access;
+}
+
+@Riverpod(keepAlive: true)
+bool requiresAppUpdate(Ref ref) {
+  final access = ref.watch(apiAccessProvider);
+  final subscription = access.changes.listen((_) => ref.invalidateSelf());
+  ref.onDispose(subscription.cancel);
+  return access.updateRequired;
+}
+
 /// Where this device's session lives between launches. Overridden in `main`,
 /// which reads the token from secure storage before the first frame.
 @Riverpod(keepAlive: true)
@@ -27,6 +43,7 @@ api.OpensplitApi? apiClient(Ref ref) {
   if (apiBaseUrl.isEmpty) return null;
   return buildApiClient(
     baseUrl: apiBaseUrl,
+    access: ref.watch(apiAccessProvider),
     token: ref.watch(sessionStoreProvider).read()?.token,
   );
 }

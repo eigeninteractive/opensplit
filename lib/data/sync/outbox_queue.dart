@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import '../local/database.dart';
 import '../local/tables.dart';
 import 'sync_session.dart';
+import 'api_client.dart';
 
 /// A write the server refused outright, named the way its author would name it.
 class FailedWrite {
@@ -15,6 +16,7 @@ class FailedWrite {
     required this.label,
     required this.reason,
     required this.failedAt,
+    this.code,
   });
 
   final OutboxTarget target;
@@ -27,13 +29,29 @@ class FailedWrite {
   final String reason;
 
   final DateTime failedAt;
+
+  /// Stable refusal category for choosing a useful recovery action.
+  final String? code;
+
+  /// Repeating a denied or stale write cannot fix lost access or a stale base.
+  bool get canRetry => !const {
+    'not_member',
+    'stale_base',
+    'not_settled',
+    'group_purged',
+  }.contains(code);
 }
 
 /// Pending local writes waiting to reach the server.
+///
+/// Items refer to ledger rows; the current client builds their API requests.
+/// Breaking model changes must migrate those rows and retain pending edits
+/// before synchronization resumes.
 class OutboxQueue {
-  OutboxQueue(this._db, {DateTime Function()? clock})
+  OutboxQueue(this._db, {DateTime Function()? clock, this._access})
     : _clock = clock ?? DateTime.now;
 
+  final ApiAccess? _access;
   final AppDatabase _db;
   final DateTime Function() _clock;
 
@@ -68,6 +86,7 @@ class OutboxQueue {
     OutboxTarget target,
     String targetId,
   ) async {
+    _access?.requireWritable();
     if (!(await readSyncSession(_db)).enabled) {
       throw StateError('This account session has ended.');
     }
@@ -94,11 +113,13 @@ class OutboxQueue {
               attempts: const Value(0),
               nextAttemptAt: const Value(null),
               lastError: const Value(null),
+              failureCode: const Value(null),
               deadLetteredAt: const Value(null),
             ),
           ),
         );
 
+    _access?.requireWritable();
     if (_queued.hasListener) _queued.add(null);
   }
 
@@ -209,6 +230,7 @@ class OutboxQueue {
       label: await _labelFor(row.target, row.targetId),
       reason: row.lastError ?? 'The server refused it without saying why.',
       failedAt: row.deadLetteredAt!,
+      code: row.failureCode,
     );
   }
 
@@ -239,16 +261,27 @@ class OutboxQueue {
 
   /// Puts refused writes back in the queue.
   Future<int> retryDeadLetters() async {
-    return (_db.update(
-      _db.outbox,
-    )..where((t) => t.deadLetteredAt.isNotNull())).write(
-      const OutboxCompanion(
-        deadLetteredAt: Value(null),
-        nextAttemptAt: Value(null),
-        lastError: Value(null),
-        attempts: Value(0),
-      ),
-    );
+    _access?.requireWritable();
+    return (_db.update(_db.outbox)..where(
+          (t) =>
+              t.deadLetteredAt.isNotNull() &
+              (t.failureCode.isNull() |
+                  t.failureCode.isNotIn(const [
+                    'not_member',
+                    'stale_base',
+                    'not_settled',
+                    'group_purged',
+                  ])),
+        ))
+        .write(
+          const OutboxCompanion(
+            deadLetteredAt: Value(null),
+            nextAttemptAt: Value(null),
+            lastError: Value(null),
+            failureCode: Value(null),
+            attempts: Value(0),
+          ),
+        );
   }
 
   /// The item exactly as [item] read it. A response for an older edit must
@@ -270,13 +303,19 @@ class OutboxQueue {
       (_db.delete(_db.outbox)..where((t) => _sameEdit(t, item))).go();
 
   /// Records a failed attempt and schedules the next one.
-  Future<void> fail(OutboxRow item, String error, {bool permanent = false}) {
+  Future<void> fail(
+    OutboxRow item,
+    String error, {
+    bool permanent = false,
+    String? code,
+  }) {
     final update = _db.update(_db.outbox)..where((t) => _sameEdit(t, item));
     if (permanent) {
       return update.write(
         OutboxCompanion(
           deadLetteredAt: Value(_clock()),
           lastError: Value(error),
+          failureCode: Value(code),
         ),
       );
     }
@@ -290,6 +329,7 @@ class OutboxQueue {
         attempts: Value(attempts),
         nextAttemptAt: Value(_clock().add(backoff)),
         lastError: Value(error),
+        failureCode: Value(code),
       ),
     );
   }

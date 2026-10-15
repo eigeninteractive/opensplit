@@ -1,5 +1,7 @@
 import { env, exports as workerExports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import { apiBasePath } from "../src/paths";
+import { apiUrl } from "./session";
 
 /** Phase 0's exit criterion, as a test: the Worker answers, the bindings resolve, and the routing model behaves the way the configuration claims. */
 describe("the Worker is wired up", () => {
@@ -13,8 +15,20 @@ describe("the Worker is wired up", () => {
     });
   });
 
+  it("publishes relative contract paths under the same base as the router", async () => {
+    const response = await workerExports.default.fetch("https://opensplit.test/api/openapi.json");
+    expect(response.status).toBe(200);
+    const document = (await response.json()) as { servers: { url: string }[]; paths: Record<string, unknown> };
+    expect(document.servers).toEqual([{ url: apiBasePath }]);
+    expect(Object.keys(document.paths)).toContain("/groups/{groupId}");
+    expect(Object.keys(document.paths).every((path) => !path.startsWith("/api/"))).toBe(true);
+    const health = await workerExports.default.fetch(`https://opensplit.test${document.servers[0]?.url}/health`);
+    expect(health.status).toBe(200);
+    expect(await health.json()).toMatchObject({ ok: true, service: "opensplit" });
+  });
+
   it("answers an unknown API path with the error envelope, not HTML", async () => {
-    const response = await workerExports.default.fetch("https://opensplit.test/api/nope");
+    const response = await workerExports.default.fetch(apiUrl("/nope"));
 
     expect(response.status).toBe(404);
     expect(await response.json()).toMatchObject({
@@ -23,14 +37,14 @@ describe("the Worker is wired up", () => {
   });
 
   /**
-   * The sync routes are mounted at `/api`, which is also where the public ones
-   * live. A wildcard `use()` in that sub-app would claim `/api/nope` and answer
+   * Public and authenticated routes share the contract router. A wildcard
+   * authentication check would claim an unknown operation and answer
    * 401 — telling an unauthenticated caller nothing useful and contradicting
    * the health check sitting beside it.
    */
   it("does not let the authenticated routes claim paths they do not own", async () => {
-    for (const path of ["/api/nope", "/api/groups-ish", "/api/bootstrapped"]) {
-      const response = await workerExports.default.fetch(`https://opensplit.test${path}`);
+    for (const path of ["/nope", "/groups-ish", "/bootstrapped"]) {
+      const response = await workerExports.default.fetch(apiUrl(path));
       expect(response.status, path).toBe(404);
     }
 

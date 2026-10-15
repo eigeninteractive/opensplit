@@ -20,7 +20,7 @@ class GroupsApi {
 
   const GroupsApi(this._dio);
 
-  /// Make a group and its creator&#39;s place in it, or rename, archive or change a setting
+  /// Make a group and its creator&#39;s place in it, or change shared settings
   /// Idempotent, so a retry whose response was lost returns the same group. Editing needs membership; creating does not.
   ///
   /// Parameters:
@@ -45,7 +45,7 @@ class GroupsApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/groups/{groupId}'.replaceAll(
+    final _path = r'/groups/{groupId}'.replaceAll(
       '{'
       r'groupId'
       '}',
@@ -122,7 +122,7 @@ class GroupsApi {
   }
 
   /// Add somebody who has never opened the app, or change a name, a payment handle, or whether somebody is still here
-  /// Your own row and any placeholder are editable; another account holder&#39;s are not. Leaving is always yours to do; removing somebody else requires them to be settled in every currency.
+  /// Your own row and any placeholder are editable; another account holder&#39;s are not. Leaving or removing somebody requires them to be settled in every currency; leaving ends access. The last account holder can leave only when the entire group is settled, which permanently deletes the group.
   ///
   /// Parameters:
   /// * [groupId]
@@ -148,7 +148,7 @@ class GroupsApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/groups/{groupId}/members/{memberId}'
+    final _path = r'/groups/{groupId}/members/{memberId}'
         .replaceAll(
           '{'
           r'groupId'

@@ -41,7 +41,13 @@ final _ledger = GroupLedger(
   entries: const [],
   balances: const [],
   transfers: const [],
-  me: null,
+  me: Member(
+    id: 'me',
+    groupId: _group.id,
+    profileId: 'account',
+    displayName: 'Ravi',
+    joinedAt: DateTime.utc(2026),
+  ),
   profiles: const {},
   brokenEntries: const [],
 );
@@ -257,7 +263,7 @@ void main() {
           pulled: 0,
           failed: 0,
           error: DioException(
-            requestOptions: RequestOptions(path: '/api/sync'),
+            requestOptions: RequestOptions(path: '/sync'),
             type: DioExceptionType.connectionError,
           ),
           nextPushAt: DateTime.utc(2026, 10, 10),

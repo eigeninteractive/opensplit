@@ -13,7 +13,7 @@ should help people verify those decisions before recording them.
 | Journey | Presentation and purpose |
 | --- | --- |
 | Start, sign in, save a guest account | A clear primary action, ordinary filled fields, and outlined alternative identity actions. Recovery is available from Account and Settings. |
-| Groups and archive | Group identity, name, and balance remain scannable. Standard FABs create groups; navigation becomes a drawer or rail as space permits. |
+| Groups | Group identity, name, and balance remain scannable. Standard FABs create groups; navigation becomes a drawer or rail as space permits. |
 | Group journal | A tonal cover identifies the group. Expenses are grouped by day; amounts and payer summaries remain distinct. Expenses and balances use stock tabs, with both panels visible on wide screens. |
 | Add or edit expense | Amount and currency form the headline. Description, category, and day follow. Separate payer and split cards group the two money decisions. Optional time is in a stock expansion tile. |
 | People and invitations | Member avatars use the active palette by default. Membership actions, placeholders, and invite sheets retain standard lists, buttons, menus, and sheets. |
@@ -150,8 +150,9 @@ opt-out, and a changed palette on resume.
 The actual app is built with `dart run tool/build_web.dart` and served through
 `cd server && pnpm dev` on the same localhost origin. This preserves the real
 Worker, OPFS database, session, and headers. The committed product screenshots
-are rendered by `flutter test tool/screenshots_test.dart` from repository demo
-data. Browser verification and native-device limits are reported with the
+are refreshed with `dart run tool/store_artifacts.dart` from repository demo
+data, together with the feature graphic and other derivatives. CI rejects stale
+source or output hashes. Browser verification and native-device limits are reported with the
 change; automated tests do not replace TalkBack or physical One UI acceptance.
 
 Recorded validation for this change:

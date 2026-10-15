@@ -66,87 +66,52 @@ class Currencies extends Table with TableInfo {
   bool get dontWriteConstraints => true;
 }
 
-class Profiles extends Table with TableInfo {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  Profiles(this.attachedDatabase, [this._alias]);
-  late final GeneratedColumn<String> id = GeneratedColumn<String>(
-    'id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> displayName = GeneratedColumn<String>(
-    'display_name',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  late final GeneratedColumn<String> avatarUrl = GeneratedColumn<String>(
-    'avatar_url',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  late final GeneratedColumn<String> upiVpa = GeneratedColumn<String>(
-    'upi_vpa',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  late final GeneratedColumn<int> updatedAt = GeneratedColumn<int>(
-    'updated_at',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  @override
-  List<GeneratedColumn> get $columns => [
-    id,
-    displayName,
-    avatarUrl,
-    upiVpa,
-    updatedAt,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'profiles';
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  Never map(Map<String, dynamic> data, {String? tablePrefix}) {
-    throw UnsupportedError('TableInfo.map in schema verification code');
-  }
-
-  @override
-  Profiles createAlias(String alias) {
-    return Profiles(attachedDatabase, alias);
-  }
-
-  @override
-  List<String> get customConstraints => const ['PRIMARY KEY(id)'];
-  @override
-  bool get dontWriteConstraints => true;
-}
-
 class Groups extends Table with TableInfo {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
   Groups(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<String> avatarKind = GeneratedColumn<String>(
+    'avatar_kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT \'initials\'',
+    defaultValue: const CustomExpression('\'initials\''),
+  );
+  late final GeneratedColumn<String> avatarColor = GeneratedColumn<String>(
+    'avatar_color',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> avatarEmoji = GeneratedColumn<String>(
+    'avatar_emoji',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> avatarIcon = GeneratedColumn<String>(
+    'avatar_icon',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> avatarPhoto = GeneratedColumn<String>(
+    'avatar_photo',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
   late final GeneratedColumn<String> id = GeneratedColumn<String>(
     'id',
     aliasedName,
@@ -189,6 +154,23 @@ class Groups extends Table with TableInfo {
     $customConstraints: 'NOT NULL DEFAULT 1 CHECK (simplify_debts IN (0, 1))',
     defaultValue: const CustomExpression('1'),
   );
+  late final GeneratedColumn<String> coverKind = GeneratedColumn<String>(
+    'cover_kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT \'generated\'',
+    defaultValue: const CustomExpression('\'generated\''),
+  );
+  late final GeneratedColumn<String> coverPhoto = GeneratedColumn<String>(
+    'cover_photo',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
   late final GeneratedColumn<String> createdBy = GeneratedColumn<String>(
     'created_by',
     aliasedName,
@@ -197,45 +179,39 @@ class Groups extends Table with TableInfo {
     requiredDuringInsert: false,
     $customConstraints: 'NULL',
   );
-  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
     'created_at',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.string,
     requiredDuringInsert: true,
     $customConstraints: 'NOT NULL',
   );
-  late final GeneratedColumn<int> archivedAt = GeneratedColumn<int>(
-    'archived_at',
+  late final GeneratedColumn<int> seq = GeneratedColumn<int>(
+    'seq',
     aliasedName,
     true,
     type: DriftSqlType.int,
     requiredDuringInsert: false,
     $customConstraints: 'NULL',
   );
-  late final GeneratedColumn<int> updatedAt = GeneratedColumn<int>(
-    'updated_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints:
-        'NOT NULL DEFAULT (CAST(strftime(\'%s\', CURRENT_TIMESTAMP) AS INTEGER))',
-    defaultValue: const CustomExpression(
-      'CAST(strftime(\'%s\', CURRENT_TIMESTAMP) AS INTEGER)',
-    ),
-  );
   @override
   List<GeneratedColumn> get $columns => [
+    avatarKind,
+    avatarColor,
+    avatarEmoji,
+    avatarIcon,
+    avatarPhoto,
     id,
     name,
     defaultCurrency,
     isDirect,
     simplifyDebts,
+    coverKind,
+    coverPhoto,
     createdBy,
     createdAt,
-    archivedAt,
-    updatedAt,
+    seq,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -252,167 +228,6 @@ class Groups extends Table with TableInfo {
   @override
   Groups createAlias(String alias) {
     return Groups(attachedDatabase, alias);
-  }
-
-  @override
-  List<String> get customConstraints => const ['PRIMARY KEY(id)'];
-  @override
-  bool get dontWriteConstraints => true;
-}
-
-class Members extends Table with TableInfo {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  Members(this.attachedDatabase, [this._alias]);
-  late final GeneratedColumn<String> id = GeneratedColumn<String>(
-    'id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> groupId = GeneratedColumn<String>(
-    'group_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL REFERENCES "groups"(id)ON DELETE CASCADE',
-  );
-  late final GeneratedColumn<String> profileId = GeneratedColumn<String>(
-    'profile_id',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  late final GeneratedColumn<String> displayName = GeneratedColumn<String>(
-    'display_name',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<int> joinedAt = GeneratedColumn<int>(
-    'joined_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<int> leftAt = GeneratedColumn<int>(
-    'left_at',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  late final GeneratedColumn<String> upiVpa = GeneratedColumn<String>(
-    'upi_vpa',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  late final GeneratedColumn<int> updatedAt = GeneratedColumn<int>(
-    'updated_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints:
-        'NOT NULL DEFAULT (CAST(strftime(\'%s\', CURRENT_TIMESTAMP) AS INTEGER))',
-    defaultValue: const CustomExpression(
-      'CAST(strftime(\'%s\', CURRENT_TIMESTAMP) AS INTEGER)',
-    ),
-  );
-  @override
-  List<GeneratedColumn> get $columns => [
-    id,
-    groupId,
-    profileId,
-    displayName,
-    joinedAt,
-    leftAt,
-    upiVpa,
-    updatedAt,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'members';
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  Never map(Map<String, dynamic> data, {String? tablePrefix}) {
-    throw UnsupportedError('TableInfo.map in schema verification code');
-  }
-
-  @override
-  Members createAlias(String alias) {
-    return Members(attachedDatabase, alias);
-  }
-
-  @override
-  List<String> get customConstraints => const ['PRIMARY KEY(id)'];
-  @override
-  bool get dontWriteConstraints => true;
-}
-
-class Categories extends Table with TableInfo {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  Categories(this.attachedDatabase, [this._alias]);
-  late final GeneratedColumn<String> id = GeneratedColumn<String>(
-    'id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> name = GeneratedColumn<String>(
-    'name',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> icon = GeneratedColumn<String>(
-    'icon',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  @override
-  List<GeneratedColumn> get $columns => [id, name, icon];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'categories';
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  Never map(Map<String, dynamic> data, {String? tablePrefix}) {
-    throw UnsupportedError('TableInfo.map in schema verification code');
-  }
-
-  @override
-  Categories createAlias(String alias) {
-    return Categories(attachedDatabase, alias);
   }
 
   @override
@@ -483,13 +298,29 @@ class Entries extends Table with TableInfo {
     requiredDuringInsert: true,
     $customConstraints: 'NOT NULL',
   );
-  late final GeneratedColumn<int> entryDate = GeneratedColumn<int>(
+  late final GeneratedColumn<String> entryDate = GeneratedColumn<String>(
     'entry_date',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.string,
     requiredDuringInsert: true,
     $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> occurredAt = GeneratedColumn<String>(
+    'occurred_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> timeZone = GeneratedColumn<String>(
+    'time_zone',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
   );
   late final GeneratedColumn<String> splitKind = GeneratedColumn<String>(
     'split_kind',
@@ -515,11 +346,11 @@ class Entries extends Table with TableInfo {
     requiredDuringInsert: false,
     $customConstraints: 'NULL',
   );
-  late final GeneratedColumn<int> fxAt = GeneratedColumn<int>(
+  late final GeneratedColumn<String> fxAt = GeneratedColumn<String>(
     'fx_at',
     aliasedName,
     true,
-    type: DriftSqlType.int,
+    type: DriftSqlType.string,
     requiredDuringInsert: false,
     $customConstraints: 'NULL',
   );
@@ -539,40 +370,24 @@ class Entries extends Table with TableInfo {
     requiredDuringInsert: true,
     $customConstraints: 'NOT NULL',
   );
-  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
     'created_at',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.string,
     requiredDuringInsert: true,
     $customConstraints: 'NOT NULL',
   );
-  late final GeneratedColumn<int> updatedAt = GeneratedColumn<int>(
-    'updated_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<int> baseUpdatedAt = GeneratedColumn<int>(
-    'base_updated_at',
+  late final GeneratedColumn<int> seq = GeneratedColumn<int>(
+    'seq',
     aliasedName,
     true,
     type: DriftSqlType.int,
     requiredDuringInsert: false,
     $customConstraints: 'NULL',
   );
-  late final GeneratedColumn<int> deletedAt = GeneratedColumn<int>(
+  late final GeneratedColumn<String> deletedAt = GeneratedColumn<String>(
     'deleted_at',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  late final GeneratedColumn<String> clientKey = GeneratedColumn<String>(
-    'client_key',
     aliasedName,
     true,
     type: DriftSqlType.string,
@@ -589,6 +404,8 @@ class Entries extends Table with TableInfo {
     currency,
     amountMinor,
     entryDate,
+    occurredAt,
+    timeZone,
     splitKind,
     fxRate,
     fxSource,
@@ -596,10 +413,8 @@ class Entries extends Table with TableInfo {
     notes,
     createdBy,
     createdAt,
-    updatedAt,
-    baseUpdatedAt,
+    seq,
     deletedAt,
-    clientKey,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -616,6 +431,323 @@ class Entries extends Table with TableInfo {
   @override
   Entries createAlias(String alias) {
     return Entries(attachedDatabase, alias);
+  }
+
+  @override
+  List<String> get customConstraints => const ['PRIMARY KEY(id)'];
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class EntriesFts extends Table with TableInfo, VirtualTableInfo {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  EntriesFts(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: '',
+  );
+  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
+    'notes',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: '',
+  );
+  @override
+  List<GeneratedColumn> get $columns => [description, notes];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'entries_fts';
+  @override
+  Set<GeneratedColumn> get $primaryKey => const {};
+  @override
+  Never map(Map<String, dynamic> data, {String? tablePrefix}) {
+    throw UnsupportedError('TableInfo.map in schema verification code');
+  }
+
+  @override
+  EntriesFts createAlias(String alias) {
+    return EntriesFts(attachedDatabase, alias);
+  }
+
+  @override
+  bool get dontWriteConstraints => true;
+  @override
+  String get moduleAndArgs =>
+      'fts5(description, notes, content=entries, content_rowid=rowid)';
+}
+
+class Profiles extends Table with TableInfo {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  Profiles(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<String> avatarKind = GeneratedColumn<String>(
+    'avatar_kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT \'initials\'',
+    defaultValue: const CustomExpression('\'initials\''),
+  );
+  late final GeneratedColumn<String> avatarColor = GeneratedColumn<String>(
+    'avatar_color',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> avatarEmoji = GeneratedColumn<String>(
+    'avatar_emoji',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> avatarIcon = GeneratedColumn<String>(
+    'avatar_icon',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> avatarPhoto = GeneratedColumn<String>(
+    'avatar_photo',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> displayName = GeneratedColumn<String>(
+    'display_name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> upiVpa = GeneratedColumn<String>(
+    'upi_vpa',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    avatarKind,
+    avatarColor,
+    avatarEmoji,
+    avatarIcon,
+    avatarPhoto,
+    id,
+    displayName,
+    upiVpa,
+    version,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'profiles';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Never map(Map<String, dynamic> data, {String? tablePrefix}) {
+    throw UnsupportedError('TableInfo.map in schema verification code');
+  }
+
+  @override
+  Profiles createAlias(String alias) {
+    return Profiles(attachedDatabase, alias);
+  }
+
+  @override
+  List<String> get customConstraints => const ['PRIMARY KEY(id)'];
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class Members extends Table with TableInfo {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  Members(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> groupId = GeneratedColumn<String>(
+    'group_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES "groups"(id)ON DELETE CASCADE',
+  );
+  late final GeneratedColumn<String> profileId = GeneratedColumn<String>(
+    'profile_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> displayName = GeneratedColumn<String>(
+    'display_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> joinedAt = GeneratedColumn<String>(
+    'joined_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> leftAt = GeneratedColumn<String>(
+    'left_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> upiVpa = GeneratedColumn<String>(
+    'upi_vpa',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<int> seq = GeneratedColumn<int>(
+    'seq',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    groupId,
+    profileId,
+    displayName,
+    joinedAt,
+    leftAt,
+    upiVpa,
+    seq,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'members';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Never map(Map<String, dynamic> data, {String? tablePrefix}) {
+    throw UnsupportedError('TableInfo.map in schema verification code');
+  }
+
+  @override
+  Members createAlias(String alias) {
+    return Members(attachedDatabase, alias);
+  }
+
+  @override
+  List<String> get customConstraints => const ['PRIMARY KEY(id)'];
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class Categories extends Table with TableInfo {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  Categories(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> icon = GeneratedColumn<String>(
+    'icon',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, name, icon];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'categories';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Never map(Map<String, dynamic> data, {String? tablePrefix}) {
+    throw UnsupportedError('TableInfo.map in schema verification code');
+  }
+
+  @override
+  Categories createAlias(String alias) {
+    return Categories(attachedDatabase, alias);
   }
 
   @override
@@ -749,11 +881,11 @@ class EntryShares extends Table with TableInfo {
   bool get dontWriteConstraints => true;
 }
 
-class EntrySnapshots extends Table with TableInfo {
+class GroupEvents extends Table with TableInfo {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
-  EntrySnapshots(this.attachedDatabase, [this._alias]);
+  GroupEvents(this.attachedDatabase, [this._alias]);
   late final GeneratedColumn<String> id = GeneratedColumn<String>(
     'id',
     aliasedName,
@@ -761,14 +893,6 @@ class EntrySnapshots extends Table with TableInfo {
     type: DriftSqlType.string,
     requiredDuringInsert: true,
     $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> entryId = GeneratedColumn<String>(
-    'entry_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL REFERENCES entries(id)ON DELETE CASCADE',
   );
   late final GeneratedColumn<String> groupId = GeneratedColumn<String>(
     'group_id',
@@ -786,93 +910,77 @@ class EntrySnapshots extends Table with TableInfo {
     requiredDuringInsert: false,
     $customConstraints: 'NULL REFERENCES members(id)ON DELETE CASCADE',
   );
-  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
     'created_at',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.string,
     requiredDuringInsert: true,
     $customConstraints: 'NOT NULL',
   );
-  late final GeneratedColumn<String> description = GeneratedColumn<String>(
-    'description',
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
     aliasedName,
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
     $customConstraints: 'NOT NULL',
   );
-  late final GeneratedColumn<String> currency = GeneratedColumn<String>(
-    'currency',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<int> amountMinor = GeneratedColumn<int>(
-    'amount_minor',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<int> entryDate = GeneratedColumn<int>(
-    'entry_date',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> splitKind = GeneratedColumn<String>(
-    'split_kind',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> categoryId = GeneratedColumn<String>(
-    'category_id',
+  late final GeneratedColumn<String> subjectId = GeneratedColumn<String>(
+    'subject_id',
     aliasedName,
     true,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
     $customConstraints: 'NULL',
   );
-  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
-    'notes',
+  late final GeneratedColumn<String> entry = GeneratedColumn<String>(
+    'entry',
     aliasedName,
     true,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
     $customConstraints: 'NULL',
   );
-  late final GeneratedColumn<int> deletedAt = GeneratedColumn<int>(
-    'deleted_at',
+  late final GeneratedColumn<String> member = GeneratedColumn<String>(
+    'member',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> group = GeneratedColumn<String>(
+    'group',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> link = GeneratedColumn<String>(
+    'link',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<int> seq = GeneratedColumn<int>(
+    'seq',
     aliasedName,
     true,
     type: DriftSqlType.int,
     requiredDuringInsert: false,
     $customConstraints: 'NULL',
   );
-  late final GeneratedColumn<String> payers = GeneratedColumn<String>(
-    'payers',
+  late final GeneratedColumn<int> ordinal = GeneratedColumn<int>(
+    'ordinal',
     aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> shares = GeneratedColumn<String>(
-    'shares',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
   );
   late final GeneratedColumn<int> isProvisional = GeneratedColumn<int>(
     'is_provisional',
@@ -886,27 +994,24 @@ class EntrySnapshots extends Table with TableInfo {
   @override
   List<GeneratedColumn> get $columns => [
     id,
-    entryId,
     groupId,
     actorId,
     createdAt,
-    description,
-    currency,
-    amountMinor,
-    entryDate,
-    splitKind,
-    categoryId,
-    notes,
-    deletedAt,
-    payers,
-    shares,
+    kind,
+    subjectId,
+    entry,
+    member,
+    group,
+    link,
+    seq,
+    ordinal,
     isProvisional,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
-  static const String $name = 'entry_snapshots';
+  static const String $name = 'group_events';
   @override
   Set<GeneratedColumn> get $primaryKey => {id};
   @override
@@ -915,8 +1020,8 @@ class EntrySnapshots extends Table with TableInfo {
   }
 
   @override
-  EntrySnapshots createAlias(String alias) {
-    return EntrySnapshots(attachedDatabase, alias);
+  GroupEvents createAlias(String alias) {
+    return GroupEvents(attachedDatabase, alias);
   }
 
   @override
@@ -954,11 +1059,19 @@ class EntryConflicts extends Table with TableInfo {
     requiredDuringInsert: true,
     $customConstraints: 'NOT NULL',
   );
-  late final GeneratedColumn<int> rejectedAt = GeneratedColumn<int>(
+  late final GeneratedColumn<int> baseSeq = GeneratedColumn<int>(
+    'base_seq',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> rejectedAt = GeneratedColumn<String>(
     'rejected_at',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.string,
     requiredDuringInsert: true,
     $customConstraints: 'NOT NULL',
   );
@@ -967,6 +1080,7 @@ class EntryConflicts extends Table with TableInfo {
     entryId,
     groupId,
     attempted,
+    baseSeq,
     rejectedAt,
   ];
   @override
@@ -1059,16 +1173,8 @@ class Outbox extends Table with TableInfo {
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
   Outbox(this.attachedDatabase, [this._alias]);
-  late final GeneratedColumn<String> id = GeneratedColumn<String>(
-    'id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> operation = GeneratedColumn<String>(
-    'operation',
+  late final GeneratedColumn<String> target = GeneratedColumn<String>(
+    'target',
     aliasedName,
     false,
     type: DriftSqlType.string,
@@ -1088,21 +1194,11 @@ class Outbox extends Table with TableInfo {
     aliasedName,
     false,
     type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT \'\'',
-    defaultValue: const CustomExpression('\'\''),
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
   );
-  late final GeneratedColumn<String> payload = GeneratedColumn<String>(
-    'payload',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT \'{}\'',
-    defaultValue: const CustomExpression('\'{}\''),
-  );
-  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
-    'created_at',
+  late final GeneratedColumn<int> position = GeneratedColumn<int>(
+    'position',
     aliasedName,
     false,
     type: DriftSqlType.int,
@@ -1118,11 +1214,11 @@ class Outbox extends Table with TableInfo {
     $customConstraints: 'NOT NULL DEFAULT 0',
     defaultValue: const CustomExpression('0'),
   );
-  late final GeneratedColumn<int> nextAttemptAt = GeneratedColumn<int>(
+  late final GeneratedColumn<String> nextAttemptAt = GeneratedColumn<String>(
     'next_attempt_at',
     aliasedName,
     true,
-    type: DriftSqlType.int,
+    type: DriftSqlType.string,
     requiredDuringInsert: false,
     $customConstraints: 'NULL',
   );
@@ -1134,25 +1230,32 @@ class Outbox extends Table with TableInfo {
     requiredDuringInsert: false,
     $customConstraints: 'NULL',
   );
-  late final GeneratedColumn<int> deadLetteredAt = GeneratedColumn<int>(
+  late final GeneratedColumn<String> failureCode = GeneratedColumn<String>(
+    'failure_code',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> deadLetteredAt = GeneratedColumn<String>(
     'dead_lettered_at',
     aliasedName,
     true,
-    type: DriftSqlType.int,
+    type: DriftSqlType.string,
     requiredDuringInsert: false,
     $customConstraints: 'NULL',
   );
   @override
   List<GeneratedColumn> get $columns => [
-    id,
-    operation,
+    target,
     targetId,
     revision,
-    payload,
-    createdAt,
+    position,
     attempts,
     nextAttemptAt,
     lastError,
+    failureCode,
     deadLetteredAt,
   ];
   @override
@@ -1161,7 +1264,7 @@ class Outbox extends Table with TableInfo {
   String get actualTableName => $name;
   static const String $name = 'outbox';
   @override
-  Set<GeneratedColumn> get $primaryKey => {id};
+  Set<GeneratedColumn> get $primaryKey => {target, targetId};
   @override
   Never map(Map<String, dynamic> data, {String? tablePrefix}) {
     throw UnsupportedError('TableInfo.map in schema verification code');
@@ -1173,16 +1276,73 @@ class Outbox extends Table with TableInfo {
   }
 
   @override
-  List<String> get customConstraints => const ['PRIMARY KEY(id)'];
+  List<String> get customConstraints => const [
+    'PRIMARY KEY(target, target_id)',
+  ];
   @override
   bool get dontWriteConstraints => true;
 }
 
-class SyncCursors extends Table with TableInfo {
+class GroupCursors extends Table with TableInfo {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
-  SyncCursors(this.attachedDatabase, [this._alias]);
+  GroupCursors(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<String> groupId = GeneratedColumn<String>(
+    'group_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES "groups"(id)ON DELETE CASCADE',
+  );
+  late final GeneratedColumn<int> seq = GeneratedColumn<int>(
+    'seq',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT 0',
+    defaultValue: const CustomExpression('0'),
+  );
+  late final GeneratedColumn<String> lastSyncedAt = GeneratedColumn<String>(
+    'last_synced_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  @override
+  List<GeneratedColumn> get $columns => [groupId, seq, lastSyncedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'group_cursors';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {groupId};
+  @override
+  Never map(Map<String, dynamic> data, {String? tablePrefix}) {
+    throw UnsupportedError('TableInfo.map in schema verification code');
+  }
+
+  @override
+  GroupCursors createAlias(String alias) {
+    return GroupCursors(attachedDatabase, alias);
+  }
+
+  @override
+  List<String> get customConstraints => const ['PRIMARY KEY(group_id)'];
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class FeedCursors extends Table with TableInfo {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  FeedCursors(this.attachedDatabase, [this._alias]);
   late final GeneratedColumn<String> feed = GeneratedColumn<String>(
     'feed',
     aliasedName,
@@ -1191,37 +1351,29 @@ class SyncCursors extends Table with TableInfo {
     requiredDuringInsert: true,
     $customConstraints: 'NOT NULL',
   );
-  late final GeneratedColumn<int> cursor = GeneratedColumn<int>(
+  late final GeneratedColumn<String> cursor = GeneratedColumn<String>(
     'cursor',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  late final GeneratedColumn<String> cursorId = GeneratedColumn<String>(
-    'cursor_id',
     aliasedName,
     true,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
     $customConstraints: 'NULL',
   );
-  late final GeneratedColumn<int> lastSyncedAt = GeneratedColumn<int>(
+  late final GeneratedColumn<String> lastSyncedAt = GeneratedColumn<String>(
     'last_synced_at',
     aliasedName,
     true,
-    type: DriftSqlType.int,
+    type: DriftSqlType.string,
     requiredDuringInsert: false,
     $customConstraints: 'NULL',
   );
   @override
-  List<GeneratedColumn> get $columns => [feed, cursor, cursorId, lastSyncedAt];
+  List<GeneratedColumn> get $columns => [feed, cursor, lastSyncedAt];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
-  static const String $name = 'sync_cursors';
+  static const String $name = 'feed_cursors';
   @override
   Set<GeneratedColumn> get $primaryKey => {feed};
   @override
@@ -1230,8 +1382,8 @@ class SyncCursors extends Table with TableInfo {
   }
 
   @override
-  SyncCursors createAlias(String alias) {
-    return SyncCursors(attachedDatabase, alias);
+  FeedCursors createAlias(String alias) {
+    return FeedCursors(attachedDatabase, alias);
   }
 
   @override
@@ -1261,11 +1413,11 @@ class SyncLeases extends Table with TableInfo {
     requiredDuringInsert: true,
     $customConstraints: 'NOT NULL',
   );
-  late final GeneratedColumn<int> expiresAt = GeneratedColumn<int>(
+  late final GeneratedColumn<String> expiresAt = GeneratedColumn<String>(
     'expires_at',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.string,
     requiredDuringInsert: true,
     $customConstraints: 'NOT NULL',
   );
@@ -1351,40 +1503,94 @@ class SyncSessions extends Table with TableInfo {
 class DatabaseAtV1 extends GeneratedDatabase {
   DatabaseAtV1(QueryExecutor e) : super(e);
   late final Currencies currencies = Currencies(this);
-  late final Profiles profiles = Profiles(this);
   late final Groups groups = Groups(this);
+  late final Entries entries = Entries(this);
+  late final EntriesFts entriesFts = EntriesFts(this);
+  late final Profiles profiles = Profiles(this);
   late final Members members = Members(this);
   late final Categories categories = Categories(this);
-  late final Entries entries = Entries(this);
   late final EntryPayers entryPayers = EntryPayers(this);
   late final EntryShares entryShares = EntryShares(this);
-  late final EntrySnapshots entrySnapshots = EntrySnapshots(this);
+  late final GroupEvents groupEvents = GroupEvents(this);
   late final EntryConflicts entryConflicts = EntryConflicts(this);
   late final FxRates fxRates = FxRates(this);
   late final Outbox outbox = Outbox(this);
-  late final SyncCursors syncCursors = SyncCursors(this);
+  late final GroupCursors groupCursors = GroupCursors(this);
+  late final FeedCursors feedCursors = FeedCursors(this);
   late final SyncLeases syncLeases = SyncLeases(this);
   late final SyncSessions syncSessions = SyncSessions(this);
+  late final Index groupEventsGroup = Index(
+    'group_events_group',
+    'CREATE INDEX group_events_group ON group_events (group_id, seq, ordinal)',
+  );
+  late final Index groupEventsSubject = Index(
+    'group_events_subject',
+    'CREATE INDEX group_events_subject ON group_events (subject_id)',
+  );
+  late final Index groupEventsActor = Index(
+    'group_events_actor',
+    'CREATE INDEX group_events_actor ON group_events (actor_id)',
+  );
+  late final Index membersGroup = Index(
+    'members_group',
+    'CREATE INDEX members_group ON members (group_id)',
+  );
+  late final Index membersProfile = Index(
+    'members_profile',
+    'CREATE INDEX members_profile ON members (profile_id)',
+  );
+  late final Index entriesGroup = Index(
+    'entries_group',
+    'CREATE INDEX entries_group ON entries (group_id, entry_date)',
+  );
+  late final Index entryConflictsGroup = Index(
+    'entry_conflicts_group',
+    'CREATE INDEX entry_conflicts_group ON entry_conflicts (group_id)',
+  );
+  late final Index entryPayersMember = Index(
+    'entry_payers_member',
+    'CREATE INDEX entry_payers_member ON entry_payers (member_id)',
+  );
+  late final Index entrySharesMember = Index(
+    'entry_shares_member',
+    'CREATE INDEX entry_shares_member ON entry_shares (member_id)',
+  );
+  late final Index fxRatesCurrency = Index(
+    'fx_rates_currency',
+    'CREATE INDEX fx_rates_currency ON fx_rates (currency, as_of)',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities => [
     currencies,
-    profiles,
     groups,
+    entries,
+    entriesFts,
+    profiles,
     members,
     categories,
-    entries,
     entryPayers,
     entryShares,
-    entrySnapshots,
+    groupEvents,
     entryConflicts,
     fxRates,
     outbox,
-    syncCursors,
+    groupCursors,
+    feedCursors,
     syncLeases,
     syncSessions,
+    groupEventsGroup,
+    groupEventsSubject,
+    groupEventsActor,
+    membersGroup,
+    membersProfile,
+    entriesGroup,
+    entryConflictsGroup,
+    entryPayersMember,
+    entrySharesMember,
+    fxRatesCurrency,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -1393,14 +1599,14 @@ class DatabaseAtV1 extends GeneratedDatabase {
         'groups',
         limitUpdateKind: UpdateKind.delete,
       ),
-      result: [TableUpdate('members', kind: UpdateKind.delete)],
+      result: [TableUpdate('entries', kind: UpdateKind.delete)],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
         'groups',
         limitUpdateKind: UpdateKind.delete,
       ),
-      result: [TableUpdate('entries', kind: UpdateKind.delete)],
+      result: [TableUpdate('members', kind: UpdateKind.delete)],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -1418,24 +1624,17 @@ class DatabaseAtV1 extends GeneratedDatabase {
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
-        'entries',
-        limitUpdateKind: UpdateKind.delete,
-      ),
-      result: [TableUpdate('entry_snapshots', kind: UpdateKind.delete)],
-    ),
-    WritePropagation(
-      on: TableUpdateQuery.onTableName(
         'groups',
         limitUpdateKind: UpdateKind.delete,
       ),
-      result: [TableUpdate('entry_snapshots', kind: UpdateKind.delete)],
+      result: [TableUpdate('group_events', kind: UpdateKind.delete)],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
         'members',
         limitUpdateKind: UpdateKind.delete,
       ),
-      result: [TableUpdate('entry_snapshots', kind: UpdateKind.delete)],
+      result: [TableUpdate('group_events', kind: UpdateKind.delete)],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -1451,7 +1650,17 @@ class DatabaseAtV1 extends GeneratedDatabase {
       ),
       result: [TableUpdate('entry_conflicts', kind: UpdateKind.delete)],
     ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'groups',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('group_cursors', kind: UpdateKind.delete)],
+    ),
   ]);
   @override
   int get schemaVersion => 1;
+  @override
+  DriftDatabaseOptions get options =>
+      const DriftDatabaseOptions(storeDateTimeAsText: true);
 }

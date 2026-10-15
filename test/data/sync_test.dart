@@ -91,6 +91,144 @@ void main() {
     payerAmounts: {payer ?? g.ravi: amount},
   );
 
+  group('group lifecycle across devices', () {
+    liveTest(
+      'leaving clears every device and rejoining loads current records',
+      () async {
+        final g = await seedGroup();
+        final entry = await a.entries.create(
+          draft(g, 100, between: [g.ravi]),
+          createdBy: g.ravi,
+        );
+        await a.sync.syncGroup(g.groupId);
+        final other = await Device.sameAccountAs(a, pageSize: 1);
+        await other.sync.syncEverything();
+        await a.groups.leaveGroup(memberId: g.ravi);
+        expect((await a.sync.syncGroup(g.groupId)).isClean, isTrue);
+        expect(await a.groups.getGroup(g.groupId), isNull);
+        expect(await a.db.select(a.db.outbox).get(), isEmpty);
+        expect((await other.sync.syncEverything()).isClean, isTrue);
+        expect(await other.groups.getGroup(g.groupId), isNull);
+        expect(await other.entries.getEntry(entry.id), isNull);
+        final fresh = await Device.sameAccountAs(a);
+        expect(await fresh.sync.discoverGroups(), isEmpty);
+
+        await b.sync.syncGroup(g.groupId);
+        expect(await b.entries.getEntry(entry.id), isNotNull);
+        await b.groups.updateGroup(
+          (await b.groups.getGroup(g.groupId))!.copyWith(name: 'Current group'),
+        );
+        await b.sync.syncGroup(g.groupId);
+        final link = await b.invites.createGroupLink(g.groupId);
+        await a.invites.join(link.token, displayName: 'Ravi');
+        expect((await a.sync.syncEverything()).isClean, isTrue);
+        expect((await a.groups.getGroup(g.groupId))!.name, 'Current group');
+        expect(await a.entries.getEntry(entry.id), isNotNull);
+        expect((await a.groups.watchListings().first).single.hasLeft, isFalse);
+      },
+    );
+
+    liveTest(
+      'offline departure stays queued and hidden until confirmed',
+      () async {
+        final g = await seedGroup();
+        await a.sync.syncGroup(g.groupId);
+        a.tap.before = (request) async => throw offline(request);
+        await a.groups.leaveGroup(memberId: g.ravi);
+        expect((await a.sync.syncGroup(g.groupId)).isClean, isFalse);
+        expect((await a.groups.watchListings().first).single.hasLeft, isTrue);
+        expect(await a.outbox.pendingCount(), 1);
+        await expectLater(
+          a.entries.create(draft(g, 100), createdBy: g.ravi),
+          throwsStateError,
+        );
+        a.tap.before = null;
+        await a.db
+            .update(a.db.outbox)
+            .write(const OutboxCompanion(nextAttemptAt: Value(null)));
+        expect((await a.sync.syncGroup(g.groupId)).isClean, isTrue);
+        expect(await a.groups.getGroup(g.groupId), isNull);
+        expect(await a.db.select(a.db.outbox).get(), isEmpty);
+      },
+    );
+
+    for (final lastAccount in [false, true]) {
+      liveTest(
+        'lost leave reply clears the cache (last account: $lastAccount)',
+        () async {
+          final g = await seedGroup(joined: !lastAccount);
+          await a.sync.syncGroup(g.groupId);
+          final wire = (await changesOf(
+            a.client,
+            g.groupId,
+          )).members.firstWhere((m) => m.id == g.ravi);
+          await a.groups.leaveGroup(memberId: g.ravi);
+          // The request reached the server, but its response never reached this device.
+          await fetch(
+            a.client.getGroupsApi().putMember(
+              groupId: g.groupId,
+              memberId: g.ravi,
+              memberInput: api.MemberInput(
+                displayName: wire.displayName,
+                upiVpa: wire.upiVpa,
+                leftAt: DateTime.now().toUtc(),
+                baseSeq: wire.seq,
+              ),
+            ),
+          );
+          expect((await a.sync.syncEverything()).isClean, isTrue);
+          expect(await a.groups.getGroup(g.groupId), isNull);
+          expect(await a.db.select(a.db.outbox).get(), isEmpty);
+        },
+      );
+    }
+
+    liveTest(
+      'a newer balance refuses departure and restores access with a reason',
+      () async {
+        final g = await seedGroup();
+        await a.sync.syncGroup(g.groupId);
+        await a.groups.leaveGroup(memberId: g.ravi);
+        await b.entries.create(
+          draft(g, 100, payer: g.priya),
+          createdBy: g.priya,
+        );
+        await b.sync.syncGroup(g.groupId);
+        expect((await a.sync.syncGroup(g.groupId)).failed, 1);
+        expect((await a.groups.watchListings().first).single.hasLeft, isFalse);
+        expect(
+          (await a.outbox.deadLetters()).single.failureCode,
+          'not_settled',
+        );
+        expect(await a.outbox.retryDeadLetters(), 0);
+        await a.sync.discardRefused();
+        expect((await a.sync.syncGroup(g.groupId)).isClean, isTrue);
+        expect(await a.ledger(g.groupId), hasLength(1));
+        await expectLater(
+          a.groups.leaveGroup(memberId: g.ravi),
+          throwsStateError,
+        );
+      },
+    );
+
+    liveTest(
+      'access loss clears stale offline edits without a retry loop',
+      () async {
+        final g = await seedGroup();
+        final other = await Device.sameAccountAs(a);
+        await other.sync.syncEverything();
+        await other.entries.create(draft(g, 200), createdBy: g.ravi);
+        await a.sync.syncGroup(g.groupId);
+        await a.groups.leaveGroup(memberId: g.ravi);
+        await a.sync.syncGroup(g.groupId);
+        expect((await other.sync.syncEverything()).isClean, isTrue);
+        expect(await other.groups.getGroup(g.groupId), isNull);
+        expect(await other.db.select(other.db.outbox).get(), isEmpty);
+        expect(await other.ledger(g.groupId), isEmpty);
+      },
+    );
+  });
+
   group('reference data', () {
     liveTest('arrives with a device\'s first sync', () async {
       await start();
@@ -138,7 +276,7 @@ void main() {
 
       final report = await a.sync.syncEverything();
 
-      final asked = a.tap.last('GET', '/api/reference');
+      final asked = a.tap.last('GET', '/reference');
       expect(asked?.headers['If-None-Match'], isNotNull);
       expect(report.error, isNull);
       expect(await a.sync.shared.hasReferenceData(), isTrue);
@@ -795,7 +933,7 @@ void main() {
     void serveRates(Device device) {
       published = [];
       device.tap.answer = (request) {
-        if (request.method != 'GET' || !request.path.endsWith('/api/fx')) {
+        if (request.method != 'GET' || !request.path.endsWith('/fx')) {
           return null;
         }
         final since = request.queryParameters['since'] as String;
@@ -814,7 +952,7 @@ void main() {
     );
 
     String? lastSince() =>
-        a.tap.last('GET', '/api/fx')?.queryParameters['since'] as String?;
+        a.tap.last('GET', '/fx')?.queryParameters['since'] as String?;
 
     liveTest('arrive with sync and are then left alone', () async {
       await seedGroup(joined: false);
@@ -897,7 +1035,7 @@ void main() {
     liveTest('a rate failure never fails a sync that carries money', () async {
       await seedGroup(joined: false);
       a.tap.before = (request) async {
-        if (request.path.endsWith('/api/fx')) throw offline(request);
+        if (request.path.endsWith('/fx')) throw offline(request);
       };
       final report = await a.sync.syncEverything();
       expect(report.isClean, isTrue, reason: '$report');
@@ -951,7 +1089,7 @@ void main() {
       expect((await other.ledger(g.groupId)).single.row.amountMinor, 240000);
     });
 
-    liveTest('a group left behind is not rediscovered', () async {
+    liveTest('a group left behind is absent on a fresh device', () async {
       final g = await seedGroup(joined: false);
       await a.sync.syncGroup(g.groupId);
       await a.groups.leaveGroup(memberId: g.ravi);
@@ -959,24 +1097,18 @@ void main() {
 
       expect(
         await (await Device.sameAccountAs(a)).sync.discoverGroups(),
-        isEmpty,
+        isNot(contains(g.groupId)),
       );
     });
 
-    liveTest(
-      'nor pulled again by the device that left it, once it is confirmed',
-      () async {
-        final g = await seedGroup(joined: false);
-        await a.sync.syncGroup(g.groupId);
-        await a.groups.leaveGroup(memberId: g.ravi);
-
-        // Pushed and read back: the server has said so.
-        await a.sync.syncGroup(g.groupId);
-        expect(await a.sync.discoverGroups(), isEmpty);
-        // Still on the device, read-only, among the groups put away.
-        expect((await a.groups.watchListings().first).single.hasLeft, isTrue);
-      },
-    );
+    liveTest('confirmed departure removes the local group', () async {
+      final g = await seedGroup(joined: false);
+      await a.sync.syncGroup(g.groupId);
+      await a.groups.leaveGroup(memberId: g.ravi);
+      await a.sync.syncGroup(g.groupId);
+      expect(await a.sync.discoverGroups(), isNot(contains(g.groupId)));
+      expect(await a.groups.watchListings().first, isEmpty);
+    });
 
     liveTest(
       'failed discovery is not a successful local-only answer',
@@ -1084,7 +1216,7 @@ void main() {
     liveTest('the cursor stops it re-fetching what it already has', () async {
       await start();
       int? since() =>
-          a.tap.last('GET', '/api/profiles')?.queryParameters['since'] as int?;
+          a.tap.last('GET', '/profiles')?.queryParameters['since'] as int?;
 
       await a.sync.shared.pullProfiles();
       expect(since(), 0, reason: 'the first pull asks for everything');
@@ -1480,10 +1612,10 @@ void main() {
         final report = await a.sync.syncGroups(const {});
 
         expect(report.isClean, isTrue, reason: '$report');
-        for (final feed in ['/api/reference', '/api/profiles']) {
+        for (final feed in ['/reference', '/profiles']) {
           expect(a.tap.count('GET', feed), 0, reason: feed);
         }
-        expect(a.tap.count('GET', '/api/fx'), 1, reason: '/api/fx');
+        expect(a.tap.count('GET', '/fx'), 1, reason: '/fx');
         expect(a.tap.requests.where(isGroupList).map(pulled), [
           [g.groupId],
         ]);

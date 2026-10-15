@@ -1,7 +1,7 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "09fbe554-2e51-414e-935c-d7812dbbe577",
+  "id": "16bacb0a-1384-44b2-bf4b-85593943c828",
   "prevIds": [
     "00000000-0000-0000-0000-000000000000"
   ],
@@ -801,16 +801,6 @@
       "default": null,
       "generated": null,
       "name": "last_activity_at",
-      "entityType": "columns",
-      "table": "meta"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "archived_at",
       "entityType": "columns",
       "table": "meta"
     },

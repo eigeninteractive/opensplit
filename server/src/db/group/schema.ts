@@ -19,7 +19,7 @@ export const splitKinds = ["equal", "exact", "shares", "percent"] as const;
 
 /** Event kinds, grouped by the payload each group carries. */
 export const memberEventKinds = ["member_added", "member_joined", "member_left", "member_renamed"] as const;
-export const groupEventKinds = ["group_renamed", "group_archived", "group_restored"] as const;
+export const groupEventKinds = ["group_renamed"] as const;
 export const linkEventKinds = ["link_created", "link_revoked"] as const;
 export const eventKinds = ["entry", ...memberEventKinds, ...groupEventKinds, ...linkEventKinds] as const;
 
@@ -73,7 +73,6 @@ export const meta = sqliteTable(
       .references(() => members.id),
     createdAt: text("created_at").notNull(),
     lastActivityAt: text("last_activity_at").notNull(),
-    archivedAt: text("archived_at"),
     updatedAt: text("updated_at").notNull(),
     seq: integer("seq").notNull(),
   },
@@ -242,7 +241,7 @@ export const outbox = sqliteTable("outbox", {
   createdAt: text("created_at").notNull(),
 });
 
-export const chores = ["outbox", "archive", "purge"] as const;
+export const chores = ["outbox"] as const;
 export type Chore = (typeof chores)[number];
 
 /** Deadlines owed to the object's single alarm, which is armed at the earliest. */

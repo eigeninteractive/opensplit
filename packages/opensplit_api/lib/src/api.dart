@@ -18,7 +18,7 @@ import 'package:opensplit_api/src/api/reference_api.dart';
 import 'package:opensplit_api/src/api/sync_api.dart';
 
 class OpensplitApi {
-  static const String basePath = r'http://localhost';
+  static const String basePath = r'/api/v1';
 
   final Dio dio;
   OpensplitApi({

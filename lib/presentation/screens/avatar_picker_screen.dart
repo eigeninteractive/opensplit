@@ -14,6 +14,8 @@ import '../widgets/shared_element.dart';
 import '../widgets/page_body.dart';
 import '../widgets/sync_status_notice.dart';
 
+import '../widgets/group_access.dart';
+
 /// Chooses what stands for you, or for a group: initials, an emoji or an
 /// icon, on a hue.
 ///
@@ -94,6 +96,13 @@ class _AvatarPickerScreenState extends ConsumerState<AvatarPickerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final groupId = widget.groupId;
+    if (groupId != null) {
+      final ledger = ref.watch(groupLedgerProvider(groupId));
+      if (ledger != null && !ledger.canEdit) {
+        return const GroupUnavailableScreen();
+      }
+    }
     final subject = _subject();
     if (subject != null && _original == null) {
       _original = subject.avatar;

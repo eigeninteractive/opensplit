@@ -18,10 +18,6 @@ enum EventKind {
   memberRenamed(r'member_renamed'),
   @JsonValue(r'group_renamed')
   groupRenamed(r'group_renamed'),
-  @JsonValue(r'group_archived')
-  groupArchived(r'group_archived'),
-  @JsonValue(r'group_restored')
-  groupRestored(r'group_restored'),
   @JsonValue(r'link_created')
   linkCreated(r'link_created'),
   @JsonValue(r'link_revoked')

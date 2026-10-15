@@ -10,7 +10,7 @@ import 'google_sign_in_gateway.dart';
 import 'pending_identity_redirect.dart';
 import 'session_store.dart';
 
-/// The session, through the server's `/api/identity` routes, which wrap Better
+/// The session, through the server's `/identity` routes, which wrap Better
 /// Auth and answer in contract types.
 final class BetterAuthService implements AuthService {
   BetterAuthService({

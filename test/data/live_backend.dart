@@ -36,7 +36,7 @@ late bool _backendUp;
 /// Whether the probe in [setUpBackend] found a Worker.
 bool get backendUp => _backendUp;
 
-/// Probes the Worker once for the file: `/api/health` must name OpenSplit, so
+/// Probes the current API once for the file: it must name OpenSplit, so
 /// another project on the same port skips rather than fails.
 void setUpBackend() {
   setUpAll(() async {
@@ -140,7 +140,7 @@ bool isEntryWrite(RequestOptions r) =>
 
 /// Matches a pull, which also says which groups the account is in.
 bool isGroupList(RequestOptions r) =>
-    r.method == 'POST' && r.path.endsWith('/api/sync');
+    r.method == 'POST' && r.path.endsWith('/sync');
 
 /// One group's page past [since], read the way the app reads it.
 Future<api.ChangePage> changesOf(
@@ -180,7 +180,7 @@ class Device {
     : db = AppDatabase(NativeDatabase.memory()) {
     outbox = OutboxQueue(db);
     groups = DriftGroupRepository(db, outbox: outbox, accountId: profileId);
-    entries = DriftEntryRepository(db, outbox: outbox);
+    entries = DriftEntryRepository(db, outbox: outbox, accountId: profileId);
     sync = engine(pageSize: pageSize);
   }
 

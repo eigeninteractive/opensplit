@@ -3,9 +3,12 @@ import 'package:opensplit_api/opensplit_api.dart' show AvatarKind, CoverKind;
 import 'package:uuid/uuid.dart';
 
 import '../../domain/settle/upi.dart';
+import '../../domain/balance/balance_fold.dart';
+import 'drift_entry_repository.dart';
 import '../local/database.dart';
 import '../local/tables.dart';
 import '../sync/outbox_queue.dart';
+import 'group_write_access.dart';
 
 /// A group as a list of groups shows it.
 class GroupListing {
@@ -25,8 +28,8 @@ class GroupListing {
   /// The newest line in the group's activity feed, or when it was made.
   final DateTime lastActivityAt;
 
-  /// In the main list: neither put away nor left.
-  bool get isCurrent => !group.isArchived && !hasLeft;
+  /// In the main list while this account participates.
+  bool get isCurrent => !hasLeft;
 }
 
 /// Local-first group and membership storage.
@@ -178,11 +181,17 @@ final class DriftGroupRepository {
     }
 
     await _db.transaction(() async {
+      await requireGroupWrite(_db, group.id, accountId);
+      final current = await getGroup(group.id);
+      if (current?.seq != group.seq) {
+        throw StateError(
+          'The group changed. Reopen its settings and try again.',
+        );
+      }
       await (_db.update(_db.groups)..where((t) => t.id.equals(group.id))).write(
         GroupsCompanion(
           name: Value(trimmed),
           simplifyDebts: Value(group.simplifyDebts),
-          archivedAt: Value(group.archivedAt),
           avatarKind: Value(group.avatarKind),
           avatarColor: Value(group.avatarColor),
           avatarEmoji: Value(group.avatarEmoji),
@@ -198,10 +207,15 @@ final class DriftGroupRepository {
   }
 
   /// Leaves a group by marking your own member row as having left. The group
-  /// stays on this device, read-only, among the groups put away. The server
-  /// refuses this while you owe or are owed anything in it.
+  /// disappears from this account; the server removes it when nobody remains.
+  /// Leaving requires settlement; the last account must settle the whole group.
   Future<void> leaveGroup({required String memberId}) async {
     await _db.transaction(() async {
+      final member = await _requireMemberWrite(memberId);
+      if (accountId != null && member.profileId != accountId) {
+        throw StateError('You can only leave your own membership.');
+      }
+      await _requireSettledDeparture(member);
       await (_db.update(_db.members)..where((t) => t.id.equals(memberId)))
           .write(MembersCompanion(leftAt: Value(_clock())));
       await outbox?.enqueueInTransaction(OutboxTarget.member, memberId);
@@ -236,6 +250,7 @@ final class DriftGroupRepository {
     );
 
     await _db.transaction(() async {
+      await requireGroupWrite(_db, groupId, accountId);
       await _db.into(_db.members).insert(member);
       await outbox?.enqueueInTransaction(OutboxTarget.member, member.id);
     });
@@ -252,6 +267,7 @@ final class DriftGroupRepository {
       );
     }
     await _db.transaction(() async {
+      await _requireMemberWrite(memberId);
       await (_db.update(_db.members)..where((t) => t.id.equals(memberId)))
           .write(MembersCompanion(displayName: Value(trimmed)));
       await outbox?.enqueueInTransaction(OutboxTarget.member, memberId);
@@ -264,6 +280,8 @@ final class DriftGroupRepository {
     // Marked as left, never deleted. Their name still has to render on every
     // expense they were part of, and their balance still has to be settleable.
     await _db.transaction(() async {
+      final member = await _requireMemberWrite(memberId);
+      await _requireSettledDeparture(member);
       await (_db.update(_db.members)..where((t) => t.id.equals(memberId)))
           .write(MembersCompanion(leftAt: Value(_clock())));
       await outbox?.enqueueInTransaction(OutboxTarget.member, memberId);
@@ -277,6 +295,7 @@ final class DriftGroupRepository {
       throw ArgumentError.value(vpa, 'vpa', 'Not a UPI ID.');
     }
     await _db.transaction(() async {
+      await _requireMemberWrite(memberId);
       await (_db.update(
         _db.members,
       )..where((t) => t.id.equals(memberId))).write(
@@ -302,7 +321,7 @@ final class DriftGroupRepository {
     for (final members in byGroup.values) {
       if (!members.any((m) => m.profileId == profileId)) continue;
       final others = members.any(
-        (m) => m.profileId != null && m.profileId != profileId,
+        (m) => m.isActive && m.profileId != null && m.profileId != profileId,
       );
       if (others) {
         shared++;
@@ -313,12 +332,32 @@ final class DriftGroupRepository {
     return (solo: solo, shared: shared);
   }
 
-  Future<void> setArchived(String groupId, {required bool archived}) async {
-    await _db.transaction(() async {
-      await (_db.update(_db.groups)..where((t) => t.id.equals(groupId))).write(
-        GroupsCompanion(archivedAt: Value(archived ? _clock() : null)),
+  Future<void> _requireSettledDeparture(Member member) async {
+    final entries = await DriftEntryRepository(_db).getEntries(member.groupId);
+    final balances = foldBalances(entries);
+    if (balances.any((balance) => balance.memberId == member.id)) {
+      throw StateError(
+        'Settle this member’s balance before leaving or removing them.',
       );
-      await outbox?.enqueueInTransaction(OutboxTarget.group, groupId);
-    });
+    }
+    final members = await getMembers(member.groupId);
+    final lastAccount =
+        member.profileId != null &&
+        !members.any(
+          (other) => other.id != member.id && other.profileId != null,
+        );
+    if (lastAccount && balances.isNotEmpty) {
+      throw StateError(
+        'Settle all balances before the last account holder leaves.',
+      );
+    }
+  }
+
+  Future<Member> _requireMemberWrite(String memberId) async {
+    final member = await (_db.select(
+      _db.members,
+    )..where((row) => row.id.equals(memberId))).getSingle();
+    await requireGroupWrite(_db, member.groupId, accountId);
+    return member;
   }
 }

@@ -15,9 +15,10 @@ import '../navigation.dart';
 import '../widgets/avatar_view.dart';
 import '../widgets/export_button.dart';
 import '../widgets/page_body.dart';
+import '../widgets/group_access.dart';
 import '../widgets/segmented_list.dart';
 
-/// Renaming, archiving and leaving.
+/// Group settings and departure.
 class GroupSettingsScreen extends ConsumerStatefulWidget {
   const GroupSettingsScreen({super.key, required this.groupId});
 
@@ -38,34 +39,24 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
       context: context,
       builder: (context) => _RenameDialog(current: ledger.group.name),
     );
-    if (name == null || name == ledger.group.name) return;
+    if (name == null || name == ledger.group.name || !mounted) return;
 
     setState(() => _busy = true);
     try {
-      // Read again: the row may have changed while the dialog was open.
-      final groups = ref.read(groupRepositoryProvider);
-      final group = await groups.getGroup(widget.groupId);
-      if (group == null) return;
-      await groups.updateGroup(group.copyWith(name: name));
-      if (mounted) {
+      final saved = await saveWithFeedback(context, () async {
+        // Read again: the row may have changed while the dialog was open.
+        final groups = ref.read(groupRepositoryProvider);
+        final group = await groups.getGroup(widget.groupId);
+        if (group == null) {
+          throw StateError('This group is no longer available.');
+        }
+        await groups.updateGroup(group.copyWith(name: name));
+      });
+      if (saved && mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Renamed')));
       }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _setArchived(
-    GroupLedger ledger, {
-    required bool archived,
-  }) async {
-    setState(() => _busy = true);
-    try {
-      await ref
-          .read(groupRepositoryProvider)
-          .setArchived(widget.groupId, archived: archived);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -93,17 +84,36 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
   Future<void> _leave(GroupLedger ledger, Member me) async {
     final debts = _outstanding(ledger, me);
     if (debts.isNotEmpty) return _settleFirst(debts);
+    final lastAccount = !ledger.members.any(
+      (member) => member.id != me.id && member.profileId != null,
+    );
+    if (lastAccount && !ledger.isSettled) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Settle the group first'),
+          content: const Text(
+            'You are the last account holder. All balances, including people without accounts, must be settled before you can leave and delete the group.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Leave this group?'),
-        content: const Text(
-          'You stop getting updates, and you will not appear in new '
-          'expenses.\n\n'
-          'Everything you have already paid for or owed stays exactly as it '
-          'is. This device keeps a read-only copy with your archived groups, '
-          'and an invite link brings you back to the same place.',
+        content: Text(
+          lastAccount
+              ? 'You are the last account holder. Leaving permanently deletes this group and its expenses. Export a copy first if you need one.'
+              : 'Leaving ends your access on all your devices. Your expenses stay in the group for the remaining members. Export a copy first if you need one.',
         ),
         actions: [
           TextButton(
@@ -122,16 +132,25 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
     );
     if (!(confirmed ?? false) || !mounted) return;
 
+    // Membership changes can unmount this screen before its save completes.
+    final groups = ref.read(groupRepositoryProvider);
+    final sync = ref.read(syncControllerProvider.notifier);
+    final router = GoRouter.of(context);
+    final groupId = widget.groupId;
     setState(() => _busy = true);
     try {
-      await ref.read(groupRepositoryProvider).leaveGroup(memberId: me.id);
+      final saved = await saveWithFeedback(
+        context,
+        () => groups.leaveGroup(memberId: me.id),
+      );
+      if (!saved) return;
       // Best effort: the leave is already recorded locally and queued, so an
       // unreachable server only delays it.
-      await ref.read(syncControllerProvider.notifier).syncGroup(widget.groupId);
+      router.go('/');
+      await sync.syncGroup(groupId);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-    if (mounted) goBack(context, '/');
   }
 
   /// Says why leaving has to wait, and offers the way to get there.
@@ -170,7 +189,7 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
       return Scaffold(appBar: AppBar(leading: const BackButton()));
     }
 
-    final archived = ledger.group.archivedAt != null;
+    if (ledger.me?.isActive != true) return const GroupUnavailableScreen();
     final me = ledger.me;
 
     return Scaffold(
@@ -191,7 +210,9 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
                   title: const Text('Name'),
                   subtitle: Text(ledger.group.name),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: _busy ? null : () => _rename(ledger),
+                  onTap: _busy || !ledger.canEdit
+                      ? null
+                      : () => _rename(ledger),
                 ),
                 ListTile(
                   leading: AvatarView(
@@ -206,7 +227,9 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
                     InitialsAvatar() || PhotoAvatar() => 'Its initials',
                   }),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => context.push('/g/${widget.groupId}/picture'),
+                  onTap: ledger.canEdit
+                      ? () => context.push('/g/${widget.groupId}/picture')
+                      : null,
                 ),
               ],
             ),
@@ -215,28 +238,20 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
               children: [
                 SwitchListTile(
                   value: ledger.group.simplifyDebts,
-                  onChanged: _busy
+                  onChanged: _busy || !ledger.canEdit
                       ? null
-                      : (value) => ref
-                            .read(groupRepositoryProvider)
-                            .updateGroup(
-                              ledger.group.copyWith(simplifyDebts: value),
-                            ),
+                      : (value) => saveWithFeedback(
+                          context,
+                          () => ref
+                              .read(groupRepositoryProvider)
+                              .updateGroup(
+                                ledger.group.copyWith(simplifyDebts: value),
+                              ),
+                        ),
                   title: const Text('Suggest the fewest payments'),
                   subtitle: const Text(
                     'Fewer payments, same balances. You may pay someone '
                     'you did not directly owe.',
-                  ),
-                ),
-
-                SwitchListTile(
-                  value: archived,
-                  onChanged: _busy
-                      ? null
-                      : (value) => _setArchived(ledger, archived: value),
-                  title: const Text('Archive'),
-                  subtitle: const Text(
-                    'Hide this group without deleting its expenses.',
                   ),
                 ),
               ],
@@ -257,9 +272,9 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
             ),
             const SizedBox(height: 24),
 
-            if (me == null)
+            if (!ledger.canEdit || me == null)
               Text(
-                'You are not a member of this group.',
+                'Update OpenSplit to make changes.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: scheme.onSurfaceVariant,
                 ),
@@ -273,14 +288,16 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
                       'Leave group',
                       style: TextStyle(color: scheme.error),
                     ),
-                    subtitle: const Text('Past expenses stay in the group.'),
+                    subtitle: const Text(
+                      'Export any records you want to keep first.',
+                    ),
                     onTap: _busy ? null : () => _leave(ledger, me),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
               Text(
-                'Groups with expenses cannot be deleted. Archive them instead.',
+                'Leaving ends your access. Export a copy beforehand if you need it.',
                 style: Theme.of(
                   context,
                 ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),

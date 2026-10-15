@@ -15,7 +15,7 @@ describe("a stranger holding no token", () => {
     expect(refusal(await stub(groupId).changes(ZARA, 0, 100)).code).toBe("not_member");
     expect(refusal(await stub(groupId).createInvite(priya.id, ZARA)).code).toBe("not_member");
     expect(refusal(await stub(groupId).createLink(ZARA)).code).toBe("not_member");
-    expect(refusal(await stub(groupId).putGroup(groupId, { name: "Zara's now", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, ...defaultGroupLook, creatorId: freshId("m"), creatorName: "Zara" }, ZARA)).code).toBe("not_member");
+    expect(refusal(await stub(groupId).putGroup(groupId, { name: "Zara's now", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, baseSeq: null, ...defaultGroupLook, creatorId: freshId("m"), creatorName: "Zara" }, ZARA)).code).toBe("not_member");
   });
 });
 

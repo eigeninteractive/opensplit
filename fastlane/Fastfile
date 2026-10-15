@@ -86,8 +86,8 @@ platform :android do
 
     if priority >= 4
       UI.important(
-        "in-app update priority #{priority}: this release will interrupt " \
-        "testers with a blocking update they cannot dismiss"
+        "in-app update priority #{priority}: installed clients can offer " \
+        "an immediate update when Play makes it available and allows the flow"
       )
     end
     UI.message("Uploading to the #{track} track with status #{status}")

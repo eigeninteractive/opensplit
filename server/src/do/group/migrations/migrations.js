@@ -1,8 +1,8 @@
-import m0000 from './20261005061632_gigantic_mother_askani/migration.sql';
+import m0000 from './20261014133419_previous_gorilla_man/migration.sql';
 
   export default {
     migrations: {
-      "20261005061632_gigantic_mother_askani": m0000
+      "20261014133419_previous_gorilla_man": m0000
 }
   }
   

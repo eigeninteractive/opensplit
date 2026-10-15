@@ -45,7 +45,7 @@ describe("when D1 is not answering", () => {
     const groupId = freshId("outbox");
 
     await withTableAway("memberships", async () => {
-      ok(await stub(groupId).putGroup(groupId, { name: "Offline", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, ...defaultGroupLook, creatorId: `${groupId}-m`, creatorName: "Ravi" }, RAVI));
+      ok(await stub(groupId).putGroup(groupId, { name: "Offline", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, baseSeq: null, ...defaultGroupLook, creatorId: `${groupId}-m`, creatorName: "Ravi" }, RAVI));
 
       // The group itself is fine. The index simply does not know about it yet.
       const waiting = await outboxOf(groupId);
@@ -58,18 +58,18 @@ describe("when D1 is not answering", () => {
   });
 
   /** The retry deadline outliving its retry used to leave the group with no alarm at all. */
-  it("drops the retry once it succeeds, and the dormancy clock is armed again", async () => {
+  it("drops the retry and alarm once the index catches up", async () => {
     const groupId = freshId("outbox");
     await withTableAway("memberships", async () => {
-      ok(await stub(groupId).putGroup(groupId, { name: "Offline", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, ...defaultGroupLook, creatorId: `${groupId}-m`, creatorName: "Ravi" }, RAVI));
+      ok(await stub(groupId).putGroup(groupId, { name: "Offline", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, baseSeq: null, ...defaultGroupLook, creatorId: `${groupId}-m`, creatorName: "Ravi" }, RAVI));
     });
 
     await stub(groupId).runUpkeep(Date.now());
     const after = await outboxOf(groupId);
 
     expect(after.pending).toBe(0);
-    expect(after.chores).toEqual(["archive"]);
-    expect(after.alarm ?? 0).toBeGreaterThan(Date.now() + 80 * DAYS);
+    expect(after.chores).toEqual([]);
+    expect(after.alarm).toBeNull();
   });
 
   it("sends a backlog of any size in one go, not twenty at a time", async () => {
@@ -78,7 +78,7 @@ describe("when D1 is not answering", () => {
 
     await withTableAway("link_tokens", async () => {
       for (let index = 0; index < 25; index++) {
-        const member = ok(await object.putMember(`${groupId}-p${index}`, { displayName: `P${index}`, upiVpa: null, leftAt: null }, RAVI));
+        const member = ok(await object.putMember(`${groupId}-p${index}`, { displayName: `P${index}`, upiVpa: null, leftAt: null, baseSeq: null }, RAVI));
         ok(await object.createInvite(member.id, RAVI));
       }
       expect((await outboxOf(groupId)).pending).toBe(25);
@@ -110,11 +110,11 @@ describe("the order writes arrive in", () => {
     const priya = await makeAccount("Priya");
     const { groupId, priya: place } = await makeGroup();
     const invite = ok(await stub(groupId).createInvite(place.id, RAVI));
-    ok(await stub(groupId).join(invite.token, priya, BY_INVITE));
+    const joined = ok(await stub(groupId).join(invite.token, priya, BY_INVITE));
 
     // Leaving and being brought back, many times over, all in flight at once.
     const at = new Date().toISOString();
-    await Promise.all(Array.from({ length: 12 }, (_, index) => (index % 2 === 0 ? stub(groupId).putMember(place.id, { displayName: "Priya", upiVpa: null, leftAt: at }, priya) : stub(groupId).putMember(place.id, { displayName: "Priya", upiVpa: null, leftAt: null }, RAVI))));
+    await Promise.all(Array.from({ length: 12 }, (_, index) => (index % 2 === 0 ? stub(groupId).putMember(place.id, { displayName: "Priya", upiVpa: null, leftAt: at, baseSeq: joined.member.seq }, priya) : stub(groupId).putMember(place.id, { displayName: "Priya", upiVpa: null, leftAt: null, baseSeq: null }, RAVI))));
 
     const truth = ok(await stub(groupId).changes(RAVI, 0, 500)).members.find((member) => member.id === place.id);
     expect((await membership(groupId, priya))?.left_at ?? null).toBe(truth?.leftAt ?? null);
@@ -145,7 +145,7 @@ describe("an account deleted while its membership is on the way", () => {
     const groupId = freshId("gone");
 
     await withTableAway("memberships", async () => {
-      ok(await stub(groupId).putGroup(groupId, { name: "Solo", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, ...defaultGroupLook, creatorId: `${groupId}-m`, creatorName: "Asha" }, owner));
+      ok(await stub(groupId).putGroup(groupId, { name: "Solo", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, baseSeq: null, ...defaultGroupLook, creatorId: `${groupId}-m`, creatorName: "Asha" }, owner));
       await env.DB.prepare("delete from user where id = ?").bind(owner).run();
     });
     await stub(groupId).runUpkeep(Date.now());

@@ -38,7 +38,7 @@ class AccountApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/account';
+    final _path = r'/account';
     final _options = Options(
       method: r'DELETE',
       headers: <String, dynamic>{...?headers},

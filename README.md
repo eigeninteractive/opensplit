@@ -137,7 +137,7 @@ Worker over local D1, KV and Durable Object storage. There is no fake server:
 the rules they exercise are the server's own. Nothing touches a Cloudflare
 account and no credentials are needed.
 
-They skip themselves unless an OpenSplit Worker answers `/api/health`, so
+They skip themselves unless the current OpenSplit API answers its health check, so
 `flutter test` stays green without one. To use another port (`pnpm exec wrangler dev
 --env test --port 8797`), pass `--dart-define=API_BASE_URL=http://127.0.0.1:8797`. CI runs
 them in the `backend` job with `--dart-define=REQUIRE_BACKEND=true`, so a
@@ -160,9 +160,13 @@ dart run drift_dev schema dump lib/data/local/database.dart drift_schemas/
 dart run drift_dev schema generate drift_schemas/ test/data/generated_migrations/
 ```
 
-Until the first public release, an upgrade rebuilds the local database and
-re-syncs, which loses anything recorded offline and never pushed. See
-[docs/local-database.md](docs/local-database.md).
+The local storage baseline opens an `opensplit-v1-<accountId>` database at
+schema version 1 and synchronizes it from the server. Old databases are unused;
+their offline edits do not transfer. Future upgrades must keep this database
+name and migrate local data and queued edits before sync resumes. API retirement
+pauses pending uploads; replay through a new API requires that release's
+mapping and migration tests. See [docs/local-database.md](docs/local-database.md)
+and [docs/api-upgrades.md](docs/api-upgrades.md).
 
 The domain layer is also run in a real browser:
 
@@ -302,11 +306,10 @@ package, and only `tool/build_web.dart` may produce a deployable web directory.
 It verifies the configuration, builds the client, and then has Workbox precache
 the finished release, bundling Firebase's public identifiers into the worker. CI uses structurally valid inert identifiers to prove
 the release build. After every CI gate passes, pushes to `main` build with real
-production variables, deploy the Worker and the bundle together, and distribute
-a signed AAB to Play closed testing. Release reruns the same CI checks before
-publishing.
-A manual **Release** run with **deploy unchecked** creates
-artifacts only, for first-upload bootstrap.
+production variables, deploy the Worker and web bundle together, and distribute
+a signed AAB and listing artwork to Play closed testing. Release reruns the same
+CI checks before publishing. A manual **Release** run with **deploy unchecked**
+creates artifacts only, for first-upload bootstrap.
 
 Every integration is off unless configured, and hidden rather than shown broken:
 
@@ -317,6 +320,11 @@ Every integration is off unless configured, and hidden rather than shown broken:
 | `FCM_PROJECT_ID`, `FCM_SENDER_ID`, and the `ANDROID_`/`WEB_` key and app id | Push |
 | `FCM_VAPID_KEY` | Web push, in addition to the above |
 | `LINK_HOST` | The host used in invite links |
+
+The app API uses one base path, defined in `server/src/paths.ts`. OpenAPI
+`servers.url` carries it into the generated Dart client; operation paths below
+are relative to that base. `API_BASE_URL` configures only the backend origin.
+To change the contract version, edit the base path and regenerate the client.
 
 ### Exchange rates
 
@@ -334,7 +342,7 @@ cd server && pnpm exec wrangler secret put EXCHANGERATE_API_KEY --env=""
 A daily cron (`0 4 * * *`, after ECB publishes) calls the `Fx` Durable Object,
 which is the **only writer** of rates. It holds the history in its own SQLite
 and publishes one blob per month to KV, where every device reads it through
-`GET /api/fx`.
+`GET /fx`.
 
 A singleton object rather than a scheduled function writing KV directly,
 because KV is last-write-wins: the daily run and an on-demand backfill
@@ -362,7 +370,7 @@ already covered would otherwise make the `source` stamped on somebody's
 converted expense quietly wrong.
 
 **Backdated entries fetch on demand.** Recording an expense on a date the app
-has never priced posts to `/api/fx/backfill`, which fetches that day and caches
+has never priced posts to `/fx/backfill`, which fetches that day and caches
 it for everyone. The object refuses dates it can already answer, repeats within
 the hour, futures, and dates chased more than five times — some days are
 unanswerable, and without a ceiling every device retries them forever against
@@ -439,7 +447,7 @@ project made:
 1. **Google Auth Platform → Branding** (formerly the OAuth consent screen).
    App name, support email, developer contact. Nothing works until this exists.
 2. **Credentials → Create credentials → OAuth client ID → Web application.**
-   Add `https://<your host>/api/auth/callback/google` as an authorized redirect
+   Add `https://<your host>/api/v1/auth/callback/google` as an authorized redirect
    URI, and your site origin under authorized JavaScript origins. Its
    **Client ID** is `GOOGLE_WEB_CLIENT_ID` — one value, used on both platforms,
    because the Worker verifies the ID token's audience against the web client
@@ -486,7 +494,7 @@ The app deliberately does *not* create a session on startup. It used to, and
 that broke the arrival it was meant to protect: somebody who already had an
 account and tapped an invite link had the single-use token spent by a throwaway
 anonymous account, and no way into the group afterwards. `/join/:token` now
-reads the link with `GET /api/links/{token}`, which is the one route that runs
+reads the link with `GET /links/{token}`, which is the one route that runs
 with no session at all, shows what the link is for, and joins only after the
 identity question has an answer.
 
@@ -517,7 +525,7 @@ Arriving on a group link asks which of the group's unclaimed placeholders you
 are, if any. Claiming one is the same single-column update a named invite
 performs — no expense is rewritten and no balance moves — and it is what stops
 one shared link turning a group of six into a group of twelve.
-`GET /api/links/{token}/placeholders` deliberately **requires** a session,
+`GET /links/{token}/placeholders` deliberately **requires** a session,
 unlike the preview beside it: those are other people's names, which is more than
 the token itself implies, and it is asked after an account has been chosen
 rather than before.
@@ -578,7 +586,7 @@ nothing else changes, which is why a deployment with no push configured still
 records expenses normally.
 
 **Three kinds wake a device:** an expense, somebody arriving, somebody leaving.
-Not renames, archives or links — those belong in the activity feed, which is
+Not renames or links — those belong in the activity feed, which is
 read on purpose, rather than on a lock screen. `link_created` in particular
 would wake a whole group to say that one of them tapped Share.
 
@@ -711,7 +719,7 @@ adapter tests:
 ```bash
 pnpm dev --test-scheduled   # exposes the handler
 curl 'http://127.0.0.1:8787/cdn-cgi/handler/scheduled?cron=0+4+*+*+*'
-curl 'http://127.0.0.1:8787/api/fx?since=2026-01-01'
+curl 'http://127.0.0.1:8787/api/v1/fx?since=2026-01-01'
 ```
 
 This reaches the real ECB feed, and with no `EXCHANGERATE_API_KEY` set the log
@@ -733,11 +741,11 @@ reviewer and a Google OAuth reviewer can all read what the app is. With the
 client at the root, the public face would be a sign-in screen, which OAuth
 branding verification rejects.
 
-Its pictures are generated rather than drawn. `flutter test
-tool/screenshots_test.dart` renders the real screens over demo data into
-`site/store/`, and `python3 tool/store_graphics.py` frames one of them as the
-link preview and the Play feature graphic; rerun both after a visible UI
-change. The pages use the fonts the app bundles, which `tool/build_web.dart`
+Its pictures are generated rather than drawn. `dart run
+tool/store_artifacts.dart` renders the real screens over demo data into
+`site/store/`, then builds the link preview, Play feature graphic and email
+wordmark. CI checks the saved source and output hashes, so app changes require
+a complete artwork refresh. The pages use the fonts the app bundles, which `tool/build_web.dart`
 copies to `/fonts`, so the site asks no other origin for anything.
 
 Nothing in Dart knows about the prefix. `--base-href=/app/` puts it below the

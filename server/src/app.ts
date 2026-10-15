@@ -6,9 +6,11 @@ import { accountRoutes } from "./api/account";
 import { inviteRoutes } from "./api/invites";
 import { ledgerRoutes } from "./api/ledger";
 import { referenceRoutes } from "./api/reference";
+import { unavailableApi } from "./api/routing";
 import { type AppEnv, services } from "./context";
 import { identityRoutes } from "./identity/routes";
 import { openApiDocument } from "./openapi";
+import { apiBasePath, authBasePath } from "./paths";
 import { apiError, jsonResponse } from "./schemas/common";
 import { AccountSchema } from "./schemas/identity";
 import { EntrySnapshotSchema, GroupEventPayloadSchema, GroupLinkSchema, GroupSchema, LinkEventPayloadSchema, MemberEventPayloadSchema, PushDataSchema } from "./schemas/ledger";
@@ -31,36 +33,43 @@ const app = new OpenAPIHono<AppEnv>({
   },
 });
 
+// Emit this router's relative paths with the shared OpenAPI server URL. The
+// parent router owns the mount and the operational endpoints, not the contract.
+const api = new OpenAPIHono<AppEnv>();
+
 /**
  * Components that some field holds as nullable, registered before any route
  * uses them. The generator builds a component from its first use, so one first
  * met through `.nullable()` would itself be emitted nullable, everywhere.
  */
 for (const schema of [GroupSchema, GroupLinkSchema, AccountSchema, EntrySnapshotSchema, MemberEventPayloadSchema, GroupEventPayloadSchema, LinkEventPayloadSchema]) {
-  app.openAPIRegistry.register(schema.meta()?.id as string, schema);
+  api.openAPIRegistry.register(schema.meta()?.id as string, schema);
 }
 
-app.use("/api/*", services);
+// Only the current contract reaches account and ledger services.
+app.use(`${apiBasePath}/*`, services);
 
 // Better Auth's own handler, only for the redirect Google sends the browser back to.
-app.on(["GET", "POST"], ["/api/auth/callback/*", "/api/auth/error"], (c) => c.var.auth.handler(c.req.raw));
+app.on(["GET", "POST"], [`${authBasePath}/callback/*`, `${authBasePath}/error`], (c) => c.var.auth.handler(c.req.raw));
 
-const api = new OpenAPIHono<AppEnv>();
-api.openapi(healthRoute, (c) => c.json({ ok: true as const, service: "opensplit" as const, now: new Date().toISOString() }, 200));
+const health = () => ({ ok: true as const, service: "opensplit" as const, now: new Date().toISOString() });
+api.openapi(healthRoute, (c) => c.json(health(), 200));
+// Deployment probes remain stable across app contract versions.
+app.get("/api/health", (c) => c.json(health(), 200));
 identityRoutes(api);
 ledgerRoutes(api);
 inviteRoutes(api);
 accountRoutes(api);
 referenceRoutes(api);
-app.route("/api", api);
 
-app.openAPIRegistry.registerComponent("securitySchemes", "bearer", { type: "http", scheme: "bearer", description: "The session token from `set-auth-token`, on Android." });
-app.openAPIRegistry.registerComponent("securitySchemes", "cookie", { type: "apiKey", in: "cookie", name: "better-auth.session_token", description: "The HttpOnly session cookie, on the web." });
+api.openAPIRegistry.registerComponent("securitySchemes", "bearer", { type: "http", scheme: "bearer", description: "The session token from `set-auth-token`, on Android." });
+api.openAPIRegistry.registerComponent("securitySchemes", "cookie", { type: "apiKey", in: "cookie", name: "better-auth.session_token", description: "The HttpOnly session cookie, on the web." });
 // Sent over FCM rather than HTTP, so no route references it.
-app.openAPIRegistry.register("PushData", PushDataSchema);
-app.doc("/api/openapi.json", openApiDocument);
+api.openAPIRegistry.register("PushData", PushDataSchema);
+app.route(apiBasePath, api);
+app.get("/api/openapi.json", (c) => c.json(api.getOpenAPIDocument(openApiDocument)));
 
-app.all("/api/*", (c) => c.json(apiError("not_found", "No such endpoint."), 404));
+app.all("/api/*", (c) => unavailableApi(c));
 
 /**
  * No asset matched. A path under `/app` is a client deep link such as
@@ -91,4 +100,4 @@ app.onError((error, c) => {
   return c.json(apiError("internal", "Something went wrong.", "transient"), 500);
 });
 
-export { app };
+export { api, app };

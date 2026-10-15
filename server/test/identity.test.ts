@@ -1,7 +1,8 @@
 import { env, exports as workerExports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import { authBasePath } from "../src/paths";
 import { googleIdToken } from "./google";
-import { signInAsGuest } from "./session";
+import { apiUrl, signInAsGuest } from "./session";
 
 /** The branches that decide whether somebody's ledger survives. */
 
@@ -20,7 +21,7 @@ function everyOutcomeCarriesTheField(body: Outcome) {
 }
 
 async function continueWithGoogle(idToken: string, options: { token?: string; allowSignIn?: boolean; nonce?: string } = {}): Promise<Response> {
-  return workerExports.default.fetch("https://opensplit.test/api/identity/google", {
+  return workerExports.default.fetch(apiUrl("/identity/google"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -165,7 +166,7 @@ describe("continuing with Google", () => {
 
 describe("the email code flow", () => {
   async function startEmail(email: string, token?: string): Promise<{ flow: string }> {
-    const response = await workerExports.default.fetch("https://opensplit.test/api/identity/email", {
+    const response = await workerExports.default.fetch(apiUrl("/identity/email"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -211,7 +212,7 @@ describe("the email code flow", () => {
 
   it("refuses a wrong code as a refusal, not a crash", async () => {
     await startEmail("wrong-code@example.com");
-    const response = await workerExports.default.fetch("https://opensplit.test/api/identity/email/verify", {
+    const response = await workerExports.default.fetch(apiUrl("/identity/email/verify"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: "wrong-code@example.com", code: "00000000", flow: "signInPending" }),
@@ -222,7 +223,7 @@ describe("the email code flow", () => {
   });
 
   it("refuses a malformed address with the standard error shape", async () => {
-    const response = await workerExports.default.fetch("https://opensplit.test/api/identity/email", {
+    const response = await workerExports.default.fetch(apiUrl("/identity/email"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: "not-an-address" }),
@@ -236,7 +237,7 @@ describe("the email code flow", () => {
 });
 
 describe("the session", () => {
-  const session = (token?: string) => workerExports.default.fetch("https://opensplit.test/api/identity/session", { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  const session = (token?: string) => workerExports.default.fetch(apiUrl("/identity/session"), { headers: token ? { Authorization: `Bearer ${token}` } : {} });
 
   it("is none without a credential", async () => {
     expect(await (await session()).json()).toEqual({ account: null, token: null });
@@ -250,7 +251,7 @@ describe("the session", () => {
 
   it("ends on sign-out", async () => {
     const guest = await signInAsGuest();
-    const out = await workerExports.default.fetch("https://opensplit.test/api/identity/sign-out", { method: "POST", headers: { Authorization: `Bearer ${guest.token}` } });
+    const out = await workerExports.default.fetch(apiUrl("/identity/sign-out"), { method: "POST", headers: { Authorization: `Bearer ${guest.token}` } });
 
     expect(out.status).toBe(204);
     expect(await (await session(guest.token)).json()).toEqual({ account: null, token: null });
@@ -259,7 +260,7 @@ describe("the session", () => {
 
 describe("the browser flow to Google", () => {
   it("answers with a Google URL and the state cookie the callback will check", async () => {
-    const response = await workerExports.default.fetch("https://opensplit.test/api/identity/google/redirect", {
+    const response = await workerExports.default.fetch(apiUrl("/identity/google/redirect"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ callbackUrl: "http://localhost:8787/app/welcome", allowSignIn: false }),
@@ -268,6 +269,7 @@ describe("the browser flow to Google", () => {
     expect(response.status).toBe(200);
     const { url } = (await response.json()) as { url: string };
     expect(new URL(url).hostname).toBe("accounts.google.com");
+    expect(new URL(url).searchParams.get("redirect_uri")).toBe(`${env.APP_ORIGIN}${authBasePath}/callback/google`);
     expect(response.headers.getSetCookie().length).toBeGreaterThan(0);
   });
 });

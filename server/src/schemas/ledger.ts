@@ -100,7 +100,7 @@ const memberRow = createSelectSchema(tables.members, {
 
 export const MemberSchema = memberRow.openapi("Member");
 /** A member row at the id the device minted; a new one is a placeholder. No `profileId`: only an invite hands a place to an account. */
-export const MemberInputSchema = memberRow.pick({ displayName: true, upiVpa: true, leftAt: true }).openapi("MemberInput");
+export const MemberInputSchema = memberRow.pick({ displayName: true, upiVpa: true, leftAt: true }).extend({ baseSeq: SeqSchema.nullable() }).openapi("MemberInput");
 
 const groupRow = createSelectSchema(tables.meta, {
   id: () => IdSchema,
@@ -110,7 +110,6 @@ const groupRow = createSelectSchema(tables.meta, {
   ...coverRefinements,
   createdBy: () => IdSchema,
   createdAt: () => TimestampSchema,
-  archivedAt: () => TimestampSchema,
   updatedAt: () => TimestampSchema,
   lastActivityAt: () => TimestampSchema,
   seq: () => SeqSchema,
@@ -124,8 +123,8 @@ export const GroupSchema = groupRow.openapi("Group");
  * creator are read only then: afterwards they describe how the group began.
  */
 export const GroupInputSchema = groupRow
-  .pick({ name: true, defaultCurrency: true, isDirect: true, simplifyDebts: true, archivedAt: true, ...avatarFields, ...coverFields })
-  .extend({ creatorId: memberRow.shape.id, creatorName: memberRow.shape.displayName })
+  .pick({ name: true, defaultCurrency: true, isDirect: true, simplifyDebts: true, ...avatarFields, ...coverFields })
+  .extend({ creatorId: memberRow.shape.id, creatorName: memberRow.shape.displayName, baseSeq: SeqSchema.nullable() })
   .superRefine(refineAvatar)
   .superRefine(refineCover)
   .openapi("GroupInput");
@@ -230,7 +229,6 @@ export const ChangePageSchema = z
 
 /** A page as the group's object answers it; the Worker adds the profiles, which live in D1. */
 export type GroupChanges = Omit<ChangePage, "profiles">;
-
 /** Where a device stands in one group's history. */
 export const GroupCursorSchema = z.object({ groupId: IdSchema, since: SeqSchema }).openapi("GroupCursor");
 
@@ -252,7 +250,7 @@ export const GroupRefusalSchema = z.object({ groupId: IdSchema, code: ErrorCodeS
 
 export const PullSchema = z
   .object({
-    /** Every group this account is in now, asked for or not: how a device finds a group joined elsewhere. */
+    /** Every group this account actively participates in: how a device finds a group joined elsewhere. */
     groupIds: z.array(IdSchema),
     /** One page per group read, in the order asked. */
     pages: z.array(ChangePageSchema),

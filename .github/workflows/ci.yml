@@ -69,6 +69,8 @@ jobs:
       # only the former loads the plugins named in analysis_options.yaml -- so
       # every riverpod_lint rule was being skipped here while passing locally
       # in an IDE that does load them.
+      - name: Verify store artwork matches the current UI and assets
+        run: dart run tool/store_artifacts.dart --check
       - run: dart analyze --fatal-infos
       - run: flutter test --exclude-tags integration
       - name: Test domain logic and refresh UI in Chrome

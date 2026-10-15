@@ -6,7 +6,7 @@ import { chunked } from "./chunked";
 import { memberships, profiles } from "./db/d1/schema";
 import { finishDeletions } from "./forget";
 
-/** The two crons. Dormant groups are not swept: each group object arms its own alarm. */
+/** The two crons. Groups remain while an account actively participates. */
 
 export async function refreshRates(env: Env): Promise<void> {
   const fx = env.FX.getByName("global");

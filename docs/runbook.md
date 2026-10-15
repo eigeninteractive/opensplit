@@ -6,8 +6,8 @@ release after that does.
 
 Commands that change something in a Cloudflare, Google, Resend, GitHub or Play
 account are in the production sections, and only there. Nothing in the
-repository runs them for you, apart from the release workflow on a push to
-`main`.
+repository runs them for you, apart from an explicitly dispatched **Release**
+workflow with **deploy** checked. Pushes to `main` build artifacts only.
 
 ---
 
@@ -202,11 +202,11 @@ is made, so a lost one is replaced by *Add secret* on the client, put in with
 authorized redirect URI, and the origin:
 
 ```
-https://opensplit.eigeninteractive.com/api/auth/callback/google
+https://opensplit.eigeninteractive.com/api/v1/auth/callback/google
 https://opensplit.eigeninteractive.com                           (JavaScript origin)
 ```
 
-The path is Better Auth's (`basePath: "/api/auth"` in `server/src/auth.ts`) and
+The path uses `authBasePath`, derived from `apiBasePath` in `server/src/paths.ts`, and
 must match character for character, with no trailing slash. A wrong redirect
 URI fails at Google's consent screen with `redirect_uri_mismatch`, before the
 request reaches the Worker, so there is no trace of it in our logs.
@@ -338,10 +338,12 @@ A push to `main` runs `.github/workflows/release.yml`:
 8. A `v<version>` tag, the first time a build of that version ships.
 
 D1 migrations are applied before the Worker that needs them goes live.
-Before launch, a schema change needs no compatibility period; if one is
-awkward, resetting the backend is simpler (`docs/resetting-the-backend.md`).
 The Durable Objects migrate themselves, lazily, the first time each group is
-opened after a deploy.
+opened after a deploy. A breaking API requires a coordinated pause that covers
+Play review and installation, because old clients remain installed after the
+backend changes. Arrange any required [storage reset](resetting-the-backend.md)
+before merging a release that needs one. Normal schema changes use incremental
+migrations; an initial schema must not be reapplied over existing databases.
 
 A manual run (*Actions → Release → Run workflow*) with **deploy** unchecked
 builds the artifacts without deploying anything.
@@ -418,8 +420,9 @@ Both files go in one pull request. A bump without the release leaves
 
 Which part to bump: patch when a version only fixes things, minor when it adds
 anything, and major when it leaves older clients behind, such as a server change
-they can no longer talk to. A major one is also the release to send with update
-priority 4, so those clients are made to update.
+they can no longer talk to. Send a breaking release with update priority 4 so
+eligible clients request an immediate update when Play makes it available.
+Priority does not replace the pause or verify that everyone has installed it.
 
 Merges between versions keep the version's name and differ by build number;
 "1.2.0 (1701)" and "1.2.0 (1804)" are two builds of 1.2.0.
@@ -435,7 +438,9 @@ rest on a last line. The notes are in `en-US`, the store listing's language,
 because Play refuses notes in a language the listing lacks. Add a language to
 the listing, and the workflow has to write that language too.
 
-**Play's artwork.** `tool/play_metadata.dart` packages the notes and the current
+**Play's artwork.** First run `dart run tool/store_artifacts.dart` to refresh
+screenshots, the feature graphic and their derivatives together. CI runs its
+`--check` mode and rejects stale sources or outputs. `tool/play_metadata.dart` packages the notes and the current
 committed artwork into a fresh `en-US` supply tree. It checks all inputs before
 writing, resizes the icon to 512 × 512 and retains the feature graphic and
 screenshots byte-for-byte. The workflow passes that directory as
@@ -474,6 +479,7 @@ step.
 
 ```sh
 base=https://opensplit.eigeninteractive.com
+api_base="$base/api/v1"  # current contract base; server/src/paths.ts owns it
 
 curl -s $base/api/health                       # {"ok":true,"service":"opensplit",...}
 curl -sI $base/                                # 200, the landing page
@@ -481,14 +487,14 @@ curl -sI $base/privacy                         # 200, not a redirect
 curl -sI $base/app/ | grep -i cross-origin     # both isolation headers
 curl -sI $base/app/g/does-not-exist-yet        # 200 and text/html: the shell
 curl -sI $base/.well-known/assetlinks.json     # 200 application/json, no redirect
-curl -s "$base/api/reference" | head -c 200    # currencies and categories
+curl -s "$api_base/reference" | head -c 200    # currencies and categories
 ```
 
 `/api/health` proves the script deployed, not that D1 is bound, since it
 touches no database. A guest sign-in does, writing a user and a session:
 
 ```sh
-token=$(curl -s -X POST $base/api/identity/guest | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
+token=$(curl -s -X POST $api_base/identity/guest | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
 echo "$token"                                  # non-empty: D1 and BETTER_AUTH_SECRET work
 ```
 
@@ -502,11 +508,11 @@ reuse the guest's:
 ```sh
 pnpm exec wrangler tail --format pretty &
 
-curl -s -X POST $base/api/fx/backfill -H "Authorization: Bearer $token" \
+curl -s -X POST $api_base/fx/backfill -H "Authorization: Bearer $token" \
   -H 'content-type: application/json' \
   -d "{\"asOf\":\"$(date -u -v-3d +%F)\",\"currency\":\"EUR\"}"   # {"accepted":true}
 
-curl -s "$base/api/fx?since=$(date -u -v-7d +%F)" | head -c 300
+curl -s "$api_base/fx?since=$(date -u -v-7d +%F)" | head -c 300
 ```
 
 In the tail, `[fx] stored N months …` means rates reached KV. `[fx] uncovered
@@ -542,6 +548,13 @@ The release service account needs the app-level
 permission as well as access to release on testing tracks, so Fastlane can
 update the listing artwork. The upload does not change listing text or promote
 the bundle to production. Play review and availability still apply.
+
+Verify the feature graphic under **Grow users → Store presence → Main store
+listing → Graphics** after uploading and publishing. Its presence there is
+separate from its visibility on a particular public listing: Google uses it as
+the preview-video cover and on selected promotional surfaces. A missing public
+banner alone does not establish an upload failure. See
+[Google's preview asset guidance](https://support.google.com/googleplay/android-developer/answer/9866151).
 
 Under *App content*, the three URLs, each a real static file answering 200 with
 no redirect, and the same constants the app's Settings screen opens

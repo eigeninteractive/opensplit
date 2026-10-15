@@ -61,7 +61,7 @@
   // Production's `opensplit-cache` namespace; local runs ignore the id too.
   "kv_namespaces": [{ "binding": "CACHE", "id": "791356628add46dcba93cbd86c75c9ac" }],
 
-  // No dormancy sweep: each group object arms its own alarm.
+  // No group dormancy sweep: groups persist while an account remains active.
   "triggers": {
     "crons": [
       "0 4 * * *", // exchange rates

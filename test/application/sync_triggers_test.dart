@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:opensplit/application/sync_coordinator.dart';
 import 'package:opensplit/data/sync/sync_engine.dart';
+import 'package:opensplit/data/sync/api_client.dart';
 import 'package:test/test.dart';
 
 /// What makes a sync happen, and what deliberately does not.
@@ -62,6 +63,39 @@ void main() {
     scheduler.dispose();
     await online.close();
     await writes.close();
+  });
+
+  test('retired APIs stop timers and every sync trigger', () async {
+    scheduler.dispose();
+    var attempts = 0;
+    Future<SyncReport> retired() async {
+      attempts++;
+      return const SyncReport(
+        pushed: 0,
+        pulled: 0,
+        failed: 0,
+        error: ApiFailure.updateRequired(),
+      );
+    }
+
+    scheduler = SyncCoordinator(
+      syncAll: retired,
+      syncGroups: (_) => retired(),
+      online: online.stream,
+      writes: writes.stream,
+      writeDelay: Duration.zero,
+    );
+    scheduler.start();
+    await settle();
+    expect(scheduler.status.retryAt, isNull);
+    expect(scheduler.status.isSyncing, isFalse);
+    online.add(true);
+    writes.add(null);
+    scheduler.resumed();
+    await scheduler.syncAll();
+    await scheduler.syncGroup('trip');
+    await settleWrite();
+    expect(attempts, 1);
   });
 
   test('syncs once at launch', () async {
@@ -170,7 +204,7 @@ void main() {
     await settle();
 
     // Creating a group queues the group and its owner; an expense that
-    // unarchives its group queues two rows as well.
+    // is followed by a group edit queues two rows as well.
     writes.add(null);
     writes.add(null);
     writes.add(null);

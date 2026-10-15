@@ -15,10 +15,7 @@ void main() {
   });
 
   test('an origin with a path in it is refused', () {
-    // The client appends `/api/...` to this, so a trailing path would produce
-    // `/app/api/bootstrap` and a 404 that reads as an outage rather than as a
-    // mistyped config value — which is the kind of thing that costs an
-    // afternoon precisely because the app still launches.
+    // Configuration names the host. The generated contract owns the API path.
     expect(validateBackendUrl('https://ledger.example.org/app'), isNotNull);
     expect(validateBackendUrl('https://ledger.example.org/api'), isNotNull);
   });

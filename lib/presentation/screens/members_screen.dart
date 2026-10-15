@@ -28,12 +28,14 @@ class MembersScreen extends ConsumerWidget {
         leading: BackButton(onPressed: () => goBack(context, '/g/$groupId')),
         title: const Text('People'),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: null,
-        onPressed: () => _addMember(context, ref),
-        icon: const Icon(Icons.person_add_outlined),
-        label: const Text('Add person'),
-      ),
+      floatingActionButton: ledger?.canEdit != true
+          ? null
+          : FloatingActionButton.extended(
+              heroTag: null,
+              onPressed: () => _addMember(context, ref),
+              icon: const Icon(Icons.person_add_outlined),
+              label: const Text('Add person'),
+            ),
       body: PageBody(
         child: ledger == null
             ? const SizedBox.shrink()
@@ -42,19 +44,23 @@ class MembersScreen extends ConsumerWidget {
                 children: [
                   // Above the list rather than in a menu, because it is what
                   // somebody who has just made a group came here to do.
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                    child: FilledButton.tonalIcon(
-                      onPressed: () => showGroupLinkSheet(context, groupId),
-                      icon: const Icon(Icons.link),
-                      label: const Text('Share an invite link'),
+                  if (ledger.canEdit)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                      child: FilledButton.tonalIcon(
+                        onPressed: () => showGroupLinkSheet(context, groupId),
+                        icon: const Icon(Icons.link),
+                        label: const Text('Share an invite link'),
+                      ),
                     ),
-                  ),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: SegmentedList(
                       children: [
-                        for (final member in ledger.members)
+                        for (final member in [
+                          ...ledger.members,
+                          ...ledger.pastMembers,
+                        ])
                           ListTile(
                             leading: MemberAvatar(
                               ledger: ledger,
@@ -65,7 +71,9 @@ class MembersScreen extends ConsumerWidget {
                                   (member.id == ledger.me?.id ? ' (you)' : ''),
                             ),
                             subtitle: Text(
-                              ledger.upiOf(member) != null
+                              !member.isActive
+                                  ? 'Left the group'
+                                  : ledger.upiOf(member) != null
                                   // The handle is the useful thing to see at a glance
                                   // here: it is what makes settling with this person
                                   // one tap instead of a chat message asking for it.
@@ -76,83 +84,90 @@ class MembersScreen extends ConsumerWidget {
                                   ? 'Added by someone here — no account yet'
                                   : 'Member',
                             ),
-                            trailing: PopupMenuButton<String>(
-                              onSelected: (action) => switch (action) {
-                                'invite' => showInviteSheet(
-                                  context,
-                                  ref,
-                                  member,
-                                ),
-                                'me' => context.go('/account'),
-                                'rename' => _rename(context, ref, member),
-                                'upi' => _setUpi(context, ref, member),
-                                'remove' => _remove(
-                                  context,
-                                  ref,
-                                  member,
-                                  ledger,
-                                ),
-                                _ => null,
-                              },
-                              // Only placeholders can be renamed or given a payment
-                              // handle here, and that is not a permission rule — it
-                              // is what the fields are.
-                              itemBuilder: (context) {
-                                final mine = member.id == ledger.me?.id;
-
-                                // Your own row, or a placeholder's.
-                                final editable = member.isPlaceholder || mine;
-
-                                // Removing somebody also cuts off their access to the
-                                // group, so it is offered only once nothing is owed
-                                // either way.
-                                final removable =
-                                    !mine && ledger.isSettledUp(member.id);
-
-                                return [
-                                  if (member.isPlaceholder)
-                                    const PopupMenuItem(
-                                      value: 'invite',
-                                      child: Text('Send invite link'),
-                                    ),
-                                  if (member.isPlaceholder && editable) ...[
-                                    const PopupMenuItem(
-                                      value: 'rename',
-                                      child: Text('Rename'),
-                                    ),
-                                    PopupMenuItem(
-                                      value: 'upi',
-                                      child: Text(
-                                        member.upiVpa == null
-                                            ? 'Add UPI ID'
-                                            : 'Change UPI ID',
+                            trailing: !ledger.canEdit || !member.isActive
+                                ? null
+                                : PopupMenuButton<String>(
+                                    onSelected: (action) => switch (action) {
+                                      'invite' => showInviteSheet(
+                                        context,
+                                        ref,
+                                        member,
                                       ),
-                                    ),
-                                  ],
-                                  if (mine)
-                                    const PopupMenuItem(
-                                      value: 'me',
-                                      child: Text('Edit your name and UPI ID'),
-                                    ),
-                                  if (removable)
-                                    const PopupMenuItem(
-                                      value: 'remove',
-                                      child: Text('Remove from group'),
-                                    )
-                                  // Said rather than silently withheld: an absent
-                                  // menu item reads as a bug, and the reason here is
-                                  // something the group can act on.
-                                  else if (!mine)
-                                    PopupMenuItem(
-                                      enabled: false,
-                                      child: Text(
-                                        '${ledger.nameOfMember(member)} is not '
-                                        'settled up',
+                                      'me' => context.go('/account'),
+                                      'rename' => _rename(context, ref, member),
+                                      'upi' => _setUpi(context, ref, member),
+                                      'remove' => _remove(
+                                        context,
+                                        ref,
+                                        member,
+                                        ledger,
                                       ),
-                                    ),
-                                ];
-                              },
-                            ),
+                                      _ => null,
+                                    },
+                                    // Only placeholders can be renamed or given a payment
+                                    // handle here, and that is not a permission rule — it
+                                    // is what the fields are.
+                                    itemBuilder: (context) {
+                                      final mine = member.id == ledger.me?.id;
+
+                                      // Your own row, or a placeholder's.
+                                      final editable =
+                                          member.isPlaceholder || mine;
+
+                                      // Removing somebody also cuts off their access to the
+                                      // group, so it is offered only once nothing is owed
+                                      // either way.
+                                      final removable =
+                                          !mine &&
+                                          ledger.isSettledUp(member.id);
+
+                                      return [
+                                        if (member.isPlaceholder)
+                                          const PopupMenuItem(
+                                            value: 'invite',
+                                            child: Text('Send invite link'),
+                                          ),
+                                        if (member.isPlaceholder &&
+                                            editable) ...[
+                                          const PopupMenuItem(
+                                            value: 'rename',
+                                            child: Text('Rename'),
+                                          ),
+                                          PopupMenuItem(
+                                            value: 'upi',
+                                            child: Text(
+                                              member.upiVpa == null
+                                                  ? 'Add UPI ID'
+                                                  : 'Change UPI ID',
+                                            ),
+                                          ),
+                                        ],
+                                        if (mine)
+                                          const PopupMenuItem(
+                                            value: 'me',
+                                            child: Text(
+                                              'Edit your name and UPI ID',
+                                            ),
+                                          ),
+                                        if (removable)
+                                          const PopupMenuItem(
+                                            value: 'remove',
+                                            child: Text('Remove from group'),
+                                          )
+                                        // Said rather than silently withheld: an absent
+                                        // menu item reads as a bug, and the reason here is
+                                        // something the group can act on.
+                                        else if (!mine)
+                                          PopupMenuItem(
+                                            enabled: false,
+                                            child: Text(
+                                              '${ledger.nameOfMember(member)} is not '
+                                              'settled up',
+                                            ),
+                                          ),
+                                      ];
+                                    },
+                                  ),
                           ),
                       ],
                     ),
@@ -179,9 +194,13 @@ class MembersScreen extends ConsumerWidget {
       helper: 'They do not need the app. You can invite them later.',
     );
     if (name == null || name.trim().isEmpty) return;
-    await ref
-        .read(groupRepositoryProvider)
-        .addMember(groupId, displayName: name);
+    if (!context.mounted) return;
+    await saveWithFeedback(
+      context,
+      () async => ref
+          .read(groupRepositoryProvider)
+          .addMember(groupId, displayName: name),
+    );
   }
 
   /// Records a UPI handle for a member of this group.
@@ -199,9 +218,13 @@ class MembersScreen extends ConsumerWidget {
     controller.dispose();
     if (saved == null) return;
 
-    await ref
-        .read(groupRepositoryProvider)
-        .setMemberUpiVpa(member.id, saved.isEmpty ? null : saved);
+    if (!context.mounted) return;
+    await saveWithFeedback(
+      context,
+      () => ref
+          .read(groupRepositoryProvider)
+          .setMemberUpiVpa(member.id, saved.isEmpty ? null : saved),
+    );
   }
 
   Future<void> _rename(
@@ -216,7 +239,11 @@ class MembersScreen extends ConsumerWidget {
       initial: member.displayName,
     );
     if (name == null || name.trim().isEmpty) return;
-    await ref.read(groupRepositoryProvider).renameMember(member.id, name);
+    if (!context.mounted) return;
+    await saveWithFeedback(
+      context,
+      () => ref.read(groupRepositoryProvider).renameMember(member.id, name),
+    );
   }
 
   Future<void> _remove(
@@ -251,8 +278,11 @@ class MembersScreen extends ConsumerWidget {
       ),
     );
 
-    if (confirmed ?? false) {
-      await ref.read(groupRepositoryProvider).removeMember(member.id);
+    if ((confirmed ?? false) && context.mounted) {
+      await saveWithFeedback(
+        context,
+        () => ref.read(groupRepositoryProvider).removeMember(member.id),
+      );
     }
   }
 }

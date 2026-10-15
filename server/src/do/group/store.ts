@@ -45,7 +45,7 @@ export function findTombstone(tx: Tx) {
 export function requireMeta(tx: Tx): MetaRow {
   const meta = findMeta(tx);
   if (meta) return meta;
-  if (findTombstone(tx)) refuse("group_purged", "This group was settled and has been removed.");
+  if (findTombstone(tx)) refuse("group_purged", "This group has been removed.");
   refuse("no_group", "No such group.");
 }
 
@@ -70,9 +70,16 @@ export function requireMember(tx: Tx, memberId: string): MemberRow {
   return member;
 }
 
-/** Whether anybody here could still read this group. */
-export function hasAccountHolders(tx: Tx): boolean {
-  return tx.select({ id: schema.members.id }).from(schema.members).where(isNotNull(schema.members.profileId)).limit(1).get() !== undefined;
+/** Whether an active account still participates. */
+export function hasActiveAccounts(tx: Tx): boolean {
+  return (
+    tx
+      .select({ id: schema.members.id })
+      .from(schema.members)
+      .where(and(isNotNull(schema.members.profileId), isNull(schema.members.leftAt)))
+      .limit(1)
+      .get() !== undefined
+  );
 }
 
 /** Deletes the whole group, children first, leaving a tombstone for the feed. */

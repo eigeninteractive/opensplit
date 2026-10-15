@@ -4,10 +4,11 @@ import 'package:animations/animations.dart';
 
 import '../l10n/app_localizations.dart';
 import 'navigation.dart';
+import 'widgets/group_access.dart';
+import 'widgets/update_required_notice.dart';
 import 'screens/about_screen.dart';
 import 'screens/account_screen.dart';
 import 'screens/activity_screen.dart';
-import 'screens/archived_groups_screen.dart';
 import 'screens/avatar_picker_screen.dart';
 import 'screens/edit_profile_screen.dart';
 import 'screens/entry_editor_screen.dart';
@@ -92,20 +93,19 @@ GoRouter buildRouter({
     GoRoute(
       path: '/welcome',
       pageBuilder: (context, state) => const NoTransitionPage(
-        child: _ReadingOrderScreen(child: WelcomeScreen()),
+        child: _ReadingOrderScreen(
+          child: RequireCurrentApp(child: WelcomeScreen()),
+        ),
       ),
     ),
     // The link a friend sends.
     GoRoute(
       path: '/join/:token',
       builder: (context, state) => _ReadingOrderScreen(
-        child: JoinScreen(token: state.pathParameters['token']!),
+        child: RequireCurrentApp(
+          child: JoinScreen(token: state.pathParameters['token']!),
+        ),
       ),
-    ),
-    GoRoute(
-      path: '/archived',
-      builder: (context, state) =>
-          const _ReadingOrderScreen(child: ArchivedGroupsScreen()),
     ),
     // Above the shell rather than inside Settings' branch, so it arrives
     // with a back arrow instead of a menu button -- it is a screen reached
@@ -120,51 +120,64 @@ GoRouter buildRouter({
     GoRoute(
       path: '/account/edit',
       builder: (context, state) => _ReadingOrderScreen(
-        child: EditProfileScreen(
-          focus:
-              ProfileField.values
-                  .asNameMap()[state.uri.queryParameters['field']] ??
-              ProfileField.name,
+        child: RequireCurrentApp(
+          child: EditProfileScreen(
+            focus:
+                ProfileField.values
+                    .asNameMap()[state.uri.queryParameters['field']] ??
+                ProfileField.name,
+          ),
         ),
       ),
     ),
     GoRoute(
       path: '/account/save',
-      builder: (context, state) =>
-          const _ReadingOrderScreen(child: SaveAccountScreen()),
+      builder: (context, state) => const _ReadingOrderScreen(
+        child: RequireCurrentApp(child: SaveAccountScreen()),
+      ),
     ),
     GoRoute(
       path: '/account/picture',
-      builder: (context, state) =>
-          const _ReadingOrderScreen(child: AvatarPickerScreen.profile()),
+      builder: (context, state) => const _ReadingOrderScreen(
+        child: RequireCurrentApp(child: AvatarPickerScreen.profile()),
+      ),
     ),
     GoRoute(
       path: '/g/:groupId',
-      builder: (context, state) => _ReadingOrderScreen(
+      builder: (context, state) => _GroupScreen(
+        groupId: state.pathParameters['groupId']!,
         child: GroupDetailScreen(groupId: state.pathParameters['groupId']!),
       ),
       routes: [
         GoRoute(
           path: 'add',
-          builder: (context, state) => _ReadingOrderScreen(
-            child: EntryEditorScreen(groupId: state.pathParameters['groupId']!),
+          builder: (context, state) => _GroupScreen(
+            groupId: state.pathParameters['groupId']!,
+            child: RequireCurrentApp(
+              child: EntryEditorScreen(
+                groupId: state.pathParameters['groupId']!,
+              ),
+            ),
           ),
         ),
         GoRoute(
           path: 'activity',
-          builder: (context, state) => _ReadingOrderScreen(
+          builder: (context, state) => _GroupScreen(
+            groupId: state.pathParameters['groupId']!,
             child: ActivityScreen(groupId: state.pathParameters['groupId']!),
           ),
         ),
         GoRoute(
           path: 'insights',
-          builder: (context, state) => _ReadingOrderScreen(
+          builder: (context, state) => _GroupScreen(
+            groupId: state.pathParameters['groupId']!,
             child: InsightsScreen(groupId: state.pathParameters['groupId']!),
           ),
         ),
         GoRoute(
           path: 'settings',
-          builder: (context, state) => _ReadingOrderScreen(
+          builder: (context, state) => _GroupScreen(
+            groupId: state.pathParameters['groupId']!,
             child: GroupSettingsScreen(
               groupId: state.pathParameters['groupId']!,
             ),
@@ -172,35 +185,43 @@ GoRouter buildRouter({
         ),
         GoRoute(
           path: 'members',
-          builder: (context, state) => _ReadingOrderScreen(
+          builder: (context, state) => _GroupScreen(
+            groupId: state.pathParameters['groupId']!,
             child: MembersScreen(groupId: state.pathParameters['groupId']!),
           ),
         ),
         GoRoute(
           path: 'picture',
-          builder: (context, state) => _ReadingOrderScreen(
-            child: AvatarPickerScreen.group(
-              groupId: state.pathParameters['groupId']!,
+          builder: (context, state) => _GroupScreen(
+            groupId: state.pathParameters['groupId']!,
+            child: RequireCurrentApp(
+              child: AvatarPickerScreen.group(
+                groupId: state.pathParameters['groupId']!,
+              ),
             ),
           ),
         ),
         GoRoute(
           path: 'settle',
-          builder: (context, state) => _ReadingOrderScreen(
-            child: SettleUpScreen(
-              groupId: state.pathParameters['groupId']!,
-              fromMemberId: state.uri.queryParameters['from'],
-              toMemberId: state.uri.queryParameters['to'],
-              amountMinor: int.tryParse(
-                state.uri.queryParameters['amount'] ?? '',
+          builder: (context, state) => _GroupScreen(
+            groupId: state.pathParameters['groupId']!,
+            child: RequireCurrentApp(
+              child: SettleUpScreen(
+                groupId: state.pathParameters['groupId']!,
+                fromMemberId: state.uri.queryParameters['from'],
+                toMemberId: state.uri.queryParameters['to'],
+                amountMinor: int.tryParse(
+                  state.uri.queryParameters['amount'] ?? '',
+                ),
+                currency: state.uri.queryParameters['currency'],
               ),
-              currency: state.uri.queryParameters['currency'],
             ),
           ),
         ),
         GoRoute(
           path: 'e/:entryId',
-          builder: (context, state) => _ReadingOrderScreen(
+          builder: (context, state) => _GroupScreen(
+            groupId: state.pathParameters['groupId']!,
             child: EntryEditorScreen(
               groupId: state.pathParameters['groupId']!,
               entryId: state.pathParameters['entryId'],
@@ -466,4 +487,17 @@ class _NavigationDrawer extends StatelessWidget {
       ],
     );
   }
+}
+
+/// A shared access boundary for every group route, including direct links.
+class _GroupScreen extends StatelessWidget {
+  const _GroupScreen({required this.groupId, required this.child});
+
+  final String groupId;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => _ReadingOrderScreen(
+    child: GroupAccess(groupId: groupId, child: child),
+  );
 }

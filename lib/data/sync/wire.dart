@@ -23,7 +23,6 @@ extension GroupFromWire on api.Group {
     coverPhoto: coverPhoto,
     createdBy: createdBy,
     createdAt: createdAt,
-    archivedAt: archivedAt,
     seq: seq,
   );
 }
@@ -142,7 +141,6 @@ extension GroupToWire on Group {
     defaultCurrency: defaultCurrency,
     isDirect: isDirect,
     simplifyDebts: simplifyDebts,
-    archivedAt: archivedAt?.toUtc(),
     avatarKind: avatarKind,
     avatarColor: avatarColor,
     avatarEmoji: avatarEmoji,
@@ -152,6 +150,7 @@ extension GroupToWire on Group {
     coverPhoto: coverPhoto,
     creatorId: creator.id,
     creatorName: creator.displayName,
+    baseSeq: seq,
   );
 }
 
@@ -160,6 +159,7 @@ extension MemberToWire on Member {
     displayName: displayName,
     upiVpa: upiVpa,
     leftAt: leftAt?.toUtc(),
+    baseSeq: seq,
   );
 }
 

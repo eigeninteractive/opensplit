@@ -119,7 +119,7 @@ describe("recording an expense", () => {
 });
 
 describe("what does not wake a device", () => {
-  it("a rename, an archive, or a link being minted", async () => {
+  it("a rename or a link being minted", async () => {
     const fixture = await makeGroupOfTwo();
     await registerDevice(PRIYA, "device-priya");
 
@@ -127,8 +127,6 @@ describe("what does not wake a device", () => {
     const object = stub(fixture.groupId);
 
     ok(await editGroup(fixture.groupId, RAVI, { name: "Goa, again" }));
-    ok(await editGroup(fixture.groupId, RAVI, { archivedAt: new Date().toISOString() }));
-    ok(await editGroup(fixture.groupId, RAVI, { archivedAt: null }));
     ok(await object.createLink(RAVI));
     await settled();
 

@@ -14,6 +14,8 @@ import '../data/sync/outbox_queue.dart';
 import '../domain/fx/fx_quote.dart';
 import 'session_providers.dart';
 
+import 'backend_providers.dart';
+
 part 'local_providers.g.dart';
 
 /// Who holds the session, synchronously.
@@ -45,7 +47,10 @@ AppDatabase appDatabase(Ref ref) {
 /// Pending writes waiting for a server.
 @Riverpod(keepAlive: true)
 OutboxQueue outboxQueue(Ref ref) {
-  final queue = OutboxQueue(ref.watch(appDatabaseProvider));
+  final queue = OutboxQueue(
+    ref.watch(appDatabaseProvider),
+    access: ref.watch(apiAccessProvider),
+  );
   ref.onDispose(queue.dispose);
   return queue;
 }
@@ -76,6 +81,7 @@ DriftGroupRepository groupRepository(Ref ref) => DriftGroupRepository(
 DriftEntryRepository entryRepository(Ref ref) => DriftEntryRepository(
   ref.watch(appDatabaseProvider),
   outbox: ref.watch(outboxQueueProvider),
+  accountId: ref.watch(currentAccountIdProvider),
 );
 
 @Riverpod(keepAlive: true)

@@ -5,18 +5,16 @@ import { defaultAvatar, defaultGroupLook } from "../src/db/appearance";
 import type { ApiError } from "../src/schemas/common";
 import type { AccountDeletion, GroupLink, Joined, LinkPreview, Profile, ProfilePage } from "./api-types";
 import { freshId } from "./group";
-import { changes, type Guest, pull, pullResponse, signInAsGuest } from "./session";
+import { apiUrl, changes, type Guest, pull, pullResponse, signInAsGuest } from "./session";
 
 /** The person, rather than the ledger. */
-
-const ORIGIN = "https://opensplit.test";
 
 async function call(path: string, guest: Guest | null, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json");
   if (guest) headers.set("Authorization", `Bearer ${guest.token}`);
 
-  return workerExports.default.fetch(`${ORIGIN}${path}`, { ...init, headers });
+  return workerExports.default.fetch(apiUrl(path), { ...init, headers });
 }
 
 async function json<T>(response: Response): Promise<T> {
@@ -25,9 +23,9 @@ async function json<T>(response: Response): Promise<T> {
 
 async function makeGroup(host: Guest) {
   const id = freshId("acct");
-  const created = await call(`/api/groups/${id}`, host, {
+  const created = await call(`/groups/${id}`, host, {
     method: "PUT",
-    body: JSON.stringify({ name: "Goa trip", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, ...defaultGroupLook, creatorId: `${id}-host`, creatorName: "Ravi" }),
+    body: JSON.stringify({ name: "Goa trip", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, baseSeq: null, ...defaultGroupLook, creatorId: `${id}-host`, creatorName: "Ravi" }),
   });
   expect(created.status).toBe(200);
   return id;
@@ -36,16 +34,16 @@ async function makeGroup(host: Guest) {
 /** Puts two accounts in one group, the only way the app can: a link, spent. */
 async function share(host: Guest, guest: Guest, name: string) {
   const groupId = await makeGroup(host);
-  const link = await json<GroupLink>(await call(`/api/groups/${groupId}/link`, host, { method: "POST" }));
+  const link = await json<GroupLink>(await call(`/groups/${groupId}/link`, host, { method: "POST" }));
 
-  const joined = await call(`/api/links/${link.token}/join`, guest, { method: "POST", body: JSON.stringify({ memberId: null, displayName: name }) });
+  const joined = await call(`/links/${link.token}/join`, guest, { method: "POST", body: JSON.stringify({ memberId: null, displayName: name }) });
   expect(joined.status).toBe(200);
 
   return { groupId, member: (await json<Joined>(joined)).member };
 }
 
 async function writeProfile(guest: Guest, displayName: string | null, upiVpa: string | null = null, look: Record<string, unknown> = {}): Promise<Profile> {
-  const response = await call("/api/profile", guest, { method: "PUT", body: JSON.stringify({ displayName, upiVpa, ...defaultAvatar, ...look }) });
+  const response = await call("/profile", guest, { method: "PUT", body: JSON.stringify({ displayName, upiVpa, ...defaultAvatar, ...look }) });
   expect(response.status).toBe(200);
   return json<Profile>(response);
 }
@@ -64,7 +62,7 @@ describe("your own profile", () => {
 
     // A guest has no name of its own, and that null is load-bearing: claiming
     // an invite adopts the name a friend typed only when there is none here.
-    const before = await json<ProfilePage>(await call("/api/profiles", me));
+    const before = await json<ProfilePage>(await call("/profiles", me));
     expect(before.profiles).toEqual([expect.objectContaining({ id: me.id, displayName: null, upiVpa: null, deletedAt: null })]);
 
     const written = await named(me, "Ravi");
@@ -91,7 +89,7 @@ describe("your own profile", () => {
 
   it("keeps the avatar somebody picks, and gives it to everyone who can see them", async () => {
     const me = await signInAsGuest();
-    expect((await json<ProfilePage>(await call("/api/profiles", me))).profiles[0]).toMatchObject(defaultAvatar);
+    expect((await json<ProfilePage>(await call("/profiles", me))).profiles[0]).toMatchObject(defaultAvatar);
 
     const emoji = await writeProfile(me, "Ravi", null, { avatarKind: "emoji", avatarEmoji: "🏏", avatarColor: "teal" });
     expect(emoji).toMatchObject({ avatarKind: "emoji", avatarEmoji: "🏏", avatarColor: "teal", avatarIcon: null });
@@ -102,7 +100,7 @@ describe("your own profile", () => {
   });
 
   it("refuses an avatar whose fields disagree with its kind, or that is not what it says", async () => {
-    const write = (look: Record<string, unknown>) => call("/api/profile", ravi, { method: "PUT", body: JSON.stringify({ displayName: "Ravi", upiVpa: null, ...defaultAvatar, ...look }) });
+    const write = (look: Record<string, unknown>) => call("/profile", ravi, { method: "PUT", body: JSON.stringify({ displayName: "Ravi", upiVpa: null, ...defaultAvatar, ...look }) });
 
     expect((await write({ avatarKind: "emoji" })).status).toBe(400);
     expect((await write({ avatarEmoji: "🏏" })).status).toBe(400);
@@ -116,27 +114,27 @@ describe("your own profile", () => {
   });
 
   it("has room for a photo, and refuses one while nothing can be uploaded", async () => {
-    const refused = await call("/api/profile", ravi, { method: "PUT", body: JSON.stringify({ displayName: "Ravi", upiVpa: null, ...defaultAvatar, avatarKind: "photo", avatarPhoto: "avatars/me/1.webp" }) });
+    const refused = await call("/profile", ravi, { method: "PUT", body: JSON.stringify({ displayName: "Ravi", upiVpa: null, ...defaultAvatar, avatarKind: "photo", avatarPhoto: "avatars/me/1.webp" }) });
     expect(refused.status).toBe(400);
   });
 
   it("forgets the avatar with the rest of a deleted account", async () => {
     const me = await signInAsGuest();
     await writeProfile(me, "Ravi", null, { avatarKind: "icon", avatarIcon: "sailing", avatarColor: "blue" });
-    expect((await call("/api/account", me, { method: "DELETE" })).status).toBe(200);
+    expect((await call("/account", me, { method: "DELETE" })).status).toBe(200);
 
     const left = await env.DB.prepare("select avatar_kind, avatar_icon, avatar_color from profiles where id = ?").bind(me.id).first();
     expect(left).toEqual({ avatar_kind: "initials", avatar_icon: null, avatar_color: null });
   });
 
   it("refuses a payment handle that is not one", async () => {
-    const refused = await call("/api/profile", ravi, { method: "PUT", body: JSON.stringify({ displayName: "Ravi", upiVpa: "not a vpa", ...defaultAvatar }) });
+    const refused = await call("/profile", ravi, { method: "PUT", body: JSON.stringify({ displayName: "Ravi", upiVpa: "not a vpa", ...defaultAvatar }) });
     expect(refused.status).toBe(400);
     expect((await json<ApiError>(refused)).error.code).toBe("malformed");
   });
 
   it("requires both fields, so neither can be silently left behind", async () => {
-    const refused = await call("/api/profile", ravi, { method: "PUT", body: JSON.stringify({ displayName: "Ravi" }) });
+    const refused = await call("/profile", ravi, { method: "PUT", body: JSON.stringify({ displayName: "Ravi" }) });
     expect(refused.status).toBe(400);
   });
 });
@@ -153,7 +151,7 @@ describe("the profile feed", () => {
 
     await share(host, friend, "Priya");
 
-    const seen = await json<ProfilePage>(await call("/api/profiles", host));
+    const seen = await json<ProfilePage>(await call("/profiles", host));
     const ids = seen.profiles.map((row) => row.id);
 
     expect(ids).toContain(host.id);
@@ -162,7 +160,7 @@ describe("the profile feed", () => {
 
     // Symmetric, which is what makes a settle-up possible: Priya needs Ravi's
     // payment handle exactly as much as Ravi needs hers.
-    const other = await json<ProfilePage>(await call("/api/profiles", friend));
+    const other = await json<ProfilePage>(await call("/profiles", friend));
     expect(other.profiles.map((row) => row.id)).toContain(host.id);
   });
 
@@ -171,9 +169,9 @@ describe("the profile feed", () => {
     const friends = [await signInAsGuest(), await signInAsGuest(), await signInAsGuest()];
 
     const groupId = await makeGroup(host);
-    const link = await json<GroupLink>(await call(`/api/groups/${groupId}/link`, host, { method: "POST" }));
+    const link = await json<GroupLink>(await call(`/groups/${groupId}/link`, host, { method: "POST" }));
     for (const [index, friend] of friends.entries()) {
-      await call(`/api/links/${link.token}/join`, friend, { method: "POST", body: JSON.stringify({ memberId: null, displayName: `Friend ${index}` }) });
+      await call(`/links/${link.token}/join`, friend, { method: "POST", body: JSON.stringify({ memberId: null, displayName: `Friend ${index}` }) });
       await named(friend, `Friend ${index}`);
     }
 
@@ -182,7 +180,7 @@ describe("the profile feed", () => {
     let pages = 0;
 
     while (page.hasMore && pages < 10) {
-      page = await json<ProfilePage>(await call(`/api/profiles?limit=2&since=${page.seq}`, host));
+      page = await json<ProfilePage>(await call(`/profiles?limit=2&since=${page.seq}`, host));
       collected.push(...page.profiles.map((row) => row.id));
       pages += 1;
     }
@@ -213,10 +211,10 @@ describe("a group's change page", () => {
   it("carries more profiles than D1 binds in one query", async () => {
     const host = await signInAsGuest();
     const groupId = await makeGroup(host);
-    const link = await json<GroupLink>(await call(`/api/groups/${groupId}/link`, host, { method: "POST" }));
+    const link = await json<GroupLink>(await call(`/groups/${groupId}/link`, host, { method: "POST" }));
     const arrivals = await Promise.all(Array.from({ length: 120 }, () => signInAsGuest()));
     for (const [index, guest] of arrivals.entries()) {
-      await call(`/api/links/${link.token}/join`, guest, { method: "POST", body: JSON.stringify({ memberId: null, displayName: `Friend ${index}` }) });
+      await call(`/links/${link.token}/join`, guest, { method: "POST", body: JSON.stringify({ memberId: null, displayName: `Friend ${index}` }) });
     }
 
     const page = await changes(host, groupId);
@@ -233,7 +231,7 @@ describe("a group's change page", () => {
     await named(friend, "Priya");
     await named(host, "Ravi");
 
-    const swept = await json<ProfilePage>(await call("/api/profiles", host));
+    const swept = await json<ProfilePage>(await call("/profiles", host));
     expect(swept.profiles.map((row) => row.id)).not.toContain(friend.id);
 
     const { groupId } = await share(host, friend, "Priya");
@@ -249,23 +247,23 @@ describe("devices", () => {
     const second = await signInAsGuest();
     const token = `fcm-${freshId("dev")}`;
 
-    expect((await call("/api/devices", first, { method: "PUT", body: JSON.stringify({ token, platform: "android" }) })).status).toBe(200);
+    expect((await call("/devices", first, { method: "PUT", body: JSON.stringify({ token, platform: "android" }) })).status).toBe(200);
 
     // Idempotent: a token is re-registered on every launch.
-    expect((await call("/api/devices", first, { method: "PUT", body: JSON.stringify({ token, platform: "android" }) })).status).toBe(200);
+    expect((await call("/devices", first, { method: "PUT", body: JSON.stringify({ token, platform: "android" }) })).status).toBe(200);
 
     // A phone that changes hands keeps its registration token, so the claim has
     // to transfer rather than be refused — otherwise the previous owner's
     // notifications follow the new one.
-    expect((await call("/api/devices", second, { method: "PUT", body: JSON.stringify({ token, platform: "android" }) })).status).toBe(200);
+    expect((await call("/devices", second, { method: "PUT", body: JSON.stringify({ token, platform: "android" }) })).status).toBe(200);
 
     // Which means the previous owner can no longer forget it.
-    expect(await json<{ forgotten: boolean }>(await call(`/api/devices/${encodeURIComponent(token)}`, first, { method: "DELETE" }))).toEqual({ forgotten: false });
-    expect(await json<{ forgotten: boolean }>(await call(`/api/devices/${encodeURIComponent(token)}`, second, { method: "DELETE" }))).toEqual({ forgotten: true });
+    expect(await json<{ forgotten: boolean }>(await call(`/devices/${encodeURIComponent(token)}`, first, { method: "DELETE" }))).toEqual({ forgotten: false });
+    expect(await json<{ forgotten: boolean }>(await call(`/devices/${encodeURIComponent(token)}`, second, { method: "DELETE" }))).toEqual({ forgotten: true });
   });
 
   it("is refused without a session", async () => {
-    expect((await call("/api/devices", null, { method: "PUT", body: JSON.stringify({ token: "x", platform: "web" }) })).status).toBe(401);
+    expect((await call("/devices", null, { method: "PUT", body: JSON.stringify({ token: "x", platform: "web" }) })).status).toBe(401);
   });
 });
 
@@ -277,7 +275,7 @@ describe("deleting an account", () => {
 
     const { groupId, member } = await share(staying, leaving, "Ravi");
 
-    const deleted = await json<AccountDeletion>(await call("/api/account", leaving, { method: "DELETE" }));
+    const deleted = await json<AccountDeletion>(await call("/account", leaving, { method: "DELETE" }));
     expect(deleted).toEqual({ forgotten: 1, purged: 0 });
 
     // The group is untouched for everybody else, and the member row keeps its
@@ -297,7 +295,7 @@ describe("deleting an account", () => {
     const { groupId, member } = await share(staying, leaving, "Ravi");
     await named(leaving, "Ravi Kumar");
 
-    await call("/api/account", leaving, { method: "DELETE" });
+    await call("/account", leaving, { method: "DELETE" });
 
     const page = await changes(staying, groupId);
     expect(page.members.find((each) => each.id === member.id)?.displayName).toBe("Ravi Kumar");
@@ -307,7 +305,7 @@ describe("deleting an account", () => {
     const solo = await signInAsGuest();
     const groupId = await makeGroup(solo);
 
-    const deleted = await json<AccountDeletion>(await call("/api/account", solo, { method: "DELETE" }));
+    const deleted = await json<AccountDeletion>(await call("/account", solo, { method: "DELETE" }));
     expect(deleted).toEqual({ forgotten: 1, purged: 1 });
 
     // Holding somebody's expense descriptions forever in a group with no living
@@ -326,7 +324,7 @@ describe("deleting an account", () => {
     await writeProfile(going, "Zara", "zara@okaxis");
 
     const token = `fcm-${freshId("gone")}`;
-    await call("/api/devices", going, { method: "PUT", body: JSON.stringify({ token, platform: "android" }) });
+    await call("/devices", going, { method: "PUT", body: JSON.stringify({ token, platform: "android" }) });
 
     // A group with somebody else in it, so the account survives long enough
     // for its own profile to be checked from the other side.
@@ -334,7 +332,7 @@ describe("deleting an account", () => {
     await named(friend, "Priya");
     const { groupId } = await share(friend, going, "Zara");
 
-    expect((await call("/api/account", going, { method: "DELETE" })).status).toBe(200);
+    expect((await call("/account", going, { method: "DELETE" })).status).toBe(200);
 
     // The session is gone with the account, so the device is signed out by
     // consequence rather than by a second call.
@@ -346,7 +344,7 @@ describe("deleting an account", () => {
   });
 
   it("is refused without a session", async () => {
-    expect((await call("/api/account", null, { method: "DELETE" })).status).toBe(401);
+    expect((await call("/account", null, { method: "DELETE" })).status).toBe(401);
   });
 });
 
@@ -357,7 +355,7 @@ describe("a guest who never became anybody", () => {
 
     // Visible only to themselves, which is the degenerate case of the rule
     // rather than a special one: nobody shares a group with them yet.
-    const page = await json<ProfilePage>(await call("/api/profiles", guest));
+    const page = await json<ProfilePage>(await call("/profiles", guest));
     expect(page.profiles.map((row) => row.id)).toEqual([guest.id]);
   });
 });
@@ -368,8 +366,8 @@ describe("a link preview", () => {
     const friend = await signInAsGuest();
     const { groupId } = await share(host, friend, "Priya");
 
-    const link = await json<GroupLink>(await call(`/api/groups/${groupId}/link`, host, { method: "POST" }));
-    const preview = await json<LinkPreview>(await call(`/api/links/${link.token}`, friend));
+    const link = await json<GroupLink>(await call(`/groups/${groupId}/link`, host, { method: "POST" }));
+    const preview = await json<LinkPreview>(await call(`/links/${link.token}`, friend));
 
     expect(preview.isMember).toBe(true);
     expect(preview.memberCount).toBe(2);

@@ -1,3 +1,4 @@
+import '../../application/backend_providers.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -238,7 +239,9 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                         subtitle: const Text(
                           'Removes this device\'s copy. Sign back in to get it again.',
                         ),
-                        onTap: _signOut,
+                        onTap: ref.watch(requiresAppUpdateProvider)
+                            ? null
+                            : _signOut,
                       )
                     // Said out loud rather than left as a gap.
                     else
@@ -278,7 +281,9 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : null,
-                      onTap: _deleting ? null : _deleteAccount,
+                      onTap: _deleting || ref.watch(requiresAppUpdateProvider)
+                          ? null
+                          : _deleteAccount,
                     ),
                   ],
                 ),
@@ -291,7 +296,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
 }
 
 /// Who this is, as the people in your groups see them.
-class _Identity extends StatelessWidget {
+class _Identity extends ConsumerWidget {
   const _Identity({
     required this.id,
     required this.avatar,
@@ -307,7 +312,7 @@ class _Identity extends StatelessWidget {
   final bool isGuest;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final named = name?.trim() ?? '';
@@ -316,7 +321,9 @@ class _Identity extends StatelessWidget {
       margin: EdgeInsets.zero,
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: () => _edit(context, ProfileField.name),
+        onTap: ref.watch(requiresAppUpdateProvider)
+            ? null
+            : () => _edit(context, ProfileField.name),
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Row(
@@ -324,7 +331,9 @@ class _Identity extends StatelessWidget {
               Tooltip(
                 message: 'Change picture',
                 child: InkResponse(
-                  onTap: () => context.push('/account/picture'),
+                  onTap: ref.watch(requiresAppUpdateProvider)
+                      ? null
+                      : () => context.push('/account/picture'),
                   radius: 36,
                   child: AvatarView(
                     avatar: avatar,
@@ -360,7 +369,9 @@ class _Identity extends StatelessWidget {
               IconButton(
                 icon: const Icon(Icons.edit_outlined),
                 tooltip: 'Edit profile',
-                onPressed: () => _edit(context, ProfileField.name),
+                onPressed: ref.watch(requiresAppUpdateProvider)
+                    ? null
+                    : () => _edit(context, ProfileField.name),
               ),
             ],
           ),
@@ -371,11 +382,11 @@ class _Identity extends StatelessWidget {
 }
 
 /// The one thing a guest should do, said once and with one button.
-class _SaveAccountCard extends StatelessWidget {
+class _SaveAccountCard extends ConsumerWidget {
   const _SaveAccountCard();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final onCard = scheme.onSecondaryContainer;
@@ -400,7 +411,9 @@ class _SaveAccountCard extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             FilledButton(
-              onPressed: () => context.push('/account/save'),
+              onPressed: ref.watch(requiresAppUpdateProvider)
+                  ? null
+                  : () => context.push('/account/save'),
               child: const Text('Save my account'),
             ),
           ],
@@ -434,7 +447,7 @@ class _SectionHeader extends StatelessWidget {
 }
 
 /// One stored value, read-only, opening the editor on its own field.
-class _ProfileRow extends StatelessWidget {
+class _ProfileRow extends ConsumerWidget {
   const _ProfileRow({
     required this.icon,
     required this.label,
@@ -452,7 +465,7 @@ class _ProfileRow extends StatelessWidget {
   final ProfileField field;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final shown = value?.trim() ?? '';
     return ListTile(
@@ -463,7 +476,9 @@ class _ProfileRow extends StatelessWidget {
         style: shown.isEmpty ? TextStyle(color: scheme.onSurfaceVariant) : null,
       ),
       trailing: const Icon(Icons.chevron_right),
-      onTap: () => _edit(context, field),
+      onTap: ref.watch(requiresAppUpdateProvider)
+          ? null
+          : () => _edit(context, field),
     );
   }
 }

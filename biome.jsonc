@@ -24,6 +24,8 @@
       "!server/worker-configuration.d.ts",
       // The API contract, emitted from the Worker's Zod schemas.
       "!docs/openapi.json",
+      // Store artwork provenance, emitted after a complete render.
+      "!site/store/artifacts.json",
       // `drift_dev schema dump`.
       "!drift_schemas",
       // Drift's release file, which CI compares byte for byte.

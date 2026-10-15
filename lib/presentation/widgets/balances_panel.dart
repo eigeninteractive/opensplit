@@ -388,10 +388,12 @@ class _TransferTile extends StatelessWidget {
             Theme.of(context).textTheme.titleMedium!,
           ).copyWith(color: scheme.onSurface),
         ),
-        trailing: FilledButton.tonal(
-          onPressed: settle,
-          child: const Text('Settle'),
-        ),
+        trailing: !ledger.canEdit
+            ? null
+            : FilledButton.tonal(
+                onPressed: settle,
+                child: const Text('Settle'),
+              ),
       ),
     );
   }

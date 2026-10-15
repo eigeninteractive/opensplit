@@ -73,8 +73,10 @@ class _ExportButtonState extends ConsumerState<ExportButton> {
 
       final json = groupToJson(
         group: ledger.group,
-        members: ledger.members,
-        entries: ledger.entries,
+        members: [...ledger.members, ...ledger.pastMembers],
+        entries: await ref
+            .read(entryRepositoryProvider)
+            .getEntries(widget.groupId, includeDeleted: true),
         profiles: ledger.profiles,
         nameOf: ledger.nameOfMember,
         activity: activity,
@@ -108,7 +110,7 @@ class _ExportButtonState extends ConsumerState<ExportButton> {
             ? (ledger?.entries ?? const [])
             : entries,
         memberNames: {
-          for (final member in ledger?.members ?? const [])
+          for (final member in [...?ledger?.members, ...?ledger?.pastMembers])
             // The resolved name, so somebody who has claimed an account appears
             // in the file under the name everybody actually calls them.
             member.id: ledger?.nameOfMember(member) ?? member.displayName,

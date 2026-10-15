@@ -27,7 +27,6 @@ Group _$GroupFromJson(
       'createdBy',
       'createdAt',
       'lastActivityAt',
-      'archivedAt',
       'updatedAt',
       'seq',
     ],
@@ -79,10 +78,6 @@ Group _$GroupFromJson(
       'lastActivityAt',
       (v) => DateTime.parse(v as String),
     ),
-    archivedAt: $checkedConvert(
-      'archivedAt',
-      (v) => v == null ? null : DateTime.parse(v as String),
-    ),
     updatedAt: $checkedConvert('updatedAt', (v) => DateTime.parse(v as String)),
     seq: $checkedConvert('seq', (v) => (v as num).toInt()),
   );
@@ -105,7 +100,6 @@ Map<String, dynamic> _$GroupToJson(Group instance) => <String, dynamic>{
   'createdBy': instance.createdBy,
   'createdAt': instance.createdAt.toIso8601String(),
   'lastActivityAt': instance.lastActivityAt.toIso8601String(),
-  'archivedAt': instance.archivedAt?.toIso8601String(),
   'updatedAt': instance.updatedAt.toIso8601String(),
   'seq': instance.seq,
 };

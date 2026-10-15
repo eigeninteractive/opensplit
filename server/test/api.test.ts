@@ -5,18 +5,16 @@ import { defaultGroupLook } from "../src/db/appearance";
 import type { ApiError } from "../src/schemas/common";
 import type { Entry, Group, Member } from "./api-types";
 import { freshId } from "./group";
-import { changes, type Guest, pull, pullResponse, signInAsGuest } from "./session";
+import { apiUrl, changes, type Guest, pull, pullResponse, signInAsGuest } from "./session";
 
 /** The sync surface over HTTP. */
-
-const ORIGIN = "https://opensplit.test";
 
 async function call(path: string, guest: Guest | null, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json");
   if (guest) headers.set("Authorization", `Bearer ${guest.token}`);
 
-  return workerExports.default.fetch(`${ORIGIN}${path}`, { ...init, headers });
+  return workerExports.default.fetch(apiUrl(path), { ...init, headers });
 }
 
 async function json<T>(response: Response): Promise<T> {
@@ -25,9 +23,9 @@ async function json<T>(response: Response): Promise<T> {
 
 async function makeGroup(guest: Guest, name = "Goa trip") {
   const id = freshId("api");
-  const response = await call(`/api/groups/${id}`, guest, {
+  const response = await call(`/groups/${id}`, guest, {
     method: "PUT",
-    body: JSON.stringify({ name, defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, ...defaultGroupLook, creatorId: `${id}-me`, creatorName: "Ravi" }),
+    body: JSON.stringify({ name, defaultCurrency: "INR", isDirect: false, simplifyDebts: true, baseSeq: null, ...defaultGroupLook, creatorId: `${id}-me`, creatorName: "Ravi" }),
   });
 
   expect(response.status).toBe(200);
@@ -62,7 +60,7 @@ let zara: Guest;
 
 /** Writes an expense at its own id, as Ravi. */
 function putEntry(groupId: string, { id, ...body }: { id: string } & Record<string, unknown>) {
-  return call(`/api/groups/${groupId}/entries/${id}`, ravi, { method: "PUT", body: JSON.stringify(body) });
+  return call(`/groups/${groupId}/entries/${id}`, ravi, { method: "PUT", body: JSON.stringify(body) });
 }
 
 beforeAll(async () => {
@@ -76,7 +74,7 @@ describe("without a session", () => {
     expect(pulled.status).toBe(401);
     expect((await json<ApiError>(pulled)).error.code).toBe("no_session");
 
-    const write = await call(`/api/groups/${freshId()}`, null, { method: "PUT", body: JSON.stringify({}) });
+    const write = await call(`/groups/${freshId()}`, null, { method: "PUT", body: JSON.stringify({}) });
     expect(write.status).toBe(401);
   });
 });
@@ -269,11 +267,12 @@ describe("the roster over HTTP", () => {
     const { id } = await makeGroup(ravi);
     const memberId = freshId("api-m");
 
-    const added = await call(`/api/groups/${id}/members/${memberId}`, ravi, { method: "PUT", body: JSON.stringify({ displayName: "Priya", upiVpa: null, leftAt: null }) });
+    const added = await call(`/groups/${id}/members/${memberId}`, ravi, { method: "PUT", body: JSON.stringify({ displayName: "Priya", upiVpa: null, leftAt: null, baseSeq: null }) });
     expect(added.status).toBe(200);
-    expect((await json<Member>(added)).profileId).toBeNull();
+    const member = await json<Member>(added);
+    expect(member.profileId).toBeNull();
 
-    const patched = await call(`/api/groups/${id}/members/${memberId}`, ravi, { method: "PUT", body: JSON.stringify({ displayName: "Priya", upiVpa: "priya@okaxis", leftAt: null }) });
+    const patched = await call(`/groups/${id}/members/${memberId}`, ravi, { method: "PUT", body: JSON.stringify({ displayName: "Priya", upiVpa: "priya@okaxis", leftAt: null, baseSeq: member.seq }) });
     expect(patched.status).toBe(200);
     expect((await json<Member>(patched)).upiVpa).toBe("priya@okaxis");
   });
@@ -281,15 +280,16 @@ describe("the roster over HTTP", () => {
   it("refuses a payment handle that is not one, before the object sees it", async () => {
     const { id } = await makeGroup(ravi);
     const memberId = freshId("api-m");
-    await call(`/api/groups/${id}/members/${memberId}`, ravi, { method: "PUT", body: JSON.stringify({ displayName: "Priya", upiVpa: null, leftAt: null }) });
+    await call(`/groups/${id}/members/${memberId}`, ravi, { method: "PUT", body: JSON.stringify({ displayName: "Priya", upiVpa: null, leftAt: null, baseSeq: null }) });
 
-    const response = await call(`/api/groups/${id}/members/${memberId}`, ravi, { method: "PUT", body: JSON.stringify({ displayName: "Priya", upiVpa: "not a handle", leftAt: null }) });
+    const response = await call(`/groups/${id}/members/${memberId}`, ravi, { method: "PUT", body: JSON.stringify({ displayName: "Priya", upiVpa: "not a handle", leftAt: null, baseSeq: null }) });
     expect(response.status).toBe(400);
   });
 
   it("changes how a group looks without telling the activity feed", async () => {
     const { id } = await makeGroup(ravi);
-    const look = (look: Record<string, unknown>) => call(`/api/groups/${id}`, ravi, { method: "PUT", body: JSON.stringify({ name: "Goa trip", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, ...defaultGroupLook, creatorId: "unused", creatorName: "Ravi", ...look }) });
+    const look = async (look: Record<string, unknown>) =>
+      call(`/groups/${id}`, ravi, { method: "PUT", body: JSON.stringify({ name: "Goa trip", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, baseSeq: (await changes(ravi, id)).group?.seq, ...defaultGroupLook, creatorId: "unused", creatorName: "Ravi", ...look }) });
 
     const events = async () => (await changes(ravi, id)).events.length;
     const before = await events();
@@ -306,10 +306,10 @@ describe("the roster over HTTP", () => {
   it("renames a group, and refuses a blank name", async () => {
     const { id } = await makeGroup(ravi);
 
-    const renamed = await call(`/api/groups/${id}`, ravi, { method: "PUT", body: JSON.stringify({ name: "Goa, take two", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, ...defaultGroupLook, creatorId: "unused", creatorName: "Ravi" }) });
+    const renamed = await call(`/groups/${id}`, ravi, { method: "PUT", body: JSON.stringify({ name: "Goa, take two", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, baseSeq: (await changes(ravi, id)).group?.seq, ...defaultGroupLook, creatorId: "unused", creatorName: "Ravi" }) });
     expect((await json<Group>(renamed)).name).toBe("Goa, take two");
 
-    const blank = await call(`/api/groups/${id}`, ravi, { method: "PUT", body: JSON.stringify({ name: "   ", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, ...defaultGroupLook, creatorId: "unused", creatorName: "Ravi" }) });
+    const blank = await call(`/groups/${id}`, ravi, { method: "PUT", body: JSON.stringify({ name: "   ", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, baseSeq: (await changes(ravi, id)).group?.seq, ...defaultGroupLook, creatorId: "unused", creatorName: "Ravi" }) });
     expect(blank.status).toBe(400);
   });
 });
@@ -334,7 +334,7 @@ describe("which group a page is about", () => {
 
   it("is still stated by a group that has been collected", async () => {
     const { id } = await makeGroup(ravi);
-    await env.GROUP.getByName(id).runUpkeep(Date.now() + 800 * 24 * 60 * 60 * 1000);
+    await env.GROUP.getByName(id).forgetProfile(ravi.id, null);
 
     const page = await changes(ravi, id);
     expect(page.groupId).toBe(id);

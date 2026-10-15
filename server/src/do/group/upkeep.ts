@@ -2,21 +2,9 @@ import { eq, inArray, sql } from "drizzle-orm";
 
 import type { LinkKind } from "../../db/d1/schema";
 import * as schema from "../../db/group/schema";
-import { isGroupSettled } from "./balances";
-import { append } from "./events";
-import { findMeta, hasAccountHolders, nextSeq, nowIso, purge, requireMeta, type Tx } from "./store";
+import { findMeta, hasActiveAccounts, nowIso, purge, requireMeta, type Tx } from "./store";
 
 /** What the object owes D1 (the outbox) and its own future (the schedule behind its one alarm). */
-
-const DAY = 24 * 60 * 60 * 1000;
-
-/** Archiving is reversible; collecting waits four times as long and requires everyone settled. */
-export const DORMANCY = {
-  archiveAfter: 90 * DAY,
-  purgeAfter: 365 * DAY,
-  /** How long to wait before asking an unsettled dormant group again. */
-  recheck: 30 * DAY,
-} as const;
 
 const RETRY_BACKOFF = [30_000, 2 * 60_000, 10 * 60_000, 60 * 60_000] as const;
 
@@ -41,59 +29,22 @@ export function nextDue(tx: Tx): number | null {
   );
 }
 
-/** Called in the transaction of every change a member makes: a group in use is not dormant. */
-export function touchDormancy(tx: Tx, now: string): void {
+/** Records when the shared ledger last changed. */
+export function touchActivity(tx: Tx, now: string): void {
   tx.update(schema.meta).set({ lastActivityAt: now }).run();
-  scheduleAt(tx, "archive", Date.parse(now) + DORMANCY.archiveAfter);
-  unschedule(tx, "purge");
 }
 
 export interface UpkeepOutcome {
-  archived: boolean;
   purged: boolean;
 }
 
-/** Archive if quiet, collect if long dead and settled, and re-arm for whatever is next. */
-export function runDormancy(tx: Tx, now: number): UpkeepOutcome {
-  const outcome: UpkeepOutcome = { archived: false, purged: false };
+/** A group exists while an account participates, regardless of inactivity. */
+export function collectUnowned(tx: Tx, now: number): UpkeepOutcome {
   const meta = findMeta(tx);
-  if (!meta) return outcome;
-
-  const quietSince = Date.parse(meta.lastActivityAt);
-
-  if (meta.archivedAt === null) {
-    if (quietSince + DORMANCY.archiveAfter > now) {
-      scheduleAt(tx, "archive", quietSince + DORMANCY.archiveAfter);
-      return outcome;
-    }
-
-    const seq = nextSeq(tx);
-    const at = nowIso(now);
-    tx.update(schema.meta).set({ archivedAt: at, updatedAt: at, seq }).where(eq(schema.meta.id, meta.id)).run();
-    append(tx, { seq, now: at, actorId: null, kind: "group_archived", group: { name: meta.name, previousName: null } });
-    outcome.archived = true;
-  }
-  // Archived, by this run or by a member: only collecting is left to wait for, and a spent
-  // archive deadline left behind would hold the alarm in the past.
-  unschedule(tx, "archive");
-
-  // Nobody left with an account: collect as soon as it is quiet.
-  const due = hasAccountHolders(tx) ? quietSince + DORMANCY.purgeAfter : quietSince;
-  if (due > now) {
-    scheduleAt(tx, "purge", due);
-    return outcome;
-  }
-
-  if (!isGroupSettled(tx)) {
-    scheduleAt(tx, "purge", now + DORMANCY.recheck);
-    return outcome;
-  }
-
+  if (!meta || hasActiveAccounts(tx)) return { purged: false };
   purge(tx, nowIso(now));
   stagePurge(tx, meta.id, nowIso(now));
-  unschedule(tx, "purge");
-  outcome.purged = true;
-  return outcome;
+  return { purged: true };
 }
 
 export function stageMembership(tx: Tx, profileId: string, leftAt: string | null, now: string): void {

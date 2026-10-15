@@ -73,6 +73,29 @@ void main() {
     expect(await outbox.nextAttemptAt(), isNull);
   });
 
+  test(
+    'retry does not resubmit writes that lost access or their edit base',
+    () async {
+      for (final code in ['not_member', 'stale_base', 'group_purged']) {
+        await outbox.enqueue(OutboxTarget.group, code);
+        await outbox.fail(
+          (await outbox.due()).single,
+          'Refresh required',
+          permanent: true,
+          code: code,
+        );
+      }
+      await outbox.enqueue(OutboxTarget.group, 'retryable');
+      await outbox.fail(
+        (await outbox.due()).single,
+        'Temporary failure',
+        permanent: true,
+      );
+      await outbox.retryDeadLetters();
+      expect((await outbox.due()).map((row) => row.targetId), ['retryable']);
+    },
+  );
+
   group('the order changes are pushed in', () {
     late DriftGroupRepository groups;
     late DriftEntryRepository entries;
@@ -102,7 +125,7 @@ void main() {
         _draft(made.group.id, made.creator.id, priya.id),
         createdBy: made.creator.id,
       );
-      await groups.removeMember(priya.id);
+      await groups.renameMember(priya.id, 'Priya Updated');
 
       expect(await order(), [OutboxTarget.entry, OutboxTarget.member]);
     });

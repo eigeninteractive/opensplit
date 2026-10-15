@@ -66,7 +66,7 @@ export async function makeGroup(options: { groupId?: string; name?: string; curr
         defaultCurrency: options.currency ?? "INR",
         isDirect: false,
         simplifyDebts: true,
-        archivedAt: null,
+        baseSeq: null,
         ...defaultGroupLook,
         creatorId: `${groupId}-ravi`,
         creatorName: "Ravi",
@@ -75,7 +75,7 @@ export async function makeGroup(options: { groupId?: string; name?: string; curr
     ),
   );
 
-  const priya = ok(await object.putMember(`${groupId}-priya`, { displayName: "Priya", upiVpa: null, leftAt: null }, options.owner ?? RAVI));
+  const priya = ok(await object.putMember(`${groupId}-priya`, { displayName: "Priya", upiVpa: null, leftAt: null, baseSeq: null }, options.owner ?? RAVI));
 
   const changes = ok(await object.changes(options.owner ?? RAVI, 0, 500));
   const ravi = changes.members.find((member) => member.profileId === (options.owner ?? RAVI));
@@ -161,9 +161,9 @@ export async function editGroup(groupId: string, profileId: string, changes: Par
   const object = stub(groupId);
   const group = ok(await object.changes(profileId, 0, 500)).group;
   if (!group) expect.unreachable("No group row to edit.");
-  const { name, defaultCurrency, isDirect, simplifyDebts, archivedAt, avatarKind, avatarColor, avatarEmoji, avatarIcon, avatarPhoto, coverKind, coverPhoto, createdBy } = group;
+  const { name, defaultCurrency, isDirect, simplifyDebts, avatarKind, avatarColor, avatarEmoji, avatarIcon, avatarPhoto, coverKind, coverPhoto, createdBy } = group;
   const look = { avatarKind, avatarColor, avatarEmoji, avatarIcon, avatarPhoto, coverKind, coverPhoto };
-  return object.putGroup(groupId, { name, defaultCurrency, isDirect, simplifyDebts, archivedAt, ...look, creatorId: createdBy, creatorName: "Ravi", ...changes }, profileId);
+  return object.putGroup(groupId, { name, defaultCurrency, isDirect, simplifyDebts, baseSeq: group.seq, ...look, creatorId: createdBy, creatorName: "Ravi", ...changes }, profileId);
 }
 
 /** The same for a member row. */
@@ -171,7 +171,7 @@ export async function editMember(groupId: string, memberId: string, profileId: s
   const object = stub(groupId);
   const member = await memberRow(groupId, memberId, profileId);
   const { displayName, upiVpa, leftAt } = member;
-  return object.putMember(memberId, { displayName, upiVpa, leftAt, ...changes }, profileId);
+  return object.putMember(memberId, { displayName, upiVpa, leftAt, baseSeq: member.seq, ...changes }, profileId);
 }
 
 /** A member row as the group object currently holds it. Read as `RAVI`, who is in every fixture. */

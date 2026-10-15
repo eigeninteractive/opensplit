@@ -21,6 +21,8 @@ targets:
       drift_dev:analyzer:
         enabled: true
         options: &drift_options
+          # Match AppDatabase.options so schema dumps describe actual storage.
+          store_date_time_values_as_text: true
           sql:
             dialect: sqlite
             options:

@@ -41,7 +41,7 @@ class DevicesApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/devices/{token}'.replaceAll(
+    final _path = r'/devices/{token}'.replaceAll(
       '{'
       r'token'
       '}',
@@ -129,7 +129,7 @@ class DevicesApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/devices';
+    final _path = r'/devices';
     final _options = Options(
       method: r'PUT',
       headers: <String, dynamic>{...?headers},

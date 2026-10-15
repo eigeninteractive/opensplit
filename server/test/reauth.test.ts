@@ -3,17 +3,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { IdentityOutcome } from "../src/schemas/identity";
 import { googleIdToken } from "./google";
-import { randomIp, signInAsGuest } from "./session";
+import { apiUrl, randomIp, signInAsGuest } from "./session";
 
 /**
  * A session lasts a year, so holding one is not proof enough to delete the
  * account behind it: an account with an address confirms with a fresh code.
  */
 
-const ORIGIN = "https://opensplit.test";
-
 function call(path: string, token: string, init: { method: string; body?: unknown }) {
-  return workerExports.default.fetch(`${ORIGIN}/api${path}`, {
+  return workerExports.default.fetch(apiUrl(path), {
     method: init.method,
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "CF-Connecting-IP": randomIp() },
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
@@ -22,7 +20,7 @@ function call(path: string, token: string, init: { method: string; body?: unknow
 
 async function googleAccount(sub: string): Promise<{ id: string; token: string; email: string }> {
   const email = `${sub}@example.com`;
-  const response = await workerExports.default.fetch(`${ORIGIN}/api/identity/google`, {
+  const response = await workerExports.default.fetch(apiUrl("/identity/google"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ idToken: await googleIdToken({ sub, email }), nonce: null, allowSignIn: true }),

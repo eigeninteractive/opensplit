@@ -11,6 +11,7 @@ import { profiles } from "./db/d1/schema";
 import { createEmailSender } from "./email/sender";
 import { signInCodeMessage } from "./email/sign-in-code";
 import { handOverGuest } from "./forget";
+import { authBasePath } from "./paths";
 
 /**
  * Better Auth on D1. Its tables are generated into `src/auth-schema.ts`;
@@ -30,7 +31,7 @@ export function build(env: Env) {
     database: drizzleAdapter(drizzle(env.DB, { relations: authSchema.authRelations }), { provider: "sqlite", schema: authSchema }),
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.APP_ORIGIN,
-    basePath: "/api/auth",
+    basePath: authBasePath,
     trustedOrigins: [env.APP_ORIGIN],
 
     // No passwords: Google, an emailed code, or a guest.
