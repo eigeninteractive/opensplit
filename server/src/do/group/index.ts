@@ -15,8 +15,8 @@ import migrations from "./migrations/migrations";
 import { pendingNotices } from "./notices";
 import { attempt, type Result } from "./refusal";
 import { createGroup, forgetProfile, handOver, putMember, updateGroup } from "./roster";
-import { currentSeq, findMeta, findTombstone, type GroupDb, nowIso, requireActiveMember, requireMeta, type Tx, type WriteContext } from "./store";
-import { backoffOutbox, clearOutbox, nextDue, type OutboxRow, pendingOutbox, runDormancy, touchDormancy, type UpkeepOutcome } from "./upkeep";
+import { currentSeq, findMemberByProfile, findMeta, findTombstone, type GroupDb, nowIso, requireActiveMember, requireMeta, type Tx, type WriteContext } from "./store";
+import { backoffOutbox, clearOutbox, collectUnowned, nextDue, type OutboxRow, pendingOutbox, touchActivity, type UpkeepOutcome } from "./upkeep";
 
 /**
  * One group's ledger and its authorization boundary. The object runs one
@@ -33,7 +33,9 @@ export class Group extends DurableObject<Env> {
     super(ctx, env);
     this.db = drizzle(ctx.storage, { logger: false });
     // Each object migrates itself lazily, on its first open after a deploy.
-    ctx.blockConcurrencyWhile(async () => migrate(this.db, migrations));
+    ctx.blockConcurrencyWhile(async () => {
+      migrate(this.db, migrations);
+    });
   }
 
   async ping(): Promise<string> {
@@ -46,11 +48,20 @@ export class Group extends DurableObject<Env> {
 
   /** Creates the group at this object's id, or edits it. Creating needs no membership; editing does. */
   async putGroup(groupId: string, input: GroupInput, profileId: string) {
-    return this.write(profileId, (tx, now) => (findMeta(tx) === undefined && findTombstone(tx) === undefined ? createGroup(tx, groupId, input, profileId, now) : updateGroup(tx, input, as(tx, profileId, now))));
+    return this.write(profileId, (tx, now) => {
+      if (findMeta(tx) === undefined && findTombstone(tx) === undefined) createGroup(tx, groupId, input, profileId, now);
+      else updateGroup(tx, input, as(tx, profileId, now));
+      return requireMeta(tx);
+    });
   }
 
   async putMember(memberId: string, input: MemberInput, profileId: string) {
-    return this.write(profileId, (tx, now) => putMember(tx, memberId, input, as(tx, profileId, now)));
+    return this.write(profileId, (tx, now) => {
+      const self = findMemberByProfile(tx, profileId);
+      // A lost leave response must still be acknowledgeable after access ended.
+      if (self?.id === memberId && self.leftAt !== null && input.leftAt !== null && input.displayName === self.displayName && input.upiVpa === self.upiVpa) return self;
+      return putMember(tx, memberId, input, as(tx, profileId, now));
+    });
   }
 
   async putEntry(entryId: string, input: EntryInput, profileId: string) {
@@ -108,15 +119,15 @@ export class Group extends DurableObject<Env> {
     return outcome;
   }
 
-  /** Housekeeping as of an instant, so dormancy is testable without waiting months. */
+  /** Collects only groups with no active account. */
   async runUpkeep(now: number = Date.now()): Promise<UpkeepOutcome> {
-    const outcome = this.db.transaction((tx) => runDormancy(tx, now));
+    const outcome = this.db.transaction((tx) => collectUnowned(tx, now));
     await this.settle();
     return outcome;
   }
 
   override async alarm(): Promise<void> {
-    this.db.transaction((tx) => runDormancy(tx, Date.now()));
+    this.db.transaction((tx) => collectUnowned(tx, Date.now()));
     // Re-armed unconditionally: the alarm that is firing is spent once this returns.
     await this.settle({ rearm: true });
   }
@@ -141,7 +152,7 @@ export class Group extends DurableObject<Env> {
         const before = currentSeq(tx);
         const value = body(tx, now);
         const after = currentSeq(tx);
-        if (after > before) touchDormancy(tx, now);
+        if (after > before) touchActivity(tx, now);
         return { value, spent: after > before ? after : null };
       }),
     );
@@ -155,15 +166,19 @@ export class Group extends DurableObject<Env> {
 
   /** Push runs after the commit, inside `waitUntil`, and can never fail the write. */
   private announce(seq: number, actorProfileId: string): void {
-    const { groupId, messages } = this.db.transaction((tx) => ({ groupId: requireMeta(tx).id, messages: pendingNotices(tx, seq) }));
-    if (messages.length === 0) return;
+    const { groupId, messages } = this.db.transaction((tx) => {
+      const groupId = findMeta(tx)?.id;
+      return { groupId, messages: groupId === undefined ? [] : pendingNotices(tx, seq) };
+    });
+    if (groupId === undefined || messages.length === 0) return;
     this.ctx.waitUntil(wakeDevices(this.env, groupId, actorProfileId, messages).catch((error) => console.error("[group] push failed", error)));
   }
 
   private async settle({ rearm = false } = {}): Promise<void> {
     await this.flush();
     const due = this.db.transaction((tx) => nextDue(tx));
-    if (due !== null && (rearm || (await this.ctx.storage.getAlarm()) !== due)) await this.ctx.storage.setAlarm(due);
+    if (due === null) await this.ctx.storage.deleteAlarm();
+    else if (rearm || (await this.ctx.storage.getAlarm()) !== due) await this.ctx.storage.setAlarm(due);
   }
 
   /** The flush in progress, if any. Flushes run one after another, never side by side. */

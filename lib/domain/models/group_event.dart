@@ -73,7 +73,7 @@ final class MemberChanged extends GroupEvent {
   final String? previousName;
 }
 
-/// The group itself was renamed, archived or restored.
+/// The group itself was renamed.
 final class GroupChanged extends GroupEvent {
   const GroupChanged({
     required super.id,

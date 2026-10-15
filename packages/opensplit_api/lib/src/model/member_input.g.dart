@@ -8,7 +8,10 @@ part of 'member_input.dart';
 
 MemberInput _$MemberInputFromJson(Map<String, dynamic> json) =>
     $checkedCreate('MemberInput', json, ($checkedConvert) {
-      $checkKeys(json, requiredKeys: const ['displayName', 'upiVpa', 'leftAt']);
+      $checkKeys(
+        json,
+        requiredKeys: const ['displayName', 'upiVpa', 'leftAt', 'baseSeq'],
+      );
       final val = MemberInput(
         displayName: $checkedConvert('displayName', (v) => v as String),
         upiVpa: $checkedConvert('upiVpa', (v) => v as String?),
@@ -16,6 +19,7 @@ MemberInput _$MemberInputFromJson(Map<String, dynamic> json) =>
           'leftAt',
           (v) => v == null ? null : DateTime.parse(v as String),
         ),
+        baseSeq: $checkedConvert('baseSeq', (v) => (v as num?)?.toInt()),
       );
       return val;
     });
@@ -25,4 +29,5 @@ Map<String, dynamic> _$MemberInputToJson(MemberInput instance) =>
       'displayName': instance.displayName,
       'upiVpa': instance.upiVpa,
       'leftAt': instance.leftAt?.toIso8601String(),
+      'baseSeq': instance.baseSeq,
     };

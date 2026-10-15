@@ -11,18 +11,21 @@ import '../local/database.dart';
 import '../local/entry_writer.dart';
 import '../local/tables.dart';
 import '../sync/outbox_queue.dart';
+import 'group_write_access.dart';
 
 /// Local-first entry storage.
 final class DriftEntryRepository {
   DriftEntryRepository(
     this._db, {
     this.outbox,
+    this.accountId,
     Uuid? uuid,
     DateTime Function()? clock,
   }) : _uuid = uuid ?? const Uuid(),
        _clock = clock ?? DateTime.now;
 
   final AppDatabase _db;
+  final String? accountId;
 
   /// Null in a purely local build, where there is nothing to sync to.
   final OutboxQueue? outbox;
@@ -39,6 +42,7 @@ final class DriftEntryRepository {
     required String? actorId,
     required DateTime at,
   }) async {
+    await requireGroupWrite(_db, after.row.groupId, accountId);
     final snapshot = snapshotOf(after);
     final latest = await _latestSnapshot(after.id);
 
@@ -206,17 +210,9 @@ final class DriftEntryRepository {
           'This expense is already recorded. Reopen it to make changes.',
         );
       }
-      await _unarchive(entry.row.groupId);
       await _writeWithSnapshot(after: entry, actorId: createdBy, at: at);
     });
     return entry;
-  }
-
-  /// A group somebody is still using is not dormant.
-  Future<void> _unarchive(String groupId) async {
-    await (_db.update(_db.groups)
-          ..where((t) => t.id.equals(groupId) & t.archivedAt.isNotNull()))
-        .write(const GroupsCompanion(archivedAt: Value(null)));
   }
 
   /// Replaces an existing entry's contents, keeping its id and creation

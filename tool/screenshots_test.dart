@@ -12,8 +12,8 @@
 // rewrite committed images on every run.
 //
 // The data goes in through the app's own repositories, so every figure on the
-// screens is one the app computed. Dates are relative to today, which is the
-// only thing that changes between two runs.
+// screens is one the app computed. Dates are relative to today; fixture ids
+// are seeded so avatars, covers and tie-breaks stay consistent between runs.
 
 import 'dart:convert';
 import 'dart:io';
@@ -38,11 +38,14 @@ import 'package:opensplit/presentation/screens/welcome_screen.dart';
 import 'package:opensplit/presentation/theme.dart';
 import 'package:opensplit/presentation/theme_mode.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
+import 'package:uuid/data.dart';
+import 'package:uuid/rng.dart';
 import 'package:opensplit_api/opensplit_api.dart' show SplitKind;
 
 import '../test/harness.dart';
 
-/// Where the images go: served by the site, uploaded to Play by hand.
+/// Where the images go: served by the site and packaged by the Play release.
 const _output = String.fromEnvironment(
   'SCREENSHOT_OUTPUT',
   defaultValue: 'site/store',
@@ -310,8 +313,9 @@ Future<void> _loadFonts() async {
 ///
 /// Returns the trip's id. Groups list newest first, so it is created last.
 Future<String> _seed(AppDatabase db) async {
-  final groups = DriftGroupRepository(db);
-  final entries = DriftEntryRepository(db);
+  final uuid = Uuid(goptions: GlobalOptions(MathRNG(seed: 42)));
+  final groups = DriftGroupRepository(db, uuid: uuid);
+  final entries = DriftEntryRepository(db, uuid: uuid);
   final today = DateTime.now();
 
   Future<({String group, List<String> members})> group(

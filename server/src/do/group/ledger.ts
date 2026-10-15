@@ -6,7 +6,7 @@ import { type Entry, type EntryInput, editableEntryColumns } from "../../schemas
 import { positionsByMember } from "./balances";
 import { appendSnapshot, byMember, moneyRows } from "./events";
 import { refuse } from "./refusal";
-import { type EntryRow, nextSeq, requireMeta, type Tx, type WriteContext } from "./store";
+import { type EntryRow, nextSeq, type Tx, type WriteContext } from "./store";
 
 /**
  * The expense write path. Every rule is checked here against the finished
@@ -50,7 +50,6 @@ function requireEntry(tx: Tx, id: string): Entry {
  * its shares and whether it counts are one fact.
  */
 export function putEntry(tx: Tx, id: string, input: EntryInput, { now, actor }: WriteContext): Entry {
-  const meta = requireMeta(tx);
   assertBalanced(input);
   assertMembersExist(tx, input);
 
@@ -67,11 +66,6 @@ export function putEntry(tx: Tx, id: string, input: EntryInput, { now, actor }: 
   assertDepartedOnlySettle(tx, stored, input);
 
   const seq = nextSeq(tx);
-
-  // A live expense brings an archived group back, silently: the expense is the record.
-  if (meta.archivedAt !== null && input.deletedAt === null) {
-    tx.update(schema.meta).set({ archivedAt: null, updatedAt: now, seq }).where(eq(schema.meta.id, meta.id)).run();
-  }
 
   // A rate keeps its timestamp unless the rate or its source changed.
   const fxAt = stored && stored.fxRate === input.fxRate && stored.fxSource === input.fxSource ? stored.fxAt : input.fxRate !== null ? now : null;

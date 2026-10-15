@@ -63,6 +63,7 @@ class SessionController extends _$SessionController {
 
   /// Ends the session.
   Future<void> signOut() async {
+    ref.read(apiAccessProvider).requireWritable();
     final auth = ref.read(authServiceProvider);
     if (auth == null) return;
 

@@ -21,6 +21,8 @@ class MemberInput {
     required this.upiVpa,
 
     required this.leftAt,
+
+    required this.baseSeq,
   });
 
   @JsonKey(name: r'displayName', required: true, includeIfNull: false)
@@ -32,19 +34,25 @@ class MemberInput {
   @JsonKey(name: r'leftAt', required: true, includeIfNull: true)
   final DateTime? leftAt;
 
+  // minimum: 0
+  @JsonKey(name: r'baseSeq', required: true, includeIfNull: true)
+  final int? baseSeq;
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is MemberInput &&
           other.displayName == displayName &&
           other.upiVpa == upiVpa &&
-          other.leftAt == leftAt;
+          other.leftAt == leftAt &&
+          other.baseSeq == baseSeq;
 
   @override
   int get hashCode =>
       displayName.hashCode +
       (upiVpa == null ? 0 : upiVpa.hashCode) +
-      (leftAt == null ? 0 : leftAt.hashCode);
+      (leftAt == null ? 0 : leftAt.hashCode) +
+      (baseSeq == null ? 0 : baseSeq.hashCode);
 
   factory MemberInput.fromJson(Map<String, dynamic> json) =>
       _$MemberInputFromJson(json);

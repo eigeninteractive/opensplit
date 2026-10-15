@@ -43,7 +43,7 @@ class ReferenceApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/fx';
+    final _path = r'/fx';
     final _options = Options(
       method: r'GET',
       headers: <String, dynamic>{...?headers},
@@ -114,7 +114,7 @@ class ReferenceApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/reference';
+    final _path = r'/reference';
     final _options = Options(
       method: r'GET',
       headers: <String, dynamic>{
@@ -189,7 +189,7 @@ class ReferenceApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/fx/backfill';
+    final _path = r'/fx/backfill';
     final _options = Options(
       method: r'POST',
       headers: <String, dynamic>{...?headers},

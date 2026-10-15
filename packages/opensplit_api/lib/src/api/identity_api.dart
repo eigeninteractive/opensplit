@@ -47,7 +47,7 @@ class IdentityApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/identity/session';
+    final _path = r'/identity/session';
     final _options = Options(
       method: r'GET',
       headers: <String, dynamic>{...?headers},
@@ -126,7 +126,7 @@ class IdentityApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/identity/google';
+    final _path = r'/identity/google';
     final _options = Options(
       method: r'POST',
       headers: <String, dynamic>{...?headers},
@@ -224,7 +224,7 @@ class IdentityApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/identity/reauth/verify';
+    final _path = r'/identity/reauth/verify';
     final _options = Options(
       method: r'POST',
       headers: <String, dynamic>{...?headers},
@@ -316,7 +316,7 @@ class IdentityApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/identity/guest';
+    final _path = r'/identity/guest';
     final _options = Options(
       method: r'POST',
       headers: <String, dynamic>{...?headers},
@@ -397,7 +397,7 @@ class IdentityApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/identity/sign-out';
+    final _path = r'/identity/sign-out';
     final _options = Options(
       method: r'POST',
       headers: <String, dynamic>{...?headers},
@@ -450,7 +450,7 @@ class IdentityApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/identity/email';
+    final _path = r'/identity/email';
     final _options = Options(
       method: r'POST',
       headers: <String, dynamic>{...?headers},
@@ -548,7 +548,7 @@ class IdentityApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/identity/google/redirect';
+    final _path = r'/identity/google/redirect';
     final _options = Options(
       method: r'POST',
       headers: <String, dynamic>{...?headers},
@@ -644,7 +644,7 @@ class IdentityApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/identity/reauth';
+    final _path = r'/identity/reauth';
     final _options = Options(
       method: r'POST',
       headers: <String, dynamic>{...?headers},
@@ -727,7 +727,7 @@ class IdentityApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/identity/email/verify';
+    final _path = r'/identity/email/verify';
     final _options = Options(
       method: r'POST',
       headers: <String, dynamic>{...?headers},

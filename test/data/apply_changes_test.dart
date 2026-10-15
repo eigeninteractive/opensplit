@@ -1,11 +1,18 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:opensplit/data/local/database.dart';
+import 'package:opensplit/data/local/tables.dart';
+import 'package:opensplit/data/repositories/drift_group_repository.dart';
+import 'package:opensplit/data/repositories/drift_entry_repository.dart';
+import 'package:opensplit/domain/entry_draft.dart';
+import 'package:opensplit/domain/split/splitter.dart';
 import 'package:opensplit/data/sync/apply_changes.dart';
+import 'package:opensplit/data/sync/outbox_queue.dart';
 import 'package:opensplit_api/opensplit_api.dart' as api;
 import 'package:test/test.dart';
 
 import '../harness.dart';
 
-/// A null on a page is a value, not an absence: restoring, rejoining and
+/// A null on a page is a value, not an absence: rejoining and
 /// clearing all arrive as one, and a local copy that kept the old value would
 /// disagree with every other device for good.
 void main() {
@@ -15,27 +22,25 @@ void main() {
   setUp(() async => db = await testDatabase());
   tearDown(() => db.close());
 
-  api.Group group({String id = 'g', DateTime? archivedAt, int seq = 1}) =>
-      api.Group(
-        avatarKind: api.AvatarKind.initials,
-        avatarColor: null,
-        avatarEmoji: null,
-        avatarIcon: null,
-        avatarPhoto: null,
-        coverKind: api.CoverKind.generated,
-        coverPhoto: null,
-        id: id,
-        name: 'Goa',
-        defaultCurrency: 'INR',
-        isDirect: false,
-        simplifyDebts: true,
-        createdBy: 'm',
-        createdAt: at,
-        archivedAt: archivedAt,
-        updatedAt: at,
-        lastActivityAt: at,
-        seq: seq,
-      );
+  api.Group group({String id = 'g', int seq = 1}) => api.Group(
+    avatarKind: api.AvatarKind.initials,
+    avatarColor: null,
+    avatarEmoji: null,
+    avatarIcon: null,
+    avatarPhoto: null,
+    coverKind: api.CoverKind.generated,
+    coverPhoto: null,
+    id: id,
+    name: 'Goa',
+    defaultCurrency: 'INR',
+    isDirect: false,
+    simplifyDebts: true,
+    createdBy: 'm',
+    createdAt: at,
+    updatedAt: at,
+    lastActivityAt: at,
+    seq: seq,
+  );
 
   api.Member member({String? upiVpa, DateTime? leftAt, int seq = 1}) =>
       api.Member(
@@ -81,12 +86,84 @@ void main() {
     purgedAt: null,
   );
 
-  test('a restore, a rejoin and a cleared handle all land', () async {
+  test('purging clears dependent rows and queued edits atomically', () async {
+    final queue = OutboxQueue(db);
+    addTearDown(queue.dispose);
+    final groups = DriftGroupRepository(db, outbox: queue);
+    final entries = DriftEntryRepository(db, outbox: queue);
+    final made = await groups.createGroup(
+      name: 'Deleted',
+      defaultCurrency: 'INR',
+      creatorDisplayName: 'Ravi',
+    );
+    final retained = await groups.createGroup(
+      name: 'Retained',
+      defaultCurrency: 'INR',
+      creatorDisplayName: 'Priya',
+    );
+    final entry = await entries.create(
+      EntryDraft(
+        groupId: made.group.id,
+        currency: 'INR',
+        amountMinor: 100,
+        description: 'Dinner',
+        split: EqualSplit([made.creator.id]),
+        payerAmounts: {made.creator.id: 100},
+      ),
+      createdBy: made.creator.id,
+    );
+    await db
+        .into(db.groupCursors)
+        .insert(
+          GroupCursorsCompanion.insert(
+            groupId: made.group.id,
+            seq: const Value(1),
+          ),
+        );
+    final tombstone = api.ChangePage(
+      groupId: made.group.id,
+      seq: 2,
+      hasMore: false,
+      group: null,
+      members: const [],
+      profiles: const [],
+      entries: const [],
+      events: const [],
+      purgedAt: at,
+    );
+    await db.customStatement(
+      "CREATE TRIGGER reject_removal BEFORE DELETE ON groups BEGIN SELECT RAISE(ABORT, 'test rollback'); END;",
+    );
+    await expectLater(
+      applyGroupChanges(db, tombstone, now: at),
+      throwsA(anything),
+    );
+    expect(await groups.getGroup(made.group.id), isNotNull);
+    expect(await queue.unsentIds(OutboxTarget.entry), contains(entry.id));
+    await db.customStatement('DROP TRIGGER reject_removal');
+    await applyGroupChanges(db, tombstone, now: at);
+    expect(await groups.getGroup(made.group.id), isNull);
+    expect(await entries.getEntry(entry.id), isNull);
+    expect(await db.select(db.entryPayers).get(), isEmpty);
+    expect(await db.select(db.entryShares).get(), isEmpty);
+    expect(await db.select(db.groupCursors).get(), isEmpty);
+    expect(
+      (await db.select(db.groupEvents).get()).where(
+        (e) => e.groupId == made.group.id,
+      ),
+      isEmpty,
+    );
+    expect(await queue.unsentIds(OutboxTarget.entry), isEmpty);
+    expect(await queue.unsentIds(OutboxTarget.group), [retained.group.id]);
+    expect(await groups.getGroup(retained.group.id), isNotNull);
+  });
+
+  test('a rejoin and a cleared handle both land', () async {
     await applyGroupChanges(
       db,
       page(
         seq: 1,
-        group: group(archivedAt: at),
+        group: group(),
         member: member(upiVpa: 'ravi@okaxis', leftAt: at),
         profile: profile(upiVpa: 'ravi@okaxis', version: 1),
       ),
@@ -104,10 +181,8 @@ void main() {
       now: at,
     );
 
-    final stored = await db.select(db.groups).getSingle();
     final ravi = await db.select(db.members).getSingle();
     final account = await db.select(db.profiles).getSingle();
-    expect(stored.archivedAt, isNull, reason: 'the group was restored');
     expect(ravi.leftAt, isNull, reason: 'Ravi rejoined');
     expect(ravi.upiVpa, isNull, reason: 'the group handle was cleared');
     expect(account.upiVpa, isNull, reason: 'the account handle was cleared');

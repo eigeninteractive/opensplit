@@ -96,9 +96,28 @@ void main() {
       final listing = (await mine.watchListings().first).single;
       expect(listing.hasLeft, isTrue);
       expect(listing.isCurrent, isFalse);
-      // Left, not archived: a sync bringing the group row back cannot undo it.
-      expect(listing.group.isArchived, isFalse);
     });
+
+    test(
+      'account deletion counts only active accounts as retaining a group',
+      () async {
+        final made = await groups.createGroup(
+          name: 'Trip',
+          defaultCurrency: 'INR',
+          creatorDisplayName: 'Ravi',
+          creatorProfileId: 'me',
+        );
+        final other = await groups.addMember(
+          made.group.id,
+          displayName: 'Priya',
+        );
+        await (db.update(db.members)..where((m) => m.id.equals(other.id)))
+            .write(const MembersCompanion(profileId: Value('other')));
+        expect(await groups.membershipBreakdown('me'), (solo: 0, shared: 1));
+        await groups.removeMember(other.id);
+        expect(await groups.membershipBreakdown('me'), (solo: 1, shared: 0));
+      },
+    );
 
     test('groups are listed by their newest activity', () async {
       final mine = DriftGroupRepository(db, accountId: 'me');
@@ -133,20 +152,6 @@ void main() {
           listing.group.name,
       ];
       expect(names, ['Made first', 'Made second']);
-    });
-
-    test('archived groups drop out of the default list', () async {
-      final created = await groups.createGroup(
-        name: 'Old Trip',
-        defaultCurrency: 'INR',
-        creatorDisplayName: 'Ravi',
-      );
-
-      await groups.setArchived(created.group.id, archived: true);
-
-      final listed = (await groups.watchListings().first).single;
-      expect(listed.group.isArchived, isTrue);
-      expect(listed.isCurrent, isFalse);
     });
   });
 

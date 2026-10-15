@@ -51,7 +51,7 @@
     {
       "binding": "DB",
       "database_name": "opensplit",
-      "database_id": "a25350b6-ac42-474b-b14c-4535b7448ee5",
+      "database_id": "2170e95b-6da3-4c79-ac84-f8468219bd23",
       "migrations_dir": "migrations",
       "migrations_pattern": "migrations/*/migration.sql"
     }
@@ -61,7 +61,7 @@
   // Production's `opensplit-cache` namespace; local runs ignore the id too.
   "kv_namespaces": [{ "binding": "CACHE", "id": "791356628add46dcba93cbd86c75c9ac" }],
 
-  // No dormancy sweep: each group object arms its own alarm.
+  // No group dormancy sweep: groups persist while an account remains active.
   "triggers": {
     "crons": [
       "0 4 * * *", // exchange rates

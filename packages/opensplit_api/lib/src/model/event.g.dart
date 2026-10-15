@@ -88,8 +88,6 @@ const _$EventKindEnumMap = {
   EventKind.memberLeft: 'member_left',
   EventKind.memberRenamed: 'member_renamed',
   EventKind.groupRenamed: 'group_renamed',
-  EventKind.groupArchived: 'group_archived',
-  EventKind.groupRestored: 'group_restored',
   EventKind.linkCreated: 'link_created',
   EventKind.linkRevoked: 'link_revoked',
   EventKind.unknownDefaultOpenApi: 'unknown_default_open_api',

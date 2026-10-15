@@ -3,6 +3,7 @@ import 'package:flutter/widget_previews.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/sync_providers.dart';
+import '../../application/backend_providers.dart';
 
 /// Refreshes through the same coordinator as pull-to-refresh and automatic
 /// sync.
@@ -19,7 +20,9 @@ class SyncRefreshButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final status = ref.watch(syncControllerProvider);
-    if (!status.enabled) return const SizedBox.shrink();
+    if (!status.enabled || ref.watch(requiresAppUpdateProvider)) {
+      return const SizedBox.shrink();
+    }
     return _RefreshIconButton(
       isSyncing: status.isSyncing,
       onRefresh: () async {

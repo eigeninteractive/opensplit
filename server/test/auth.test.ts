@@ -2,7 +2,7 @@ import { env, exports as workerExports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
 import type { Session } from "../src/schemas/identity";
-import { signInAsGuest } from "./session";
+import { apiUrl, signInAsGuest } from "./session";
 
 interface ProfileRow {
   id: string;
@@ -40,7 +40,7 @@ describe("guest accounts", () => {
   it("resolves the session from a bearer token", async () => {
     const guest = await signInAsGuest();
 
-    const response = await workerExports.default.fetch("https://opensplit.test/api/identity/session", { headers: { Authorization: `Bearer ${guest.token}` } });
+    const response = await workerExports.default.fetch(apiUrl("/identity/session"), { headers: { Authorization: `Bearer ${guest.token}` } });
 
     expect(response.status).toBe(200);
     const body = (await response.json()) as Session;

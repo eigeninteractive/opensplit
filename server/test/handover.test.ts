@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { IdentityOutcome } from "../src/schemas/identity";
 import { googleIdToken } from "./google";
 import { BY_INVITE, makeGroup, ok, RAVI, stub } from "./group";
-import { signInAsGuest } from "./session";
+import { apiUrl, signInAsGuest } from "./session";
 
 /**
  * A guest signing in to an account they already had. Both are the same
@@ -13,7 +13,7 @@ import { signInAsGuest } from "./session";
  */
 
 async function continueWithGoogle(sub: string, email: string, token?: string): Promise<IdentityOutcome> {
-  const response = await workerExports.default.fetch("https://opensplit.test/api/identity/google", {
+  const response = await workerExports.default.fetch(apiUrl("/identity/google"), {
     method: "POST",
     headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify({ idToken: await googleIdToken({ sub, email }), nonce: null, allowSignIn: true }),
@@ -25,7 +25,7 @@ async function continueWithGoogle(sub: string, email: string, token?: string): P
 /** Ravi's group, with a place the guest has claimed. */
 async function groupWithGuest(guestId: string, placeName = "Priya") {
   const { groupId } = await makeGroup();
-  const place = ok(await stub(groupId).putMember(`${groupId}-${placeName}`, { displayName: placeName, upiVpa: null, leftAt: null }, RAVI));
+  const place = ok(await stub(groupId).putMember(`${groupId}-${placeName}`, { displayName: placeName, upiVpa: null, leftAt: null, baseSeq: null }, RAVI));
   const invite = ok(await stub(groupId).createInvite(place.id, RAVI));
   ok(await stub(groupId).join(invite.token, guestId, BY_INVITE));
   return { groupId, placeId: place.id };
@@ -69,7 +69,7 @@ describe("a guest signing in to an account they already had", () => {
     const guest = await signInAsGuest();
     const { groupId, placeId } = await groupWithGuest(guest.id, "Guest Priya");
 
-    const ownersPlace = ok(await stub(groupId).putMember(`${groupId}-owner`, { displayName: "Priya", upiVpa: null, leftAt: null }, RAVI));
+    const ownersPlace = ok(await stub(groupId).putMember(`${groupId}-owner`, { displayName: "Priya", upiVpa: null, leftAt: null, baseSeq: null }, RAVI));
     const invite = ok(await stub(groupId).createInvite(ownersPlace.id, RAVI));
     ok(await stub(groupId).join(invite.token, owner.account.id, BY_INVITE));
 

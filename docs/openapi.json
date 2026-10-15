@@ -1,9 +1,14 @@
 {
   "openapi": "3.0.3",
+  "servers": [
+    {
+      "url": "/api/v1"
+    }
+  ],
   "info": {
     "version": "1.0.0",
     "title": "OpenSplit",
-    "description": "The server stores rows and enforces one invariant. It computes nothing: splitting, folding balances, simplifying debts and analytics all happen on the device."
+    "description": "The server stores financial history and enforces membership, settlement and write concurrency rules. Splitting, debt simplification and analytics happen on the device."
   },
   "components": {
     "securitySchemes": {
@@ -91,12 +96,6 @@
             "format": "date-time",
             "example": "2026-09-23T11:20:41.865Z"
           },
-          "archivedAt": {
-            "type": "string",
-            "nullable": true,
-            "format": "date-time",
-            "example": "2026-09-23T11:20:41.865Z"
-          },
           "updatedAt": {
             "type": "string",
             "format": "date-time",
@@ -124,7 +123,6 @@
           "createdBy",
           "createdAt",
           "lastActivityAt",
-          "archivedAt",
           "updatedAt",
           "seq"
         ]
@@ -429,8 +427,6 @@
           "member_left",
           "member_renamed",
           "group_renamed",
-          "group_archived",
-          "group_restored",
           "link_created",
           "link_revoked"
         ]
@@ -520,6 +516,7 @@
           "malformed",
           "no_session",
           "not_found",
+          "update_required",
           "internal",
           "identity_already_in_use",
           "auth_failed",
@@ -1304,12 +1301,6 @@
           "simplifyDebts": {
             "type": "boolean"
           },
-          "archivedAt": {
-            "type": "string",
-            "nullable": true,
-            "format": "date-time",
-            "example": "2026-09-23T11:20:41.865Z"
-          },
           "avatarKind": {
             "$ref": "#/components/schemas/AvatarKind"
           },
@@ -1350,6 +1341,12 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 100
+          },
+          "baseSeq": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 0,
+            "example": 412
           }
         },
         "required": [
@@ -1357,7 +1354,6 @@
           "defaultCurrency",
           "isDirect",
           "simplifyDebts",
-          "archivedAt",
           "avatarKind",
           "avatarColor",
           "avatarEmoji",
@@ -1366,7 +1362,8 @@
           "coverKind",
           "coverPhoto",
           "creatorId",
-          "creatorName"
+          "creatorName",
+          "baseSeq"
         ]
       },
       "MemberInput": {
@@ -1388,12 +1385,19 @@
             "nullable": true,
             "format": "date-time",
             "example": "2026-09-23T11:20:41.865Z"
+          },
+          "baseSeq": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 0,
+            "example": 412
           }
         },
         "required": [
           "displayName",
           "upiVpa",
-          "leftAt"
+          "leftAt",
+          "baseSeq"
         ]
       },
       "EntryInput": {
@@ -2005,7 +2009,7 @@
     "parameters": {}
   },
   "paths": {
-    "/api/health": {
+    "/health": {
       "get": {
         "operationId": "health",
         "tags": [
@@ -2026,7 +2030,7 @@
         }
       }
     },
-    "/api/identity/reauth": {
+    "/identity/reauth": {
       "post": {
         "security": [
           {
@@ -2086,7 +2090,7 @@
         }
       }
     },
-    "/api/identity/reauth/verify": {
+    "/identity/reauth/verify": {
       "post": {
         "security": [
           {
@@ -2156,7 +2160,7 @@
         }
       }
     },
-    "/api/identity/guest": {
+    "/identity/guest": {
       "post": {
         "security": [
           {},
@@ -2196,7 +2200,7 @@
         }
       }
     },
-    "/api/identity/session": {
+    "/identity/session": {
       "get": {
         "security": [
           {},
@@ -2226,7 +2230,7 @@
         }
       }
     },
-    "/api/identity/sign-out": {
+    "/identity/sign-out": {
       "post": {
         "security": [
           {},
@@ -2249,7 +2253,7 @@
         }
       }
     },
-    "/api/identity/google": {
+    "/identity/google": {
       "post": {
         "security": [
           {},
@@ -2310,7 +2314,7 @@
         }
       }
     },
-    "/api/identity/google/redirect": {
+    "/identity/google/redirect": {
       "post": {
         "security": [
           {},
@@ -2371,7 +2375,7 @@
         }
       }
     },
-    "/api/identity/email": {
+    "/identity/email": {
       "post": {
         "security": [
           {},
@@ -2431,7 +2435,7 @@
         }
       }
     },
-    "/api/identity/email/verify": {
+    "/identity/email/verify": {
       "post": {
         "security": [
           {},
@@ -2511,7 +2515,7 @@
         }
       }
     },
-    "/api/sync": {
+    "/sync": {
       "post": {
         "security": [
           {
@@ -2571,7 +2575,7 @@
         }
       }
     },
-    "/api/groups/{groupId}": {
+    "/groups/{groupId}": {
       "put": {
         "security": [
           {
@@ -2585,7 +2589,7 @@
         "tags": [
           "groups"
         ],
-        "summary": "Make a group and its creator's place in it, or rename, archive or change a setting",
+        "summary": "Make a group and its creator's place in it, or change shared settings",
         "description": "Idempotent, so a retry whose response was lost returns the same group. Editing needs membership; creating does not.",
         "parameters": [
           {
@@ -2694,7 +2698,7 @@
         }
       }
     },
-    "/api/groups/{groupId}/members/{memberId}": {
+    "/groups/{groupId}/members/{memberId}": {
       "put": {
         "security": [
           {
@@ -2709,7 +2713,7 @@
           "groups"
         ],
         "summary": "Add somebody who has never opened the app, or change a name, a payment handle, or whether somebody is still here",
-        "description": "Your own row and any placeholder are editable; another account holder's are not. Leaving is always yours to do; removing somebody else requires them to be settled in every currency.",
+        "description": "Your own row and any placeholder are editable; another account holder's are not. Leaving or removing somebody requires them to be settled in every currency; leaving ends access. The last account holder can leave only when the entire group is settled, which permanently deletes the group.",
         "parameters": [
           {
             "schema": {
@@ -2828,7 +2832,7 @@
         }
       }
     },
-    "/api/groups/{groupId}/entries/{entryId}": {
+    "/groups/{groupId}/entries/{entryId}": {
       "put": {
         "security": [
           {
@@ -2962,7 +2966,7 @@
         }
       }
     },
-    "/api/groups/{groupId}/members/{memberId}/invite": {
+    "/groups/{groupId}/members/{memberId}/invite": {
       "post": {
         "security": [
           {
@@ -3086,7 +3090,7 @@
         }
       }
     },
-    "/api/groups/{groupId}/link": {
+    "/groups/{groupId}/link": {
       "post": {
         "security": [
           {
@@ -3419,7 +3423,7 @@
         }
       }
     },
-    "/api/links/{token}": {
+    "/links/{token}": {
       "get": {
         "security": [
           {},
@@ -3483,7 +3487,7 @@
         }
       }
     },
-    "/api/links/{token}/placeholders": {
+    "/links/{token}/placeholders": {
       "get": {
         "security": [
           {
@@ -3596,7 +3600,7 @@
         }
       }
     },
-    "/api/links/{token}/join": {
+    "/links/{token}/join": {
       "post": {
         "security": [
           {
@@ -3719,7 +3723,7 @@
         }
       }
     },
-    "/api/profiles": {
+    "/profiles": {
       "get": {
         "security": [
           {
@@ -3789,7 +3793,7 @@
         }
       }
     },
-    "/api/profile": {
+    "/profile": {
       "put": {
         "security": [
           {
@@ -3848,7 +3852,7 @@
         }
       }
     },
-    "/api/devices": {
+    "/devices": {
       "put": {
         "security": [
           {
@@ -3908,7 +3912,7 @@
         }
       }
     },
-    "/api/devices/{token}": {
+    "/devices/{token}": {
       "delete": {
         "security": [
           {
@@ -3960,7 +3964,7 @@
         }
       }
     },
-    "/api/account": {
+    "/account": {
       "delete": {
         "security": [
           {
@@ -4010,7 +4014,7 @@
         }
       }
     },
-    "/api/reference": {
+    "/reference": {
       "get": {
         "operationId": "getReference",
         "tags": [
@@ -4045,7 +4049,7 @@
         }
       }
     },
-    "/api/fx": {
+    "/fx": {
       "get": {
         "operationId": "getFxRates",
         "tags": [
@@ -4089,7 +4093,7 @@
         }
       }
     },
-    "/api/fx/backfill": {
+    "/fx/backfill": {
       "post": {
         "security": [
           {

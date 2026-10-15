@@ -56,7 +56,7 @@ export const SeqSchema = z.int().nonnegative().openapi({ example: 412 });
 export const refusalCodes = [
   "not_member",
   "no_group",
-  /** Archived, a year silent and settled, then collected. */
+  /** The group has been permanently deleted. */
   "group_purged",
   "no_such_entry",
   "no_such_member",
@@ -83,9 +83,9 @@ export const RetrySchema = z.enum(["stale", "permanent", "transient"]).openapi("
   description: "stale: re-read, re-compose and send again. permanent: this will be refused identically forever; do not retry. transient: back off and try the same request again.",
 });
 
-export const ErrorCodeSchema = z.enum([...refusalCodes, "no_session", "not_found", "internal", "identity_already_in_use", "auth_failed", "rate_limited", "reauth_required"]).openapi("ErrorCode");
+export const ErrorCodeSchema = z.enum([...refusalCodes, "no_session", "not_found", "update_required", "internal", "identity_already_in_use", "auth_failed", "rate_limited", "reauth_required"]).openapi("ErrorCode");
 
-/** Every failure's body. The client acts on `retry`, never on the status code. */
+/** Stable failure codes, with retry guidance for ordinary write refusals. */
 export const ErrorSchema = z
   .object({
     error: z.object({

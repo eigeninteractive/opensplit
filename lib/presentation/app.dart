@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:in_app_update/in_app_update.dart';
 
 import '../application/local_providers.dart';
+import '../application/backend_providers.dart';
 import '../application/preferences_providers.dart';
 import '../application/push_providers.dart';
 import '../application/ledger_providers.dart';
@@ -19,6 +20,7 @@ import '../l10n/app_localizations.dart';
 import 'dynamic_colors.dart';
 import 'theme.dart';
 import 'theme_mode.dart';
+import 'widgets/update_required_notice.dart';
 
 class OpenSplitApp extends ConsumerStatefulWidget {
   const OpenSplitApp({super.key});
@@ -128,7 +130,9 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp>
   /// for.
   Future<void> _offerUpdate() async {
     final service = ref.read(appUpdateServiceProvider);
-    if (!service.isSupported || _busy) return;
+    if (!service.isSupported || _busy || ref.read(requiresAppUpdateProvider)) {
+      return;
+    }
 
     final last = _lastChecked;
     if (last != null && DateTime.now().difference(last) < _recheckAfter) return;
@@ -208,7 +212,7 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp>
       // Each screen retains standard visual reading order within its scope.
       builder: (context, child) => FocusTraversalGroup(
         policy: WidgetOrderTraversalPolicy(),
-        child: child!,
+        child: UpdateRequiredNotice(child: child!),
       ),
     );
   }

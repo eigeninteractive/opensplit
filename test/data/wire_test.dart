@@ -16,7 +16,7 @@ void main() {
   group('updates', () {
     // Null is a value in an update (restore, rejoin, clear), so it has to be
     // on the wire rather than dropped.
-    test('restoring a group sends archivedAt: null', () {
+    test('a new group sends a null base sequence', () {
       final creator = Member(
         id: 'm',
         groupId: 'g',
@@ -33,7 +33,7 @@ void main() {
         simplifyDebts: true,
         createdAt: DateTime.utc(2026),
       );
-      expect(group.toInput(creator).toJson(), containsPair('archivedAt', null));
+      expect(group.toInput(creator).toJson(), containsPair('baseSeq', null));
     });
 
     test('rejoining and clearing a handle send their nulls', () {
@@ -66,7 +66,6 @@ void main() {
       coverPhoto: null,
       createdBy: 'm',
       createdAt: DateTime.utc(2026),
-      archivedAt: null,
       updatedAt: DateTime.utc(2026),
       lastActivityAt: DateTime.utc(2026),
       seq: 1,
@@ -198,9 +197,9 @@ void main() {
     test('reads in (seq, ordinal) order, not by id', () async {
       // Ids sort the opposite way to the order the change recorded them in.
       await line('b', api.EventKind.groupRenamed, seq: 4, ordinal: 0);
-      await line('a', api.EventKind.groupArchived, seq: 4, ordinal: 1);
+      await line('a', api.EventKind.linkCreated, seq: 4, ordinal: 1);
       await line('z', api.EventKind.groupRenamed, seq: 3, ordinal: 0);
-      await line('p', api.EventKind.groupRestored, provisional: true);
+      await line('p', api.EventKind.linkRevoked, provisional: true);
 
       final feed = await DriftActivityRepository(db).watchGroup('g').first;
       expect([for (final event in feed) event.id], ['p', 'a', 'b', 'z']);

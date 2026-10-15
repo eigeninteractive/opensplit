@@ -1,13 +1,14 @@
 """Generates the raster brand images: two promotional ones from the landing
 page's hero, and the lockup the sign-in email opens with.
 
-    python3 tool/store_graphics.py
+    dart run tool/store_artifacts.dart
 
-after `flutter test tool/screenshots_test.dart`, since the first two frame a
-real screenshot:
+The orchestrator captures screens, invokes this producer and records provenance.
+To run this producer alone: python3 tool/store_graphics.py.
+The first two outputs frame a real screenshot:
 
 - site/store/og-card.png, 1200 x 630, the link preview Open Graph asks for.
-- site/store/feature-graphic.jpg, 1024 x 500, the banner on the Play listing.
+- site/store/feature-graphic.jpg, 1024 x 500, used in Play promotional and preview placements.
   JPEG because Play rejects a PNG with an alpha channel, even an opaque one.
 - site/email/wordmark.png, the lockup at three times the size the email shows
   it (server/src/email/sender.ts). Mail clients load neither SVG nor web fonts,

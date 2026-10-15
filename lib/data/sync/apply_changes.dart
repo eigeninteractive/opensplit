@@ -8,6 +8,7 @@ import 'package:opensplit_api/opensplit_api.dart' as api;
 
 import '../local/database.dart';
 import '../local/entry_writer.dart';
+import '../local/remove_group.dart';
 import '../local/tables.dart';
 import 'wire.dart';
 
@@ -67,31 +68,28 @@ Future<int> applyGroupChanges(
   AppDatabase db,
   api.ChangePage page, {
   required DateTime now,
+  Future<void> Function()? assertActive,
 }) async {
   final groupId = page.groupId;
 
   if (page.purgedAt != null) {
     // The group was collected on the server; this page is the one that says so.
     await db.transaction(() async {
-      await (db.delete(db.groups)..where((t) => t.id.equals(groupId))).go();
-      await (db.delete(
-        db.groupCursors,
-      )..where((t) => t.groupId.equals(groupId))).go();
+      await assertActive?.call();
+      await removeGroupInTransaction(db, groupId);
     });
     return 0;
   }
 
   return db.transaction(() async {
+    await assertActive?.call();
     // Foreign-key order: the group, its members, entries naming them, then
     // events naming both.
     final group = page.group;
-    if (group != null &&
-        !(await _dirtyIds(db, OutboxTarget.group)).contains(group.id)) {
-      // Companions with their nulls stated: a data class upserts a null as
-      // "leave it", and restoring, rejoining and clearing are all nulls.
-      await db
-          .into(db.groups)
-          .insertOnConflictUpdate(group.toRow().toCompanion(false));
+    if (group != null) {
+      if (!(await _dirtyIds(db, OutboxTarget.group)).contains(group.id)) {
+        await db.into(db.groups).insertOnConflictUpdate(group.toRow());
+      }
     }
 
     final dirtyMembers = await _dirtyIds(db, OutboxTarget.member);

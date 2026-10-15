@@ -9,6 +9,7 @@ import '../../domain/models/entry.dart';
 import '../../domain/models/entry_snapshot.dart';
 import '../local/database.dart';
 import '../local/entry_writer.dart';
+import '../local/remove_group.dart';
 import '../local/tables.dart';
 import 'api_client.dart';
 import 'apply_changes.dart';
@@ -64,6 +65,7 @@ class SyncEngine {
     required this.client,
     required this.outbox,
     this.accountId,
+    this.access,
     SyncGate? gate,
     DateTime Function()? clock,
     this.pageSize = 200,
@@ -80,6 +82,7 @@ class SyncEngine {
     );
   }
 
+  final ApiAccess? access;
   final AppDatabase db;
   final api.OpensplitApi client;
   final OutboxQueue outbox;
@@ -105,6 +108,7 @@ class SyncEngine {
   }
 
   Future<void> _assertActive() async {
+    access?.requireWritable();
     final session = await readSyncSession(db);
     if (_disposed ||
         !session.enabled ||
@@ -134,46 +138,13 @@ class SyncEngine {
     }.difference(skipped).toList()..sort();
   }
 
-  /// Groups a pull can only waste a request on: ones the server has never
-  /// acknowledged (their creation is still in the outbox, and the server
-  /// would answer `no_group`), and ones this account has left for good.
+  /// Groups whose creation has not reached the server yet.
   Future<Set<String>> _unreadable() async => {
     for (final group in await (db.select(
       db.groups,
     )..where((t) => t.seq.isNull())).get())
       group.id,
-    ...await _leftForGood(),
   };
-
-  /// Groups this account has left or been removed from, and this device has
-  /// already read that back from the server. A pull of one can only ever come
-  /// back empty. An invite link brings the group back, and the server then
-  /// names it among the account's groups again.
-  Future<Set<String>> _leftForGood() async {
-    final account = accountId;
-    if (account == null) return const {};
-
-    final departed =
-        await (db.select(db.members)..where(
-              (t) =>
-                  t.profileId.equals(account) &
-                  t.leftAt.isNotNull() &
-                  t.seq.isNotNull(),
-            ))
-            .get();
-    if (departed.isEmpty) return const {};
-
-    final cursors = await _groupCursors();
-    // Unsent, the leave is this device's word alone, and the server may still
-    // refuse it.
-    final unsent = await outbox.unsentIds(OutboxTarget.member);
-    return {
-      for (final member in departed)
-        if (!unsent.contains(member.id) &&
-            (cursors[member.groupId] ?? 0) >= member.seq!)
-          member.groupId,
-    };
-  }
 
   /// Pushes what is waiting, then reads [groupIds] and every group the push
   /// wrote to. What a screen, a local write or a push message asks for: the
@@ -274,10 +245,35 @@ class SyncEngine {
           await outbox.complete(item);
           sent++;
         } on ApiFailure catch (e) {
+          // Retiring a contract does not reject or acknowledge any queued edit.
+          if (e.isUpdateRequired) rethrow;
+          if (e.code == api.ErrorCode.notMember ||
+              e.code == api.ErrorCode.groupPurged) {
+            if (await _groupFor(item) case final groupId?) {
+              await _removeGroup(groupId);
+              sent++;
+              continue;
+            }
+          }
+          if (e.retry != api.Retry.transient) {
+            await _restoreRefusedDeparture(item);
+          }
           switch (e.retry) {
             case api.Retry.stale:
-              if (await _parkConflict(item) case final groupId?) {
-                groups.add(groupId);
+              if (item.target == OutboxTarget.entry) {
+                if (await _parkConflict(item) case final groupId?) {
+                  groups.add(groupId);
+                }
+              } else {
+                await outbox.fail(
+                  item,
+                  e.message,
+                  permanent: true,
+                  code: e.code?.value,
+                );
+                if (await _groupFor(item) case final groupId?) {
+                  groups.add(groupId);
+                }
               }
             case api.Retry.transient:
               await outbox.fail(item, e.message);
@@ -285,7 +281,15 @@ class SyncEngine {
             // Refused identically next time; retrying would wedge the queue.
             case api.Retry.permanent:
             case api.Retry.unknownDefaultOpenApi:
-              await outbox.fail(item, e.message, permanent: true);
+              await outbox.fail(
+                item,
+                e.message,
+                permanent: true,
+                code: e.code?.value,
+              );
+              if (await _groupFor(item) case final groupId?) {
+                groups.add(groupId);
+              }
           }
           failed++;
         } catch (e) {
@@ -297,6 +301,36 @@ class SyncEngine {
     }
     return (sent: sent, failed: failed, groups: groups);
   }
+
+  Future<void> _removeGroup(String groupId) => db.transaction(() async {
+    await _assertActive();
+    await removeGroupInTransaction(db, groupId);
+  });
+
+  /// A refused leave must not lock the account out of its still-active group.
+  /// Keep the refusal for review; a new leave replaces it after discarding.
+  Future<void> _restoreRefusedDeparture(OutboxRow item) async {
+    if (accountId == null || item.target != OutboxTarget.member) return;
+    await db.transaction(() async {
+      await _assertActive();
+      if (!await outbox.isCurrent(item)) return;
+      await (db.update(db.members)..where(
+            (m) => m.id.equals(item.targetId) & m.profileId.equals(accountId!),
+          ))
+          .write(const MembersCompanion(leftAt: Value(null)));
+    });
+  }
+
+  Future<String?> _groupFor(OutboxRow item) async => switch (item.target) {
+    OutboxTarget.group => item.targetId,
+    OutboxTarget.member => (await (db.select(
+      db.members,
+    )..where((t) => t.id.equals(item.targetId))).getSingleOrNull())?.groupId,
+    OutboxTarget.entry => (await (db.select(
+      db.entries,
+    )..where((t) => t.id.equals(item.targetId))).getSingleOrNull())?.groupId,
+    OutboxTarget.profile => null,
+  };
 
   /// Parks an edit the server refused as stale for a person to read, and
   /// rewinds the cursor to its base so the next pull brings the server's
@@ -458,9 +492,10 @@ class SyncEngine {
           ),
         );
         await db.transaction(() async {
-          if (!await outbox.isCurrent(item)) return;
+          await _assertActive();
           await (db.update(db.groups)..where((t) => t.id.equals(group.id)))
               .write(GroupsCompanion(seq: Value(stored.seq)));
+
           // The creator landed in the same change; this stops a second push.
           if (group.seq == null) {
             await (db.update(db.members)..where((t) => t.id.equals(creator.id)))
@@ -486,9 +521,13 @@ class SyncEngine {
           ),
         );
         await db.transaction(() async {
-          if (!await outbox.isCurrent(item)) return;
-          await (db.update(db.members)..where((t) => t.id.equals(member.id)))
-              .write(MembersCompanion(seq: Value(stored.seq)));
+          await _assertActive();
+          if (stored.profileId == accountId && stored.leftAt != null) {
+            await removeGroupInTransaction(db, member.groupId);
+          } else {
+            await (db.update(db.members)..where((t) => t.id.equals(member.id)))
+                .write(MembersCompanion(seq: Value(stored.seq)));
+          }
         });
         return member.groupId;
 
@@ -539,8 +578,8 @@ class SyncEngine {
   /// is caught up or refused. With [everything], also every group this
   /// account is in, and the server's answer names any it joined elsewhere.
   ///
-  /// A group the server refuses is logged and left as it is here: one group
-  /// it cannot read says nothing about the others.
+  /// Definitive membership loss removes that group's cache and queued edits.
+  /// Other refusals leave its cache intact and do not stop unrelated groups.
   Future<int> _pull(Set<String> groupIds, {required bool everything}) async {
     final cursors = await _groupCursors();
     final skipped = await _unreadable();
@@ -580,7 +619,12 @@ class SyncEngine {
         done.add(cursor.groupId);
       }
       for (final page in answer.pages) {
-        applied += await applyGroupChanges(db, page, now: _clock());
+        applied += await applyGroupChanges(
+          db,
+          page,
+          now: _clock(),
+          assertActive: _assertActive,
+        );
         final since = cursors[page.groupId] ?? 0;
         cursors[page.groupId] = page.seq;
         if (page.hasMore && page.purgedAt == null && page.seq > since) {
@@ -589,6 +633,11 @@ class SyncEngine {
         }
       }
       for (final refusal in answer.refusals) {
+        if (refusal.code == api.ErrorCode.notMember ||
+            refusal.code == api.ErrorCode.groupPurged) {
+          await _removeGroup(refusal.groupId);
+          continue;
+        }
         developer.log(
           'Group ${refusal.groupId} was not read: ${refusal.message}',
           name: 'opensplit.sync',

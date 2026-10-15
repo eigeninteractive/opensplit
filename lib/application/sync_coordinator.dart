@@ -71,6 +71,10 @@ class SyncCoordinator extends ChangeNotifier {
 
   SyncStatus get status => _status;
 
+  bool get _requiresUpdate =>
+      _status.error is ApiFailure &&
+      (_status.error as ApiFailure).isUpdateRequired;
+
   /// Listens for triggers and syncs what happened while the app was closed.
   void start() {
     if (_disposed || _subscriptions.isNotEmpty) return;
@@ -99,14 +103,14 @@ class SyncCoordinator extends ChangeNotifier {
   }
 
   Future<void> syncAll() {
-    if (_disposed) return Future.value();
+    if (_disposed || _requiresUpdate) return Future.value();
     _allPending = true;
     return _begin();
   }
 
   /// One group, unless nothing has synced cleanly yet: then everything.
   Future<void> syncGroup(String groupId) {
-    if (_disposed) return Future.value();
+    if (_disposed || _requiresUpdate) return Future.value();
     if (!_status.hasCompletedFullSync || _status.error != null) {
       return syncAll();
     }
@@ -118,13 +122,13 @@ class SyncCoordinator extends ChangeNotifier {
   /// rest of the account waits for the next full sync: nothing else changed
   /// on this device, and another device's change arrives with its push.
   Future<void> _syncWrites() {
-    if (_disposed) return Future.value();
+    if (_disposed || _requiresUpdate) return Future.value();
     _partialPending = true;
     return _begin();
   }
 
   void _writeQueued() {
-    if (_disposed) return;
+    if (_disposed || _requiresUpdate) return;
     _writeTimer?.cancel();
     _writeTimer = Timer(writeDelay, () => unawaited(_syncWrites()));
   }
@@ -195,6 +199,10 @@ class SyncCoordinator extends ChangeNotifier {
   void _scheduleRetry() {
     Duration? delay;
     var retry = syncAll;
+    if (_requiresUpdate) {
+      _setStatus(isSyncing: false);
+      return;
+    }
     if (_status.error != null) {
       delay = Duration(seconds: math.min(5 * (1 << _failures), 300));
       _failures = math.min(_failures + 1, 6);

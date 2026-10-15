@@ -1,4 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -34,6 +35,7 @@ Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
   // exists — and it does not, because nothing here went through main().
   WidgetsFlutterBinding.ensureInitialized();
 
+  ApiAccess? access;
   AppDatabase? db;
   OutboxQueue? outbox;
   try {
@@ -57,6 +59,10 @@ Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
     final session = await readBackgroundSession();
     if (session == null) return;
     final profileId = session.account.id;
+    access = ApiAccess.persisted(
+      await SharedPreferences.getInstance(),
+      baseUrl: apiBaseUrl,
+    );
 
     // A second connection to the same file — the same file, because the ledger
     // is named after the account and this isolate resolved the same account
@@ -65,14 +71,19 @@ Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
     final syncing = await readSyncSession(db);
     if (!syncing.enabled) return;
 
-    outbox = OutboxQueue(db);
+    outbox = OutboxQueue(db, access: access);
     final engine = SyncEngine(
       db: db,
       // Its own client with the stored token: no Riverpod container here, and
       // no cookie jar on Android.
-      client: buildApiClient(baseUrl: apiBaseUrl, token: session.token),
+      client: buildApiClient(
+        baseUrl: apiBaseUrl,
+        token: session.token,
+        access: access,
+      ),
       outbox: outbox,
       accountId: profileId,
+      access: access,
     );
 
     // Sync first. The notification describes what is now on the device, not
@@ -128,6 +139,7 @@ Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
   } catch (_) {
     // Nothing to report to and nobody to report it to.
   } finally {
+    await access?.dispose();
     await outbox?.dispose();
     await db?.close();
   }

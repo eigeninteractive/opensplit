@@ -1,14 +1,12 @@
 import { env, exports as workerExports } from "cloudflare:workers";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-
 import { monthsFrom } from "../src/api/reference";
 import { type MonthBlob, monthKey } from "../src/fx/blob";
 import { reference, referenceEtag, supportedCurrencies } from "../src/reference";
 import type { FxPage, Reference } from "../src/schemas/reference";
+import { apiUrl } from "./session";
 
 /** Rates, and the object that is their only writer. */
-
-const ORIGIN = "https://opensplit.test";
 
 /** A `fetch` that answers from a script, and records what it was asked. */
 function stubFetch(script: (url: string) => unknown | null) {
@@ -328,7 +326,7 @@ describe("monthsFrom", () => {
 
 describe("the reference route", () => {
   it("serves the bundled data, and a 304 for an unchanged ETag", async () => {
-    const response = await workerExports.default.fetch(`${ORIGIN}/api/reference`);
+    const response = await workerExports.default.fetch(apiUrl("/reference"));
     expect(response.status).toBe(200);
 
     const body = (await response.json()) as Reference;
@@ -338,17 +336,17 @@ describe("the reference route", () => {
     const etag = response.headers.get("ETag");
     expect(etag).toBe(referenceEtag);
 
-    const again = await workerExports.default.fetch(`${ORIGIN}/api/reference`, { headers: { "If-None-Match": etag ?? "" } });
+    const again = await workerExports.default.fetch(apiUrl("/reference"), { headers: { "If-None-Match": etag ?? "" } });
     expect(again.status).toBe(304);
   });
 
   it("needs no session, because it is the same for everybody", async () => {
     // `using (true)` in SQL said the same thing at more length.
-    expect((await workerExports.default.fetch(`${ORIGIN}/api/reference`)).status).toBe(200);
+    expect((await workerExports.default.fetch(apiUrl("/reference"))).status).toBe(200);
   });
 
   it("carries an exponent for every currency, because amounts are integers", async () => {
-    const body = (await workerExports.default.fetch(`${ORIGIN}/api/reference`).then((r) => r.json())) as Reference;
+    const body = (await workerExports.default.fetch(apiUrl("/reference")).then((r) => r.json())) as Reference;
 
     // Getting one wrong is a factor-of-a-thousand error in somebody's balance
     // rather than a formatting quirk: JPY and KRW have no minor unit at all,
@@ -368,7 +366,7 @@ describe("the fx route", () => {
   });
 
   it("reads from KV rather than waking the object", async () => {
-    const response = await workerExports.default.fetch(`${ORIGIN}/api/fx?since=2026-09-01`);
+    const response = await workerExports.default.fetch(apiUrl("/fx?since=2026-09-01"));
     expect(response.status).toBe(200);
 
     const page = (await response.json()) as FxPage;
@@ -382,12 +380,12 @@ describe("the fx route", () => {
   });
 
   it("refuses something that is not a date", async () => {
-    const response = await workerExports.default.fetch(`${ORIGIN}/api/fx?since=last-tuesday`);
+    const response = await workerExports.default.fetch(apiUrl("/fx?since=last-tuesday"));
     expect(response.status).toBe(400);
   });
 
   it("answers an empty page rather than nothing for a month never published", async () => {
-    const page = (await workerExports.default.fetch(`${ORIGIN}/api/fx?since=2026-09-30`).then((r) => r.json())) as FxPage;
+    const page = (await workerExports.default.fetch(apiUrl("/fx?since=2026-09-30")).then((r) => r.json())) as FxPage;
     expect(page.rates).toEqual([]);
   });
 
@@ -395,7 +393,7 @@ describe("the fx route", () => {
     // A device asking from six years ago must not get 2020 and an empty page:
     // its high-water mark would stay six years behind and every sync would
     // fetch the same nothing.
-    const response = await workerExports.default.fetch(`${ORIGIN}/api/fx?since=2020-01-01`);
+    const response = await workerExports.default.fetch(apiUrl("/fx?since=2020-01-01"));
     const page = (await response.json()) as FxPage;
 
     expect(page.hasMore).toBe(true);

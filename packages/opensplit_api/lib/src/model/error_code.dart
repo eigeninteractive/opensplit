@@ -40,6 +40,8 @@ enum ErrorCode {
   noSession(r'no_session'),
   @JsonValue(r'not_found')
   notFound(r'not_found'),
+  @JsonValue(r'update_required')
+  updateRequired(r'update_required'),
   @JsonValue(r'internal')
   internal(r'internal'),
   @JsonValue(r'identity_already_in_use')

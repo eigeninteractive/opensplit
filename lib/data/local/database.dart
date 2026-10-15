@@ -79,7 +79,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Bump this on **any** change to a table in `tables.dart`.
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 1;
 
   /// Timestamps are stored as ISO-8601 text rather than Unix seconds.
   @override
@@ -108,10 +108,6 @@ class AppDatabase extends _$AppDatabase {
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) => m.createAll(),
 
-    // Every schema change rebuilds the local database from empty, and the
-    // device re-syncs.
-    onUpgrade: (m, from, to) => destructiveFallback.onUpgrade(m, from, to),
-
     beforeOpen: (details) async {
       if (_resumeSession) {
         await (update(syncSessions)..where((t) => t.id.equals('account')))
@@ -134,8 +130,6 @@ class AppDatabase extends _$AppDatabase {
 }
 
 extension GroupState on Group {
-  bool get isArchived => archivedAt != null;
-
   Avatar get avatar => Avatar.fromColumns((
     kind: avatarKind,
     color: avatarColor,

@@ -728,6 +728,7 @@ void main() {
         host.client.getGroupsApi().putGroup(
           groupId: groupId,
           groupInput: api.GroupInput(
+            baseSeq: null,
             avatarKind: api.AvatarKind.initials,
             avatarColor: null,
             avatarEmoji: null,
@@ -739,7 +740,6 @@ void main() {
             defaultCurrency: 'INR',
             isDirect: false,
             simplifyDebts: true,
-            archivedAt: null,
             creatorId: '$groupId-ravi',
             creatorName: 'Ravi',
           ),
@@ -751,6 +751,7 @@ void main() {
           groupId: groupId,
           memberId: '$groupId-priya',
           memberInput: api.MemberInput(
+            baseSeq: null,
             displayName: 'Priya',
             upiVpa: null,
             leftAt: null,
@@ -957,60 +958,20 @@ void main() {
       );
     });
 
-    test('restoring a group and clearing a handle reach the server', () async {
+    test('clearing a member handle reaches the server', () async {
       if (!backendUp) return;
-
-      // Null is a value in both updates: restore, rejoin, clear.
       final g = await seededGroup(ravi);
-      await fetch(
-        ravi.client.getGroupsApi().putGroup(
-          groupId: g.groupId,
-          groupInput: api.GroupInput(
-            avatarKind: api.AvatarKind.initials,
-            avatarColor: null,
-            avatarEmoji: null,
-            avatarIcon: null,
-            avatarPhoto: null,
-            coverKind: api.CoverKind.generated,
-            coverPhoto: null,
-            name: 'Goa',
-            defaultCurrency: 'INR',
-            isDirect: false,
-            simplifyDebts: true,
-            archivedAt: DateTime.now().toUtc(),
-            creatorId: '${g.groupId}-ravi',
-            creatorName: 'Ravi',
-          ),
-        ),
-      );
-      final restored = await fetch(
-        ravi.client.getGroupsApi().putGroup(
-          groupId: g.groupId,
-          groupInput: api.GroupInput(
-            avatarKind: api.AvatarKind.initials,
-            avatarColor: null,
-            avatarEmoji: null,
-            avatarIcon: null,
-            avatarPhoto: null,
-            coverKind: api.CoverKind.generated,
-            coverPhoto: null,
-            name: 'Goa',
-            defaultCurrency: 'INR',
-            isDirect: false,
-            simplifyDebts: true,
-            archivedAt: null,
-            creatorId: '${g.groupId}-ravi',
-            creatorName: 'Ravi',
-          ),
-        ),
-      );
-      expect(restored.archivedAt, isNull);
 
-      await fetch(
+      final member = (await changesOf(
+        ravi.client,
+        g.groupId,
+      )).members.singleWhere((member) => member.id == g.priya);
+      final updated = await fetch(
         ravi.client.getGroupsApi().putMember(
           groupId: g.groupId,
           memberId: g.priya,
           memberInput: api.MemberInput(
+            baseSeq: member.seq,
             displayName: 'Priya',
             upiVpa: 'priya@okaxis',
             leftAt: null,
@@ -1022,6 +983,7 @@ void main() {
           groupId: g.groupId,
           memberId: g.priya,
           memberInput: api.MemberInput(
+            baseSeq: updated.seq,
             displayName: 'Priya',
             upiVpa: null,
             leftAt: null,

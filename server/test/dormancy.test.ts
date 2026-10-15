@@ -1,10 +1,7 @@
-import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
-import { defaultGroupLook } from "../src/db/appearance";
-import type { Group } from "../src/do/group";
-import { deleteEntry, draftOf, editMember, evenly, freshId, makeGroup, makeGroupOfTwo, ok, PRIYA, RAVI, refusal, saveEntry, stub } from "./group";
+import { deleteEntry, editMember, evenly, freshId, makeGroup, makeGroupOfTwo, ok, PRIYA, RAVI, saveEntry, stub } from "./group";
 
 /** Dormancy and account deletion: what an idle group does to itself, and what survives somebody deleting the account that made it. */
 
@@ -15,159 +12,17 @@ async function membershipsIn(groupId: string): Promise<{ profile_id: string; lef
   return rows.results;
 }
 
-describe("a group that goes quiet", () => {
-  it("is put away after three months", async () => {
-    const { groupId } = await makeGroup();
-    const outcome = await stub(groupId).runUpkeep(Date.now() + 100 * DAYS);
-
-    expect(outcome.archived).toBe(true);
-    expect(ok(await stub(groupId).changes(RAVI, 0, 500)).group?.archivedAt).not.toBeNull();
-  });
-
-  it("is left alone while somebody is still using it", async () => {
-    const { groupId } = await makeGroup();
-    const outcome = await stub(groupId).runUpkeep(Date.now() + 10 * DAYS);
-
-    expect(outcome.archived).toBe(false);
-  });
-
-  /**
-   * Archiving is reversible precisely so that being wrong about it costs the
-   * people in the group nothing.
-   */
-  it("comes back by itself the moment somebody adds an expense, with nothing to undo", async () => {
+describe("history retention", () => {
+  it("neither hides nor deletes a settled group merely because time passes", async () => {
     const { groupId, ravi, priya } = await makeGroup();
     const object = stub(groupId);
-
-    await object.runUpkeep(Date.now() + 100 * DAYS);
-    ok(await saveEntry(object, evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 400), RAVI));
-
-    expect(ok(await object.changes(RAVI, 0, 500)).group?.archivedAt).toBeNull();
-  });
-
-  /**
-   * Quiet is measured from the last change anybody made, not from the newest
-   * expense: a group whose people spend months correcting old expenses, or
-   * only joining and renaming, is in use.
-   */
-  it("counts an edit to an old expense as use", async () => {
-    const { groupId, ravi, priya } = await makeGroup();
-    const object = stub(groupId);
-    const entry = ok(await saveEntry(object, evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 400), RAVI));
-
-    // Recorded, and last touched, half a year ago.
-    const longAgo = Date.now() - 180 * DAYS;
-    await runInDurableObject(object, async (_instance: Group, state) => {
-      state.storage.sql.exec("update entries set created_at = ?", new Date(longAgo).toISOString());
-      state.storage.sql.exec("update meta set last_activity_at = ?", new Date(longAgo).toISOString());
-    });
-    ok(await saveEntry(object, draftOf(entry, { description: "Dinner, corrected" }), RAVI));
-
-    expect((await object.runUpkeep(Date.now() + 10 * DAYS)).archived).toBe(false);
-  });
-
-  it("does not count being archived as use", async () => {
-    const { groupId } = await makeGroup();
-    const object = stub(groupId);
-
-    await object.runUpkeep(Date.now() + 100 * DAYS);
-    const activity = await runInDurableObject(object, async (_instance: Group, state) => state.storage.sql.exec<{ last_activity_at: string }>("select last_activity_at from meta").one().last_activity_at);
-    expect(Date.parse(activity)).toBeLessThan(Date.now() + DAYS);
-  });
-
-  /** A deadline already spent would hold the object's one alarm in the past, firing again as soon as it returns. */
-  it("leaves no archive deadline behind once it is archived, by anybody", async () => {
-    const { groupId, ravi, priya } = await makeGroup();
-    const object = stub(groupId);
-    const entry = ok(await saveEntry(object, evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 400), RAVI));
-    ok(await object.putGroup(groupId, { name: "Goa trip", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: new Date().toISOString(), ...defaultGroupLook, creatorId: ravi.id, creatorName: "Ravi" }, RAVI));
-    // Deleting is a change, so it arms the archive deadline again, in an archived group.
+    const entry = ok(await saveEntry(object, evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 1000), RAVI));
     ok(await deleteEntry(object, entry, RAVI));
-
-    await object.runUpkeep(Date.now() + 100 * DAYS);
-    const chores = await runInDurableObject(object, async (_instance: Group, state) =>
-      state.storage.sql
-        .exec<{ name: string }>("select name from schedule")
-        .toArray()
-        .map((row) => row.name),
-    );
-    expect(chores).not.toContain("archive");
-  });
-
-  it("tells the record that nobody archived it", async () => {
-    const { groupId } = await makeGroup();
-    await stub(groupId).runUpkeep(Date.now() + 100 * DAYS);
-
-    const events = ok(await stub(groupId).changes(RAVI, 0, 500)).events;
-    const archived = events.findLast((event) => event.kind === "group_archived");
-    expect(archived?.actorId).toBeNull();
-  });
-});
-
-describe("a group long dead", () => {
-  /**
-   * The settled check is the whole safety of collection. The most likely
-   * reason a group goes quiet with a balance outstanding is that the debt is
-   * disputed or forgotten, which is exactly when erasing the record is worst.
-   */
-  it("is never collected while anybody still owes anybody anything", async () => {
-    const { groupId, ravi, priya } = await makeGroup();
-    const object = stub(groupId);
-
-    ok(await saveEntry(object, evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 1000), RAVI));
-
-    const outcome = await object.runUpkeep(Date.now() + 800 * DAYS);
-    expect(outcome.purged).toBe(false);
-    expect(ok(await object.changes(RAVI, 0, 500)).group).not.toBeNull();
-  });
-
-  it("is collected once it is settled, and says so in the feed", async () => {
-    const { groupId, ravi, priya } = await makeGroup();
-    const object = stub(groupId);
-
-    const id = freshId("e");
-    const entry = ok(await saveEntry(object, evenly(id, ravi.id, [ravi.id, priya.id], 1000), RAVI));
-    ok(await deleteEntry(object, entry, RAVI));
-
-    const outcome = await object.runUpkeep(Date.now() + 800 * DAYS);
-    expect(outcome.purged).toBe(true);
-
-    /**
-     * The end of a group is a change with a sequence number, which means it
-     * travels. Deleting the rows and telling nobody would leave a phone that
-     * had synced the group holding it forever.
-     */
+    expect(await object.runUpkeep(Date.now() + 800 * DAYS)).toEqual({ purged: false });
     const page = ok(await object.changes(RAVI, 0, 500));
-    expect(page.purgedAt).not.toBeNull();
-    expect(page.group).toBeNull();
-    expect(page.entries).toHaveLength(0);
-    expect(page.members).toHaveLength(0);
-  });
-
-  it("stops answering writes afterwards, and says which kind of nothing it is", async () => {
-    const { groupId, ravi, priya } = await makeGroup();
-    const object = stub(groupId);
-
-    const id = freshId("e");
-    const entry = ok(await saveEntry(object, evenly(id, ravi.id, [ravi.id, priya.id], 500), RAVI));
-    ok(await deleteEntry(object, entry, RAVI));
-    await object.runUpkeep(Date.now() + 800 * DAYS);
-
-    expect(refusal(await saveEntry(object, evenly(freshId("e"), ravi.id, [ravi.id], 100), RAVI)).code).toBe("group_purged");
-  });
-
-  it("takes its rows out of the membership index with it", async () => {
-    const { groupId, ravi, priya } = await makeGroup();
-    const object = stub(groupId);
-
+    expect(page.purgedAt).toBeNull();
+    expect(page.entries).toHaveLength(1);
     expect(await membershipsIn(groupId)).toHaveLength(1);
-
-    const id = freshId("e");
-    const entry = ok(await saveEntry(object, evenly(id, ravi.id, [ravi.id, priya.id], 500), RAVI));
-    ok(await deleteEntry(object, entry, RAVI));
-    await object.runUpkeep(Date.now() + 800 * DAYS);
-
-    expect(await membershipsIn(groupId)).toHaveLength(0);
   });
 });
 

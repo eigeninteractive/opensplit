@@ -36,7 +36,7 @@ const putGroupRoute = createRoute({
   operationId: "putGroup",
   path: "/groups/{groupId}",
   tags: ["groups"],
-  summary: "Make a group and its creator's place in it, or rename, archive or change a setting",
+  summary: "Make a group and its creator's place in it, or change shared settings",
   description: "Idempotent, so a retry whose response was lost returns the same group. Editing needs membership; creating does not.",
   request: { params: GroupPathSchema, body: jsonBody(GroupInputSchema) },
   responses: { 200: jsonResponse(GroupSchema, "The group"), ...refusals },
@@ -49,7 +49,7 @@ const putMemberRoute = createRoute({
   path: "/groups/{groupId}/members/{memberId}",
   tags: ["groups"],
   summary: "Add somebody who has never opened the app, or change a name, a payment handle, or whether somebody is still here",
-  description: "Your own row and any placeholder are editable; another account holder's are not. Leaving is always yours to do; removing somebody else requires them to be settled in every currency.",
+  description: "Your own row and any placeholder are editable; another account holder's are not. Leaving or removing somebody requires them to be settled in every currency; leaving ends access. The last account holder can leave only when the entire group is settled, which permanently deletes the group.",
   request: { params: MemberPathSchema, body: jsonBody(MemberInputSchema) },
   responses: { 200: jsonResponse(MemberSchema, "The member"), ...refusals },
 });
@@ -109,7 +109,7 @@ export function ledgerRoutes(routes: OpenAPIHono<AppEnv>) {
   });
 }
 
-/** The groups an account is in now, from D1's index of them. */
+/** Groups the account actively participates in. */
 async function groupsOf(db: DrizzleD1Database, profileId: string): Promise<string[]> {
   const rows = await db
     .select({ groupId: memberships.groupId })

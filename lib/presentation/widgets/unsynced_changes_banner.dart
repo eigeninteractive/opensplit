@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/local_providers.dart';
+import '../../application/backend_providers.dart';
 import '../../application/sync_providers.dart';
 import '../../data/sync/outbox_queue.dart';
 import 'inline_notice.dart';
@@ -28,27 +29,30 @@ class UnsyncedChangesBanner extends ConsumerWidget {
         title: count == 1
             ? 'One change could not be saved'
             : '$count changes could not be saved',
-        message: count == 1
-            ? '“${failures.single.label}” is on this device only. Nobody '
-                  'else in the group can see it, and it is not counted '
-                  'in their balances.'
-            : 'They are on this device only. Nobody else in the group '
-                  'can see them, and they are not counted in their '
-                  'balances.',
+        message: failures.every((failure) => !failure.canRetry)
+            ? 'These changes could not be saved. '
+                  'Review the details, then discard the local edits before trying a new change.'
+            : '${count == 1 ? '“${failures.single.label}” has edits' : 'These edits are'} '
+                  'on this device only. Review the details before retrying or discarding them.',
         actions: [
           TextButton(
             onPressed: () => _showDetails(context, failures),
             child: const Text('Details'),
           ),
           TextButton(
-            onPressed: () => _confirmDiscard(context, ref, failures),
+            onPressed: ref.watch(requiresAppUpdateProvider)
+                ? null
+                : () => _confirmDiscard(context, ref, failures),
             child: const Text('Discard'),
           ),
-          FilledButton(
-            onPressed: () =>
-                ref.read(syncControllerProvider.notifier).retryFailed(),
-            child: const Text('Try again'),
-          ),
+          if (failures.any((failure) => failure.canRetry))
+            FilledButton(
+              onPressed: ref.watch(requiresAppUpdateProvider)
+                  ? null
+                  : () =>
+                        ref.read(syncControllerProvider.notifier).retryFailed(),
+              child: const Text('Try again'),
+            ),
         ],
       ),
     );

@@ -99,9 +99,7 @@ final class DriftActivityRepository {
       displayName: row.member?.displayName ?? 'Someone',
       previousName: row.member?.previousName,
     ),
-    EventKind.groupRenamed ||
-    EventKind.groupArchived ||
-    EventKind.groupRestored => GroupChanged(
+    EventKind.groupRenamed => GroupChanged(
       id: row.id,
       groupId: row.groupId,
       actorId: row.actorId,

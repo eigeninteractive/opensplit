@@ -45,7 +45,7 @@ class EntriesApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/groups/{groupId}/entries/{entryId}'
+    final _path = r'/groups/{groupId}/entries/{entryId}'
         .replaceAll(
           '{'
           r'groupId'

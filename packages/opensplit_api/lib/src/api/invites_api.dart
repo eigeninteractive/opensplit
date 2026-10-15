@@ -47,7 +47,7 @@ class InvitesApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/groups/{groupId}/link'.replaceAll(
+    final _path = r'/groups/{groupId}/link'.replaceAll(
       '{'
       r'groupId'
       '}',
@@ -137,7 +137,7 @@ class InvitesApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/groups/{groupId}/members/{memberId}/invite'
+    final _path = r'/groups/{groupId}/members/{memberId}/invite'
         .replaceAll(
           '{'
           r'groupId'
@@ -228,7 +228,7 @@ class InvitesApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/groups/{groupId}/link'.replaceAll(
+    final _path = r'/groups/{groupId}/link'.replaceAll(
       '{'
       r'groupId'
       '}',
@@ -318,7 +318,7 @@ class InvitesApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/links/{token}/join'.replaceAll(
+    final _path = r'/links/{token}/join'.replaceAll(
       '{'
       r'token'
       '}',
@@ -417,7 +417,7 @@ class InvitesApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/links/{token}/placeholders'.replaceAll(
+    final _path = r'/links/{token}/placeholders'.replaceAll(
       '{'
       r'token'
       '}',
@@ -505,7 +505,7 @@ class InvitesApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/links/{token}'.replaceAll(
+    final _path = r'/links/{token}'.replaceAll(
       '{'
       r'token'
       '}',
@@ -593,7 +593,7 @@ class InvitesApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/groups/{groupId}/link'.replaceAll(
+    final _path = r'/groups/{groupId}/link'.replaceAll(
       '{'
       r'groupId'
       '}',

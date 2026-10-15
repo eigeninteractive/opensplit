@@ -3,6 +3,7 @@ import type { Context } from "hono";
 
 import { requireSession, withSession } from "../context";
 import { kindOf, type Refusal, type Result, statusFor } from "../do/group/refusal";
+import { currentApiVersion } from "../paths";
 import { apiError, errorResponse, IdSchema } from "../schemas/common";
 
 /** What every route module shares: session guards, addressing, and how a refusal becomes a response. */
@@ -55,6 +56,16 @@ export const refusals = {
 export const rateLimited = { 429: errorResponse("Too many attempts. Wait a minute and try again.") };
 
 type WorkerEnv = { Bindings: Env };
+
+/** Only a retired numbered contract asks the client to update. Other missing paths remain 404s. */
+export function unavailableApi<E extends WorkerEnv>(c: Context<E>, currentVersion: number = currentApiVersion) {
+  const requestedVersion = /^\/api\/v([1-9]\d*)(?:\/|$)/.exec(c.req.path)?.[1];
+  if (requestedVersion !== undefined && Number(requestedVersion) < currentVersion) {
+    c.header("Cache-Control", "no-store");
+    return c.json(apiError("update_required", "Update OpenSplit to connect to the server."), 410);
+  }
+  return c.json(apiError("not_found", "No such endpoint."), 404);
+}
 
 /** The client's address. Cloudflare always sets it; only a test calling the Worker directly omits it. */
 export function clientIp<E extends WorkerEnv>(c: Context<E>): string {

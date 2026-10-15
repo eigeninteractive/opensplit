@@ -28,8 +28,6 @@ class GroupInput {
 
     required this.simplifyDebts,
 
-    required this.archivedAt,
-
     required this.avatarKind,
 
     required this.avatarColor,
@@ -47,6 +45,8 @@ class GroupInput {
     required this.creatorId,
 
     required this.creatorName,
+
+    required this.baseSeq,
   });
 
   @JsonKey(name: r'name', required: true, includeIfNull: false)
@@ -60,9 +60,6 @@ class GroupInput {
 
   @JsonKey(name: r'simplifyDebts', required: true, includeIfNull: false)
   final bool simplifyDebts;
-
-  @JsonKey(name: r'archivedAt', required: true, includeIfNull: true)
-  final DateTime? archivedAt;
 
   @JsonKey(
     name: r'avatarKind',
@@ -111,6 +108,10 @@ class GroupInput {
   @JsonKey(name: r'creatorName', required: true, includeIfNull: false)
   final String creatorName;
 
+  // minimum: 0
+  @JsonKey(name: r'baseSeq', required: true, includeIfNull: true)
+  final int? baseSeq;
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -119,7 +120,6 @@ class GroupInput {
           other.defaultCurrency == defaultCurrency &&
           other.isDirect == isDirect &&
           other.simplifyDebts == simplifyDebts &&
-          other.archivedAt == archivedAt &&
           other.avatarKind == avatarKind &&
           other.avatarColor == avatarColor &&
           other.avatarEmoji == avatarEmoji &&
@@ -128,7 +128,8 @@ class GroupInput {
           other.coverKind == coverKind &&
           other.coverPhoto == coverPhoto &&
           other.creatorId == creatorId &&
-          other.creatorName == creatorName;
+          other.creatorName == creatorName &&
+          other.baseSeq == baseSeq;
 
   @override
   int get hashCode =>
@@ -136,7 +137,6 @@ class GroupInput {
       defaultCurrency.hashCode +
       isDirect.hashCode +
       simplifyDebts.hashCode +
-      (archivedAt == null ? 0 : archivedAt.hashCode) +
       avatarKind.hashCode +
       (avatarColor == null ? 0 : avatarColor.hashCode) +
       (avatarEmoji == null ? 0 : avatarEmoji.hashCode) +
@@ -145,7 +145,8 @@ class GroupInput {
       coverKind.hashCode +
       (coverPhoto == null ? 0 : coverPhoto.hashCode) +
       creatorId.hashCode +
-      creatorName.hashCode;
+      creatorName.hashCode +
+      (baseSeq == null ? 0 : baseSeq.hashCode);
 
   factory GroupInput.fromJson(Map<String, dynamic> json) =>
       _$GroupInputFromJson(json);

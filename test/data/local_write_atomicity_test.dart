@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/local/local_reset.dart';
@@ -22,6 +23,35 @@ void main() {
     await seedReferenceData(db);
   });
   tearDown(() => db.close());
+
+  test(
+    'a stale settings form cannot overwrite a group pulled in the meantime',
+    () async {
+      final groups = DriftGroupRepository(db);
+      final made = await groups.createGroup(
+        name: 'Original',
+        defaultCurrency: 'INR',
+        creatorDisplayName: 'Test',
+      );
+      await db
+          .update(db.groups)
+          .write(
+            const GroupsCompanion(
+              seq: Value(2),
+              name: Value('Remote name'),
+              simplifyDebts: Value(false),
+            ),
+          );
+      await expectLater(
+        groups.updateGroup(made.group.copyWith(name: 'Stale edit')),
+        throwsStateError,
+      );
+      final saved = await groups.getGroup(made.group.id);
+      expect(saved?.name, 'Remote name');
+      expect(saved?.simplifyDebts, isFalse);
+      expect(await db.select(db.outbox).get(), isEmpty);
+    },
+  );
 
   test(
     'a session cleared by sign-out cannot accept late editor writes',

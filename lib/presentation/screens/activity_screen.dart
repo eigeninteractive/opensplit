@@ -121,16 +121,10 @@ class _Line extends StatelessWidget {
             : '$actor renamed $previousName to $displayName',
       ),
 
-      GroupChanged(kind: EventKind.groupRenamed, :final name) => (
+      GroupChanged(:final name) => (
         Icons.drive_file_rename_outline,
         '$actor renamed the group to $name',
       ),
-      GroupChanged(kind: EventKind.groupArchived) => (
-        Icons.inventory_2_outlined,
-        '$actor archived the group',
-      ),
-      GroupChanged() => (Icons.unarchive_outlined, '$actor restored the group'),
-
       LinkChanged(kind: EventKind.linkCreated) => (
         Icons.link,
         '$actor created an invite link',

@@ -2,6 +2,7 @@ import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
 import 'package:in_app_update/in_app_update.dart';
+import 'package:in_app_review/in_app_review.dart';
 
 /// How badly a waiting update wants to be installed.
 enum UpdateUrgency {
@@ -12,7 +13,7 @@ enum UpdateUrgency {
   /// costs nothing. The ordinary case.
   flexible,
 
-  /// A full-screen, blocking flow that the person cannot dismiss.
+  /// A full-screen installation flow. Play can report cancellation or failure.
   immediate,
 }
 
@@ -23,8 +24,8 @@ class AppUpdateService {
   bool get isSupported =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
-  /// The priority at which an update stops being optional.
-  static const int _blockingFrom = 4;
+  /// The priority at which an ordinary update offer uses the immediate flow.
+  static const int _immediateFrom = 4;
 
   /// What Play is holding for this app, and how much it matters.
   Future<UpdateUrgency> check() async {
@@ -36,7 +37,7 @@ class AppUpdateService {
       }
 
       // Both halves are required.
-      if ((info.updatePriority) >= _blockingFrom &&
+      if ((info.updatePriority) >= _immediateFrom &&
           info.immediateUpdateAllowed) {
         return UpdateUrgency.immediate;
       }
@@ -56,6 +57,35 @@ class AppUpdateService {
       return UpdateUrgency.none;
     }
   }
+
+  /// Updates a build whose API has been retired, regardless of Play priority.
+  ///
+  /// Canceling keeps saved data readable. If Play cannot run the immediate
+  /// flow, its listing lets the user install once the release is available.
+  Future<void> updateRequired() async {
+    if (isSupported) {
+      try {
+        final info = await InAppUpdate.checkForUpdate();
+        if (info.updateAvailability ==
+                UpdateAvailability.developerTriggeredUpdateInProgress ||
+            (info.updateAvailability == UpdateAvailability.updateAvailable &&
+                info.immediateUpdateAllowed)) {
+          final result = await installNow();
+          if (result != AppUpdateResult.inAppUpdateFailed) return;
+        }
+      } catch (error) {
+        developer.log(
+          'Could not start the Play update',
+          name: 'opensplit.update',
+          error: error,
+        );
+      }
+    }
+    await openStoreListing();
+  }
+
+  /// Opens the platform store if an in-app update cannot run.
+  Future<void> openStoreListing() => InAppReview.instance.openStoreListing();
 
   /// Downloads in the background. Resolves when the download finishes, is
   /// declined, or fails.

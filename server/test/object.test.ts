@@ -9,8 +9,6 @@ import { kindOf, statusFor } from "../src/do/group/refusal";
 import { refusalCodes } from "../src/schemas/common";
 import { evenly, freshId, makeGroup, ok, RAVI, saveEntry, stub } from "./group";
 
-const DAYS = 24 * 60 * 60 * 1000;
-
 /** The object as a Cloudflare object, rather than as a ledger: its migrations, its alarm, and the type its methods actually present across the RPC boundary. */
 
 describe("the schema this object migrates itself to", () => {
@@ -49,18 +47,16 @@ describe("the schema this object migrates itself to", () => {
 });
 
 describe("the one alarm", () => {
-  it("is armed for the dormancy clock as soon as there is a group", async () => {
+  it("has no destructive dormancy alarm for an owned group", async () => {
     const { groupId } = await makeGroup();
 
     await runInDurableObject(stub(groupId), async (_instance: Group, state) => {
       const at = await state.storage.getAlarm();
-      expect(at).not.toBeNull();
-      expect(at ?? 0).toBeGreaterThan(Date.now() + 80 * DAYS);
-      expect(at ?? 0).toBeLessThan(Date.now() + 100 * DAYS);
+      expect(at).toBeNull();
     });
   });
 
-  it("is pushed out again by every expense, so a group in use is never put away", async () => {
+  it("does not create a retention deadline when an expense is added", async () => {
     const { groupId, ravi, priya } = await makeGroup();
 
     const before = await runInDurableObject(stub(groupId), async (_instance: Group, state) => state.storage.getAlarm());
@@ -68,10 +64,11 @@ describe("the one alarm", () => {
     ok(await saveEntry(stub(groupId), evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 300), RAVI));
 
     const after = await runInDurableObject(stub(groupId), async (_instance: Group, state) => state.storage.getAlarm());
-    expect(after ?? 0).toBeGreaterThan(before ?? 0);
+    expect(before).toBeNull();
+    expect(after).toBeNull();
   });
 
-  it("finds nothing to do when it fires early, and simply re-arms", async () => {
+  it("clears a spent alarm when no index work remains", async () => {
     const { groupId } = await makeGroup();
 
     await runInDurableObject(stub(groupId), async (_instance: Group, state) => {
@@ -79,7 +76,7 @@ describe("the one alarm", () => {
     });
 
     expect(await runDurableObjectAlarm(stub(groupId))).toBe(true);
-    expect(ok(await stub(groupId).changes(RAVI, 0, 100)).group?.archivedAt).toBeNull();
+    expect(ok(await stub(groupId).changes(RAVI, 0, 100)).purgedAt).toBeNull();
   });
 });
 

@@ -73,7 +73,11 @@ never set it on a photograph.
 
 ## Icons and splash
 
-Generated, never edited by hand:
+Generated, never edited by hand. For product screenshots and their derivatives,
+run **`dart run tool/store_artifacts.dart`**. It runs both producers below and
+records hashes only after every output succeeds. `--check` validates that record
+in CI. Regenerate after changing app code, assets or the capture toolchain;
+individually rendering screenshots does not update the complete artwork record.
 
 | Command | Writes | From |
 |---|---|---|
@@ -97,6 +101,12 @@ splash for the same reason.
 | Hi-res icon | 512 × 512, opaque | `assets/icon/icon.png`, resized |
 | Feature graphic | 1024 × 500, JPEG | `site/store/feature-graphic.jpg` |
 | Phone screenshots | 1080 × 1920, PNG | `site/store/screenshot-1-groups.png` to `-5-insights.png`, in that order |
+
+The feature graphic is uploaded as `images/featureGraphic.jpg` alongside the
+screenshots. Google Play uses it in preview-video and promotional placements;
+it is not a guaranteed permanent banner on the public listing. Verify upload
+results in the release log or Play Console store listing, independently of
+where Play chooses to display it. See [Google Play preview asset guidance](https://support.google.com/googleplay/android-developer/answer/9866151?hl=en-GB).
 
 All of it is generated (above). To package the committed assets and Cider notes:
 

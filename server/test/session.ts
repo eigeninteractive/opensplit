@@ -1,5 +1,6 @@
 import { exports as workerExports } from "cloudflare:workers";
 
+import { apiBasePath } from "../src/paths";
 import type { IdentityOutcome } from "../src/schemas/identity";
 import type { ChangePage, GroupCursor, Pull } from "../src/schemas/ledger";
 
@@ -11,7 +12,7 @@ export interface Guest {
 
 export async function signInAsGuest(): Promise<Guest> {
   // A client of its own, as each real guest is: the guest door is rate-limited per address.
-  const response = await workerExports.default.fetch("https://opensplit.test/api/identity/guest", { method: "POST", headers: { "CF-Connecting-IP": randomIp() } });
+  const response = await workerExports.default.fetch(apiUrl("/identity/guest"), { method: "POST", headers: { "CF-Connecting-IP": randomIp() } });
   if (response.status !== 200) throw new Error(`Guest sign-in failed: ${response.status}`);
 
   const body = (await response.json()) as IdentityOutcome;
@@ -26,11 +27,14 @@ export function randomIp(): string {
 
 const ORIGIN = "https://opensplit.test";
 
+/** A current-contract URL; test operations stay relative to the shared mount. */
+export const apiUrl = (path: string) => `${ORIGIN}${apiBasePath}${path}`;
+
 /** The sync route, as the app calls it. */
 export function pullResponse(guest: Guest | null, groups: GroupCursor[], limit = 200): Promise<Response> {
   const headers = new Headers({ "Content-Type": "application/json" });
   if (guest) headers.set("Authorization", `Bearer ${guest.token}`);
-  return workerExports.default.fetch(`${ORIGIN}/api/sync`, { method: "POST", headers, body: JSON.stringify({ groups, limit }) });
+  return workerExports.default.fetch(apiUrl("/sync"), { method: "POST", headers, body: JSON.stringify({ groups, limit }) });
 }
 
 export async function pull(guest: Guest, groups: GroupCursor[], limit = 200): Promise<Pull> {

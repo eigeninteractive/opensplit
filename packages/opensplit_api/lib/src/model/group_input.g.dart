@@ -15,7 +15,6 @@ GroupInput _$GroupInputFromJson(Map<String, dynamic> json) =>
           'defaultCurrency',
           'isDirect',
           'simplifyDebts',
-          'archivedAt',
           'avatarKind',
           'avatarColor',
           'avatarEmoji',
@@ -25,6 +24,7 @@ GroupInput _$GroupInputFromJson(Map<String, dynamic> json) =>
           'coverPhoto',
           'creatorId',
           'creatorName',
+          'baseSeq',
         ],
       );
       final val = GroupInput(
@@ -32,10 +32,6 @@ GroupInput _$GroupInputFromJson(Map<String, dynamic> json) =>
         defaultCurrency: $checkedConvert('defaultCurrency', (v) => v as String),
         isDirect: $checkedConvert('isDirect', (v) => v as bool),
         simplifyDebts: $checkedConvert('simplifyDebts', (v) => v as bool),
-        archivedAt: $checkedConvert(
-          'archivedAt',
-          (v) => v == null ? null : DateTime.parse(v as String),
-        ),
         avatarKind: $checkedConvert(
           'avatarKind',
           (v) => $enumDecode(
@@ -73,6 +69,7 @@ GroupInput _$GroupInputFromJson(Map<String, dynamic> json) =>
         coverPhoto: $checkedConvert('coverPhoto', (v) => v as String?),
         creatorId: $checkedConvert('creatorId', (v) => v as String),
         creatorName: $checkedConvert('creatorName', (v) => v as String),
+        baseSeq: $checkedConvert('baseSeq', (v) => (v as num?)?.toInt()),
       );
       return val;
     });
@@ -83,7 +80,6 @@ Map<String, dynamic> _$GroupInputToJson(GroupInput instance) =>
       'defaultCurrency': instance.defaultCurrency,
       'isDirect': instance.isDirect,
       'simplifyDebts': instance.simplifyDebts,
-      'archivedAt': instance.archivedAt?.toIso8601String(),
       'avatarKind': _$AvatarKindEnumMap[instance.avatarKind]!,
       'avatarColor': _$AvatarColorEnumMap[instance.avatarColor],
       'avatarEmoji': instance.avatarEmoji,
@@ -93,6 +89,7 @@ Map<String, dynamic> _$GroupInputToJson(GroupInput instance) =>
       'coverPhoto': instance.coverPhoto,
       'creatorId': instance.creatorId,
       'creatorName': instance.creatorName,
+      'baseSeq': instance.baseSeq,
     };
 
 const _$AvatarKindEnumMap = {

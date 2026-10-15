@@ -4,11 +4,17 @@ What changed in each version of the app, newest first. The format is
 [Semantic Versioning](https://semver.org/), and the file is kept by
 [cider](https://pub.dev/packages/cider): see "Versions" in docs/runbook.md.
 
-## [Unreleased]
+## [4.0.0] - 2026-10-15
 ### Changed
+- When a numbered API version is retired, saved data stays readable and pending uploads pause. Update OpenSplit through Play or restart into the new web release to edit again.
+- This testing release opens a fresh local ledger and requires signing in again. Old device databases remain unused; older builds can no longer change server data.
+- The archive option has been removed. Leaving a group ends access on all devices.
+- The last account holder can leave a fully settled group, permanently deleting it. Groups with active account holders are retained without an inactivity deadline.
 - Groups have larger names and avatars with quieter cover art. Forms use consistent filled fields, and app wording is shorter.
 
 ### Fixed
+- Departed members cannot open group screens or edit cached data. Confirmed access loss clears the local cache without a retry loop. Stale group and member edits cannot overwrite newer versions.
+- Store screenshots and the feature graphic are refreshed together, with CI detecting stale artwork.
 - Improved browser database transaction reliability.
 
 ### Security
@@ -100,7 +106,7 @@ What changed in each version of the app, newest first. The format is
 ### Added
 - The first build, to Play internal testing.
 
-[Unreleased]: https://github.com/eigeninteractive/opensplit/compare/v3.1.0...HEAD
+[4.0.0]: https://github.com/eigeninteractive/opensplit/compare/v3.1.0...v4.0.0
 [3.1.0]: https://github.com/eigeninteractive/opensplit/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/eigeninteractive/opensplit/compare/v2.0.0...v3.0.0
 [2.0.0]: https://github.com/eigeninteractive/opensplit/compare/v1.0.0...v2.0.0

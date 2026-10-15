@@ -1,12 +1,12 @@
-import { and, eq, isNotNull, ne } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, ne } from "drizzle-orm";
 
 import * as schema from "../../db/group/schema";
 import type { Group, GroupInput, Member, MemberInput } from "../../schemas/ledger";
-import { isSettled } from "./balances";
+import { isGroupSettled, isSettled } from "./balances";
 import { append } from "./events";
 import { refuse } from "./refusal";
 import { findMemberByProfile, findMeta, nextSeq, purge, requireMember, requireMeta, type Tx, type WriteContext } from "./store";
-import { stageMembership, stagePurge } from "./upkeep";
+import { collectUnowned, stageMembership, stagePurge, touchActivity } from "./upkeep";
 
 /**
  * The group and its people. Membership is the only permission: no owner, no
@@ -44,27 +44,26 @@ function appearanceOf(input: GroupInput) {
 }
 
 /**
- * Rename, archive or restore, settings, and how it looks. Any member; all of
+ * Shared settings and appearance. Any active member; all of
  * it is visible and reversible. A new look is not an event: the activity feed
  * records what happened to the money and the people, and a picture is neither.
  */
 export function updateGroup(tx: Tx, input: GroupInput, { now, actor }: WriteContext): Group {
   const meta = requireMeta(tx);
-  const { name, simplifyDebts, archivedAt } = input;
+  const { name, simplifyDebts } = input;
   const appearance = appearanceOf(input);
-  const unchanged = name === meta.name && simplifyDebts === meta.simplifyDebts && archivedAt === meta.archivedAt && Object.entries(appearance).every(([column, value]) => meta[column as keyof typeof appearance] === value);
+  const unchanged = name === meta.name && simplifyDebts === meta.simplifyDebts && Object.entries(appearance).every(([column, value]) => meta[column as keyof typeof appearance] === value);
   if (unchanged) return meta;
+  if (input.baseSeq !== meta.seq) refuse("stale_base", "This group's settings changed. Refresh them before trying again.");
 
   const seq = nextSeq(tx);
   tx.update(schema.meta)
-    .set({ name, simplifyDebts, archivedAt, ...appearance, updatedAt: now, seq })
+    .set({ name, simplifyDebts, ...appearance, updatedAt: now, seq })
     .where(eq(schema.meta.id, meta.id))
     .run();
 
   const written = { seq, now, actorId: actor.id };
   if (name !== meta.name) append(tx, { ...written, kind: "group_renamed", group: { name, previousName: meta.name } });
-  if (archivedAt !== null && meta.archivedAt === null) append(tx, { ...written, kind: "group_archived", group: { name, previousName: null } });
-  if (archivedAt === null && meta.archivedAt !== null) append(tx, { ...written, kind: "group_restored", group: { name, previousName: null } });
 
   return requireMeta(tx);
 }
@@ -113,6 +112,16 @@ function updateMember(tx: Tx, memberId: string, input: MemberInput, { now, actor
     refuse("forbidden", `${target.displayName} left this group, so only they can come back, with a link.`);
   }
   if (displayName === target.displayName && upiVpa === target.upiVpa && !leaving && !returning) return target;
+  if (input.baseSeq !== target.seq) refuse("stale_base", "This member changed. Refresh the group before trying again.");
+  if (leaving && target.profileId !== null) {
+    const otherActive = tx
+      .select({ id: schema.members.id })
+      .from(schema.members)
+      .where(and(isNotNull(schema.members.profileId), isNull(schema.members.leftAt), ne(schema.members.id, target.id)))
+      .limit(1)
+      .get();
+    if (!otherActive && !isGroupSettled(tx)) refuse("not_settled", "Settle every balance before the last account leaves and deletes this group.");
+  }
 
   const seq = nextSeq(tx);
   tx.update(schema.members).set({ displayName, upiVpa, leftAt, updatedAt: now, seq }).where(eq(schema.members.id, memberId)).run();
@@ -124,7 +133,9 @@ function updateMember(tx: Tx, memberId: string, input: MemberInput, { now, actor
   if (displayName !== target.displayName) append(tx, { ...written, kind: "member_renamed", member: { displayName, previousName: target.displayName } });
 
   if (target.profileId !== null) stageMembership(tx, target.profileId, leftAt, now);
-  return requireMember(tx, memberId);
+  const result = requireMember(tx, memberId);
+  if (leaving) collectUnowned(tx, Date.parse(now));
+  return result;
 }
 
 /**
@@ -140,7 +151,7 @@ export function forgetProfile(tx: Tx, profileId: string, displayName: string | n
   const others = tx
     .select({ id: schema.members.id })
     .from(schema.members)
-    .where(and(isNotNull(schema.members.profileId), ne(schema.members.profileId, profileId)))
+    .where(and(isNotNull(schema.members.profileId), isNull(schema.members.leftAt), ne(schema.members.profileId, profileId)))
     .limit(1)
     .get();
 
@@ -154,6 +165,7 @@ export function forgetProfile(tx: Tx, profileId: string, displayName: string | n
     .set({ profileId: null, displayName: displayName ?? member.displayName, updatedAt: now, seq: nextSeq(tx) })
     .where(eq(schema.members.id, member.id))
     .run();
+  touchActivity(tx, now);
   return { forgotten: true, purged: false };
 }
 
@@ -167,12 +179,23 @@ export function handOver(tx: Tx, profileId: string, heirId: string, now: string)
   const meta = findMeta(tx);
   const member = meta && findMemberByProfile(tx, profileId);
   if (!meta || !member) return { forgotten: false, purged: false };
-  if (findMemberByProfile(tx, heirId)) return forgetProfile(tx, profileId, null, now);
+  const heir = findMemberByProfile(tx, heirId);
+  if (heir) {
+    // Signing in transfers an active guest's access to the same person's account.
+    if (member.leftAt === null && heir.leftAt !== null) {
+      const seq = nextSeq(tx);
+      tx.update(schema.members).set({ leftAt: null, updatedAt: now, seq }).where(eq(schema.members.id, heir.id)).run();
+      append(tx, { seq, now, actorId: null, kind: "member_joined", subjectId: heir.id, member: { displayName: heir.displayName, previousName: null } });
+      stageMembership(tx, heirId, null, now);
+    }
+    return forgetProfile(tx, profileId, null, now);
+  }
 
   tx.update(schema.members)
     .set({ profileId: heirId, updatedAt: now, seq: nextSeq(tx) })
     .where(eq(schema.members.id, member.id))
     .run();
   stageMembership(tx, heirId, member.leftAt, now);
+  touchActivity(tx, now);
   return { forgotten: true, purged: false };
 }

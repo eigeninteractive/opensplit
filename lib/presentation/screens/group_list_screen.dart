@@ -1,3 +1,4 @@
+import '../../application/backend_providers.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,7 +21,6 @@ import '../widgets/link_account_prompt.dart';
 import '../widgets/offline_indicator.dart';
 import '../widgets/page_body.dart';
 import '../widgets/pull_to_sync.dart';
-import '../widgets/segmented_list.dart';
 import '../widgets/sync_refresh_button.dart';
 import '../widgets/sync_status_notice.dart';
 import '../widgets/unsynced_changes_banner.dart';
@@ -30,10 +30,6 @@ class GroupListScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Archived and left groups are pulled in here rather than queried
-    // separately, so the list and the "archived" row at the bottom of it are
-    // two readings of one stream and cannot disagree about which group is
-    // where.
     final source = groupListingsProvider;
 
     final groupsAsync = ref.watch(source);
@@ -42,7 +38,6 @@ class GroupListScreen extends ConsumerWidget {
       for (final listing in all)
         if (listing.isCurrent) listing.group,
     ];
-    final archived = all.length - groups.length;
 
     return DestinationScaffold(
       titleWidget: const BrandLockup(),
@@ -60,7 +55,9 @@ class GroupListScreen extends ConsumerWidget {
       // device with no connection.
       floatingActionButton: FloatingActionButton.extended(
         heroTag: null,
-        onPressed: ref.watch(referenceDataProvider).value ?? false
+        onPressed:
+            !ref.watch(requiresAppUpdateProvider) &&
+                (ref.watch(referenceDataProvider).value ?? false)
             ? () => showCreateGroupSheet(context)
             : null,
         icon: const Icon(Icons.group_add_outlined),
@@ -77,10 +74,7 @@ class GroupListScreen extends ConsumerWidget {
             child: _Message(text: 'Could not load groups.\n$error'),
           ),
         ],
-        AsyncValue(hasValue: true) => _GroupList.slivers(
-          groups: groups,
-          archivedCount: archived,
-        ),
+        AsyncValue(hasValue: true) => _GroupList.slivers(groups: groups),
         // Nothing, rather than placeholder cards: at launch the splash covers
         // this, and afterwards a local read is too quick to be worth drawing.
         _ => const [LaunchPlaceholder(child: SliverToBoxAdapter())],
@@ -93,10 +87,7 @@ class GroupListScreen extends ConsumerWidget {
 abstract final class _GroupList {
   static const _noticeGap = EdgeInsets.only(bottom: 8);
 
-  static List<Widget> slivers({
-    required List<Group> groups,
-    required int archivedCount,
-  }) => [
+  static List<Widget> slivers({required List<Group> groups}) => [
     // The notices, each of which renders as nothing until it has something to
     // say.
     SliverPadding(
@@ -128,35 +119,11 @@ abstract final class _GroupList {
           ),
         ),
       ),
-    if (archivedCount > 0)
-      SliverToBoxAdapter(child: _ArchivedRow(count: archivedCount)),
     const SliverPadding(padding: EdgeInsets.only(bottom: 96)),
   ];
 }
 
 /// The way to the groups that are no longer in this list.
-class _ArchivedRow extends StatelessWidget {
-  const _ArchivedRow({required this.count});
-
-  final int count;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: 16),
-    // A group of one, apart from the groups above it.
-    child: SegmentedList(
-      children: [
-        ListTile(
-          onTap: () => context.push('/archived'),
-          leading: const Icon(Icons.inventory_2_outlined),
-          title: Text('Archived groups ($count)'),
-          trailing: const Icon(Icons.chevron_right),
-        ),
-      ],
-    ),
-  );
-}
-
 class _GroupTile extends ConsumerWidget {
   const _GroupTile({required this.group});
 

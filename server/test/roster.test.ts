@@ -109,21 +109,15 @@ describe("leaving, and being removed", () => {
    * Neither of the obvious answers is right, and this is the third one. See
    * `changes.ts`.
    */
-  it("leaves the removed member reading up to their own removal, and no further", async () => {
+  it("ends read access as soon as the member is removed", async () => {
     const { groupId, ravi, priya } = await makeGroupOfTwo();
     const object = stub(groupId);
 
     const removed = ok(await editMember(groupId, priya.id, RAVI, { leftAt: new Date().toISOString() }));
 
-    const hers = ok(await object.changes(PRIYA, 0, 500));
-    expect(hers.seq).toBe(removed.seq);
-    expect(hers.members.find((member) => member.id === priya.id)?.leftAt).not.toBeNull();
-
+    expect(refusal(await object.changes(PRIYA, 0, 500)).code).toBe("not_member");
     ok(await saveEntry(object, evenly(freshId("e"), ravi.id, [ravi.id], 700), RAVI));
-
-    const after = ok(await object.changes(PRIYA, hers.seq, 500));
-    expect(after.entries).toHaveLength(0);
-    expect(after.hasMore).toBe(false);
+    expect(refusal(await object.changes(PRIYA, removed.seq, 500)).code).toBe("not_member");
   });
 
   it("including what the group is called after they went", async () => {
@@ -132,7 +126,7 @@ describe("leaving, and being removed", () => {
     ok(await editMember(groupId, priya.id, RAVI, { leftAt: new Date().toISOString() }));
     ok(await editGroup(groupId, RAVI, { name: "Somewhere new" }));
 
-    expect(ok(await object.changes(PRIYA, 0, 500)).group?.name).not.toBe("Somewhere new");
+    expect(refusal(await object.changes(PRIYA, 0, 500)).code).toBe("not_member");
   });
 
   it("and stops them writing to it at all", async () => {
@@ -186,7 +180,7 @@ describe("coming back", () => {
     const object = stub(groupId);
     ok(await editMember(groupId, priya.id, PRIYA, { leftAt: new Date().toISOString() }));
 
-    const zara = ok(await object.putMember(freshId("m"), { displayName: "Zara", upiVpa: null, leftAt: null }, RAVI));
+    const zara = ok(await object.putMember(freshId("m"), { displayName: "Zara", upiVpa: null, leftAt: null, baseSeq: null }, RAVI));
     const invite = ok(await object.createInvite(zara.id, RAVI));
 
     expect(ok(await object.join(invite.token, PRIYA, { memberId: null, displayName: null })).member.id).toBe(priya.id);
@@ -236,8 +230,8 @@ describe("the group itself", () => {
   /**
    * `id`, `createdAt` and `createdBy` are not fields on the patch, so they
    * cannot be sent. Were they — as they would be on a full-row upsert — this
-   * one call would re-identify a group, back-date it into the dormancy purge,
-   * and reassign its authorship.
+   * one call would re-identify a group, back-date its creation, and reassign
+   * its authorship.
    */
   it("cannot be re-identified, back-dated, or have its authorship reassigned", async () => {
     const { groupId, group } = await makeGroupOfTwo();
@@ -250,7 +244,7 @@ describe("the group itself", () => {
 
   it("cannot be claimed at an id somebody else is already using", async () => {
     const { groupId } = await makeGroup();
-    const refused = refusal(await stub(groupId).putGroup(groupId, { name: "Mine now", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, ...defaultGroupLook, creatorId: freshId("m"), creatorName: "Zara" }, ZARA));
+    const refused = refusal(await stub(groupId).putGroup(groupId, { name: "Mine now", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, baseSeq: null, ...defaultGroupLook, creatorId: freshId("m"), creatorName: "Zara" }, ZARA));
 
     // Somebody writing to an id that is taken is a stranger to that group.
     expect(refused.code).toBe("not_member");
@@ -258,7 +252,7 @@ describe("the group itself", () => {
 
   it("answers the account that made it idempotently, for a retry whose response was lost", async () => {
     const { groupId, group } = await makeGroup();
-    const again = ok(await stub(groupId).putGroup(groupId, { name: "Goa trip", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, ...defaultGroupLook, creatorId: `${groupId}-ravi`, creatorName: "Ravi" }, RAVI));
+    const again = ok(await stub(groupId).putGroup(groupId, { name: "Goa trip", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, baseSeq: null, ...defaultGroupLook, creatorId: `${groupId}-ravi`, creatorName: "Ravi" }, RAVI));
 
     expect(again.seq).toBe(group.seq);
   });
@@ -267,7 +261,7 @@ describe("the group itself", () => {
     const { groupId } = await makeGroup();
     await stub(groupId).forgetProfile(RAVI, null);
 
-    const refused = refusal(await stub(groupId).putGroup(groupId, { name: "Back again", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, archivedAt: null, ...defaultGroupLook, creatorId: freshId("m"), creatorName: "Ravi" }, RAVI));
+    const refused = refusal(await stub(groupId).putGroup(groupId, { name: "Back again", defaultCurrency: "INR", isDirect: false, simplifyDebts: true, baseSeq: null, ...defaultGroupLook, creatorId: freshId("m"), creatorName: "Ravi" }, RAVI));
     expect(refused.code).toBe("group_purged");
   });
 });

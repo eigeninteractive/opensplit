@@ -205,7 +205,6 @@ class Groups extends Table with AvatarColumns {
   /// its members arrive in one page in no particular order.
   TextColumn get createdBy => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
-  DateTimeColumn get archivedAt => dateTime().nullable()();
   IntColumn get seq => integer().nullable()();
 
   @override
@@ -396,6 +395,7 @@ class Outbox extends Table {
   IntColumn get attempts => integer().withDefault(const Constant(0))();
   DateTimeColumn get nextAttemptAt => dateTime().nullable()();
   TextColumn get lastError => text().nullable()();
+  TextColumn get failureCode => text().nullable()();
 
   /// Set when the server refused this permanently. Kept, not deleted, so the
   /// person can see which write never reached the group.

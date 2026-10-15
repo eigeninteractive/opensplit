@@ -82,7 +82,7 @@ double _opacityOf(WidgetTester tester, Type screen) => tester
     .fold(1, (opacity, fade) => opacity * fade.opacity.value);
 
 /// A group with nothing in it, so there is something to drill into.
-Future<void> _seedGroup(AppDatabase db, {DateTime? archivedAt}) async {
+Future<void> _seedGroup(AppDatabase db, {bool left = false}) async {
   // Currencies are reference data the database ships with, so there is
   // nothing to seed there — only the group.
   await db
@@ -94,7 +94,18 @@ Future<void> _seedGroup(AppDatabase db, {DateTime? archivedAt}) async {
           defaultCurrency: 'INR',
           createdBy: const Value(testAccountId),
           createdAt: DateTime.utc(2026),
-          archivedAt: Value(archivedAt),
+        ),
+      );
+  await db
+      .into(db.members)
+      .insert(
+        MembersCompanion.insert(
+          id: testAccountId,
+          groupId: 'g1',
+          profileId: const Value(testAccountId),
+          displayName: 'Ravi',
+          joinedAt: DateTime.utc(2026),
+          leftAt: Value(left ? DateTime.utc(2026, 3) : null),
         ),
       );
 }
@@ -381,44 +392,22 @@ void main() {
     );
   });
 
-  group('archived groups', () {
-    testWidgets('are out of the list but not out of reach', (tester) async {
-      await _seedGroup(db, archivedAt: DateTime.utc(2026, 3));
-      await _pumpApp(tester, db);
-
-      expect(
-        find.text('Flat 4B'),
-        findsNothing,
-        reason: 'the list is for groups still in use',
-      );
-
-      await tester.tap(find.text('Archived groups (1)'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Flat 4B'), findsOneWidget);
-      expect(find.text('Restore'), findsOneWidget);
-
-      await _unmount(tester);
-    });
-
-    testWidgets('restoring one puts it back', (tester) async {
-      await _seedGroup(db, archivedAt: DateTime.utc(2026, 3));
-      await _pumpApp(tester, db);
-
-      await tester.tap(find.text('Archived groups (1)'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Restore'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Nothing is archived'), findsOneWidget);
-
-      await tester.tap(find.byType(BackButton));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Flat 4B'), findsOneWidget);
-      expect(find.textContaining('Archived groups'), findsNothing);
-
-      await _unmount(tester);
-    });
+  testWidgets('departed groups disappear and direct links reveal no history', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await _seedGroup(db, left: true);
+    await _pumpApp(tester, db);
+    expect(find.text('Flat 4B'), findsNothing);
+    expect(find.textContaining('Past groups'), findsNothing);
+    _router(tester).go('/g/g1');
+    await tester.pumpAndSettle();
+    expect(find.text('Group unavailable'), findsOneWidget);
+    expect(find.text('Flat 4B'), findsNothing);
+    expect(find.text('Add expense'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await _unmount(tester);
   });
 }

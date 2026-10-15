@@ -46,7 +46,7 @@ class SyncApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/profiles';
+    final _path = r'/profiles';
     final _options = Options(
       method: r'GET',
       headers: <String, dynamic>{...?headers},
@@ -135,7 +135,7 @@ class SyncApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/sync';
+    final _path = r'/sync';
     final _options = Options(
       method: r'POST',
       headers: <String, dynamic>{...?headers},
@@ -229,7 +229,7 @@ class SyncApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/api/profile';
+    final _path = r'/profile';
     final _options = Options(
       method: r'PUT',
       headers: <String, dynamic>{...?headers},

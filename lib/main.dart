@@ -14,6 +14,7 @@ import 'application/preferences_providers.dart';
 import 'config.dart';
 import 'data/web/launch_signal.dart';
 import 'data/auth/session_store.dart';
+import 'data/sync/api_client.dart';
 import 'presentation/app.dart';
 import 'presentation/launch_hold.dart';
 
@@ -64,6 +65,11 @@ Future<void> main() async {
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         sessionStoreProvider.overrideWithValue(sessions),
+        apiAccessProvider.overrideWith((ref) {
+          final access = ApiAccess.persisted(prefs, baseUrl: apiBaseUrl);
+          ref.onDispose(access.dispose);
+          return access;
+        }),
       ],
       child: const OpenSplitApp(),
     ),
