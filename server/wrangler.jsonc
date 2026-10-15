@@ -51,7 +51,7 @@
     {
       "binding": "DB",
       "database_name": "opensplit",
-      "database_id": "a25350b6-ac42-474b-b14c-4535b7448ee5",
+      "database_id": "2170e95b-6da3-4c79-ac84-f8468219bd23",
       "migrations_dir": "migrations",
       "migrations_pattern": "migrations/*/migration.sql"
     }
