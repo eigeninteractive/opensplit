@@ -353,23 +353,48 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('a narrow group keeps its name and its two main actions', (
+  testWidgets('a narrow offline group keeps all three main actions', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(320, 720);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await _mount(tester, _TestSync(), GroupDetailScreen(groupId: _group.id));
+    final sync = _TestSync(
+      initial: SyncStatus(
+        hasCompletedFullSync: true,
+        lastReport: SyncReport(
+          pushed: 0,
+          pulled: 0,
+          failed: 0,
+          error: DioException(
+            requestOptions: RequestOptions(path: '/sync'),
+            type: DioExceptionType.connectionError,
+          ),
+        ),
+      ),
+    );
+    await _mount(tester, sync, GroupDetailScreen(groupId: _group.id));
     await tester.pumpAndSettle();
-    if (kIsWeb) expect(find.byTooltip('Refresh'), findsOneWidget);
-    expect(find.byTooltip('Settle up'), findsOneWidget);
-    expect(find.byTooltip('People'), findsOneWidget);
+    expect(find.byIcon(Icons.cloud_off_outlined), findsOneWidget);
+    expect(
+      find.byTooltip('Search expenses and payments').hitTestable(),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('Settle up').hitTestable(), findsOneWidget);
+    expect(find.byTooltip('People').hitTestable(), findsOneWidget);
 
     await tester.tap(find.byTooltip('More'));
     await tester.pumpAndSettle();
     for (final label in ['Insights', 'Activity', 'Group settings']) {
       expect(find.text(label), findsOneWidget);
+    }
+    if (kIsWeb) {
+      await tester.tap(find.text('Refresh'));
+      await tester.pump();
+      expect(sync.requests, [_group.id]);
+      sync.finish();
+      await tester.pumpAndSettle();
     }
     expect(tester.takeException(), isNull);
   });

@@ -114,7 +114,7 @@ class _InviteSheetState extends ConsumerState<_InviteSheet> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: scheme.surfaceContainerHighest,
+                color: scheme.surfaceContainerHigh,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: SelectableText(

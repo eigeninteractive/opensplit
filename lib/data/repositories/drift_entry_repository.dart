@@ -8,6 +8,7 @@ import '../../domain/models/entry.dart';
 import '../../domain/models/entry_snapshot.dart';
 import '../../domain/split/splitter.dart';
 import '../local/database.dart';
+import '../local/entry_search.dart';
 import '../local/entry_writer.dart';
 import '../local/tables.dart';
 import '../sync/outbox_queue.dart';
@@ -96,6 +97,30 @@ final class DriftEntryRepository {
 
     final byId = {for (final entry in await _hydrate(rows)) entry.id: entry};
     return [for (final id in ids) ?byId[id]];
+  }
+
+  /// Matches descriptions and notes across a group's currencies and entry kinds.
+  ///
+  /// Empty input yields no results. Deleted entries are excluded, and local
+  /// edits or incoming sync changes update the stream automatically.
+  Stream<List<Entry>> search(String groupId, String query) {
+    final match = entrySearchMatch(query);
+    if (match == null) return Stream.value(const []);
+    return _db
+        .customSelect(
+          'SELECT e.id FROM entries e '
+          'WHERE e.group_id = ? AND e.deleted_at IS NULL '
+          'AND e.rowid IN '
+          '(SELECT rowid FROM entries_fts WHERE entries_fts MATCH ?) '
+          'ORDER BY e.entry_date DESC, e.occurred_at DESC NULLS LAST, '
+          'e.created_at DESC',
+          variables: [Variable<String>(groupId), Variable<String>(match)],
+          readsFrom: {_db.entries, _db.entryPayers, _db.entryShares},
+        )
+        .watch()
+        .asyncMap(
+          (rows) => getByIds([for (final row in rows) row.read<String>('id')]),
+        );
   }
 
   /// Every entry in a group, most recent first.

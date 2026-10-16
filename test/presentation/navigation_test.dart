@@ -14,6 +14,7 @@ import 'package:opensplit/presentation/screens/group_list_screen.dart';
 import 'package:opensplit/presentation/screens/settings_screen.dart';
 import 'package:opensplit/presentation/widgets/avatar_view.dart';
 import 'package:opensplit/presentation/widgets/group_avatar_hero.dart';
+import 'package:opensplit/presentation/widgets/segmented_list.dart';
 import 'package:opensplit/presentation/widgets/group_cover.dart';
 import 'package:opensplit/presentation/widgets/shared_element.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -238,11 +239,11 @@ void main() {
         of: find.text('Flat 4B'),
         matching: find.byType(ListTile),
       );
-      expect(find.ancestor(of: tile, matching: find.byType(Card)), findsOne);
+      expect(find.ancestor(of: tile, matching: find.byType(Segment)), findsOne);
       expect(
         tester.getRect(find.byType(GroupCover)),
         tester.getRect(tile),
-        reason: 'the quiet artwork fills the card behind its identity',
+        reason: 'the quiet artwork fills the segment behind its identity',
       );
 
       await tester.tap(find.text('Flat 4B'));

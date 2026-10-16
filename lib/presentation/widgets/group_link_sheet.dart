@@ -166,7 +166,7 @@ class _GroupLinkSheetState extends ConsumerState<_GroupLinkSheet> {
     Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest,
+        color: scheme.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(12),
       ),
       child: SelectableText(_url, style: theme.textTheme.bodySmall),

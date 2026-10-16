@@ -35,6 +35,12 @@ class GroupCover extends ConsumerWidget {
     final group = ledger.group;
     final avatar = group.avatar;
     final scheme = AvatarPalette.of(context).forAvatar(avatar, group.id);
+    final surface = Theme.of(context).colorScheme.surfaceContainerHigh;
+    // Money and supporting text can wrap across the entire pattern. Keep
+    // every motif quiet beneath them, including at the trailing edge.
+    final quietOpacity = Theme.of(context).brightness == Brightness.light
+        ? 0.07
+        : 0.08;
     final categories = <String, Category>{
       for (final category
           in ref.watch(categoriesProvider).value ?? const <Category>[])
@@ -62,23 +68,11 @@ class GroupCover extends ConsumerWidget {
 
     return ExcludeSemantics(
       child: ColoredBox(
-        color: Color.lerp(
-          scheme.primaryContainer,
-          scheme.surfaceContainerLow,
-          patternFade,
-        )!,
+        color: Color.lerp(scheme.primaryContainer, surface, patternFade)!,
         child: IconTheme.merge(
           data: IconThemeData(color: scheme.onPrimaryContainer),
-          child: ShaderMask(
-            blendMode: BlendMode.dstIn,
-            shaderCallback: (bounds) => LinearGradient(
-              colors: [
-                Colors.black.withValues(alpha: 0.16 * (1 - 0.65 * patternFade)),
-                Colors.black.withValues(alpha: 0.16 * (1 - 0.65 * patternFade)),
-                Colors.black.withValues(alpha: 0.16 * (1 - 0.2 * patternFade)),
-              ],
-              stops: const [0, 0.6, 1],
-            ).createShader(bounds),
+          child: Opacity(
+            opacity: 0.16 + (quietOpacity - 0.16) * patternFade,
             child: ClipRect(
               child: FittedBox(
                 fit: BoxFit.cover,

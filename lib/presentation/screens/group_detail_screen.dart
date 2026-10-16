@@ -8,6 +8,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:opensplit_api/opensplit_api.dart' show EntryKind;
 
 import '../../application/ledger_providers.dart';
+import '../../application/backend_providers.dart';
 import '../../application/sync_providers.dart';
 import '../../data/local/database.dart';
 import '../../domain/calendar_date.dart';
@@ -24,6 +25,7 @@ import '../widgets/group_cover.dart';
 import '../widgets/shared_element.dart';
 import '../widgets/group_pane.dart';
 import '../widgets/group_standing.dart';
+import '../widgets/group_search_button.dart';
 import '../widgets/offline_indicator.dart';
 import '../widgets/page_body.dart';
 import '../widgets/group_access.dart';
@@ -130,7 +132,7 @@ class GroupDetailScreen extends ConsumerWidget {
 
 /// The group's own top app bar: its name, its cover and picture, and where
 /// you stand, collapsing to the name and the tabs once you scroll.
-class _GroupAppBar extends StatelessWidget {
+class _GroupAppBar extends ConsumerWidget {
   const _GroupAppBar({
     required this.ledger,
     required this.tabs,
@@ -145,9 +147,18 @@ class _GroupAppBar extends StatelessWidget {
   final double measure;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final groupId = ledger.group.id;
-    void open(String path) => context.push('/g/$groupId/$path');
+    final compactRefresh = kIsWeb && MediaQuery.sizeOf(context).width < 400;
+    final sync = ref.watch(syncControllerProvider);
+    final canRefresh = sync.enabled && !ref.watch(requiresAppUpdateProvider);
+    void open(String path) {
+      if (path == 'refresh') {
+        ref.read(syncControllerProvider.notifier).syncGroup(groupId);
+      } else {
+        context.push('/g/$groupId/$path');
+      }
+    }
 
     return SliverAppBar(
       pinned: true,
@@ -158,7 +169,8 @@ class _GroupAppBar extends StatelessWidget {
       title: _CollapsedGroupName(name: ledger.group.name),
       actions: [
         const OfflineIndicator(),
-        if (kIsWeb) SyncRefreshButton.group(groupId),
+        if (kIsWeb && !compactRefresh) SyncRefreshButton.group(groupId),
+        GroupSearchButton(key: ValueKey(groupId), groupId: groupId),
         if (ledger.canEdit)
           IconButton(
             tooltip: 'Settle up',
@@ -174,6 +186,16 @@ class _GroupAppBar extends StatelessWidget {
           tooltip: 'More',
           onSelected: open,
           itemBuilder: (context) => [
+            if (compactRefresh && canRefresh)
+              PopupMenuItem(
+                value: 'refresh',
+                enabled: !sync.isSyncing,
+                child: ListTile(
+                  leading: const Icon(Icons.refresh),
+                  title: Text(sync.isSyncing ? 'Syncing…' : 'Refresh'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
             for (final action in _moreActions)
               PopupMenuItem(
                 value: action.path,

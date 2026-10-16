@@ -4,6 +4,17 @@ What changed in each version of the app, newest first. The format is
 [Semantic Versioning](https://semver.org/), and the file is kept by
 [cider](https://pub.dev/packages/cider): see "Versions" in docs/runbook.md.
 
+## [4.1.0] - 2026-10-16
+### Added
+- Search expenses and recorded payments from the group toolbar, across currencies, using descriptions and notes saved on this device.
+
+### Changed
+- Groups use connected rows with clearer, softer Material surfaces and more visible artwork in light mode. Neutral cards share the same surface treatment, and expense sections use outlined cards.
+
+### Fixed
+- Expense and payment editors ask before discarding changes. The whole export settings row opens the format picker, which remains scrollable with large text.
+- Clearing Insights search or filters also clears the visible search text, and restored searches display their saved query.
+
 ## [4.0.0] - 2026-10-15
 ### Changed
 - When a numbered API version is retired, saved data stays readable and pending uploads pause. Update OpenSplit through Play or restart into the new web release to edit again.
@@ -106,6 +117,7 @@ What changed in each version of the app, newest first. The format is
 ### Added
 - The first build, to Play internal testing.
 
+[4.1.0]: https://github.com/eigeninteractive/opensplit/compare/v4.0.0...v4.1.0
 [4.0.0]: https://github.com/eigeninteractive/opensplit/compare/v3.1.0...v4.0.0
 [3.1.0]: https://github.com/eigeninteractive/opensplit/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/eigeninteractive/opensplit/compare/v2.0.0...v3.0.0

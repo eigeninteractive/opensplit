@@ -151,6 +151,51 @@ void main() {
   });
   tearDown(() => db.close());
 
+  testWidgets('changed expense survives Close and asks before system back', (
+    tester,
+  ) async {
+    await _seed(db);
+    await _pumpApp(tester, db);
+    await _openEditor(tester);
+    await _type(tester, what: 'Dinner', amount: '300');
+    await tester.tap(find.byType(CloseButton));
+    await _beats(tester);
+    expect(find.text('Discard changes?'), findsOneWidget);
+    await tester.tap(find.text('Keep editing'));
+    await _beats(tester);
+    expect(tester.widget<TextField>(_field('Amount')).controller!.text, '300');
+    await tester.binding.handlePopRoute();
+    await _beats(tester);
+    expect(find.text('Discard changes?'), findsOneWidget);
+    await tester.tap(find.text('Discard'));
+    await _beats(tester);
+    expect(
+      find.widgetWithText(FloatingActionButton, 'Add expense'),
+      findsOneWidget,
+    );
+    expect(await db.select(db.entries).get(), isEmpty);
+    await _unmount(tester);
+  });
+
+  testWidgets('restoring an expense draft leaves without a discard prompt', (
+    tester,
+  ) async {
+    await _seed(db);
+    await _pumpApp(tester, db);
+    await _openEditor(tester);
+    await tester.enterText(_field('Amount'), '300');
+    await tester.enterText(_field('Amount'), '');
+    await _beats(tester);
+    await tester.tap(find.byType(CloseButton));
+    await _beats(tester);
+    expect(find.text('Discard changes?'), findsNothing);
+    expect(
+      find.widgetWithText(FloatingActionButton, 'Add expense'),
+      findsOneWidget,
+    );
+    await _unmount(tester);
+  });
+
   testWidgets('save errors remain visible at phone height', (tester) async {
     await _seed(db);
     await _pumpApp(tester, db, size: const Size(360, 640));
@@ -160,6 +205,13 @@ void main() {
     expect(find.byType(SnackBar), findsOneWidget);
     expect(find.text('Add expense'), findsOneWidget);
     expect(tester.takeException(), isNull);
+    await tester.tap(find.byType(CloseButton));
+    await _beats(tester);
+    expect(find.text('Discard changes?'), findsNothing);
+    expect(
+      find.widgetWithText(FloatingActionButton, 'Add expense'),
+      findsOneWidget,
+    );
     await _unmount(tester);
   });
 

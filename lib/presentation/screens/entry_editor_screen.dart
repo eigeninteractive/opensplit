@@ -14,6 +14,7 @@ import '../feedback.dart';
 import '../navigation.dart';
 import '../theme.dart';
 import '../widgets/amount_card.dart';
+import '../widgets/form_leave_guard.dart';
 import '../widgets/entry_history.dart';
 import '../widgets/avatar_view.dart';
 import '../widgets/category_icon.dart';
@@ -154,185 +155,193 @@ class _Editor extends ConsumerWidget {
     final textTheme = Theme.of(context).textTheme;
     final ready = ledger.canEdit && !form.saving && currency != null;
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: CloseButton(onPressed: () => goBack(context, _groupPath)),
-        title: Text(
-          !ledger.canEdit
-              ? 'Expense'
-              : form.isEditing
-              ? 'Edit expense'
-              : 'Add expense',
-        ),
-        actions: [
-          if (form.isEditing)
-            IconButton(
-              tooltip: 'Delete',
-              onPressed: ready ? () => _delete(context) : null,
-              icon: const Icon(Icons.delete_outline),
-            ),
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: FilledButton(
-              onPressed: ready ? () => _save(context) : null,
-              child: const Text('Save'),
-            ),
+    return FormLeaveGuard(
+      draft: form.copyWith(saving: false, error: null),
+      saving: form.saving,
+      fallback: _groupPath,
+      builder: (context, leave) => Scaffold(
+        appBar: AppBar(
+          leading: CloseButton(onPressed: form.saving ? null : leave),
+          title: Text(
+            !ledger.canEdit
+                ? 'Expense'
+                : form.isEditing
+                ? 'Edit expense'
+                : 'Add expense',
           ),
-        ],
-      ),
-      body: ExcludeFocus(
-        excluding: form.saving,
-        child: AbsorbPointer(
-          absorbing: form.saving,
-          child: PageBody(
-            maxWidth: 640,
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 48),
-              children: [
-                ExcludeFocus(
-                  excluding: !ledger.canEdit,
-                  child: AbsorbPointer(
-                    absorbing: !ledger.canEdit,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        AmountCard(
-                          heroTag: form.editing == null
-                              ? null
-                              : ('entry-amount', form.editing!.id),
-                          currency: currency,
-                          currencyCode: form.currencyCode,
-                          amount: form.amount,
-                          autofocus: !form.isEditing,
-                          onAmountChanged: controller.setAmount,
-                          onCurrencyChanged: controller.chooseCurrency,
-                        ),
-                        if (currency != null &&
-                            currency.code != ledger.group.defaultCurrency)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Text(
-                              '${currency.code} balances stay separate.',
-                              style: textTheme.bodySmall,
-                            ),
-                          ),
-                        const SizedBox(height: 16),
-                        SharedText(
-                          tag: (
-                            'entry-description',
-                            form.editing?.id ?? ('draft', ledger.group.id),
-                          ),
-                          text: form.description,
-                          style: textTheme.bodyLarge!.copyWith(
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
-                          child: TextFormField(
-                            initialValue: form.description,
-                            textCapitalization: TextCapitalization.sentences,
-                            decoration: const InputDecoration(
-                              labelText: 'What was it?',
-                              hintText: 'Dinner at Toit',
-                            ),
-                            onChanged: controller.setDescription,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        // The details most expenses leave as they are, as chips rather
-                        // than a field each.
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            _CategoryChip(
-                              heroTag: form.editing == null
-                                  ? null
-                                  : ('entry-category', form.editing!.id),
-                              value: form.categoryId,
-                              onChanged: controller.chooseCategory,
-                            ),
-                            ActionChip(
-                              avatar: const Icon(Icons.event_outlined),
-                              label: Text(_dayName(form.day)),
-                              tooltip: 'Change the day',
-                              onPressed: () => _pickDay(context),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-                        _EditorCard(
-                          child: _PayerSection(
-                            ledger: ledger,
+          actions: [
+            if (form.isEditing)
+              IconButton(
+                tooltip: 'Delete',
+                onPressed: ready ? () => _delete(context) : null,
+                icon: const Icon(Icons.delete_outline),
+              ),
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: FilledButton(
+                onPressed: ready ? () => _save(context) : null,
+                child: const Text('Save'),
+              ),
+            ),
+          ],
+        ),
+        body: ExcludeFocus(
+          excluding: form.saving,
+          child: AbsorbPointer(
+            absorbing: form.saving,
+            child: PageBody(
+              maxWidth: 640,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 48),
+                children: [
+                  ExcludeFocus(
+                    excluding: !ledger.canEdit,
+                    child: AbsorbPointer(
+                      absorbing: !ledger.canEdit,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          AmountCard(
+                            heroTag: form.editing == null
+                                ? null
+                                : ('entry-amount', form.editing!.id),
                             currency: currency,
-                            form: form,
-                            controller: controller,
+                            currencyCode: form.currencyCode,
+                            amount: form.amount,
+                            autofocus: !form.isEditing,
+                            onAmountChanged: controller.setAmount,
+                            onCurrencyChanged: controller.chooseCurrency,
                           ),
-                        ),
-                        const SizedBox(height: 16),
-                        _EditorCard(
-                          child: _SplitSection(
-                            ledger: ledger,
-                            currency: currency,
-                            form: form,
-                            controller: controller,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        ExpansionTile(
-                          title: const Text('Time of expense'),
-                          subtitle: Text(
-                            form.occurredAt == null
-                                ? 'Date only'
-                                : DateFormat.jm().format(
-                                    form.occurredAt!.toLocal(),
-                                  ),
-                          ),
-                          leading: const Icon(Icons.schedule_outlined),
-                          tilePadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                          ),
-                          childrenPadding: const EdgeInsets.fromLTRB(
-                            16,
-                            0,
-                            16,
-                            16,
-                          ),
-                          expandedCrossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _TimeChip(
-                              shown: form.occurredAt?.toLocal(),
-                              onPick: device == null
-                                  ? null
-                                  : () => _pickTime(context, device),
-                              onClear: controller.clearTime,
-                            ),
-                          ],
-                        ),
-                        if (form.error case final error?) ...[
-                          const SizedBox(height: 16),
-                          Card.filled(
-                            color: Theme.of(context).colorScheme.errorContainer,
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
+                          if (currency != null &&
+                              currency.code != ledger.group.defaultCurrency)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
                               child: Text(
-                                error,
-                                style: textTheme.bodyMedium?.copyWith(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onErrorContainer,
+                                '${currency.code} balances stay separate.',
+                                style: textTheme.bodySmall,
+                              ),
+                            ),
+                          const SizedBox(height: 16),
+                          SharedText(
+                            tag: (
+                              'entry-description',
+                              form.editing?.id ?? ('draft', ledger.group.id),
+                            ),
+                            text: form.description,
+                            style: textTheme.bodyLarge!.copyWith(
+                              color: Theme.of(context).colorScheme.onSurface,
+                            ),
+                            child: TextFormField(
+                              initialValue: form.description,
+                              textCapitalization: TextCapitalization.sentences,
+                              decoration: const InputDecoration(
+                                labelText: 'What was it?',
+                                hintText: 'Dinner at Toit',
+                              ),
+                              onChanged: controller.setDescription,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          // The details most expenses leave as they are, as chips rather
+                          // than a field each.
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              _CategoryChip(
+                                heroTag: form.editing == null
+                                    ? null
+                                    : ('entry-category', form.editing!.id),
+                                value: form.categoryId,
+                                onChanged: controller.chooseCategory,
+                              ),
+                              ActionChip(
+                                avatar: const Icon(Icons.event_outlined),
+                                label: Text(_dayName(form.day)),
+                                tooltip: 'Change the day',
+                                onPressed: () => _pickDay(context),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 24),
+                          _EditorCard(
+                            child: _PayerSection(
+                              ledger: ledger,
+                              currency: currency,
+                              form: form,
+                              controller: controller,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          _EditorCard(
+                            child: _SplitSection(
+                              ledger: ledger,
+                              currency: currency,
+                              form: form,
+                              controller: controller,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          ExpansionTile(
+                            title: const Text('Time of expense'),
+                            subtitle: Text(
+                              form.occurredAt == null
+                                  ? 'Date only'
+                                  : DateFormat.jm().format(
+                                      form.occurredAt!.toLocal(),
+                                    ),
+                            ),
+                            leading: const Icon(Icons.schedule_outlined),
+                            tilePadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                            ),
+                            childrenPadding: const EdgeInsets.fromLTRB(
+                              16,
+                              0,
+                              16,
+                              16,
+                            ),
+                            expandedCrossAxisAlignment:
+                                CrossAxisAlignment.start,
+                            children: [
+                              _TimeChip(
+                                shown: form.occurredAt?.toLocal(),
+                                onPick: device == null
+                                    ? null
+                                    : () => _pickTime(context, device),
+                                onClear: controller.clearTime,
+                              ),
+                            ],
+                          ),
+                          if (form.error case final error?) ...[
+                            const SizedBox(height: 16),
+                            Card.filled(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.errorContainer,
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Text(
+                                  error,
+                                  style: textTheme.bodyMedium?.copyWith(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onErrorContainer,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
-                ),
-                if (form.editing case final editing?) ...[
-                  const SizedBox(height: 32),
-                  EntryHistory(entryId: editing.id, ledger: ledger),
+                  if (form.editing case final editing?) ...[
+                    const SizedBox(height: 32),
+                    EntryHistory(entryId: editing.id, ledger: ledger),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),
@@ -359,8 +368,7 @@ class _EditorCard extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => Card.filled(
-    color: Theme.of(context).colorScheme.surfaceContainerLow,
+  Widget build(BuildContext context) => Card.outlined(
     child: Padding(padding: const EdgeInsets.all(16), child: child),
   );
 }

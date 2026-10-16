@@ -12,6 +12,7 @@ import '../launch_hold.dart';
 import '../widgets/group_avatar_hero.dart';
 import '../widgets/group_cover.dart';
 import '../widgets/shared_element.dart';
+import '../widgets/segmented_list.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/conflicting_edit_banner.dart';
 import '../widgets/create_group_sheet.dart';
@@ -111,11 +112,13 @@ abstract final class _GroupList {
         // be folding balances.
         sliver: SliverList.builder(
           itemCount: groups.length,
-          itemBuilder: (context, index) => Padding(
-            padding: EdgeInsets.only(
-              bottom: index == groups.length - 1 ? 0 : 12,
+          itemBuilder: (context, index) => Segment(
+            index: index,
+            count: groups.length,
+            child: _GroupTile(
+              group: groups[index],
+              corners: Segment.radiusAt(index: index, count: groups.length),
             ),
-            child: _GroupTile(group: groups[index]),
           ),
         ),
       ),
@@ -123,84 +126,79 @@ abstract final class _GroupList {
   ];
 }
 
-/// The way to the groups that are no longer in this list.
+/// A group's identity and balances, opening its expenses and people.
 class _GroupTile extends ConsumerWidget {
-  const _GroupTile({required this.group});
+  const _GroupTile({required this.group, required this.corners});
 
   final Group group;
+  final BorderRadius corners;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ledger = ref.watch(groupLedgerProvider(group.id));
     final currencies = ref.watch(currenciesProvider).value ?? const {};
     final theme = Theme.of(context);
-    const corners = BorderRadius.all(Radius.circular(20));
-
-    // Stock cards and tiles retain Material's ink, focus and touch behaviour.
-    return Card.filled(
-      color: theme.colorScheme.surfaceContainerLow,
-      shape: const RoundedRectangleBorder(borderRadius: corners),
-      child: Stack(
-        children: [
-          if (ledger != null)
-            Positioned.fill(
-              child: GroupCoverHero(
-                ledger: ledger,
-                borderRadius: corners,
-                patternFade: 1,
-              ),
-            ),
-          Material(
-            type: MaterialType.transparency,
-            child: ListTile(
-              onTap: () => context.push('/g/${group.id}'),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 12,
-              ),
-              minLeadingWidth: 56,
-              titleAlignment: ListTileTitleAlignment.top,
-              leading: GroupAvatarHero(group: group, radius: 28),
-              title: SharedText(
-                tag: ('group-name', group.id),
-                text: group.name,
-                maxLines: null,
-                style: theme.textTheme.titleLarge!.copyWith(
-                  color: theme.colorScheme.onSurface,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              subtitle: ledger == null
-                  ? const LaunchPlaceholder(child: SizedBox(height: 20))
-                  : Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (ledger.me != null) ...[
-                            Text(
-                              '${ledger.members.length} '
-                              '${ledger.members.length == 1 ? 'member' : 'members'}',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                          ],
-                          GroupStanding(
-                            ledger: ledger,
-                            currencies: currencies,
-                            style: theme.textTheme.bodyLarge,
-                            overflow: TextOverflow.clip,
-                          ),
-                        ],
-                      ),
-                    ),
+    // The segment owns containment; the tile keeps Material's ink and focus.
+    return Stack(
+      children: [
+        if (ledger != null)
+          Positioned.fill(
+            child: GroupCoverHero(
+              ledger: ledger,
+              borderRadius: corners,
+              patternFade: 1,
             ),
           ),
-        ],
-      ),
+        Material(
+          type: MaterialType.transparency,
+          child: ListTile(
+            onTap: () => context.push('/g/${group.id}'),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 12,
+            ),
+            minLeadingWidth: 56,
+            titleAlignment: ListTileTitleAlignment.top,
+            leading: GroupAvatarHero(group: group, radius: 28),
+            title: SharedText(
+              tag: ('group-name', group.id),
+              text: group.name,
+              maxLines: null,
+              style: theme.textTheme.titleLarge!.copyWith(
+                color: theme.colorScheme.onSurface,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            subtitle: ledger == null
+                ? const LaunchPlaceholder(child: SizedBox(height: 20))
+                : Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (ledger.me != null) ...[
+                          Text(
+                            '${ledger.members.length} '
+                            '${ledger.members.length == 1 ? 'member' : 'members'}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                        ],
+                        GroupStanding(
+                          ledger: ledger,
+                          currencies: currencies,
+                          style: theme.textTheme.bodyLarge,
+                          overflow: TextOverflow.clip,
+                        ),
+                      ],
+                    ),
+                  ),
+          ),
+        ),
+      ],
     );
   }
 }

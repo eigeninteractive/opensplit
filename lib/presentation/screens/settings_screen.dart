@@ -110,7 +110,9 @@ class _AccountRow extends ConsumerWidget {
     return Card.filled(
       // Coloured only while something needs doing. A permanent warning tint on
       // a settled account would be crying wolf on every visit.
-      color: anonymous ? scheme.secondaryContainer : null,
+      color: anonymous
+          ? scheme.secondaryContainer
+          : scheme.surfaceContainerHigh,
       child: ListTile(
         onTap: () => context.go('/account'),
         leading: Icon(
