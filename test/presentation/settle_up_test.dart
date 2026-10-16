@@ -126,6 +126,49 @@ void main() {
 
   tearDown(() => db.close());
 
+  testWidgets('payment notes are protected by Back and system back', (
+    tester,
+  ) async {
+    await _open(tester, db, '/g/g1/settle');
+    final notes = find.ancestor(
+      of: find.text('Payment note (optional)'),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(notes, 'Cash after dinner');
+    await _beats(tester);
+    await tester.tap(find.byType(BackButton).last);
+    await _beats(tester);
+    expect(find.text('Discard changes?'), findsOneWidget);
+    await tester.tap(find.text('Keep editing'));
+    await _beats(tester);
+    expect(
+      tester.widget<TextField>(notes).controller!.text,
+      'Cash after dinner',
+    );
+    await tester.binding.handlePopRoute();
+    await _beats(tester);
+    await tester.tap(find.text('Discard'));
+    await _beats(tester);
+    expect(find.text('Settle up'), findsNothing);
+    expect(await db.select(db.entries).get(), isEmpty);
+    await _unmount(tester);
+  });
+
+  testWidgets('an untouched suggested payment leaves without a prompt', (
+    tester,
+  ) async {
+    await _open(
+      tester,
+      db,
+      '/g/g1/settle?from=m-ravi&to=m-priya&amount=1200&currency=INR',
+    );
+    await tester.tap(find.byType(BackButton).last);
+    await _beats(tester);
+    expect(find.text('Discard changes?'), findsNothing);
+    expect(find.text('Settle up'), findsNothing);
+    await _unmount(tester);
+  });
+
   testWidgets('the entry URL opens a payment editor and saves a payment', (
     tester,
   ) async {

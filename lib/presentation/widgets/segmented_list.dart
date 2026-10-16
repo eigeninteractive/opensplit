@@ -58,7 +58,9 @@ class Segment extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.only(top: first ? 0 : gap),
       child: Material(
-        color: Theme.of(context).colorScheme.surfaceContainer,
+        // The higher container stays distinct even when Android supplies a
+        // darker surface role close to surfaceContainerLow.
+        color: Theme.of(context).colorScheme.surfaceContainerHigh,
         clipBehavior: Clip.antiAlias,
         shape: RoundedRectangleBorder(
           borderRadius: radiusAt(index: index, count: count),

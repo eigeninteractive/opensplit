@@ -19,7 +19,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/foundation.dart'
+    show debugDefaultTargetPlatformOverride;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -34,6 +37,7 @@ import 'package:opensplit/data/repositories/drift_group_repository.dart';
 import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:opensplit/presentation/app.dart';
+import 'package:opensplit/presentation/dynamic_colors.dart';
 import 'package:opensplit/presentation/screens/welcome_screen.dart';
 import 'package:opensplit/presentation/theme.dart';
 import 'package:opensplit/presentation/theme_mode.dart';
@@ -44,6 +48,7 @@ import 'package:uuid/rng.dart';
 import 'package:opensplit_api/opensplit_api.dart' show SplitKind;
 
 import '../test/harness.dart';
+import '../test/fixtures/android_wallpaper.dart';
 
 /// Where the images go: served by the site and packaged by the Play release.
 const _output = String.fromEnvironment(
@@ -88,13 +93,148 @@ void main() {
     await tester.pumpWidget(
       RepaintBoundary(
         key: frame,
-        child: signedInApp(db: db, prefs: prefs, child: const OpenSplitApp()),
+        child: signedInApp(
+          db: db,
+          prefs: prefs,
+          overrides: [
+            if (const bool.fromEnvironment('REVIEW_SINGLE_GROUP'))
+              groupListingsProvider.overrideWith(
+                (ref) => DriftGroupRepository(
+                  db,
+                ).watchListings().map((groups) => groups.take(1).toList()),
+              ),
+          ],
+          child: const OpenSplitApp(),
+        ),
       ),
     );
     final router = ProviderScope.containerOf(
       tester.element(find.byType(OpenSplitApp)),
     ).read(routerProvider);
     Future<void> shoot(String name) => _capture(tester, frame, name);
+
+    if (const bool.fromEnvironment('RENDER_SEARCH_REVIEW')) {
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(OpenSplitApp)),
+      );
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      for (final (label, device) in [
+        ('phone', _reviewPhone),
+        ('desktop', _desktop),
+      ]) {
+        debugDefaultTargetPlatformOverride = label == 'phone'
+            ? TargetPlatform.android
+            : TargetPlatform.macOS;
+        for (final mode in [ThemeMode.light, ThemeMode.dark]) {
+          await container.read(themeModeProvider.notifier).set(mode);
+          _resize(tester, device);
+          router.go('/g/$trip');
+          await shoot('search-toolbar-$label-${mode.name}');
+          await tester.tap(find.byTooltip('Search expenses and payments'));
+          await _settle(tester);
+          await tester.enterText(
+            find.descendant(
+              of: find.byType(SearchBar),
+              matching: find.byType(TextField),
+            ),
+            'dinner',
+          );
+          await shoot('search-results-$label-${mode.name}');
+          await tester.tap(find.byType(BackButton).last);
+          await _settle(tester);
+        }
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _settle(tester);
+      await tester.runAsync(db.close);
+      debugDefaultTargetPlatformOverride = null;
+      debugDisableShadows = true;
+      return;
+    }
+
+    if (const bool.fromEnvironment('RENDER_SURFACE_REVIEW')) {
+      _resize(tester, _reviewPhone);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(OpenSplitApp)),
+      );
+      final messenger = tester.binding.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(
+        DynamicColorPlugin.channel,
+        (call) async =>
+            call.method == 'getCorePalette' ? tealAndroidWallpaper() : null,
+      );
+      addTearDown(
+        () => messenger.setMockMethodCallHandler(
+          DynamicColorPlugin.channel,
+          null,
+        ),
+      );
+      container.invalidate(wallpaperSchemesProvider);
+      for (final wallpaper in [false, true]) {
+        await container
+            .read(wallpaperColorsProvider.notifier)
+            .set(enabled: wallpaper);
+        for (final mode in [ThemeMode.light, ThemeMode.dark]) {
+          await container.read(themeModeProvider.notifier).set(mode);
+          final palette = wallpaper ? 'wallpaper' : 'brand';
+          final suffix = '$palette-${mode.name}';
+          router.go('/');
+          final count = const bool.fromEnvironment('REVIEW_SINGLE_GROUP')
+              ? 'one-'
+              : '';
+          await shoot('groups-$count$suffix');
+          if (const bool.fromEnvironment('RENDER_GROUPS_ONLY')) continue;
+          for (final (name, path) in [
+            ('expenses', '/g/$trip'),
+            ('members', '/g/$trip/members'),
+            ('group-settings', '/g/$trip/settings'),
+            ('group-picture', '/g/$trip/picture'),
+            ('settle', '/g/$trip/settle'),
+            ('insights', '/g/$trip/insights'),
+            ('activity', '/g/$trip/activity'),
+            ('settings', '/settings'),
+            ('account', '/account'),
+            ('profile', '/account/edit'),
+            ('about', '/about'),
+          ]) {
+            router.go(path);
+            await shoot('$name-$suffix');
+          }
+          router.go('/g/$trip');
+          await _settle(tester);
+          await tester.tap(find.text('Balances'));
+          await shoot('balances-$suffix');
+          router.go('/');
+          await _settle(tester);
+          await tester.tap(
+            find.widgetWithText(FloatingActionButton, 'New group'),
+          );
+          await shoot('new-group-$suffix');
+          Navigator.of(tester.element(find.byType(BottomSheet))).pop();
+          await _settle(tester);
+          router.go('/g/$trip/add');
+          await _settle(tester);
+          await _fillExpense(tester);
+          await shoot('add-expense-$suffix');
+          await tester.tap(find.byType(CloseButton));
+          await shoot('discard-$suffix');
+          await tester.tap(find.text('Keep editing'));
+          await _settle(tester);
+          router.go('/g/$trip/settings');
+          await _settle(tester);
+          await tester.scrollUntilVisible(find.text('Export this group'), 200);
+          await tester.tap(find.text('Export this group'));
+          await shoot('export-$suffix');
+          Navigator.of(tester.element(find.byType(BottomSheet))).pop();
+          await _settle(tester);
+        }
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _settle(tester);
+      await tester.runAsync(db.close);
+      debugDisableShadows = true;
+      return;
+    }
 
     await shoot('screenshot-1-groups');
 
@@ -240,6 +380,7 @@ Future<void> _capture(
   String output = _output,
 }) async {
   await _settle(tester);
+  expect(tester.takeException(), isNull, reason: 'Rendering $name');
   final boundary = frame.currentContext!.findRenderObject()!;
   await tester.runAsync(() async {
     final image = await (boundary as RenderRepaintBoundary).toImage(

@@ -18,6 +18,7 @@ import '../../domain/settle/upi.dart';
 import '../navigation.dart';
 import '../feedback.dart';
 import '../widgets/amount_card.dart';
+import '../widgets/form_leave_guard.dart';
 import '../widgets/entry_history.dart';
 import '../widgets/page_body.dart';
 import '../widgets/shared_element.dart';
@@ -170,180 +171,184 @@ class _SettleUp extends ConsumerWidget {
           id: ?ledger.memberById(id),
     }.values.toList();
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: BackButton(
-          onPressed: () => goBack(context, '/g/${ledger.group.id}'),
-        ),
-        title: Text(
-          !ledger.canEdit
-              ? 'Payment'
-              : form.isEditing
-              ? 'Edit payment'
-              : 'Settle up',
-        ),
-        actions: [
-          if (form.isEditing) ...[
-            IconButton(
-              tooltip: 'Delete payment',
-              onPressed: ready ? () => _delete(context) : null,
-              icon: const Icon(Icons.delete_outline),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: FilledButton(
-                onPressed: ready ? () => _record(context, ref) : null,
-                child: const Text('Save'),
+    return FormLeaveGuard(
+      draft: form.copyWith(saving: false, error: null),
+      saving: form.saving,
+      fallback: '/g/${ledger.group.id}',
+      builder: (context, leave) => Scaffold(
+        appBar: AppBar(
+          leading: BackButton(onPressed: form.saving ? null : leave),
+          title: Text(
+            !ledger.canEdit
+                ? 'Payment'
+                : form.isEditing
+                ? 'Edit payment'
+                : 'Settle up',
+          ),
+          actions: [
+            if (form.isEditing) ...[
+              IconButton(
+                tooltip: 'Delete payment',
+                onPressed: ready ? () => _delete(context) : null,
+                icon: const Icon(Icons.delete_outline),
               ),
-            ),
-          ],
-        ],
-      ),
-      body: PageBody(
-        maxWidth: 640,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-          children: [
-            ExcludeFocus(
-              excluding: !ledger.canEdit,
-              child: AbsorbPointer(
-                absorbing: !ledger.canEdit,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (editing != null) ...[
-                      Row(
-                        children: [
-                          SharedElement(
-                            tag: ('entry-category', editing.id),
-                            child: Icon(
-                              Icons.handshake_outlined,
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onTertiaryContainer,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: SharedText(
-                              tag: ('entry-description', editing.id),
-                              text:
-                                  '${ledger.nameOf(from ?? '')} paid '
-                                  '${ledger.nameOf(to ?? '')}',
-                              style: Theme.of(context).textTheme.titleLarge!
-                                  .copyWith(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.onSurface,
-                                  ),
-                              maxLines: 2,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-                    ],
-                    AmountCard(
-                      heroTag: editing != null
-                          ? ('entry-amount', editing.id)
-                          : transferIdentity == null
-                          ? null
-                          : ('settlement-amount', transferIdentity!),
-                      currency: currency,
-                      currencyCode: form.currencyCode,
-                      amount: form.amount,
-                      label: 'Amount',
-                      error: form.error,
-                      onAmountChanged: controller.setAmount,
-                      onCurrencyChanged: controller.chooseCurrency,
-                    ),
-                    const SizedBox(height: 24),
-                    _MemberDropdown(
-                      heroTag: transferIdentity == null
-                          ? null
-                          : ('settlement-from', transferIdentity!),
-                      label: form.isEditing ? 'Paid by' : 'Who is paying',
-                      members: members,
-                      nameOf: ledger.nameOfMember,
-                      meId: ledger.me?.id,
-                      value: from,
-                      onChanged: controller.choosePayer,
-                    ),
-                    const SizedBox(height: 16),
-                    _MemberDropdown(
-                      heroTag: transferIdentity == null
-                          ? null
-                          : ('settlement-to', transferIdentity!),
-                      label: form.isEditing ? 'Paid to' : 'Who is being paid',
-                      members: members,
-                      nameOf: ledger.nameOfMember,
-                      meId: ledger.me?.id,
-                      value: to,
-                      excludeId: from,
-                      onChanged: controller.choosePayee,
-                    ),
-                    const SizedBox(height: 16),
-                    if (!form.isEditing &&
-                        from != null &&
-                        to != null &&
-                        currency != null) ...[
-                      const SizedBox(height: 8),
-                      _OutstandingHint(
-                        ledger: ledger,
-                        from: from,
-                        to: to,
-                        currency: currency,
-                      ),
-                    ],
-                    const SizedBox(height: 8),
-                    _PaymentDetails(form: form, controller: controller),
-                    const SizedBox(height: 24),
-                    if (!form.isEditing &&
-                        currency != null &&
-                        currency.code == 'INR') ...[
-                      _UpiSection(
-                        payeeName: payeeName,
-                        // A new payee, or their handle arriving with their profile,
-                        // is a new field: what it shows is never left over from
-                        // somebody else.
-                        fieldKey: ValueKey((to, form.knownHandleIn(ledger))),
-                        handle: form.handleIn(ledger),
-                        onHandleChanged: to == null
-                            ? null
-                            : controller.setHandle,
-                        uri: buildUpiPaymentUri(
-                          payeeVpa: form.handleIn(ledger),
-                          payeeName: payeeName,
-                          amountMinor: currency.parseToMinor(form.amount) ?? 0,
-                          currency: currency,
-                        ),
-                        onPaid: () => _record(context, ref),
-                      ),
-                      const SizedBox(height: 24),
-                    ],
-                    if (!form.isEditing)
-                      FilledButton.icon(
-                        onPressed: form.saving || currency == null
-                            ? null
-                            : () => _record(context, ref),
-                        icon: const Icon(Icons.check),
-                        label: const Text('Record this payment'),
-                      ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'OpenSplit does not move or check money. Recording a payment '
-                      'here only updates the balances in this app.',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: FilledButton(
+                  onPressed: ready ? () => _record(context, ref) : null,
+                  child: const Text('Save'),
                 ),
               ),
-            ),
-            if (editing != null) ...[
-              const SizedBox(height: 24),
-              EntryHistory(entryId: editing.id, ledger: ledger),
             ],
           ],
+        ),
+        body: PageBody(
+          maxWidth: 640,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+            children: [
+              ExcludeFocus(
+                excluding: !ledger.canEdit || form.saving,
+                child: AbsorbPointer(
+                  absorbing: !ledger.canEdit || form.saving,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (editing != null) ...[
+                        Row(
+                          children: [
+                            SharedElement(
+                              tag: ('entry-category', editing.id),
+                              child: Icon(
+                                Icons.handshake_outlined,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onTertiaryContainer,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: SharedText(
+                                tag: ('entry-description', editing.id),
+                                text:
+                                    '${ledger.nameOf(from ?? '')} paid '
+                                    '${ledger.nameOf(to ?? '')}',
+                                style: Theme.of(context).textTheme.titleLarge!
+                                    .copyWith(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurface,
+                                    ),
+                                maxLines: 2,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+                      AmountCard(
+                        heroTag: editing != null
+                            ? ('entry-amount', editing.id)
+                            : transferIdentity == null
+                            ? null
+                            : ('settlement-amount', transferIdentity!),
+                        currency: currency,
+                        currencyCode: form.currencyCode,
+                        amount: form.amount,
+                        label: 'Amount',
+                        error: form.error,
+                        onAmountChanged: controller.setAmount,
+                        onCurrencyChanged: controller.chooseCurrency,
+                      ),
+                      const SizedBox(height: 24),
+                      _MemberDropdown(
+                        heroTag: transferIdentity == null
+                            ? null
+                            : ('settlement-from', transferIdentity!),
+                        label: form.isEditing ? 'Paid by' : 'Who is paying',
+                        members: members,
+                        nameOf: ledger.nameOfMember,
+                        meId: ledger.me?.id,
+                        value: from,
+                        onChanged: controller.choosePayer,
+                      ),
+                      const SizedBox(height: 16),
+                      _MemberDropdown(
+                        heroTag: transferIdentity == null
+                            ? null
+                            : ('settlement-to', transferIdentity!),
+                        label: form.isEditing ? 'Paid to' : 'Who is being paid',
+                        members: members,
+                        nameOf: ledger.nameOfMember,
+                        meId: ledger.me?.id,
+                        value: to,
+                        excludeId: from,
+                        onChanged: controller.choosePayee,
+                      ),
+                      const SizedBox(height: 16),
+                      if (!form.isEditing &&
+                          from != null &&
+                          to != null &&
+                          currency != null) ...[
+                        const SizedBox(height: 8),
+                        _OutstandingHint(
+                          ledger: ledger,
+                          from: from,
+                          to: to,
+                          currency: currency,
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      _PaymentDetails(form: form, controller: controller),
+                      const SizedBox(height: 24),
+                      if (!form.isEditing &&
+                          currency != null &&
+                          currency.code == 'INR') ...[
+                        _UpiSection(
+                          payeeName: payeeName,
+                          // A new payee, or their handle arriving with their profile,
+                          // is a new field: what it shows is never left over from
+                          // somebody else.
+                          fieldKey: ValueKey((to, form.knownHandleIn(ledger))),
+                          handle: form.handleIn(ledger),
+                          onHandleChanged: to == null
+                              ? null
+                              : controller.setHandle,
+                          uri: buildUpiPaymentUri(
+                            payeeVpa: form.handleIn(ledger),
+                            payeeName: payeeName,
+                            amountMinor:
+                                currency.parseToMinor(form.amount) ?? 0,
+                            currency: currency,
+                          ),
+                          onPaid: () => _record(context, ref),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+                      if (!form.isEditing)
+                        FilledButton.icon(
+                          onPressed: form.saving || currency == null
+                              ? null
+                              : () => _record(context, ref),
+                          icon: const Icon(Icons.check),
+                          label: const Text('Record this payment'),
+                        ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'OpenSplit does not move or check money. Recording a payment '
+                        'here only updates the balances in this app.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (editing != null) ...[
+                const SizedBox(height: 24),
+                EntryHistory(entryId: editing.id, ledger: ledger),
+              ],
+            ],
+          ),
         ),
       ),
     );

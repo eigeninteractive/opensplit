@@ -96,6 +96,7 @@ Future<Map<String, String>> _inputs() async {
     'tool/store_graphics.py',
     'tool/store_artifacts.dart',
     'test/harness.dart',
+    'test/fixtures/android_wallpaper.dart',
     'test/data/server_reference_data.dart',
     '.github/workflows/ci.yml',
     for (final directory in ['lib', 'assets', 'packages/opensplit_api/lib'])

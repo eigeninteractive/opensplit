@@ -108,6 +108,32 @@ void main() {
     await tester.pump(Duration.zero);
   }
 
+  testWidgets('export row and formats remain usable at 200 percent text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final id = await seed(tester);
+    await open(tester, '/g/$id/settings');
+    await tester.scrollUntilVisible(find.text('Export this group'), 200);
+    await settle(tester);
+    // The title itself opens the sheet, not just a trailing icon.
+    await tapAndSettle(tester, find.text('Export this group'));
+    expect(find.text('Spreadsheet (CSV)'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.ensureVisible(find.text('Full backup (JSON)'));
+    await settle(tester);
+    expect(find.text('Full backup (JSON)').hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.binding.handlePopRoute();
+    await settle(tester);
+    expect(find.text('Spreadsheet (CSV)'), findsNothing);
+    await unmount(tester);
+  });
+
   testWidgets('the cover is drawn from what the group spends on', (
     tester,
   ) async {
@@ -229,6 +255,8 @@ void main() {
       expect(tester.widget<TextField>(amount).controller?.text, '12.50');
       await tester.tap(find.byType(CloseButton));
       await settle(tester);
+      expect(find.text('Discard changes?'), findsOneWidget);
+      await tapAndSettle(tester, find.text('Discard'));
       expect(find.text('Spent'), findsNWidgets(3));
       expect(tester.takeException(), isNull);
       await unmount(tester);
@@ -284,7 +312,7 @@ void main() {
       FocusManager.instance.primaryFocus?.context
           ?.findAncestorWidgetOfExactType<IconButton>()
           ?.tooltip,
-      'Settle up',
+      'Search expenses and payments',
       reason: 'Tab follows the app bar in visual reading order',
     );
     await tester.tap(

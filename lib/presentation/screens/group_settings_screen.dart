@@ -258,17 +258,7 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
             ),
             const SizedBox(height: 24),
             SegmentedList(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.ios_share),
-                  title: const Text('Export this group'),
-                  subtitle: const Text(
-                    'Download a spreadsheet or full backup.',
-                  ),
-                  isThreeLine: true,
-                  trailing: ExportButton(groupId: widget.groupId),
-                ),
-              ],
+              children: [ExportButton.tile(groupId: widget.groupId)],
             ),
             const SizedBox(height: 24),
 

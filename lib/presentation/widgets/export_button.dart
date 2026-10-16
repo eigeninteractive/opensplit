@@ -12,7 +12,12 @@ import '../../domain/export/json_export.dart';
 
 /// Exports the group, in whichever of the two formats is wanted.
 class ExportButton extends ConsumerStatefulWidget {
-  const ExportButton({super.key, required this.groupId});
+  const ExportButton({super.key, required this.groupId}) : _asTile = false;
+
+  /// The same action as a full settings row.
+  const ExportButton.tile({super.key, required this.groupId}) : _asTile = true;
+
+  final bool _asTile;
 
   final String groupId;
 
@@ -28,31 +33,34 @@ class _ExportButtonState extends ConsumerState<ExportButton> {
   Future<void> _pick() async {
     final format = await showModalBottomSheet<_Format>(
       context: context,
+      isScrollControlled: true,
       builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.table_chart_outlined),
-              title: const Text('Spreadsheet (CSV)'),
-              subtitle: const Text(
-                'One row per expense, matching what is on screen now. Opens '
-                'in Excel, Numbers or Sheets.',
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.table_chart_outlined),
+                title: const Text('Spreadsheet (CSV)'),
+                subtitle: const Text(
+                  'One row per expense, matching what is on screen now. Opens '
+                  'in Excel, Numbers or Sheets.',
+                ),
+                isThreeLine: true,
+                onTap: () => Navigator.of(context).pop(_Format.csv),
               ),
-              isThreeLine: true,
-              onTap: () => Navigator.of(context).pop(_Format.csv),
-            ),
-            ListTile(
-              leading: const Icon(Icons.data_object),
-              title: const Text('Full backup (JSON)'),
-              subtitle: const Text(
-                'The whole group, ignoring any filter: everyone, every split, '
-                'the exchange rates used, and the activity log.',
+              ListTile(
+                leading: const Icon(Icons.data_object),
+                title: const Text('Full backup (JSON)'),
+                subtitle: const Text(
+                  'The whole group, ignoring any filter: everyone, every split, '
+                  'the exchange rates used, and the activity log.',
+                ),
+                isThreeLine: true,
+                onTap: () => Navigator.of(context).pop(_Format.json),
               ),
-              isThreeLine: true,
-              onTap: () => Navigator.of(context).pop(_Format.json),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -153,15 +161,29 @@ class _ExportButtonState extends ConsumerState<ExportButton> {
   }
 
   @override
-  Widget build(BuildContext context) => IconButton(
-    tooltip: 'Export',
-    onPressed: _busy ? null : _pick,
-    icon: _busy
-        ? const SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          )
-        : const Icon(Icons.ios_share),
-  );
+  Widget build(BuildContext context) => widget._asTile
+      ? ListTile(
+          leading: const Icon(Icons.ios_share),
+          title: const Text('Export this group'),
+          subtitle: const Text('Download a spreadsheet or full backup.'),
+          isThreeLine: true,
+          onTap: _busy ? null : _pick,
+          trailing: _busy
+              ? const SizedBox.square(
+                  dimension: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.chevron_right),
+        )
+      : IconButton(
+          tooltip: 'Export',
+          onPressed: _busy ? null : _pick,
+          icon: _busy
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.ios_share),
+        );
 }

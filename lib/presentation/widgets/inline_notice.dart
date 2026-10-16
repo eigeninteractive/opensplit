@@ -27,7 +27,7 @@ class InlineNotice extends StatelessWidget {
     final foreground = isError ? scheme.onErrorContainer : scheme.onSurface;
 
     return Card.filled(
-      color: isError ? scheme.errorContainer : null,
+      color: isError ? scheme.errorContainer : scheme.surfaceContainerHigh,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

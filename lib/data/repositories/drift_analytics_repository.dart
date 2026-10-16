@@ -4,6 +4,7 @@ import '../../domain/calendar_date.dart';
 import '../../domain/models/entry.dart';
 import '../../domain/analytics/analytics_query.dart';
 import '../local/database.dart';
+import '../local/entry_search.dart';
 import 'drift_entry_repository.dart';
 
 /// Local analytics.
@@ -50,7 +51,7 @@ final class DriftAnalyticsRepository {
       vars.add(Variable<String>(filter.memberId!));
     }
 
-    final match = _ftsMatch(filter.query);
+    final match = entrySearchMatch(filter.query);
     if (match != null) {
       clauses.add(
         '$alias.rowid IN '
@@ -60,17 +61,6 @@ final class DriftAnalyticsRepository {
     }
 
     return (sql: clauses.join(' AND '), vars: vars);
-  }
-
-  /// Turns user input into an FTS5 query.
-  static String? _ftsMatch(String query) {
-    final terms = query
-        .replaceAll('"', ' ')
-        .split(RegExp(r'\s+'))
-        .where((t) => t.isNotEmpty)
-        .toList();
-    if (terms.isEmpty) return null;
-    return terms.map((t) => '"$t"*').join(' ');
   }
 
   Stream<List<Entry>> search(AnalyticsFilter filter) {

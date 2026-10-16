@@ -318,6 +318,7 @@ class _Identity extends ConsumerWidget {
     final named = name?.trim() ?? '';
 
     return Card.filled(
+      color: scheme.surfaceContainerHigh,
       margin: EdgeInsets.zero,
       child: InkWell(
         borderRadius: BorderRadius.circular(12),

@@ -107,6 +107,11 @@ Stream<List<Member>> members(Ref ref, String groupId) =>
 Stream<List<Entry>> entries(Ref ref, String groupId) =>
     ref.watch(entryRepositoryProvider).watchEntries(groupId);
 
+/// Local group search, independent of the currency and filters in Insights.
+@riverpod
+Stream<List<Entry>> groupSearchResults(Ref ref, String groupId, String query) =>
+    ref.watch(entryRepositoryProvider).search(groupId, query);
+
 /// One historical entry, including records removed from current balances.
 @riverpod
 Stream<Entry?> entryRecord(Ref ref, String entryId) =>

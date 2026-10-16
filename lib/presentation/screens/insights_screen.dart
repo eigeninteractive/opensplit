@@ -58,25 +58,9 @@ class InsightsScreen extends ConsumerWidget {
                       slivers: [
                         SliverList.list(
                           children: [
-                            // SearchBar is Material 3's search field: a
-                            // pill-shaped bar on surfaceContainerHigh with its
-                            // own elevation and leading/trailing slots.
-                            SearchBar(
-                              hintText: 'Search descriptions and notes',
-                              leading: const Icon(Icons.search),
-                              trailing: [
-                                if (filter.query.isNotEmpty)
-                                  IconButton(
-                                    icon: const Icon(Icons.clear),
-                                    tooltip: 'Clear search',
-                                    onPressed: () => controller.update(
-                                      filter.copyWith(query: ''),
-                                    ),
-                                  ),
-                              ],
-                              onChanged: (value) => controller.update(
-                                filter.copyWith(query: value),
-                              ),
+                            _InsightsSearchBar(
+                              key: ValueKey(groupId),
+                              groupId: groupId,
                             ),
                             const SizedBox(height: 12),
                             if (used.length > 1)
@@ -149,6 +133,70 @@ class InsightsScreen extends ConsumerWidget {
                 ],
               ),
       ),
+    );
+  }
+}
+
+class _InsightsSearchBar extends ConsumerStatefulWidget {
+  const _InsightsSearchBar({super.key, required this.groupId});
+
+  final String groupId;
+
+  @override
+  ConsumerState<_InsightsSearchBar> createState() => _InsightsSearchBarState();
+}
+
+class _InsightsSearchBarState extends ConsumerState<_InsightsSearchBar> {
+  late final TextEditingController _text;
+
+  @override
+  void initState() {
+    super.initState();
+    final provider = analyticsFilterControllerProvider(widget.groupId);
+    _text = TextEditingController(text: ref.read(provider).query);
+    ref.listenManual(provider.select((filter) => filter.query), (_, query) {
+      // Preserve selection and IME composition when the update came from typing.
+      if (_text.text == query) return;
+      _text.value = TextEditingValue(
+        text: query,
+        selection: TextSelection.collapsed(offset: query.length),
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  void _updateQuery(String query) {
+    final provider = analyticsFilterControllerProvider(widget.groupId);
+    final filter = ref.read(provider);
+    if (filter.query == query) return;
+    ref.read(provider.notifier).update(filter.copyWith(query: query));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final query = ref.watch(
+      analyticsFilterControllerProvider(
+        widget.groupId,
+      ).select((filter) => filter.query),
+    );
+    return SearchBar(
+      controller: _text,
+      hintText: 'Search descriptions and notes',
+      leading: const Icon(Icons.search),
+      trailing: [
+        if (query.isNotEmpty)
+          IconButton(
+            icon: const Icon(Icons.clear),
+            tooltip: 'Clear search',
+            onPressed: () => _updateQuery(''),
+          ),
+      ],
+      onChanged: _updateQuery,
     );
   }
 }
@@ -230,6 +278,7 @@ class _Section extends StatelessWidget {
         ],
         const SizedBox(height: 8),
         Card.filled(
+          color: Theme.of(context).colorScheme.surfaceContainerHigh,
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Column(
