@@ -228,8 +228,8 @@ built against the wrong backend.
 Changes intended for the next app release get a [CHANGELOG.md](CHANGELOG.md)
 entry with `dart run cider log fixed 'What changed.'`. When ready to publish
 Android, run `dart run cider bump patch` (or minor/major) and
-`dart run cider release`. A merge without an app version change deploys the
-web/backend without a Play release. See *Versions* in
+`dart run cider release`. Once that version is submitted, further merges without
+a version bump deploy only the web/backend. See *Versions* in
 [docs/runbook.md](docs/runbook.md).
 
 ```bash
@@ -308,8 +308,8 @@ It verifies the configuration, builds the client, and then has Workbox precache
 the finished release, bundling Firebase's public identifiers into the worker. CI uses structurally valid inert identifiers to prove
 the release build. After every CI gate passes, pushes to `main` build with real
 production variables and deploy the Worker and web bundle together. When the
-app version changes, the same workflow builds a signed AAB and submits it with
-listing artwork to Play production for full rollout after Google approval.
+app version has no release tag yet, the workflow builds a signed AAB and submits
+it with listing artwork to Play production for full rollout after Google approval.
 Release reruns the same CI checks before deploying. A manual **Release** run
 with **deploy unchecked**
 creates artifacts only, for first-upload bootstrap.

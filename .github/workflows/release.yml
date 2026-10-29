@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       deploy:
-        description: Deploy web/backend and release a changed app version (uncheck for artifacts only)
+        description: Deploy web/backend and a pending app version (uncheck for artifacts only)
         type: boolean
         default: false
       update_priority:
@@ -48,10 +48,8 @@ jobs:
       id-token: write
     outputs:
       version: ${{ steps.build.outputs.version }}
-      app_release: ${{ needs.checks.outputs.app_release }}
+      app_release: ${{ steps.build.outputs.app_release }}
     env:
-      BUILD_ANDROID: ${{ needs.checks.outputs.app_release == 'true' || github.event_name == 'workflow_dispatch' }}
-      PUBLISH_ANDROID: ${{ needs.checks.outputs.app_release == 'true' && (github.event_name == 'push' || inputs.deploy) }}
       BUNDLE_FROZEN: "true"
       FASTLANE_SKIP_UPDATE_CHECK: "true"
       FASTLANE_OPT_OUT_USAGE: "true"
@@ -69,15 +67,6 @@ jobs:
           cache-dependency-path: |
             server/pnpm-lock.yaml
             service_worker/pnpm-lock.yaml
-      - uses: ruby/setup-ruby@v1
-        if: env.BUILD_ANDROID == 'true'
-        with:
-          bundler-cache: true
-      - uses: actions/setup-java@v6
-        if: env.BUILD_ANDROID == 'true'
-        with:
-          distribution: temurin
-          java-version: "17"
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.47.4"
@@ -128,6 +117,29 @@ jobs:
           echo "number=$number" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "Building $version ($number)."
+          # A tag records a successful Play submission. Keep a bumped version
+          # pending across superseding web-only merges and failed uploads.
+          git fetch origin --tags
+          app_release=true
+          if git show-ref --verify --quiet "refs/tags/v$version"; then
+            app_release=false
+          fi
+          echo "app_release=$app_release" >> "$GITHUB_OUTPUT"
+          build_android=$app_release
+          if [[ "$GITHUB_EVENT_NAME" == 'workflow_dispatch' ]]; then
+            build_android=true
+          fi
+          echo "BUILD_ANDROID=$build_android" >> "$GITHUB_ENV"
+          echo "Android release pending: $app_release"
+      - uses: ruby/setup-ruby@v1
+        if: env.BUILD_ANDROID == 'true'
+        with:
+          bundler-cache: true
+      - uses: actions/setup-java@v6
+        if: env.BUILD_ANDROID == 'true'
+        with:
+          distribution: temurin
+          java-version: "17"
       # Before the slow build, so a changelog Play would refuse fails in
       # seconds. Package the notes and artwork into the runner's temporary
       # directory, leaving the checkout and generated screenshots untouched.
@@ -247,14 +259,14 @@ jobs:
           echo "The deployed Worker did not answer /api/health." >&2
           exit 1
       - name: Authenticate to Google Play (keyless)
-        if: env.PUBLISH_ANDROID == 'true'
+        if: steps.build.outputs.app_release == 'true' && (github.event_name == 'push' || inputs.deploy)
         uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.PLAY_DEPLOY_SERVICE_ACCOUNT }}
           project_id: ${{ vars.FIREBASE_PROJECT_ID }}
       - name: Submit to Play production
-        if: env.PUBLISH_ANDROID == 'true'
+        if: steps.build.outputs.app_release == 'true' && (github.event_name == 'push' || inputs.deploy)
         env:
           # Play's 0-5 in-app update priority, set per release and only
           # settable through the Publishing API. The installed app chooses the

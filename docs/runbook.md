@@ -330,21 +330,27 @@ also submits an Android release to Play production.
 
 A push to `main` runs `.github/workflows/release.yml`:
 
-1. CI, the same jobs as on a pull request. Cider compares the app version with
-   the PR/pre-push base and requires finalized notes when that version changes.
+1. CI, the same jobs as on a pull request, including the existing Cider
+   version/changelog and Play release-note tests.
 2. The resource-id check, before anything slow.
 3. The build number and complete web bundle, uploaded as an artifact.
-4. When the app version changes, a signed Android bundle and Play metadata:
-   release notes from `CHANGELOG.md` (see *Versions*) plus the committed artwork.
+4. When the app version has no `v<version>` release tag, a signed Android bundle
+   and Play metadata: release notes from `CHANGELOG.md` (see *Versions*) plus artwork.
    Android and web share the build number on these releases.
 5. `wrangler d1 migrations apply opensplit --remote`: whatever is pending.
 6. `wrangler deploy`: the script and the bundle, together, as one version.
-7. A wait for `/api/health`, then, when the app version changed, a Play production
+7. A wait for `/api/health`, then, for a pending app version, a Play production
    submission with status `completed`, the notes and artwork. This requests full
    rollout subject to Google review and managed publishing. Fastlane skips
    unchanged images by checksum and preserves listing text.
-8. A `v<version>` tag after an app release submission. Web-only deployments
+8. A `v<version>` tag after an app release submission. This records that Play
+   accepted the upload; it does not mean review is complete. Web-only deployments
    do not create app version tags.
+
+The tag is the release-completion marker. If a newer web-only merge supersedes
+the version-bump build, or an upload fails, that app version stays pending for
+the next successful run. Otherwise an ordinary merge could lose the requested
+Android release. Once tagged, subsequent merges skip Android until the next bump.
 
 Documentation, website, cosmetic and dependency PRs do not need an app version
 bump. They can merge without Android signing, an AAB build or a Play submission.
@@ -366,8 +372,8 @@ an initial schema or testing-era storage reset must not replace production data.
 
 A manual run (*Actions → Release → Run workflow*) with **deploy** unchecked
 builds web and Android artifacts without deploying anything. Checking **deploy**
-deploys the web/backend; Play submission still requires an app version change
-relative to the selected commit's first parent.
+deploys the web/backend and submits Android only if the app version is still
+untagged.
 
 ---
 
@@ -442,14 +448,9 @@ version bump. This refreshes its manifest and any date-dependent screenshot data
 
 Both files go in the PR. The existing release-note tests check that Cider can
 read a section for the current version and produce nonempty Play-compatible
-notes. When the version changes, CI also requires *Unreleased* to be empty.
-
-The existing Analyse and test job uses Cider to compare versions against
-`pull_request.base.sha` for PRs, `github.event.before` for pushes, and `HEAD^`
-for manual runs. It passes that release decision to the deployment workflow.
-Only a version change enables Android build/upload and tagging on automatic runs.
-Use the normal Cider bump commands to advance the version; semantic bump size
-remains a review decision.
+notes. The release workflow reads the version with Cider and checks for its
+release tag before building Android. Use the normal Cider bump commands to
+advance the version; semantic bump size remains a review decision.
 
 Which part to bump: patch when a version only fixes things, minor when it adds
 anything, and major when it leaves older clients behind, such as a server change
