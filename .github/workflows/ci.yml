@@ -7,6 +7,10 @@ on:
     branches: [main]
   workflow_dispatch:
   workflow_call:
+    outputs:
+      app_release:
+        description: Whether the app version changed in this PR or push.
+        value: ${{ jobs.dart.outputs.app_release }}
 
 permissions:
   contents: read
@@ -16,36 +20,17 @@ defaults:
     shell: bash
 
 jobs:
-  release_version:
-    name: Release version
+  dart:
+    name: Analyse and test
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 20
+    outputs:
+      app_release: ${{ steps.release.outputs.app_release }}
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
           fetch-depth: 0
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: "3.47.4"
-          cache: true
-      - run: flutter pub get --enforce-lockfile
-      - name: Require a new finalized Cider release
-        env:
-          # PRs compare with their target. Pushes compare with main before the
-          # push, including squash/rebase merges and multi-commit pushes.
-          # Manual runs validate the selected release against its first parent.
-          RELEASE_BASE: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}
-        run: dart run tool/check_release.dart --base-ref="$RELEASE_BASE"
-
-  dart:
-    name: Analyse and test
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
       # Before setup-node, whose pnpm cache needs pnpm on the path. Both
       # versions come from server/package.json: pnpm's from `packageManager`,
       # Node's from `devEngines.runtime`, which is what pnpm runs locally too.
@@ -62,6 +47,29 @@ jobs:
           flutter-version: "3.47.4"
           cache: true
       - run: flutter pub get --enforce-lockfile
+      - name: Detect an app version change
+        id: release
+        env:
+          RELEASE_BASE: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/release-base"
+          git show "$RELEASE_BASE:pubspec.yaml" > "$RUNNER_TEMP/release-base/pubspec.yaml"
+          previous="$(dart run cider --project-root="$RUNNER_TEMP/release-base" version)"
+          current="$(dart run cider version)"
+          app_release=false
+          if [[ "$current" != "$previous" ]]; then
+            app_release=true
+          fi
+          echo "app_release=$app_release" >> "$GITHUB_OUTPUT"
+          echo "App version $previous -> $current; Android release: $app_release"
+      - name: Require finalized notes when releasing the app
+        if: steps.release.outputs.app_release == 'true'
+        run: |
+          unreleased="$(dart run cider describe --only-body)"
+          if [[ -n "$unreleased" ]]; then
+            echo 'Run dart run cider release before releasing the app.' >&2
+            exit 1
+          fi
       - run: flutter gen-l10n
       - run: dart run build_runner build
       - name: Regenerate committed database contracts
@@ -265,12 +273,12 @@ jobs:
       # The web bundle only. Android used to be compiled here too, as a release
       # APK, and it was by a wide margin the slowest thing in CI — a whole
       # Gradle and NDK toolchain, stood up to prove something release proves
-      # again minutes later. Release calls this workflow and then builds the
-      # signed bundle from the same commit, and it deploys nothing if that
-      # fails, so main is never published from a tree Android cannot build.
+      # again minutes later. For an app version change, Release calls this
+      # workflow and builds the signed bundle from the same commit before
+      # deploying. Other merges deploy the web/backend without building Android.
       #
       # This job exists for pull requests, where release does not run and this
       # is the only compile check there is. That is also exactly what dropping
-      # the APK costs: an Android-only break now surfaces on the push to main
-      # rather than on the pull request that introduced it.
+      # the APK costs: an Android-only break surfaces when the next app release
+      # is built rather than on the pull request that introduced it.
       - run: dart run tool/build_web.dart --config=env/ci.example.json

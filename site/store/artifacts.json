@@ -1,7 +1,7 @@
 {
   "version": 1,
   "inputs": {
-    ".github/workflows/ci.yml": "d7b63cd25371d85ff9c7be8582d63c79c46da84a8dd94b85b100a913b6903df1",
+    ".github/workflows/ci.yml": "abcec259576406e7cd2d5d414968e651bad631647600db17057a2fd4e132cf47",
     "assets/brand/lockup-horizontal.svg": "0d0867f40d2351996ff7a808751d7b6e44e65323e0b4894bff6f6647f032ba15",
     "assets/brand/lockup-vertical.svg": "c32df2988057fc53cd5502a1823f6ce06b41e64e724c09d3f6cf140f1353d9fd",
     "assets/brand/mark-1024-dark.png": "7e19e1c337a842a697b0128163e817e231653c9ae0df56f93d241258d36aed45",
@@ -350,7 +350,7 @@
     "packages/opensplit_api/lib/src/model/share.g.dart": "17ff331c72c72242b56731122cfbde7b2a603e810d28bf58ee0f135e252c77a2",
     "packages/opensplit_api/lib/src/model/split_kind.dart": "38186b7b070123737b5d78cb5f19e53c0d77d95b3ffe78f2654bbaffb23851a4",
     "pubspec.lock": "04d8d141c6813eb17eba0f94235b701503a2337ab12b022826476a92d3ae21ca",
-    "pubspec.yaml": "23b6efc9e60696d17a5373f3e01b0316fd1ca7a2fe23e95bdf8b0dac36c43c05",
+    "pubspec.yaml": "c4aef83b201421f0598c4bc626c8d37df1243412f0a2ac8e6219ce54316e43a6",
     "test/data/server_reference_data.dart": "b291827d21d1ff0bee36bc7ef86e6ff1618f767e20deb1df796ac911bf6e6b9c",
     "test/fixtures/android_wallpaper.dart": "588b5037842a5c6ab2f4842e47b679b6d9de3f16c7f4670c2c125af707633c84",
     "test/harness.dart": "0e85c632a2251eb3f8052c9d6ed11b6a5e56ee1a63faf472c045c577cab53387",

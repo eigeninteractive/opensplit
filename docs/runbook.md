@@ -5,9 +5,9 @@ your own machine, how the production backend is stood up once, and what every
 release after that does.
 
 Commands that change something in a Cloudflare, Google, Resend, GitHub or Play
-account are in the production sections, and only there. Nothing in the
-repository runs them for you, apart from an explicitly dispatched **Release**
-workflow with **deploy** checked. Pushes to `main` build artifacts only.
+account are in the production sections. After CI passes, pushes to `main`
+deploy the web/backend; an app version change also submits to Play production.
+A manual **Release** run deploys only when **deploy** is checked.
 
 ---
 
@@ -321,7 +321,8 @@ choose a different priority; the old `PLAY_UPDATE_PRIORITY` repository or
 environment variable is not read by the workflow.
 `dart run tool/verify_config.dart` checks the shape of every value.
 
-From here on, a push to `main` releases.
+From here on, a push to `main` deploys the web/backend. A changed app version
+also submits an Android release to Play production.
 
 ---
 
@@ -329,21 +330,27 @@ From here on, a push to `main` releases.
 
 A push to `main` runs `.github/workflows/release.yml`:
 
-1. CI, the same jobs as on a pull request, including a newer stable version
-   and finalized Cider changelog relative to the PR/pre-push base.
+1. CI, the same jobs as on a pull request. Cider compares the app version with
+   the PR/pre-push base and requires finalized notes when that version changes.
 2. The resource-id check, before anything slow.
-3. The build number, and Play metadata: release notes from `CHANGELOG.md`
-   (see *Versions*) plus the committed icon, feature graphic and screenshots.
-4. The web bundle and the signed Android bundle, both carrying that number,
-   uploaded as artifacts alongside the prepared Play metadata.
+3. The build number and complete web bundle, uploaded as an artifact.
+4. When the app version changes, a signed Android bundle and Play metadata:
+   release notes from `CHANGELOG.md` (see *Versions*) plus the committed artwork.
+   Android and web share the build number on these releases.
 5. `wrangler d1 migrations apply opensplit --remote`: whatever is pending.
 6. `wrangler deploy`: the script and the bundle, together, as one version.
-7. A wait for `/api/health`, then a Play production submission with status
-   `completed`, the notes and listing artwork. This requests full rollout,
-   subject to Google review and managed publishing. Fastlane skips unchanged
-   images by checksum and preserves listing text. Artwork is shared across tracks.
-8. A `v<version>` tag for this release. Retries keep the same tag and receive a
-   new build number.
+7. A wait for `/api/health`, then, when the app version changed, a Play production
+   submission with status `completed`, the notes and artwork. This requests full
+   rollout subject to Google review and managed publishing. Fastlane skips
+   unchanged images by checksum and preserves listing text.
+8. A `v<version>` tag after an app release submission. Web-only deployments
+   do not create app version tags.
+
+Documentation, website, cosmetic and dependency PRs do not need an app version
+bump. They can merge without Android signing, an AAB build or a Play submission.
+Shared Flutter UI changes still reach the web deployment; Android receives them
+in the next versioned release. App dependencies and fixes can also accumulate
+until a version bump intentionally publishes them.
 
 The current-main check skips superseded commits when merges overlap. A green
 upload means Play accepted the submission, not that review has finished or
@@ -358,7 +365,9 @@ does not provide compatibility. Normal schema changes use incremental migrations
 an initial schema or testing-era storage reset must not replace production data.
 
 A manual run (*Actions → Release → Run workflow*) with **deploy** unchecked
-builds the artifacts without deploying anything.
+builds web and Android artifacts without deploying anything. Checking **deploy**
+deploys the web/backend; Play submission still requires an app version change
+relative to the selected commit's first parent.
 
 ---
 
@@ -367,7 +376,9 @@ builds the artifacts without deploying anything.
 Dependabot opens one weekly `routine-dependencies` pull request across the
 Flutter app, generated API package, Worker, service worker, GitHub Actions and
 Fastlane. Minor and patch updates share the full CI matrix and one merge to
-`main`, which triggers one release. Grouping does not enable automatic merging.
+`main`, which deploys the web/backend. Bump the app version in the dependency PR
+when its changes should also ship to Android. Grouping does not enable automatic
+merging.
 The configuration is in [`.github/dependabot.yml`](../.github/dependabot.yml);
 see GitHub's [multi-ecosystem grouping documentation](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/configuring-multi-ecosystem-updates).
 
@@ -398,29 +409,27 @@ A build has two numbers, and only one of them is written down.
   [cider](https://pub.dev/packages/cider), which keeps `CHANGELOG.md` in step.
 - **The build number**, `1701`: what Play orders builds by, Android's
   `versionCode`. It is never written down. The release workflow works it out
-  and gives the same number to the web bundle and the Android bundle, so About
-  reads "Version 1.2.0 (1701)" on both, and a bug report names one build.
+  and gives the same number to web and Android on app releases. A web-only
+  deployment advances the web build number while Android keeps its last release.
 
 cider is a dev dependency, so `dart run cider` is the version `pubspec.lock`
 pins, the same everywhere.
 
 ### In every pull request
 
-Every PR to `main` produces a production release, including documentation,
-tooling and Dependabot PRs. Update from the latest `main`, then describe what
-this release changes under *Unreleased*:
+Changes intended for the next app release get an entry under *Unreleased*:
 
 ```sh
 dart run cider log fixed 'Totals no longer round twice.'
 # or added, changed, deprecated, removed, security
 ```
 
-Write it for a user: the lines become the release's notes in Play. Maintenance
-releases can describe reliability or dependency maintenance briefly.
+Write it for a user: the lines become the release's notes in Play. Documentation
+and standalone website changes need no app changelog entry or version bump.
 
 ### Cutting a version
 
-Before merging each PR, bump and finalize its own stable version:
+When ready to publish Android, bump and finalize the version in a PR:
 
 ```sh
 dart run cider bump minor      # or patch, or major
@@ -431,31 +440,16 @@ dart run tool/store_artifacts.dart
 The artwork provenance includes `pubspec.yaml`, so regenerate after every
 version bump. This refreshes its manifest and any date-dependent screenshot data.
 
-Both files go in one pull request. A bump without the release leaves
-`pubspec.yaml` naming a version the changelog does not have, and
-the Release version check rejects it. No entries may remain under *Unreleased*.
+Both files go in the PR. The existing release-note tests check that Cider can
+read a section for the current version and produce nonempty Play-compatible
+notes. When the version changes, CI also requires *Unreleased* to be empty.
 
-```sh
-git fetch origin main
-dart run tool/check_release.dart --base-ref=origin/main
-```
-
-The checker uses the pinned Cider parser. It requires a version higher than the
-base, stable `major.minor.patch` without prerelease or build suffixes, a matching
-latest non-yanked release with nonempty Play-compatible notes, and unchanged
-published changelog sections. It checks the result, not whether a particular
-command was typed. Semantic major/minor/patch choice still needs code review.
-
-CI compares PRs with `pull_request.base.sha`, pushes with `github.event.before`,
-and manual runs with `HEAD^`. The same gate runs inside Release's prerequisite
-CI workflow before any migration, deployment or upload. Missing Git history is
-an error. Every checkout running this gate fetches full history.
-
-In **GitHub Settings → Rules → Rulesets → main**, require **Release version**
-alongside the existing CI checks and enable **Require branches to be up to date
-before merging**. This forces a second PR to update and choose a newer version
-after another PR has merged. Update Dependabot PRs with Cider metadata before
-merging; no bot exemption bypasses the release policy.
+The existing Analyse and test job uses Cider to compare versions against
+`pull_request.base.sha` for PRs, `github.event.before` for pushes, and `HEAD^`
+for manual runs. It passes that release decision to the deployment workflow.
+Only a version change enables Android build/upload and tagging on automatic runs.
+Use the normal Cider bump commands to advance the version; semantic bump size
+remains a review decision.
 
 Which part to bump: patch when a version only fixes things, minor when it adds
 anything, and major when it leaves older clients behind, such as a server change
@@ -463,9 +457,9 @@ they can no longer talk to. Send a breaking release with update priority 4 so
 eligible clients request an immediate update when Play makes it available.
 Priority does not replace the pause or verify that everyone has installed it.
 
-Each merged PR advances the version name. A retry of that release keeps its
-name and receives a new build number; there is no automatic version-changing
-commit or privileged CI push to `main`.
+Merges without a version bump keep the app version name. An app release or
+manual artifact build receives its own build number; CI does not create
+version-changing commits or push to `main`.
 
 ### What a release does with them
 
