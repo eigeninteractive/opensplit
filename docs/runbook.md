@@ -312,8 +312,13 @@ ANDROID_FCM_API_KEY     ANDROID_FCM_APP_ID
 WEB_FCM_API_KEY         WEB_FCM_APP_ID
 ```
 
-plus the Play ones (`PLAY_*`, `GCP_WORKLOAD_IDENTITY_PROVIDER`, and
-`FIREBASE_PROJECT_ID`, which the Play step authenticates against).
+plus `PLAY_DEPLOY_SERVICE_ACCOUNT`, `GCP_WORKLOAD_IDENTITY_PROVIDER`, and
+`FIREBASE_PROJECT_ID`, which the Play step authenticates against. Production's
+track and full rollout status are fixed in the Fastlane production lane;
+`PLAY_TRACK` and `PLAY_RELEASE_STATUS` only configure manual testing lanes.
+Automatic releases use update priority 0. A manual Release run can explicitly
+choose a different priority; the old `PLAY_UPDATE_PRIORITY` repository or
+environment variable is not read by the workflow.
 `dart run tool/verify_config.dart` checks the shape of every value.
 
 From here on, a push to `main` releases.
@@ -324,7 +329,8 @@ From here on, a push to `main` releases.
 
 A push to `main` runs `.github/workflows/release.yml`:
 
-1. CI, the same jobs as on a pull request.
+1. CI, the same jobs as on a pull request, including a newer stable version
+   and finalized Cider changelog relative to the PR/pre-push base.
 2. The resource-id check, before anything slow.
 3. The build number, and Play metadata: release notes from `CHANGELOG.md`
    (see *Versions*) plus the committed icon, feature graphic and screenshots.
@@ -332,18 +338,24 @@ A push to `main` runs `.github/workflows/release.yml`:
    uploaded as artifacts alongside the prepared Play metadata.
 5. `wrangler d1 migrations apply opensplit --remote`: whatever is pending.
 6. `wrangler deploy`: the script and the bundle, together, as one version.
-7. A wait for `/api/health`, then Play closed testing, with the notes and listing
-   artwork. Fastlane skips unchanged images by checksum and preserves listing
-   text. The listing artwork is shared across tracks.
-8. A `v<version>` tag, the first time a build of that version ships.
+7. A wait for `/api/health`, then a Play production submission with status
+   `completed`, the notes and listing artwork. This requests full rollout,
+   subject to Google review and managed publishing. Fastlane skips unchanged
+   images by checksum and preserves listing text. Artwork is shared across tracks.
+8. A `v<version>` tag for this release. Retries keep the same tag and receive a
+   new build number.
+
+The current-main check skips superseded commits when merges overlap. A green
+upload means Play accepted the submission, not that review has finished or
+users have installed it. Additional submissions during review can delay approval.
 
 D1 migrations are applied before the Worker that needs them goes live.
 The Durable Objects migrate themselves, lazily, the first time each group is
-opened after a deploy. A breaking API requires a coordinated pause that covers
-Play review and installation, because old clients remain installed after the
-backend changes. Arrange any required [storage reset](resetting-the-backend.md)
-before merging a release that needs one. Normal schema changes use incremental
-migrations; an initial schema must not be reapplied over existing databases.
+opened after a deploy. Keep backend/schema changes compatible with installed
+clients throughout Play review, rollout and delayed installation. A breaking
+API needs an explicit transition plan before merge; an urgent update priority
+does not provide compatibility. Normal schema changes use incremental migrations;
+an initial schema or testing-era storage reset must not replace production data.
 
 A manual run (*Actions → Release → Run workflow*) with **deploy** unchecked
 builds the artifacts without deploying anything.
@@ -394,20 +406,21 @@ pins, the same everywhere.
 
 ### In every pull request
 
-A change someone using the app would notice gets a line under *Unreleased*:
+Every PR to `main` produces a production release, including documentation,
+tooling and Dependabot PRs. Update from the latest `main`, then describe what
+this release changes under *Unreleased*:
 
 ```sh
 dart run cider log fixed 'Totals no longer round twice.'
 # or added, changed, deprecated, removed, security
 ```
 
-Write it for a tester rather than for a reviewer: the lines become the build's
-notes in Play. Refactors, tests and tooling get none.
+Write it for a user: the lines become the release's notes in Play. Maintenance
+releases can describe reliability or dependency maintenance briefly.
 
 ### Cutting a version
 
-When what is under *Unreleased* deserves a version of its own, and at the
-latest before a build goes beyond closed testing:
+Before merging each PR, bump and finalize its own stable version:
 
 ```sh
 dart run cider bump minor      # or patch, or major
@@ -416,7 +429,29 @@ dart run cider release         # Unreleased becomes this version's section, date
 
 Both files go in one pull request. A bump without the release leaves
 `pubspec.yaml` naming a version the changelog does not have, and
-`test/tool/release_notes_test.dart` fails the pull request for it.
+the Release version check rejects it. No entries may remain under *Unreleased*.
+
+```sh
+git fetch origin main
+dart run tool/check_release.dart --base-ref=origin/main
+```
+
+The checker uses the pinned Cider parser. It requires a version higher than the
+base, stable `major.minor.patch` without prerelease or build suffixes, a matching
+latest non-yanked release with nonempty Play-compatible notes, and unchanged
+published changelog sections. It checks the result, not whether a particular
+command was typed. Semantic major/minor/patch choice still needs code review.
+
+CI compares PRs with `pull_request.base.sha`, pushes with `github.event.before`,
+and manual runs with `HEAD^`. The same gate runs inside Release's prerequisite
+CI workflow before any migration, deployment or upload. Missing Git history is
+an error. Every checkout running this gate fetches full history.
+
+In **GitHub Settings → Rules → Rulesets → main**, require **Release version**
+alongside the existing CI checks and enable **Require branches to be up to date
+before merging**. This forces a second PR to update and choose a newer version
+after another PR has merged. Update Dependabot PRs with Cider metadata before
+merging; no bot exemption bypasses the release policy.
 
 Which part to bump: patch when a version only fixes things, minor when it adds
 anything, and major when it leaves older clients behind, such as a server change
@@ -424,8 +459,9 @@ they can no longer talk to. Send a breaking release with update priority 4 so
 eligible clients request an immediate update when Play makes it available.
 Priority does not replace the pause or verify that everyone has installed it.
 
-Merges between versions keep the version's name and differ by build number;
-"1.2.0 (1701)" and "1.2.0 (1804)" are two builds of 1.2.0.
+Each merged PR advances the version name. A retry of that release keeps its
+name and receives a new build number; there is no automatic version-changing
+commit or privileged CI push to `main`.
 
 ### What a release does with them
 
@@ -449,8 +485,8 @@ screenshots byte-for-byte. The workflow passes that directory as
 `bundle exec ruby test/tool/fastlane_test.rb` to exercise the upload configuration
 locally without contacting Play.
 
-**Tags.** The first build of each version tags its commit `v1.2.0`, and later
-builds leave the tag where it was. The compare links at the foot of
+**Tags.** The first successful submission of each version tags its commit
+`v1.2.0`, and retries leave the tag where it was. The compare links at the foot of
 `CHANGELOG.md` point at those tags. `v1.0.0` marks the first build that reached
 Play.
 
@@ -546,8 +582,23 @@ Anything else means links open in a browser instead of the app, silently.
 The release service account needs the app-level
 [Manage store presence](https://support.google.com/googleplay/android-developer/answer/9844686)
 permission as well as access to release on testing tracks, so Fastlane can
-update the listing artwork. The upload does not change listing text or promote
-the bundle to production. Play review and availability still apply.
+update the listing artwork. For automatic production submissions, also grant
+**Release to production, exclude devices, and use Play App Signing** under
+**Play Console → Users and permissions → CI service account → App permissions →
+OpenSplit**. Use the account named by `PLAY_DEPLOY_SERVICE_ACCOUNT`.
+
+Complete outstanding production setup and country selection before merging the
+switch to production. In **Publishing overview**, turn **Managed publishing**
+off for approved changes to publish automatically. Review pending changes first:
+merging the production workflow can initiate the public launch. First production
+releases have no percentage rollout; this workflow also requests 100% for updates.
+Review or setup failures stay visible instead of silently saving an unsubmitted
+release. The upload does not change listing text.
+
+The `closed` and `internal` Fastlane lanes remain available for manual testing;
+their track/status overrides cannot redirect the production lane. Testing uploads
+can still change the shared store artwork. Halting production stops further
+distribution but leaves installed copies in place; fixes need a higher build code.
 
 Verify the feature graphic under **Grow users → Store presence → Main store
 listing → Graphics** after uploading and publishing. Its presence there is

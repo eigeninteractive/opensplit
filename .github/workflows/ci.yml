@@ -16,6 +16,28 @@ defaults:
     shell: bash
 
 jobs:
+  release_version:
+    name: Release version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.4"
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - name: Require a new finalized Cider release
+        env:
+          # PRs compare with their target. Pushes compare with main before the
+          # push, including squash/rebase merges and multi-commit pushes.
+          # Manual runs validate the selected release against its first parent.
+          RELEASE_BASE: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}
+        run: dart run tool/check_release.dart --base-ref="$RELEASE_BASE"
+
   dart:
     name: Analyse and test
     runs-on: ubuntu-24.04

@@ -1,23 +1,14 @@
 default_platform(:android)
 
 platform :android do
-  # Which Play track a build goes to.
-  #
-  # "internal" is the one this project shipped to first: instant availability,
-  # no review, up to 100 testers. Closed testing is the next rung — it is
-  # reviewed, it is what Play's own progression asks you to graduate to, and it
-  # is where the app is now.
-  #
   # Google's *default* closed track is still called "alpha" in the Publishing
   # API, whatever the Play Console calls it on screen. A track created by hand
   # carries whatever name it was given, so this is configurable rather than
   # hardcoded: set PLAY_TRACK to that name and nothing else changes.
   DEFAULT_TRACK = "alpha".freeze
 
-  # Tracks you can reach from here. Naming them is what turns a typo into a
-  # refusal before an upload rather than an HTTP 400 after one — and keeps
-  # "production" out of reach of a workflow that is not meant to publish.
-  KNOWN_TRACKS = %w[internal alpha beta].freeze
+  # Testing lanes cannot publish to production through an environment override.
+  TEST_TRACKS = %w[internal alpha beta].freeze
 
   # How badly a release wants to be installed, on Play's 0-5 scale.
   #
@@ -42,20 +33,33 @@ platform :android do
 
   desc "Distribute the signed CI bundle to Google Play closed testers"
   lane :closed do
-    priority = Integer(ENV.fetch("PLAY_UPDATE_PRIORITY", DEFAULT_PRIORITY))
-    unless (0..5).cover?(priority)
+    track = ENV.fetch("PLAY_TRACK", DEFAULT_TRACK)
+    unless TEST_TRACKS.include?(track)
+      UI.user_error!("PLAY_TRACK must be one of #{TEST_TRACKS.join(', ')}")
+    end
+    distribute(track: track, status: ENV.fetch("PLAY_RELEASE_STATUS", "completed"))
+  end
+
+  desc "Submit the signed CI bundle for full Google Play production release"
+  lane :production do
+    distribute(track: "production", status: "completed")
+  end
+
+  desc "Distribute the signed CI bundle to Google Play internal testers"
+  lane :internal do
+    distribute(track: "internal", status: ENV.fetch("PLAY_RELEASE_STATUS", "completed"))
+  end
+
+  private_lane :distribute do |options|
+    priority = Integer(
+      ENV.fetch("PLAY_UPDATE_PRIORITY", DEFAULT_PRIORITY), exception: false
+    )
+    unless priority && (0..5).cover?(priority)
       UI.user_error!("PLAY_UPDATE_PRIORITY must be between 0 and 5")
     end
 
-    track = ENV.fetch("PLAY_TRACK", DEFAULT_TRACK)
-    unless KNOWN_TRACKS.include?(track)
-      UI.user_error!(
-        "PLAY_TRACK must be one of #{KNOWN_TRACKS.join(', ')}, or the lane " \
-        "needs teaching about a custom track named #{track.inspect}"
-      )
-    end
-
-    status = ENV.fetch("PLAY_RELEASE_STATUS", "completed")
+    track = options.fetch(:track)
+    status = options.fetch(:status)
     unless %w[completed draft].include?(status)
       UI.user_error!("PLAY_RELEASE_STATUS must be completed or draft")
     end
@@ -108,14 +112,5 @@ platform :android do
       # Fail visibly rather than silently changing review semantics on retry.
       rescue_changes_not_sent_for_review: false
     )
-  end
-
-  # Kept so a build can still be put in front of the internal testers without
-  # editing this file — useful for a smoke test that should not spend a closed
-  # testing review.
-  desc "Distribute the signed CI bundle to Google Play internal testers"
-  lane :internal do
-    ENV["PLAY_TRACK"] = "internal"
-    closed
   end
 end

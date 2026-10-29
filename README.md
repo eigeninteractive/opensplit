@@ -225,11 +225,12 @@ Configuration is injected at build time, from a file rather than a dozen
 `--dart-define` flags on one command line — which is how a release ends up
 built against the wrong backend.
 
-A change someone using the app would notice also gets a line in
-[CHANGELOG.md](CHANGELOG.md), which becomes the testers' notes in Play:
-`dart run cider log fixed 'What changed, for a tester.'`. How versions are cut
-and how builds are numbered is under *Versions* in
-[docs/runbook.md](docs/runbook.md).
+Every PR to `main`, including dependency and tooling changes, needs a newer
+stable app version and finalized [CHANGELOG.md](CHANGELOG.md) notes. Use
+`dart run cider log fixed 'What changed.'`, `dart run cider bump patch`
+(or minor/major), then `dart run cider release`. Validate against the latest
+target branch with `dart run tool/check_release.dart --base-ref=origin/main`.
+See *Versions* in [docs/runbook.md](docs/runbook.md) for the release policy.
 
 ```bash
 cp env/app.example.json env/app.json      # gitignored; fill it in
@@ -307,8 +308,9 @@ It verifies the configuration, builds the client, and then has Workbox precache
 the finished release, bundling Firebase's public identifiers into the worker. CI uses structurally valid inert identifiers to prove
 the release build. After every CI gate passes, pushes to `main` build with real
 production variables, deploy the Worker and web bundle together, and distribute
-a signed AAB and listing artwork to Play closed testing. Release reruns the same
-CI checks before publishing. A manual **Release** run with **deploy unchecked**
+a signed AAB and listing artwork to Play production for full rollout after
+Google approval. Release reruns the same CI checks, including the version gate,
+before publishing. A manual **Release** run with **deploy unchecked**
 creates artifacts only, for first-upload bootstrap.
 
 Every integration is off unless configured, and hidden rather than shown broken:

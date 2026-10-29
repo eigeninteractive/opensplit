@@ -238,23 +238,19 @@ jobs:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.PLAY_DEPLOY_SERVICE_ACCOUNT }}
           project_id: ${{ vars.FIREBASE_PROJECT_ID }}
-      - name: Distribute to Play closed testing
+      - name: Submit to Play production
         if: github.event_name == 'push' || inputs.deploy
         env:
-          PLAY_RELEASE_STATUS: ${{ vars.PLAY_RELEASE_STATUS || 'completed' }}
-          # Google's default closed track is still called "alpha" in the
-          # Publishing API. Set the PLAY_TRACK repository variable if this
-          # project's closed track was created by hand and carries its own name.
-          PLAY_TRACK: ${{ vars.PLAY_TRACK || 'alpha' }}
           # Play's 0-5 in-app update priority, set per release and only
           # settable through the Publishing API. The installed app chooses the
           # update flow; priority alone cannot force installation or block use.
-          PLAY_UPDATE_PRIORITY: ${{ inputs.update_priority || vars.PLAY_UPDATE_PRIORITY || '0' }}
+          PLAY_UPDATE_PRIORITY: ${{ inputs.update_priority || '0' }}
           # Written above, from CHANGELOG.md and the committed artwork.
           # en-US is the store listing's language; images affect the listing
-          # across tracks, even though the bundle goes to closed testing.
+          # across tracks. The production lane fixes the destination and full
+          # rollout status; Play review and managed publishing still apply.
           PLAY_METADATA_DIR: ${{ runner.temp }}/play-metadata
-        run: bundle exec fastlane android closed
+        run: bundle exec fastlane android production
       - name: Remove temporary upload key
         if: always()
         run: rm -f -- "${RUNNER_TEMP:?}/opensplit-upload.jks"
