@@ -425,7 +425,11 @@ Before merging each PR, bump and finalize its own stable version:
 ```sh
 dart run cider bump minor      # or patch, or major
 dart run cider release         # Unreleased becomes this version's section, dated today
+dart run tool/store_artifacts.dart
 ```
+
+The artwork provenance includes `pubspec.yaml`, so regenerate after every
+version bump. This refreshes its manifest and any date-dependent screenshot data.
 
 Both files go in one pull request. A bump without the release leaves
 `pubspec.yaml` naming a version the changelog does not have, and

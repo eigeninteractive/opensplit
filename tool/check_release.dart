@@ -88,7 +88,7 @@ Future<void> _checkProjects(Directory current, Directory previous) async {
     );
   }
   playReleaseNotes(await _cider(current, ['describe', version, '--only-body']));
-  await _checkHistory(current, previous);
+  await _checkHistory(current, previous, version);
 }
 
 bool _isNewer(String version, String oldVersion) {
@@ -114,8 +114,17 @@ List<int> _stableVersion(String version) {
   return version.split('.').map(int.parse).toList();
 }
 
-Future<void> _checkHistory(Directory current, Directory previous) async {
+Future<void> _checkHistory(
+  Directory current,
+  Directory previous,
+  String newVersion,
+) async {
   final history = await _cider(previous, ['list', '--include-yanked']);
+  if (history.split('\n').contains(newVersion)) {
+    throw FormatException(
+      'Version $newVersion is already in the base history.',
+    );
+  }
   for (final version in history.split('\n').where((line) => line.isNotEmpty)) {
     final original = await _cider(previous, ['describe', version]);
     if (await _cider(current, ['describe', version]) != original) {

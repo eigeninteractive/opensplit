@@ -156,16 +156,19 @@ void main() {
   });
 
   test('rejects a version already represented in base history', () async {
-    final file = File('${repository.path}/CHANGELOG.md');
-    final collision = file.readAsStringSync();
     await git(['add', 'CHANGELOG.md']);
     await git(['commit', '--quiet', '-m', 'Existing release section']);
     base = '${(await git(['rev-parse', 'HEAD'])).stdout}'.trim();
-    file.writeAsStringSync(
-      collision.replaceFirst('fixes a bug', 'changes sync'),
+    await expectLater(
+      validate(),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('already in the base history'),
+        ),
+      ),
     );
-
-    await expectLater(validate(), throwsA(isA<FormatException>()));
   });
 
   test('rejects changing published history', () async {
