@@ -225,12 +225,15 @@ Configuration is injected at build time, from a file rather than a dozen
 `--dart-define` flags on one command line — which is how a release ends up
 built against the wrong backend.
 
-Changes intended for the next app release get a [CHANGELOG.md](CHANGELOG.md)
-entry with `dart run cider log fixed 'What changed.'`. When ready to publish
-Android, run `dart run cider bump patch` (or minor/major) and
-`dart run cider release`. Once that version is submitted, further merges without
-a version bump deploy only the web/backend. See *Versions* in
-[docs/runbook.md](docs/runbook.md).
+Every app-changing PR, including cosmetic fixes and app dependency updates,
+needs a [CHANGELOG.md](CHANGELOG.md) entry with
+`dart run cider log fixed 'What changed.'`, a version bump with
+`dart run cider bump patch` (or minor/major), and `dart run cider release`.
+CI checks the bump against the PR's base. Merging deploys the web/backend and
+submits Android to Play production. Backend-only, website, documentation and
+tooling PRs need no app bump and deploy without an Android submission, unless
+an earlier app version is still awaiting a successful submission. See *Versions*
+in [docs/runbook.md](docs/runbook.md).
 
 ```bash
 cp env/app.example.json env/app.json      # gitignored; fill it in

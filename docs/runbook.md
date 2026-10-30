@@ -330,8 +330,9 @@ also submits an Android release to Play production.
 
 A push to `main` runs `.github/workflows/release.yml`:
 
-1. CI, the same jobs as on a pull request, including the existing Cider
-   version/changelog and Play release-note tests.
+1. CI, the same jobs as on a pull request: app changes require a Cider version
+   increase and finalized release notes. On main, the comparison is against
+   the previous push; on PRs, it is against the PR base.
 2. The resource-id check, before anything slow.
 3. The build number and complete web bundle, uploaded as an artifact.
 4. When the app version has no `v<version>` release tag, a signed Android bundle
@@ -352,11 +353,23 @@ the version-bump build, or an upload fails, that app version stays pending for
 the next successful run. Otherwise an ordinary merge could lose the requested
 Android release. Once tagged, subsequent merges skip Android until the next bump.
 
-Documentation, website, cosmetic and dependency PRs do not need an app version
-bump. They can merge without Android signing, an AAB build or a Play submission.
-Shared Flutter UI changes still reach the web deployment; Android receives them
-in the next versioned release. App dependencies and fixes can also accumulate
-until a version bump intentionally publishes them.
+Every app-changing PR, including cosmetic fixes and app dependency updates,
+needs a version bump and finalized notes. Its merge deploys the web/backend
+and submits Android from the same commit. Website, backend-only, documentation,
+tests and release tooling need no app bump; they skip Android unless a previous
+app release is still pending. A backend change that needs a new client must
+include that client change and its app version bump.
+
+`tool/check_app_release.dart` runs inside the required **Analyse and test** job.
+It treats `lib/`, `assets/`, `android/`, `web/`, the generated API package's
+`lib/`, and `service_worker/src/` as app inputs. App dependency manifests and
+lockfiles, code generation/localization/icon/splash configuration, and service
+worker build configuration also count. Dependency manifests are deliberately
+conservative: even a dev-dependency-only edit to an app pubspec requires a bump.
+Tests, store listing artwork, release scripts/workflows and public site files
+are exempt. The check uses Cider to read the versions and changelog, requires
+a newer stable version, and validates the released section through the existing
+Play note formatter. Published changelog history is not audited.
 
 The current-main check skips superseded commits when merges overlap. A green
 upload means Play accepted the submission, not that review has finished or
@@ -382,9 +395,10 @@ untagged.
 Dependabot opens one weekly `routine-dependencies` pull request across the
 Flutter app, generated API package, Worker, service worker, GitHub Actions and
 Fastlane. Minor and patch updates share the full CI matrix and one merge to
-`main`, which deploys the web/backend. Bump the app version in the dependency PR
-when its changes should also ship to Android. Grouping does not enable automatic
-merging.
+`main`, which deploys the web/backend. A batch that changes app dependency
+manifests or lockfiles needs a Cider bump and release, and also submits Android.
+Backend-only or release-tool-only updates need no app bump. Grouping does not
+enable automatic merging.
 The configuration is in [`.github/dependabot.yml`](../.github/dependabot.yml);
 see GitHub's [multi-ecosystem grouping documentation](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/configuring-multi-ecosystem-updates).
 
@@ -423,19 +437,20 @@ pins, the same everywhere.
 
 ### In every pull request
 
-Changes intended for the next app release get an entry under *Unreleased*:
+Every app-changing PR, including cosmetic fixes, gets an entry under *Unreleased*:
 
 ```sh
 dart run cider log fixed 'Totals no longer round twice.'
 # or added, changed, deprecated, removed, security
 ```
 
-Write it for a user: the lines become the release's notes in Play. Documentation
-and standalone website changes need no app changelog entry or version bump.
+Write it for a user: the lines become the release's notes in Play. Backend-only,
+documentation, standalone website, tests and release tooling changes need no app
+changelog entry or version bump.
 
 ### Cutting a version
 
-When ready to publish Android, bump and finalize the version in a PR:
+Bump and finalize the version in that same app-changing PR:
 
 ```sh
 dart run cider bump minor      # or patch, or major
@@ -446,11 +461,20 @@ dart run tool/store_artifacts.dart
 The artwork provenance includes `pubspec.yaml`, so regenerate after every
 version bump. This refreshes its manifest and any date-dependent screenshot data.
 
-Both files go in the PR. The existing release-note tests check that Cider can
-read a section for the current version and produce nonempty Play-compatible
-notes. The release workflow reads the version with Cider and checks for its
-release tag before building Android. Use the normal Cider bump commands to
-advance the version; semantic bump size remains a review decision.
+Both files go in the PR. CI compares app inputs with the PR base and requires
+a higher stable app version, a released section with nonempty Play-compatible
+notes, and no remaining Unreleased entries. If another app PR merges first,
+update your branch, bump beyond main's new version, and finalize the combined
+notes again. Main requires branches to be up to date before merging.
+
+To run the same check locally after committing your changes:
+
+```sh
+dart run tool/check_app_release.dart origin/main
+```
+
+The release workflow reads the version with Cider and checks for its release
+tag before building Android. Semantic bump size remains a review decision.
 
 Which part to bump: patch when a version only fixes things, minor when it adds
 anything, and major when it leaves older clients behind, such as a server change
