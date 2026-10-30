@@ -1,7 +1,7 @@
 {
   "version": 1,
   "inputs": {
-    ".github/workflows/ci.yml": "2e72f8aa1d99d3a27eee1a71a881c229c27e5ca299fcf3a029e088c26ad2ae1a",
+    ".github/workflows/ci.yml": "84836b704aee490b3f02bd1d329b607a903140b961bc843f02befe90bf4eed85",
     "assets/brand/lockup-horizontal.svg": "0d0867f40d2351996ff7a808751d7b6e44e65323e0b4894bff6f6647f032ba15",
     "assets/brand/lockup-vertical.svg": "c32df2988057fc53cd5502a1823f6ce06b41e64e724c09d3f6cf140f1353d9fd",
     "assets/brand/mark-1024-dark.png": "7e19e1c337a842a697b0128163e817e231653c9ae0df56f93d241258d36aed45",
@@ -360,11 +360,11 @@
   },
   "outputs": {
     "site/store/screenshot-1-groups.png": "5a423c4ee53d798e8cc5c3d6c88c7c0463537b9496a5c3af209131e9a0adaa75",
-    "site/store/screenshot-2-expenses.png": "bf13ae85570f7b0fc498097d714aa8a4ac61a49c663cd4143708fd596f453365",
+    "site/store/screenshot-2-expenses.png": "0865049e8f6453ee82c5dcd2674c863210c5d7dc3a7ac81044395f7e7c1dab19",
     "site/store/screenshot-3-balances.png": "cf8b93928e508999a1996c9bf1a763aee59ec7b1539540cb57406d6359945915",
     "site/store/screenshot-4-add-expense.png": "d4ca87fb76b9cffbf8fcbd53d4064b669802f5e55d1a099aeaf4447f9ae43027",
     "site/store/screenshot-5-insights.png": "876fe78c5ce4952a58b27fc3171b3fed13fc0341fa0d0234413f27fc61ca30a9",
-    "site/store/web-app.png": "932618a787d758163203b922fc193157432f6b033f7a3d6b5f0879b768181925",
+    "site/store/web-app.png": "f480ff75b808f800ece8b8d0adabe7104b4efc37d1a44978d8b6c87f1902f5f2",
     "site/store/og-card.png": "b0a268e14bcdf8d3466d0bcb030ea9580994afa9b7737cd4e70347557a8e62e5",
     "site/store/feature-graphic.jpg": "0bd2040b384175626d695087aabc4771962201c3c5fe51a06ba7d0a570185a0d",
     "site/email/wordmark.png": "8c43232387a3464261b7b86957495f972a1b4540d122d0cbfb33e5b18ad50b4c"

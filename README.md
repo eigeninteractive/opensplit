@@ -225,11 +225,15 @@ Configuration is injected at build time, from a file rather than a dozen
 `--dart-define` flags on one command line — which is how a release ends up
 built against the wrong backend.
 
-A change someone using the app would notice also gets a line in
-[CHANGELOG.md](CHANGELOG.md), which becomes the testers' notes in Play:
-`dart run cider log fixed 'What changed, for a tester.'`. How versions are cut
-and how builds are numbered is under *Versions* in
-[docs/runbook.md](docs/runbook.md).
+Every app-changing PR, including cosmetic fixes and app dependency updates,
+needs a [CHANGELOG.md](CHANGELOG.md) entry with
+`dart run cider log fixed 'What changed.'`, a version bump with
+`dart run cider bump patch` (or minor/major), and `dart run cider release`.
+CI checks the bump against the PR's base. Merging deploys the web/backend and
+submits Android to Play production. Backend-only, website, documentation and
+tooling PRs need no app bump and deploy without an Android submission, unless
+an earlier app version is still awaiting a successful submission. See *Versions*
+in [docs/runbook.md](docs/runbook.md).
 
 ```bash
 cp env/app.example.json env/app.json      # gitignored; fill it in
@@ -306,9 +310,11 @@ package, and only `tool/build_web.dart` may produce a deployable web directory.
 It verifies the configuration, builds the client, and then has Workbox precache
 the finished release, bundling Firebase's public identifiers into the worker. CI uses structurally valid inert identifiers to prove
 the release build. After every CI gate passes, pushes to `main` build with real
-production variables, deploy the Worker and web bundle together, and distribute
-a signed AAB and listing artwork to Play closed testing. Release reruns the same
-CI checks before publishing. A manual **Release** run with **deploy unchecked**
+production variables and deploy the Worker and web bundle together. When the
+app version has no release tag yet, the workflow builds a signed AAB and submits
+it with listing artwork to Play production for full rollout after Google approval.
+Release reruns the same CI checks before deploying. A manual **Release** run
+with **deploy unchecked**
 creates artifacts only, for first-upload bootstrap.
 
 Every integration is off unless configured, and hidden rather than shown broken:

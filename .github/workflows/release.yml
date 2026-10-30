@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       deploy:
-        description: Deploy to Cloudflare and Play (uncheck for first-upload artifacts only)
+        description: Deploy web/backend and a pending app version (uncheck for artifacts only)
         type: boolean
         default: false
       update_priority:
@@ -48,6 +48,7 @@ jobs:
       id-token: write
     outputs:
       version: ${{ steps.build.outputs.version }}
+      app_release: ${{ steps.build.outputs.app_release }}
     env:
       BUNDLE_FROZEN: "true"
       FASTLANE_SKIP_UPDATE_CHECK: "true"
@@ -66,13 +67,6 @@ jobs:
           cache-dependency-path: |
             server/pnpm-lock.yaml
             service_worker/pnpm-lock.yaml
-      - uses: ruby/setup-ruby@v1
-        with:
-          bundler-cache: true
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: "17"
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.47.4"
@@ -102,8 +96,8 @@ jobs:
             WEB_FCM_API_KEY, WEB_FCM_APP_ID
           }' > env/app.json
       - run: flutter pub get --enforce-lockfile
-      # One number for the whole release, given to the web bundle and the
-      # Android bundle alike, so About shows the same "1.2.0 (1701)" on both.
+      # One number per deployment. An app release gives the same number to
+      # web and Android; other merges only advance the web build number.
       # The version name is pubspec.yaml's, set with cider; see "Versions" in
       # docs/runbook.md.
       - name: Number this build
@@ -123,10 +117,34 @@ jobs:
           echo "number=$number" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "Building $version ($number)."
+          # A tag records a successful Play submission. Keep a bumped version
+          # pending across superseding web-only merges and failed uploads.
+          git fetch origin --tags
+          app_release=true
+          if git show-ref --verify --quiet "refs/tags/v$version"; then
+            app_release=false
+          fi
+          echo "app_release=$app_release" >> "$GITHUB_OUTPUT"
+          build_android=$app_release
+          if [[ "$GITHUB_EVENT_NAME" == 'workflow_dispatch' ]]; then
+            build_android=true
+          fi
+          echo "BUILD_ANDROID=$build_android" >> "$GITHUB_ENV"
+          echo "Android release pending: $app_release"
+      - uses: ruby/setup-ruby@v1
+        if: env.BUILD_ANDROID == 'true'
+        with:
+          bundler-cache: true
+      - uses: actions/setup-java@v6
+        if: env.BUILD_ANDROID == 'true'
+        with:
+          distribution: temurin
+          java-version: "17"
       # Before the slow build, so a changelog Play would refuse fails in
       # seconds. Package the notes and artwork into the runner's temporary
       # directory, leaving the checkout and generated screenshots untouched.
       - name: Prepare the Play listing and release notes
+        if: env.BUILD_ANDROID == 'true'
         run: |
           dart run tool/play_metadata.dart --output="$RUNNER_TEMP/play-metadata"
           cat "$RUNNER_TEMP/play-metadata/en-US/changelogs/default.txt"
@@ -136,6 +154,7 @@ jobs:
           BUILD_NUMBER: ${{ steps.build.outputs.number }}
         run: dart run tool/build_web.dart --build-number="$BUILD_NUMBER"
       - name: Install Android upload key
+        if: env.BUILD_ANDROID == 'true'
         env:
           ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
         run: |
@@ -144,6 +163,7 @@ jobs:
             | base64 --decode > "$RUNNER_TEMP/opensplit-upload.jks"
           test -s "$RUNNER_TEMP/opensplit-upload.jks"
       - name: Build signed Android bundle
+        if: env.BUILD_ANDROID == 'true'
         env:
           ANDROID_UPLOAD_KEYSTORE_PATH: ${{ runner.temp }}/opensplit-upload.jks
           ANDROID_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_STORE_PASSWORD }}
@@ -161,14 +181,21 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: opensplit-${{ github.sha }}-${{ github.run_attempt }}
+          path: build/web
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v7
+        if: env.BUILD_ANDROID == 'true'
+        with:
+          name: opensplit-android-${{ github.sha }}-${{ github.run_attempt }}
           path: |
-            build/web
             build/app/outputs/bundle/release/app-release.aab
             build/app/outputs/mapping/release
             build/debug-info/android
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v7
+        if: env.BUILD_ANDROID == 'true'
         with:
           name: opensplit-play-metadata-${{ github.sha }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/play-metadata
@@ -232,29 +259,25 @@ jobs:
           echo "The deployed Worker did not answer /api/health." >&2
           exit 1
       - name: Authenticate to Google Play (keyless)
-        if: github.event_name == 'push' || inputs.deploy
+        if: steps.build.outputs.app_release == 'true' && (github.event_name == 'push' || inputs.deploy)
         uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.PLAY_DEPLOY_SERVICE_ACCOUNT }}
           project_id: ${{ vars.FIREBASE_PROJECT_ID }}
-      - name: Distribute to Play closed testing
-        if: github.event_name == 'push' || inputs.deploy
+      - name: Submit to Play production
+        if: steps.build.outputs.app_release == 'true' && (github.event_name == 'push' || inputs.deploy)
         env:
-          PLAY_RELEASE_STATUS: ${{ vars.PLAY_RELEASE_STATUS || 'completed' }}
-          # Google's default closed track is still called "alpha" in the
-          # Publishing API. Set the PLAY_TRACK repository variable if this
-          # project's closed track was created by hand and carries its own name.
-          PLAY_TRACK: ${{ vars.PLAY_TRACK || 'alpha' }}
           # Play's 0-5 in-app update priority, set per release and only
           # settable through the Publishing API. The installed app chooses the
           # update flow; priority alone cannot force installation or block use.
-          PLAY_UPDATE_PRIORITY: ${{ inputs.update_priority || vars.PLAY_UPDATE_PRIORITY || '0' }}
+          PLAY_UPDATE_PRIORITY: ${{ inputs.update_priority || '0' }}
           # Written above, from CHANGELOG.md and the committed artwork.
           # en-US is the store listing's language; images affect the listing
-          # across tracks, even though the bundle goes to closed testing.
+          # across tracks. The production lane fixes the destination and full
+          # rollout status; Play review and managed publishing still apply.
           PLAY_METADATA_DIR: ${{ runner.temp }}/play-metadata
-        run: bundle exec fastlane android closed
+        run: bundle exec fastlane android production
       - name: Remove temporary upload key
         if: always()
         run: rm -f -- "${RUNNER_TEMP:?}/opensplit-upload.jks"
@@ -264,7 +287,7 @@ jobs:
   tag:
     name: Tag the version
     needs: publish
-    if: github.event_name == 'push' || inputs.deploy
+    if: (github.event_name == 'push' || inputs.deploy) && needs.publish.outputs.app_release == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:

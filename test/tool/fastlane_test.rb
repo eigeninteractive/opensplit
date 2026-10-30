@@ -14,6 +14,17 @@ def assert(condition, message)
   raise message unless condition
 end
 
+def refuses_upload(fastfile, uploads, lane, message)
+  before = uploads.size
+  begin
+    fastfile.runner.execute(lane, :android)
+    raise "Expected #{lane} to refuse #{message}"
+  rescue FastlaneCore::Interface::FastlaneError, ArgumentError => error
+    assert(error.message.include?(message), "Unexpected error: #{error.message}")
+  end
+  assert(uploads.size == before, "Invalid inputs reached the upload action")
+end
+
 repository = File.expand_path("../..", __dir__)
 original_environment = ENV.to_h
 temporary = Dir.mktmpdir("opensplit-fastlane-")
@@ -58,16 +69,50 @@ begin
     assert(options[:sync_image_upload], "Unchanged artwork should be skipped")
     assert(options[:rescue_changes_not_sent_for_review] == false, "Review failures must remain visible")
 
-    File.delete(File.join(metadata, "en-US/images/phoneScreenshots/5.png"))
-    begin
-      fastfile.runner.execute(:closed, :android)
-      raise "Missing artwork should refuse the upload"
-    rescue FastlaneCore::Interface::FastlaneError => error
-      assert(error.message.include?("PLAY_METADATA_DIR"), "Expected an actionable artwork error")
+    # Production's track and status cannot drift through old repository vars.
+    ENV["PLAY_TRACK"] = "alpha"
+    ENV["PLAY_RELEASE_STATUS"] = "draft"
+    ENV.delete("PLAY_UPDATE_PRIORITY")
+    fastfile.runner.execute(:production, :android)
+    options = uploads.last
+    assert(options[:track] == "production", "Production lane must publish to production")
+    assert(options[:release_status] == "completed", "Production must request full rollout")
+    assert(options[:rollout].nil?, "Production must not leave a staged rollout")
+    assert(options[:in_app_update_priority] == 0, "Ordinary releases must default to priority 0")
+    assert(File.realpath(options[:aab]) == File.realpath(bundle), "Production must use the signed CI bundle")
+    assert(options[:metadata_path] == metadata, "Production must include the prepared notes and artwork")
+    assert(options[:rescue_changes_not_sent_for_review] == false, "Production review failures must remain visible")
+
+    ENV["PLAY_UPDATE_PRIORITY"] = "4"
+    fastfile.runner.execute(:production, :android)
+    assert(uploads.last[:in_app_update_priority] == 4, "Explicit urgent priority must be preserved")
+    ENV["PLAY_UPDATE_PRIORITY"] = "0"
+
+    fastfile.runner.execute(:internal, :android)
+    assert(uploads.last[:track] == "internal", "Internal lane must remain available")
+    assert(uploads.last[:release_status] == "draft", "Testing can still prepare drafts")
+    ENV["PLAY_TRACK"] = "production"
+    refuses_upload(fastfile, uploads, :closed, "PLAY_TRACK")
+    ENV["PLAY_TRACK"] = "alpha"
+    ENV["PLAY_RELEASE_STATUS"] = "inProgress"
+    refuses_upload(fastfile, uploads, :closed, "PLAY_RELEASE_STATUS")
+    ENV["PLAY_RELEASE_STATUS"] = "completed"
+    [-1, 6, "urgent"].each do |priority|
+      ENV["PLAY_UPDATE_PRIORITY"] = priority.to_s
+      refuses_upload(fastfile, uploads, :production, "PLAY_UPDATE_PRIORITY")
     end
-    assert(uploads.size == 1, "Incomplete artwork reached the upload action")
+    ENV["PLAY_UPDATE_PRIORITY"] = "0"
+
+    File.delete(File.join(metadata, "en-US/images/phoneScreenshots/5.png"))
+    refuses_upload(fastfile, uploads, :production, "PLAY_METADATA_DIR")
+    File.write(File.join(metadata, "en-US/images/phoneScreenshots/5.png"), "test metadata")
+    File.delete(bundle)
+    refuses_upload(fastfile, uploads, :production, "signed release AAB")
+    File.write(bundle, "test bundle")
+    File.delete(credentials)
+    refuses_upload(fastfile, uploads, :production, "credentials file")
   end
-  puts "Fastlane artwork upload configuration passed."
+  puts "Fastlane production and testing upload configuration passed."
 ensure
   ENV.replace(original_environment)
   FileUtils.remove_entry(temporary)
