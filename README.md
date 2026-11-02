@@ -235,6 +235,10 @@ tooling PRs need no app bump and deploy without an Android submission, unless
 an earlier app version is still awaiting a successful submission. See *Versions*
 in [docs/runbook.md](docs/runbook.md).
 
+Production Play priority follows the Cider bump from the last submitted release:
+major 5 (immediate update flow), minor 2 and patch 0 (dismissible updates).
+Play availability and eligibility still apply; users can cancel the update.
+
 ```bash
 cp env/app.example.json env/app.json      # gitignored; fill it in
 cp android/key.properties.example android/key.properties   # gitignored too

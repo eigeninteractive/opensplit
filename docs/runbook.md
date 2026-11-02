@@ -316,9 +316,11 @@ plus `PLAY_DEPLOY_SERVICE_ACCOUNT`, `GCP_WORKLOAD_IDENTITY_PROVIDER`, and
 `FIREBASE_PROJECT_ID`, which the Play step authenticates against. Production's
 track and full rollout status are fixed in the Fastlane production lane;
 `PLAY_TRACK` and `PLAY_RELEASE_STATUS` only configure manual testing lanes.
-Automatic releases use update priority 0. A manual Release run can explicitly
-choose a different priority; the old `PLAY_UPDATE_PRIORITY` repository or
-environment variable is not read by the workflow.
+Production update priority comes from the Cider version compared with the
+last submitted app release tag: major **5**, minor **2**, patch **0**. CI passes
+`PLAY_APP_VERSION` and `PLAY_PREVIOUS_VERSION` to Fastlane, which computes the
+priority. Automatic and manual production runs use the same rule; there is
+no manual priority input. `PLAY_UPDATE_PRIORITY` only configures testing lanes.
 `dart run tool/verify_config.dart` checks the shape of every value.
 
 From here on, a push to `main` deploys the web/backend. A changed app version
@@ -352,6 +354,12 @@ The tag is the release-completion marker. If a newer web-only merge supersedes
 the version-bump build, or an upload fails, that app version stays pending for
 the next successful run. Otherwise an ordinary merge could lose the requested
 Android release. Once tagged, subsequent merges skip Android until the next bump.
+
+The previous version is the nearest release tag on main's first-parent history,
+not the previous merge or the newest changelog section. A pending major followed
+by a backend-only merge or an unsubmitted patch still gets major priority. A
+patch after a successfully submitted major gets priority 0. The existing
+`v4.1.0` testing release tag is the baseline for the first new production release.
 
 Every app-changing PR, including cosmetic fixes and app dependency updates,
 needs a version bump and finalized notes. Its merge deploys the web/backend
@@ -387,6 +395,7 @@ A manual run (*Actions → Release → Run workflow*) with **deploy** unchecked
 builds web and Android artifacts without deploying anything. Checking **deploy**
 deploys the web/backend and submits Android only if the app version is still
 untagged.
+Its production update priority is also derived from the version bump.
 
 ---
 
@@ -476,11 +485,22 @@ dart run tool/check_app_release.dart origin/main
 The release workflow reads the version with Cider and checks for its release
 tag before building Android. Semantic bump size remains a review decision.
 
-Which part to bump: patch when a version only fixes things, minor when it adds
-anything, and major when it leaves older clients behind, such as a server change
-they can no longer talk to. Send a breaking release with update priority 4 so
-eligible clients request an immediate update when Play makes it available.
-Priority does not replace the pause or verify that everyone has installed it.
+Which part to bump: patch for fixes, minor for features, and major for breaking
+changes. Fastlane maps the bump relative to the last submitted version to:
+
+| Bump | Play priority | App behavior when Play permits the flow |
+|---|---|---|
+| Major | 5 | Request the immediate update flow |
+| Minor | 2 | Offer a dismissible flexible update |
+| Patch | 0 | Keep the dismissible flexible update |
+
+Users can cancel the immediate flow; this policy does not add a client lockout.
+Play reports the highest priority across releases skipped by an installed
+client, so someone skipping a major can still see an immediate update when the
+latest version is a patch. Priority does not bypass review, force installation,
+or replace a compatibility plan for breaking backend changes.
+See [Google's update-priority rules](https://developer.android.com/guide/playcore/in-app-updates/kotlin-java#check-priority)
+for the behavior across skipped releases.
 
 Merges without a version bump keep the app version name. An app release or
 manual artifact build receives its own build number; CI does not create

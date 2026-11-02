@@ -36,6 +36,11 @@ Read the runbook's [release lifecycle](docs/runbook.md#every-release) and
   versions also submit Android to Play production. CI assigns build numbers
   and creates release tags; Play review and publishing settings still apply.
   Keep backend/schema changes compatible with installed older clients.
+* Production Play priority is derived from the Cider version relative to the
+  last submitted release tag: major 5, minor 2, patch 0. Major updates request
+  Play's immediate flow; minor and patch updates keep a dismissible prompt.
+  This does not add a client lockout or guarantee installation. Manual
+  production runs follow the same version-based rule.
 
 ## Interaction Guidelines
 * **User Persona:** Assume the user is familiar with programming concepts but

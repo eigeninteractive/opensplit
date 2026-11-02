@@ -9,15 +9,6 @@ on:
         description: Deploy web/backend and a pending app version (uncheck for artifacts only)
         type: boolean
         default: false
-      update_priority:
-        description: >-
-          Play in-app update priority, 0-5. The app can offer an immediate
-          update at 4 or above when Play makes it available and permits the
-          flow. Use 4 for breaking releases; priority alone does not block
-          clients or protect data during review or installation.
-        type: choice
-        default: "0"
-        options: ["0", "1", "2", "3", "4", "5"]
 
 permissions:
   contents: read
@@ -57,6 +48,9 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          # Find the last submitted app release along main's history, even
+          # after intervening backend-only merges or failed submissions.
+          fetch-depth: 0
       - uses: pnpm/action-setup@v6
         with:
           package_json_file: server/package.json
@@ -123,6 +117,12 @@ jobs:
           app_release=true
           if git show-ref --verify --quiet "refs/tags/v$version"; then
             app_release=false
+          fi
+          if [[ "$app_release" == 'true' ]]; then
+            previous_tag="$(git describe --first-parent --tags --abbrev=0 \
+              --match 'v[0-9]*.[0-9]*.[0-9]*' HEAD)"
+            echo "previous_version=${previous_tag#v}" >> "$GITHUB_OUTPUT"
+            echo "Previous submitted app version: ${previous_tag#v}"
           fi
           echo "app_release=$app_release" >> "$GITHUB_OUTPUT"
           build_android=$app_release
@@ -268,10 +268,11 @@ jobs:
       - name: Submit to Play production
         if: steps.build.outputs.app_release == 'true' && (github.event_name == 'push' || inputs.deploy)
         env:
-          # Play's 0-5 in-app update priority, set per release and only
-          # settable through the Publishing API. The installed app chooses the
-          # update flow; priority alone cannot force installation or block use.
-          PLAY_UPDATE_PRIORITY: ${{ inputs.update_priority || '0' }}
+          # Fastlane derives priority from the Cider version relative to the
+          # last submitted tag: major 5, minor 2, patch 0. This also preserves
+          # urgency across failed uploads and superseding backend-only merges.
+          PLAY_APP_VERSION: ${{ steps.build.outputs.version }}
+          PLAY_PREVIOUS_VERSION: ${{ steps.build.outputs.previous_version }}
           # Written above, from CHANGELOG.md and the committed artwork.
           # en-US is the store listing's language; images affect the listing
           # across tracks. The production lane fixes the destination and full
