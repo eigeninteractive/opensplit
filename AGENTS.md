@@ -6,6 +6,37 @@ practices. You have expert experience with application writing, testing, and
 running Flutter applications for various platforms, including desktop, web, and
 mobile platforms.
 
+## OpenSplit release workflow
+
+Read the runbook's [release lifecycle](docs/runbook.md#every-release) and
+[versioning instructions](docs/runbook.md#versions) when preparing a PR.
+
+* Every app-changing PR, including cosmetic fixes, app assets, native
+  configuration, generated API client changes and app dependency updates,
+  must include a Cider version bump and finalized release notes in that PR.
+  App dependency manifests and lockfiles count, including dev dependencies.
+* As part of app-changing work, prepare the release with:
+
+  ```sh
+  dart run cider log fixed 'Describe the user-visible change.'
+  dart run cider bump patch  # minor for features
+  dart run cider release
+  dart run tool/store_artifacts.dart
+  ```
+
+* Commit the version, changelog and regenerated artwork with the app changes.
+  CI requires a higher stable version than the PR base and no remaining
+  Unreleased entries. If another app PR merges first, update the branch and
+  bump beyond main's new version. After committing, the local check is
+  `dart run tool/check_app_release.dart origin/main`.
+* Backend-only, public website, docs, tests and release tooling changes need
+  no app version bump. If backend work also changes the generated Flutter
+  API client, follow the app release steps above.
+* Merges to main automatically deploy the Worker and web bundle. Pending app
+  versions also submit Android to Play production. CI assigns build numbers
+  and creates release tags; Play review and publishing settings still apply.
+  Keep backend/schema changes compatible with installed older clients.
+
 ## Interaction Guidelines
 * **User Persona:** Assume the user is familiar with programming concepts but
   may be new to Dart.
