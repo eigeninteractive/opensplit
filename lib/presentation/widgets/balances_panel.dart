@@ -228,8 +228,14 @@ class _CurrencySection extends StatelessWidget {
           const _Subheading('Your payments'),
           transfersOf(yours),
         ],
-        const _Subheading('Everyone'),
-        SegmentedList(
+        // What you act on leads. The rest is reference, so it stays folded
+        // away unless there is nothing of yours above it.
+        const SizedBox(height: 16),
+        _Fold(
+          storageKey: 'everyone-${ledger.group.id}-$code',
+          title: "Everyone's balances",
+          summary: '${balances.length} people',
+          initiallyExpanded: yours.isEmpty,
           children: [
             for (final balance in balances)
               _MemberBalanceRow(
@@ -240,17 +246,68 @@ class _CurrencySection extends StatelessWidget {
           ],
         ),
         if (others.isNotEmpty) ...[
-          _Subheading(
-            yours.isEmpty
-                ? 'Settle with ${others.length} '
-                      '${others.length == 1 ? 'payment' : 'payments'}'
-                : 'Between the others',
+          const SizedBox(height: 8),
+          _Fold(
+            storageKey: 'others-${ledger.group.id}-$code',
+            title: yours.isEmpty
+                ? 'Payments that settle the group'
+                : 'Payments between others',
+            summary:
+                '${others.length} '
+                '${others.length == 1 ? 'payment' : 'payments'}',
+            initiallyExpanded: yours.isEmpty,
+            children: [
+              for (final transfer in others)
+                _TransferTile(
+                  ledger: ledger,
+                  transfer: transfer,
+                  currency: currency,
+                ),
+            ],
           ),
-          transfersOf(others),
         ],
       ],
     );
   }
+}
+
+/// A group of rows folded under its own heading: Material's expansion
+/// tile, on the surface and corners the lists around it use.
+class _Fold extends StatelessWidget {
+  const _Fold({
+    required this.storageKey,
+    required this.title,
+    required this.summary,
+    required this.initiallyExpanded,
+    required this.children,
+  });
+
+  /// Keeps the fold open or shut while the other tab is showing.
+  final String storageKey;
+  final String title;
+  final String summary;
+  final bool initiallyExpanded;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Theme.of(context).colorScheme.surfaceContainerHigh,
+    clipBehavior: Clip.antiAlias,
+    shape: RoundedRectangleBorder(
+      borderRadius: Segment.radiusAt(index: 0, count: 1),
+    ),
+    child: ExpansionTile(
+      key: PageStorageKey(storageKey),
+      initiallyExpanded: initiallyExpanded,
+      // The surface already has its outline; the tile's own dividers
+      // would draw a second one inside it.
+      shape: const Border(),
+      collapsedShape: const Border(),
+      title: Text(title),
+      subtitle: Text(summary),
+      children: children,
+    ),
+  );
 }
 
 /// A currency's name, heading its section.
@@ -606,16 +663,19 @@ class _MemberBalanceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final amount = formatMoneyAbs(currency, balance.balanceMinor);
-    final who = ledger.nameOf(balance.memberId);
-    final verb = balance.balanceMinor > 0 ? 'is owed' : 'owes';
     final isMe = balance.memberId == ledger.me?.id;
+    final who = isMe ? 'You' : ledger.nameOf(balance.memberId);
+    final owed = balance.balanceMinor > 0;
+    final verb = isMe
+        ? (owed ? 'are owed' : 'owe')
+        : (owed ? 'is owed' : 'owes');
     final member = ledger.memberById(balance.memberId);
 
     return ListTile(
       leading: member == null
           ? null
           : MemberAvatar(ledger: ledger, member: member),
-      title: Text(isMe ? '$who (you)' : who),
+      title: Text(who),
       trailing: BalanceAmount(
         balanceMinor: balance.balanceMinor,
         text: '$verb $amount',

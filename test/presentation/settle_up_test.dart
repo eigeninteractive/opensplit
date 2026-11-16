@@ -195,7 +195,7 @@ void main() {
     expect(find.text('Pay by UPI'), findsNothing);
     expect(find.text('History'), findsOneWidget);
     expect(_shownIn(tester, 'Paid by'), 'Priya');
-    expect(_shownIn(tester, 'Paid to'), 'Ravi (you)');
+    expect(_shownIn(tester, 'Paid to'), 'You');
     Finder field(String label) =>
         find.ancestor(of: find.text(label), matching: find.byType(TextField));
     await tester.enterText(field('Amount'), '900');

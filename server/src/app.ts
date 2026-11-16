@@ -9,6 +9,7 @@ import { referenceRoutes } from "./api/reference";
 import { unavailableApi } from "./api/routing";
 import { type AppEnv, services } from "./context";
 import { identityRoutes } from "./identity/routes";
+import { joinToken, withLinkPreview } from "./link-preview";
 import { openApiDocument } from "./openapi";
 import { apiBasePath, authBasePath } from "./paths";
 import { apiError, jsonResponse } from "./schemas/common";
@@ -74,14 +75,16 @@ app.all("/api/*", (c) => unavailableApi(c));
 /**
  * No asset matched. A path under `/app` is a client deep link such as
  * `/app/join/:token`, answered with the client's own document (none of the
- * platform's `not_found_handling` modes picks that document); anything else is
- * the 404 page.
+ * platform's `not_found_handling` modes picks that document), with a join
+ * link's preview naming its group; anything else is the 404 page.
  */
 app.all("*", async (c) => {
   const url = new URL(c.req.url);
   if (url.pathname === "/app" || url.pathname.startsWith("/app/")) {
     const response = await c.env.ASSETS.fetch(new Request(new URL("/app/index.html", url.origin), { headers: c.req.raw.headers }));
-    return new Response(response.body, { status: response.status === 404 ? 404 : 200, headers: response.headers });
+    const document = new Response(response.body, { status: response.status === 404 ? 404 : 200, headers: response.headers });
+    const token = c.req.method === "GET" ? joinToken(url.pathname) : null;
+    return token ? withLinkPreview(c, token, document) : document;
   }
 
   const notFound = await c.env.ASSETS.fetch(new Request(new URL("/404.html", url.origin)));

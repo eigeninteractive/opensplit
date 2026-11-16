@@ -8,6 +8,9 @@ To run this producer alone: python3 tool/store_graphics.py.
 The first two outputs frame a real screenshot:
 
 - site/store/og-card.png, 1200 x 630, the link preview Open Graph asks for.
+- site/store/og-invite.png, 1200 x 630, the preview an invite link unfurls
+  with (server/src/link-preview.ts). No screenshot and no pitch, so that a
+  link somebody was sent reads as an invitation rather than an advert.
 - site/store/feature-graphic.jpg, 1024 x 500, used in Play promotional and preview placements.
   JPEG because Play rejects a PNG with an alpha channel, even an opaque one.
 - site/email/wordmark.png, the lockup at three times the size the email shows
@@ -149,6 +152,36 @@ def compose(width, height, layout):
     return canvas.resize((width, height), Image.LANCZOS).convert('RGB')
 
 
+def invite_card(width, height):
+    """The card an invite link unfurls with: the lockup, and what the link is.
+
+    The group's own name is in the preview's title, which the Worker writes
+    per link; this picture is the same for all of them.
+    """
+    W, H = width * S, height * S
+    canvas = Image.new('RGBA', (W, H), PAPER + (255,))
+    draw = ImageDraw.Draw(canvas)
+
+    radius = 0.50 * H
+    mark(draw, (W - 0.30 * H, H * 0.56), radius, radius * 6.5 / 17,
+         PRIMARY_CONTAINER, PAPER)
+
+    margin = 0.13 * H
+    wordmark(draw, (margin, 0.20 * H), 0.058 * H)
+    headline = ImageFont.truetype(SEMIBOLD, round(0.118 * H))
+    y = 0.48 * H
+    for line in ["You're invited", 'to a group.']:
+        draw.text((margin, y), line, font=headline, fill=INK, anchor='ls')
+        y += 0.118 * H * 1.02
+    body = ImageFont.truetype(REGULAR, round(0.042 * H))
+    y += 0.042 * H * 0.9
+    for line in ['Open the link to join and split', 'expenses together.']:
+        draw.text((margin, y), line, font=body, fill=SLATE, anchor='ls')
+        y += 0.042 * H * 1.45
+
+    return canvas.resize((width, height), Image.LANCZOS).convert('RGB')
+
+
 def email_wordmark(size, scale):
     """The lockup alone on the email card's surface, [size] px type at [scale]x.
 
@@ -195,7 +228,11 @@ def build():
     })
     play.save('site/store/feature-graphic.jpg', quality=92, optimize=True)
 
-    for name, image in [('og-card.png', og), ('feature-graphic.jpg', play)]:
+    invite = invite_card(1200, 630)
+    invite.save('site/store/og-invite.png', optimize=True)
+
+    for name, image in [('og-card.png', og), ('og-invite.png', invite),
+                        ('feature-graphic.jpg', play)]:
         print(f'site/store/{name}: {image.width}x{image.height}')
 
     email = email_wordmark(20, 3)

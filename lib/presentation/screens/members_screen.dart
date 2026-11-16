@@ -69,24 +69,8 @@ class MembersScreen extends ConsumerWidget {
                               ledger: ledger,
                               member: member,
                             ),
-                            title: Text(
-                              ledger.nameOfMember(member) +
-                                  (member.id == ledger.me?.id ? ' (you)' : ''),
-                            ),
-                            subtitle: Text(
-                              !member.isActive
-                                  ? 'Left the group'
-                                  : ledger.upiOf(member) != null
-                                  // The handle is the useful thing to see at a glance
-                                  // here: it is what makes settling with this person
-                                  // one tap instead of a chat message asking for it.
-                                  ? ledger.upiOf(member)!
-                                  : member.isPlaceholder
-                                  // Blunt on purpose: a placeholder is a real member
-                                  // with real money attached, not a draft.
-                                  ? 'Added by someone here — no account yet'
-                                  : 'Member',
-                            ),
+                            title: Text(ledger.titleOfMember(member)),
+                            subtitle: Text(_describe(ledger, member)),
                             trailing: !ledger.canEdit || !member.isActive
                                 ? null
                                 : PopupMenuButton<String>(
@@ -168,6 +152,27 @@ class MembersScreen extends ConsumerWidget {
               ),
       ),
     );
+  }
+
+  /// The line under a person's name.
+  static String _describe(GroupLedger ledger, Member member) {
+    if (!member.isActive) return 'Left the group';
+    // The handle is the useful thing to see at a glance here: it is what
+    // makes settling with this person one tap instead of a chat message
+    // asking for it.
+    final upi = ledger.upiOf(member);
+    // Your own row is titled "You", so this is where the name the group
+    // sees you by is shown.
+    if (member.id == ledger.me?.id) {
+      final name = ledger.nameOfMember(member);
+      return upi == null ? name : '$name · $upi';
+    }
+    if (upi != null) return upi;
+    // Blunt on purpose: a placeholder is a real member with real money
+    // attached, not a draft.
+    return member.isPlaceholder
+        ? 'Added by someone here — no account yet'
+        : 'Member';
   }
 
   Future<void> _addMember(BuildContext context, WidgetRef ref) async {

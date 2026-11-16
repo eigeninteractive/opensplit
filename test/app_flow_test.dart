@@ -106,7 +106,15 @@ void main() {
     await tester.tap(find.text('Balances'));
     await _settle(tester);
 
-    expect(find.textContaining('is owed ₹1,200.00'), findsOneWidget);
+    // Your own payment leads; everyone's standing is one tap under it.
+    expect(find.textContaining('owes ₹1,200.00'), findsNothing);
+    await tester.tap(find.text("Everyone's balances"));
+    await _settle(tester);
+    // The row's own words; the header above says "You are owed" as well.
+    expect(
+      find.textContaining(RegExp(r'^are owed ₹1,200\.00')),
+      findsOneWidget,
+    );
     expect(find.textContaining('owes ₹1,200.00'), findsOneWidget);
     expect(
       find.bySemanticsLabel(RegExp('You pay Ravi')),
@@ -173,7 +181,7 @@ void main() {
     await tester.tap(find.text('Expenses'));
     await _settle(tester);
 
-    expect(find.textContaining('you received ₹1,200.00'), findsOneWidget);
+    expect(find.text('Priya paid you'), findsOneWidget);
     expect(
       find.textContaining('you owe'),
       findsNothing,

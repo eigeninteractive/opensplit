@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:opensplit_api/opensplit_api.dart' show EventKind;
 
@@ -7,11 +8,15 @@ import '../../application/ledger_providers.dart';
 import '../../application/sync_providers.dart';
 import '../../data/local/database.dart';
 import '../../domain/activity/activity_text.dart';
+import '../../domain/calendar_date.dart';
 import '../../domain/models/entry_event.dart';
 import '../../domain/models/group_event.dart';
 import '../navigation.dart';
+import '../widgets/avatar_view.dart';
+import '../widgets/day_header.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/page_body.dart';
+import '../widgets/segmented_list.dart';
 import '../widgets/sync_status_notice.dart';
 
 /// What has happened to this group's expenses, and who did it.
@@ -43,30 +48,29 @@ class ActivityScreen extends ConsumerWidget {
         child: switch (events) {
           null => const SavedDataLoading(label: 'Loading activity'),
           [] => const _Empty(),
-          _ => ListView.separated(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            itemCount: events.length,
-            separatorBuilder: (_, _) => const Divider(height: 1),
-            itemBuilder: (context, index) {
-              final event = events[index];
+          _ => _Feed(
+            events: events,
+            lineFor: (event) {
               final currencyCode = switch (event) {
                 EntryChanged(:final snapshot?) => snapshot.currency,
                 _ => ledger?.group.defaultCurrency,
               };
+              final entry = event is EntryChanged
+                  ? ledger?.entries
+                        .where((e) => e.id == event.entryId)
+                        .firstOrNull
+                  : null;
               return _Line(
                 event: event,
-                actor: ledger?.nameOfActor(event.actorId) ?? 'Someone',
-                memberNames: ledger?.memberNames ?? const {},
+                ledger: ledger,
                 categoryNames: categoryNames,
                 pending: syncs && event.isProvisional,
-                description: event is EntryChanged
-                    ? ledger?.entries
-                          .where((e) => e.id == event.entryId)
-                          .firstOrNull
-                          ?.row
-                          .description
-                    : null,
+                description: entry?.row.description,
                 currency: currencies[currencyCode],
+                // Only while there is still an expense to open.
+                onTap: entry == null
+                    ? null
+                    : () => context.push('/g/$groupId/e/${entry.id}'),
               );
             },
           ),
@@ -76,22 +80,66 @@ class ActivityScreen extends ConsumerWidget {
   }
 }
 
+/// The record, newest first, a day at a time: the same headers and
+/// connected rows as the group's expenses.
+class _Feed extends StatelessWidget {
+  const _Feed({required this.events, required this.lineFor});
+
+  final List<GroupEvent> events;
+  final Widget Function(GroupEvent event) lineFor;
+
+  @override
+  Widget build(BuildContext context) {
+    // Events arrive newest first, so a day's run is contiguous.
+    final rows = <Object>[];
+    final days = <List<GroupEvent>>[];
+    for (final event in events) {
+      final day = calendarDay(event.createdAt.toLocal());
+      if (days.isEmpty ||
+          calendarDay(days.last.first.createdAt.toLocal()) != day) {
+        days.add([]);
+        rows.add(day);
+      }
+      days.last.add(event);
+      rows.add((event: event, day: days.last));
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.only(bottom: 32),
+      itemCount: rows.length,
+      itemBuilder: (context, index) => switch (rows[index]) {
+        final DateTime day => DayHeader(day: day),
+        (event: final GroupEvent event, day: final List<GroupEvent> day) =>
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Segment(
+              index: day.indexOf(event),
+              count: day.length,
+              child: lineFor(event),
+            ),
+          ),
+        _ => const SizedBox.shrink(),
+      },
+    );
+  }
+}
+
 /// One line of the record.
 class _Line extends StatelessWidget {
   const _Line({
     required this.event,
-    required this.actor,
-    required this.memberNames,
+    required this.ledger,
     required this.categoryNames,
     required this.pending,
     required this.description,
     required this.currency,
+    required this.onTap,
   });
 
   final GroupEvent event;
-  final String actor;
-  final Map<String, String> memberNames;
+  final GroupLedger? ledger;
   final Map<String, String> categoryNames;
+  final VoidCallback? onTap;
 
   /// This device's own account of a change the server has not confirmed.
   final bool pending;
@@ -104,6 +152,20 @@ class _Line extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final actor = ledger?.nameOfActor(event.actorId) ?? 'Someone';
+    final memberNames = ledger?.memberNames ?? const <String, String>{};
+
+    // Whoever the line is about: the person who arrived or left, and
+    // otherwise the person who made the change.
+    final who = ledger?.memberById(switch (event) {
+      MemberChanged(
+        kind: EventKind.memberJoined || EventKind.memberLeft,
+        :final memberId,
+      ) =>
+        memberId,
+      _ => event.actorId ?? '',
+    });
 
     final (icon, title) = switch (event) {
       EntryChanged(:final kind, :final snapshot) => (
@@ -169,22 +231,32 @@ class _Line extends StatelessWidget {
     };
 
     return ListTile(
-      leading: Icon(icon, color: theme.colorScheme.primary),
+      onTap: onTap,
+      leading: who == null || ledger == null
+          ? CircleAvatar(
+              backgroundColor: scheme.secondaryContainer,
+              foregroundColor: scheme.onSecondaryContainer,
+              child: Icon(icon),
+            )
+          : MemberAvatar(ledger: ledger!, member: who),
       title: Text('$title${pending ? ' — not synced yet' : ''}'),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final detail in details)
-            Text(detail, style: theme.textTheme.bodyMedium),
+          for (final detail in details) Text(detail),
           Text(
-            _when(event.createdAt),
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+            DateFormat.jm().format(event.createdAt.toLocal()),
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: scheme.onSurfaceVariant,
             ),
           ),
         ],
       ),
       isThreeLine: details.isNotEmpty,
+      // The kind of change at a glance, now that the avatar says who.
+      trailing: who == null
+          ? null
+          : Icon(icon, size: 20, color: scheme.onSurfaceVariant),
     );
   }
 
@@ -194,17 +266,6 @@ class _Line extends StatelessWidget {
     EntryEventKind.deleted => Icons.remove_circle_outline,
     EntryEventKind.restored => Icons.restore,
   };
-
-  /// Relative for the recent past, absolute once "3 days ago" stops being the
-  /// more useful of the two.
-  static String _when(DateTime at) {
-    final ago = DateTime.now().difference(at);
-    if (ago.inMinutes < 1) return 'just now';
-    if (ago.inHours < 1) return '${ago.inMinutes} min ago';
-    if (ago.inDays < 1) return '${ago.inHours}h ago';
-    if (ago.inDays < 7) return '${ago.inDays}d ago';
-    return DateFormat.yMMMd().add_jm().format(at.toLocal());
-  }
 }
 
 class _Empty extends StatelessWidget {

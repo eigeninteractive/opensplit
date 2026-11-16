@@ -454,10 +454,7 @@ class _PayerSection extends StatelessWidget {
                     member: member,
                     radius: 12,
                   ),
-                  label: Text(
-                    ledger.nameOfMember(member) +
-                        (member.id == ledger.me?.id ? ' (you)' : ''),
-                  ),
+                  label: Text(ledger.titleOfMember(member)),
                   selected: form.payers.contains(member.id),
                   onSelected: (_) => controller.choosePayer(member.id),
                 ),
@@ -567,9 +564,7 @@ class _SplitSection extends StatelessWidget {
         const SizedBox(height: 8),
         for (final member in _membersForEntry(ledger, form))
           _AllocationRow(
-            title:
-                ledger.nameOfMember(member) +
-                (member.id == ledger.me?.id ? ' (you)' : ''),
+            title: ledger.titleOfMember(member),
             selected: form.participants.contains(member.id),
             subtitle: form.splitKind == SplitKind.exact
                 ? null

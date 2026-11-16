@@ -32,11 +32,17 @@ class Segment extends StatelessWidget {
     required this.index,
     required this.count,
     required this.child,
+    this.outlined = false,
   });
 
   final int index;
   final int count;
   final Widget child;
+
+  /// Draws the item as an outline with no fill: Material's lower-emphasis
+  /// container, for a row that records something rather than asks for
+  /// attention.
+  final bool outlined;
 
   /// Material's large and extra-small corner tokens.
   static const _outer = Radius.circular(16);
@@ -60,10 +66,15 @@ class Segment extends StatelessWidget {
       child: Material(
         // The higher container stays distinct even when Android supplies a
         // darker surface role close to surfaceContainerLow.
-        color: Theme.of(context).colorScheme.surfaceContainerHigh,
+        color: outlined
+            ? Colors.transparent
+            : Theme.of(context).colorScheme.surfaceContainerHigh,
         clipBehavior: Clip.antiAlias,
         shape: RoundedRectangleBorder(
           borderRadius: radiusAt(index: index, count: count),
+          side: outlined
+              ? BorderSide(color: Theme.of(context).colorScheme.outlineVariant)
+              : BorderSide.none,
         ),
         child: child,
       ),

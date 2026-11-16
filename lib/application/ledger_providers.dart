@@ -207,6 +207,11 @@ class GroupLedger {
     return member == null ? '—' : nameOfMember(member);
   }
 
+  /// A member as a row's own title: "You" for the person looking, since
+  /// their name tells them nothing, and the name for everybody else.
+  String titleOfMember(Member member) =>
+      member.id == me?.id ? 'You' : nameOfMember(member);
+
   /// What to print against a change in the activity feed.
   String nameOfActor(String? memberId) =>
       memberId == null ? 'Someone' : nameOf(memberId);

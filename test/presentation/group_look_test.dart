@@ -14,7 +14,7 @@ import 'package:opensplit/domain/avatar.dart';
 import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:opensplit/presentation/app.dart';
-import 'package:opensplit/presentation/screens/group_detail_screen.dart';
+import 'package:opensplit/presentation/widgets/day_header.dart';
 import 'package:opensplit/presentation/widgets/group_cover.dart';
 import 'package:opensplit/presentation/widgets/group_avatar_hero.dart';
 import 'package:opensplit/presentation/screens/avatar_picker_screen.dart';
@@ -168,7 +168,7 @@ void main() {
     expect(find.text('Today'), findsOneWidget);
     expect(find.text('Yesterday'), findsOneWidget);
     // The day is the header's to say, not every row's.
-    expect(find.textContaining('Ana paid'), findsNWidgets(3));
+    expect(find.textContaining('You paid'), findsNWidgets(3));
     await unmount(tester);
   });
 

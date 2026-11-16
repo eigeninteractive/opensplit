@@ -4,10 +4,16 @@ What changed in each version of the app, newest first. The format is
 [Semantic Versioning](https://semver.org/), and the file is kept by
 [cider](https://pub.dev/packages/cider): see "Versions" in docs/runbook.md.
 
-## [4.1.1] - 2026-11-16
+## [4.2.0] - 2026-11-16
+### Added
+- Invite links preview with the group's name and who invited you, instead of the general OpenSplit card.
+- Activity is grouped by day, shows who made each change, and opens the expense when you tap a line.
+
 ### Changed
+- Expense rows show what each expense means for you on the right, with the full description and who paid. Recorded payments appear as a quieter outlined line.
+- Balances lead with your own payments. Everyone's balances and payments between others are folded underneath, and names are shown in full.
 - Activity and expense history name the expense or payment they are about, with real category names, amounts and dates.
-- Expense rows show the full description and payer, with what it means for you on its own line. Balances show full names and keep Settle for your own payments.
+- Your own row reads "You" throughout. The Add expense button shrinks to its icon while you scroll.
 
 ### Fixed
 - Removing someone who is not settled up explains why and offers to settle. Group settings rows line up.
@@ -125,7 +131,7 @@ What changed in each version of the app, newest first. The format is
 ### Added
 - The first build, to Play internal testing.
 
-[4.1.1]: https://github.com/eigeninteractive/opensplit/compare/v4.1.0...v4.1.1
+[4.2.0]: https://github.com/eigeninteractive/opensplit/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/eigeninteractive/opensplit/compare/v4.0.0...v4.1.0
 [4.0.0]: https://github.com/eigeninteractive/opensplit/compare/v3.1.0...v4.0.0
 [3.1.0]: https://github.com/eigeninteractive/opensplit/compare/v3.0.0...v3.1.0

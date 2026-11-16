@@ -162,7 +162,8 @@ export function inviteRoutes(routes: OpenAPIHono<AppEnv>) {
   });
 }
 
-async function groupFor(db: DrizzleD1Database, token: string): Promise<string | null> {
+/** The group a token routes to, or null for a token nobody minted. */
+export async function groupFor(db: DrizzleD1Database, token: string): Promise<string | null> {
   const row = await db.select({ groupId: linkTokens.groupId }).from(linkTokens).where(eq(linkTokens.token, token)).get();
   return row?.groupId ?? null;
 }
