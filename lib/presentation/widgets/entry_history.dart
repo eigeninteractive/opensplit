@@ -49,7 +49,7 @@ class EntryHistory extends ConsumerWidget {
               children: [
                 Text(
                   '${ledger.nameOfActor(event.actorId)} '
-                  '${describeKind(event.kind, isPayment: event.snapshot?.kind == EntryKind.settlement)}'
+                  '${_whatHappened(event)}'
                   '${syncs && event.isProvisional ? ' — not synced yet' : ''}',
                   style: theme.textTheme.bodyMedium,
                 ),
@@ -80,3 +80,8 @@ class EntryHistory extends ConsumerWidget {
     );
   }
 }
+
+String _whatHappened(EntryChanged event) => describeKind(
+  event.kind,
+  isPayment: event.snapshot?.kind == EntryKind.settlement,
+);

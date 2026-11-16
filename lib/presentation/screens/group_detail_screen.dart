@@ -577,9 +577,11 @@ class _PaymentTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final onTint = theme.colorScheme.onTertiaryContainer;
-    final note = entry.row.notes?.trim();
-    final legacy = entry.row.description.trim();
-    final detail = note?.isNotEmpty == true ? note! : legacy;
+    // Older payments kept their note in the description.
+    final detail = switch (entry.row.notes?.trim()) {
+      final note? when note.isNotEmpty => note,
+      _ => entry.row.description.trim(),
+    };
 
     return ListTile(
       textColor: onTint,

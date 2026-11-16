@@ -232,13 +232,17 @@ class _Line extends StatelessWidget {
 
     return ListTile(
       onTap: onTap,
-      leading: who == null || ledger == null
-          ? CircleAvatar(
-              backgroundColor: scheme.secondaryContainer,
-              foregroundColor: scheme.onSecondaryContainer,
-              child: Icon(icon),
-            )
-          : MemberAvatar(ledger: ledger!, member: who),
+      leading: switch ((ledger, who)) {
+        (final ledger?, final who?) => MemberAvatar(
+          ledger: ledger,
+          member: who,
+        ),
+        _ => CircleAvatar(
+          backgroundColor: scheme.secondaryContainer,
+          foregroundColor: scheme.onSecondaryContainer,
+          child: Icon(icon),
+        ),
+      },
       title: Text('$title${pending ? ' — not synced yet' : ''}'),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

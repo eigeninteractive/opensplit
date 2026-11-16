@@ -54,23 +54,23 @@ export async function withLinkPreview(c: Context<AppEnv>, token: string, documen
   const { title, description } = previewText(link);
   const image = `${origin}/store/og-invite.png`;
   const alt = "OpenSplit: you're invited to a group.";
-  const content: Record<string, string> = {
-    "og:title": title,
-    "og:description": description,
-    "og:url": `${origin}/app/join/${token}`,
-    "og:image": image,
-    "og:image:alt": alt,
-    "twitter:title": title,
-    "twitter:description": description,
-    "twitter:image": image,
-    "twitter:image:alt": alt,
-  };
+  const content = new Map([
+    ["og:title", title],
+    ["og:description", description],
+    ["og:url", `${origin}/app/join/${token}`],
+    ["og:image", image],
+    ["og:image:alt", alt],
+    ["twitter:title", title],
+    ["twitter:description", description],
+    ["twitter:image", image],
+    ["twitter:image:alt", alt],
+  ]);
 
   // setAttribute escapes: a group's name is whatever its members typed.
   return new HTMLRewriter()
     .on("meta", {
       element(meta) {
-        const value = content[meta.getAttribute("property") ?? meta.getAttribute("name") ?? ""];
+        const value = content.get(meta.getAttribute("property") ?? meta.getAttribute("name") ?? "");
         if (value !== undefined) meta.setAttribute("content", value);
       },
     })
