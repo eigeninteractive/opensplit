@@ -435,9 +435,11 @@ class _EntriesPane extends ConsumerWidget {
                   index: day.indexOf(entry),
                   count: day.length,
                   // A payment is a record of money changing hands, not
-                  // spending: outlined and compact, so it reads apart from
-                  // the expenses around it.
-                  outlined: entry.row.kind == EntryKind.settlement,
+                  // spending: tinted, so it reads apart from the expenses
+                  // around it.
+                  color: entry.row.kind == EntryKind.settlement
+                      ? Theme.of(context).colorScheme.tertiaryContainer
+                      : null,
                   child: _EntryTile(
                     entry: entry,
                     ledger: ledger,
@@ -556,8 +558,8 @@ class _EntryTile extends StatelessWidget {
   }
 }
 
-/// A recorded payment: one quiet line saying who paid whom and how much,
-/// with its note beneath when it has one.
+/// A recorded payment: who paid whom and how much, in the colours of the
+/// tinted row it sits on, with its note beneath when it has one.
 class _PaymentTile extends StatelessWidget {
   const _PaymentTile({
     required this.entry,
@@ -574,21 +576,20 @@ class _PaymentTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final muted = theme.colorScheme.onSurfaceVariant;
+    final onTint = theme.colorScheme.onTertiaryContainer;
     final note = entry.row.notes?.trim();
     final legacy = entry.row.description.trim();
     final detail = note?.isNotEmpty == true ? note! : legacy;
 
     return ListTile(
-      dense: true,
-      visualDensity: VisualDensity.compact,
+      textColor: onTint,
       onTap: () => context.push('/g/$groupId/e/${entry.id}'),
       leading: SizedBox(
         width: LeadingIcon.width,
         child: Center(
           child: SharedElement(
             tag: ('entry-category', entry.id),
-            child: Icon(Icons.handshake_outlined, size: 20, color: muted),
+            child: Icon(Icons.handshake_outlined, color: onTint),
           ),
         ),
       ),
@@ -596,13 +597,15 @@ class _PaymentTile extends StatelessWidget {
         tag: ('entry-description', entry.id),
         text: title,
         maxLines: 2,
-        style: theme.textTheme.bodyMedium!.copyWith(color: muted),
+        style: theme.textTheme.titleMedium!.copyWith(color: onTint),
       ),
-      subtitle: detail.isEmpty ? null : Text(detail),
+      subtitle: Text(detail.isEmpty ? 'Payment' : detail),
       trailing: SharedText(
         tag: ('entry-amount', entry.id),
         text: total,
-        style: moneyStyle(theme.textTheme.bodyMedium!).copyWith(color: muted),
+        style: moneyStyle(
+          theme.textTheme.titleMedium!,
+        ).copyWith(color: onTint, fontWeight: FontWeight.w600),
       ),
     );
   }

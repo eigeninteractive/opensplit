@@ -10,7 +10,7 @@ What changed in each version of the app, newest first. The format is
 - Activity is grouped by day, shows who made each change, and opens the expense when you tap a line.
 
 ### Changed
-- Expense rows show what each expense means for you on the right, with the full description and who paid. Recorded payments appear as a quieter outlined line.
+- Expense rows show what each expense means for you on the right, with the full description and who paid. Recorded payments appear as a tinted row, without red or green.
 - Balances lead with your own payments. Everyone's balances and payments between others are folded underneath, and names are shown in full.
 - Activity and expense history name the expense or payment they are about, with real category names, amounts and dates.
 - Your own row reads "You" throughout. The Add expense button shrinks to its icon while you scroll.
