@@ -9,6 +9,7 @@ import '../../application/local_providers.dart';
 import '../../domain/calendar_date.dart';
 import '../../domain/export/csv_export.dart';
 import '../../domain/export/json_export.dart';
+import 'leading_icon.dart';
 
 /// Exports the group, in whichever of the two formats is wanted.
 class ExportButton extends ConsumerStatefulWidget {
@@ -163,10 +164,9 @@ class _ExportButtonState extends ConsumerState<ExportButton> {
   @override
   Widget build(BuildContext context) => widget._asTile
       ? ListTile(
-          leading: const Icon(Icons.ios_share),
+          leading: const LeadingIcon(Icons.ios_share),
           title: const Text('Export this group'),
           subtitle: const Text('Download a spreadsheet or full backup.'),
-          isThreeLine: true,
           onTap: _busy ? null : _pick,
           trailing: _busy
               ? const SizedBox.square(

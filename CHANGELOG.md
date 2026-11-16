@@ -4,6 +4,14 @@ What changed in each version of the app, newest first. The format is
 [Semantic Versioning](https://semver.org/), and the file is kept by
 [cider](https://pub.dev/packages/cider): see "Versions" in docs/runbook.md.
 
+## [4.1.1] - 2026-11-16
+### Changed
+- Activity and expense history name the expense or payment they are about, with real category names, amounts and dates.
+- Expense rows show the full description and payer, with what it means for you on its own line. Balances show full names and keep Settle for your own payments.
+
+### Fixed
+- Removing someone who is not settled up explains why and offers to settle. Group settings rows line up.
+
 ## [4.1.0] - 2026-10-16
 ### Added
 - Search expenses and recorded payments from the group toolbar, across currencies, using descriptions and notes saved on this device.
@@ -117,6 +125,7 @@ What changed in each version of the app, newest first. The format is
 ### Added
 - The first build, to Play internal testing.
 
+[4.1.1]: https://github.com/eigeninteractive/opensplit/compare/v4.1.0...v4.1.1
 [4.1.0]: https://github.com/eigeninteractive/opensplit/compare/v4.0.0...v4.1.0
 [4.0.0]: https://github.com/eigeninteractive/opensplit/compare/v3.1.0...v4.0.0
 [3.1.0]: https://github.com/eigeninteractive/opensplit/compare/v3.0.0...v3.1.0

@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:opensplit_api/opensplit_api.dart' show EventKind;
 
 import '../../application/ledger_providers.dart';
@@ -26,6 +27,12 @@ class ActivityScreen extends ConsumerWidget {
 
     // Only worth saying when there is somewhere for a line to be going.
     final syncs = ref.watch(syncEngineProvider) != null;
+    final currencies = ref.watch(currenciesProvider).value ?? const {};
+    final categoryNames = {
+      for (final category
+          in ref.watch(categoriesProvider).value ?? const <Category>[])
+        category.id: category.name,
+    };
 
     return Scaffold(
       appBar: AppBar(
@@ -42,10 +49,15 @@ class ActivityScreen extends ConsumerWidget {
             separatorBuilder: (_, _) => const Divider(height: 1),
             itemBuilder: (context, index) {
               final event = events[index];
+              final currencyCode = switch (event) {
+                EntryChanged(:final snapshot?) => snapshot.currency,
+                _ => ledger?.group.defaultCurrency,
+              };
               return _Line(
                 event: event,
                 actor: ledger?.nameOfActor(event.actorId) ?? 'Someone',
                 memberNames: ledger?.memberNames ?? const {},
+                categoryNames: categoryNames,
                 pending: syncs && event.isProvisional,
                 description: event is EntryChanged
                     ? ledger?.entries
@@ -54,11 +66,7 @@ class ActivityScreen extends ConsumerWidget {
                           ?.row
                           .description
                     : null,
-                currency: ledger == null
-                    ? null
-                    : ref
-                          .watch(currenciesProvider)
-                          .value?[ledger.group.defaultCurrency],
+                currency: currencies[currencyCode],
               );
             },
           ),
@@ -74,6 +82,7 @@ class _Line extends StatelessWidget {
     required this.event,
     required this.actor,
     required this.memberNames,
+    required this.categoryNames,
     required this.pending,
     required this.description,
     required this.currency,
@@ -82,6 +91,7 @@ class _Line extends StatelessWidget {
   final GroupEvent event;
   final String actor;
   final Map<String, String> memberNames;
+  final Map<String, String> categoryNames;
 
   /// This device's own account of a change the server has not confirmed.
   final bool pending;
@@ -96,9 +106,15 @@ class _Line extends StatelessWidget {
     final theme = Theme.of(context);
 
     final (icon, title) = switch (event) {
-      EntryChanged(:final kind) => (
+      EntryChanged(:final kind, :final snapshot) => (
         _entryIcon(kind),
-        '$actor ${describeKind(kind)} ${_what()}',
+        describeEntryEvent(
+          actor: actor,
+          kind: kind,
+          snapshot: snapshot,
+          fallbackDescription: description,
+          memberNames: memberNames,
+        ),
       ),
 
       // The actor is left out of a join on purpose.
@@ -132,9 +148,24 @@ class _Line extends StatelessWidget {
       LinkChanged() => (Icons.link_off, '$actor revoked the invite link'),
     };
 
-    final changes = switch (event) {
-      EntryChanged(:final changes) => changes,
-      _ => const <FieldChange>[],
+    final details = switch (event) {
+      EntryChanged(:final changes) when changes.isNotEmpty => [
+        for (final change in changes)
+          describeChange(
+            change,
+            currency: currency,
+            memberNames: memberNames,
+            categoryNames: categoryNames,
+          ),
+      ],
+      EntryChanged(:final snapshot) => [
+        ?describeEntrySummary(
+          snapshot,
+          currency: currency,
+          memberNames: memberNames,
+        ),
+      ],
+      _ => const <String>[],
     };
 
     return ListTile(
@@ -143,15 +174,8 @@ class _Line extends StatelessWidget {
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final change in changes)
-            Text(
-              describeChange(
-                change,
-                currency: currency,
-                memberNames: memberNames,
-              ),
-              style: theme.textTheme.bodySmall,
-            ),
+          for (final detail in details)
+            Text(detail, style: theme.textTheme.bodyMedium),
           Text(
             _when(event.createdAt),
             style: theme.textTheme.labelSmall?.copyWith(
@@ -160,13 +184,9 @@ class _Line extends StatelessWidget {
           ),
         ],
       ),
-      isThreeLine: changes.isNotEmpty,
+      isThreeLine: details.isNotEmpty,
     );
   }
-
-  String _what() => (description?.trim().isNotEmpty ?? false)
-      ? '“${description!.trim()}”'
-      : 'an expense';
 
   static IconData _entryIcon(EntryEventKind kind) => switch (kind) {
     EntryEventKind.created => Icons.add_circle_outline,
@@ -183,7 +203,7 @@ class _Line extends StatelessWidget {
     if (ago.inHours < 1) return '${ago.inMinutes} min ago';
     if (ago.inDays < 1) return '${ago.inHours}h ago';
     if (ago.inDays < 7) return '${ago.inDays}d ago';
-    return '${at.day}/${at.month}/${at.year}';
+    return DateFormat.yMMMd().add_jm().format(at.toLocal());
   }
 }
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../application/ledger_providers.dart';
 import '../../application/local_providers.dart';
 import '../../data/local/database.dart';
+import '../../domain/money_format.dart';
 import '../../domain/settle/upi.dart';
 import '../feedback.dart';
 import '../navigation.dart';
@@ -109,61 +112,42 @@ class MembersScreen extends ConsumerWidget {
                                     // is what the fields are.
                                     itemBuilder: (context) {
                                       final mine = member.id == ledger.me?.id;
-
-                                      // Your own row, or a placeholder's.
-                                      final editable =
-                                          member.isPlaceholder || mine;
-
-                                      // Removing somebody also cuts off their access to the
-                                      // group, so it is offered only once nothing is owed
-                                      // either way.
-                                      final removable =
-                                          !mine &&
-                                          ledger.isSettledUp(member.id);
-
                                       return [
-                                        if (member.isPlaceholder)
-                                          const PopupMenuItem(
+                                        if (member.isPlaceholder) ...[
+                                          _menuItem(
                                             value: 'invite',
-                                            child: Text('Send invite link'),
+                                            icon: Icons.send_outlined,
+                                            label: 'Send invite link',
                                           ),
-                                        if (member.isPlaceholder &&
-                                            editable) ...[
-                                          const PopupMenuItem(
+                                          _menuItem(
                                             value: 'rename',
-                                            child: Text('Rename'),
+                                            icon: Icons.edit_outlined,
+                                            label: 'Rename',
                                           ),
-                                          PopupMenuItem(
+                                          _menuItem(
                                             value: 'upi',
-                                            child: Text(
-                                              member.upiVpa == null
-                                                  ? 'Add UPI ID'
-                                                  : 'Change UPI ID',
-                                            ),
+                                            icon: Icons
+                                                .account_balance_wallet_outlined,
+                                            label: member.upiVpa == null
+                                                ? 'Add UPI ID'
+                                                : 'Change UPI ID',
                                           ),
                                         ],
                                         if (mine)
-                                          const PopupMenuItem(
+                                          _menuItem(
                                             value: 'me',
-                                            child: Text(
-                                              'Edit your name and UPI ID',
-                                            ),
-                                          ),
-                                        if (removable)
-                                          const PopupMenuItem(
-                                            value: 'remove',
-                                            child: Text('Remove from group'),
+                                            icon: Icons.person_outline,
+                                            label: 'Edit your name and UPI ID',
                                           )
-                                        // Said rather than silently withheld: an absent
-                                        // menu item reads as a bug, and the reason here is
-                                        // something the group can act on.
-                                        else if (!mine)
-                                          PopupMenuItem(
-                                            enabled: false,
-                                            child: Text(
-                                              '${ledger.nameOfMember(member)} is not '
-                                              'settled up',
-                                            ),
+                                        // Always offered, and explained when
+                                        // it cannot happen yet: an absent or
+                                        // greyed-out item says neither what it
+                                        // would do nor how to get there.
+                                        else
+                                          _menuItem(
+                                            value: 'remove',
+                                            icon: Icons.person_remove_outlined,
+                                            label: 'Remove from group',
                                           ),
                                       ];
                                     },
@@ -252,8 +236,11 @@ class MembersScreen extends ConsumerWidget {
     Member member,
     GroupLedger ledger,
   ) async {
-    // Only offered once they are settled: the server refuses anything else,
-    // since a balance would be left with somebody who can no longer see it.
+    // The server refuses anything else, since a balance would be left with
+    // somebody who can no longer see it.
+    if (!ledger.isSettledUp(member.id)) {
+      return _explainUnsettled(context, ref, member, ledger);
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -285,7 +272,64 @@ class MembersScreen extends ConsumerWidget {
       );
     }
   }
+
+  /// Says why somebody cannot be removed yet, and offers the way there.
+  Future<void> _explainUnsettled(
+    BuildContext context,
+    WidgetRef ref,
+    Member member,
+    GroupLedger ledger,
+  ) async {
+    final name = ledger.nameOfMember(member);
+    final currencies = ref.read(currenciesProvider).value ?? const {};
+    final balances = [
+      for (final code in ledger.activeCurrencies)
+        if (ledger.balanceOf(member.id, code) case final balance
+            when balance != 0)
+          balance > 0
+              ? 'is owed ${formatMoneyAbs(currencies[code], balance)}'
+              : 'owes ${formatMoneyAbs(currencies[code], balance)}',
+    ];
+    final settle = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.person_remove_outlined),
+        title: Text("Can't remove $name yet"),
+        content: Text(
+          '$name ${balances.join(' and ')} in this group. People can be '
+          'removed once nothing is owed either way.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Settle up'),
+          ),
+        ],
+      ),
+    );
+    if ((settle ?? false) && context.mounted) {
+      unawaited(context.push('/g/$groupId/settle'));
+    }
+  }
 }
+
+/// A menu entry with its icon, as the group's own overflow menu shows them.
+PopupMenuItem<String> _menuItem({
+  required String value,
+  required IconData icon,
+  required String label,
+}) => PopupMenuItem(
+  value: value,
+  child: ListTile(
+    leading: Icon(icon),
+    title: Text(label),
+    contentPadding: EdgeInsets.zero,
+  ),
+);
 
 /// Asks for a person's name, in a sheet rather than a dialog.
 Future<String?> _promptForName(

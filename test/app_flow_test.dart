@@ -197,9 +197,14 @@ void main() {
 
     expect(find.text('Nothing yet'), findsNothing);
     expect(
-      find.textContaining('added this'),
-      findsNWidgets(2),
-      reason: 'the groceries, and the settlement that squared them',
+      find.text('Ravi added “Groceries”'),
+      findsOneWidget,
+      reason: 'a line names the expense it is about',
+    );
+    expect(
+      find.text('Ravi recorded a payment from Priya to Ravi'),
+      findsOneWidget,
+      reason: 'and the settlement that squared it says who paid whom',
     );
     expect(
       find.textContaining('Ravi'),
@@ -224,9 +229,9 @@ void main() {
     await tester.tap(find.text('Activity'));
     await _settle(tester);
 
-    expect(find.textContaining('edited this'), findsOneWidget);
+    expect(find.text('Ravi edited “Groceries”'), findsOneWidget);
     expect(
-      find.textContaining('the amount, from ₹2400.00 to ₹2000.00'),
+      find.textContaining('Amount changed from ₹2,400.00 to ₹2,000.00'),
       findsOneWidget,
       reason: 'the diff is rendered in what the group actually said out loud',
     );

@@ -313,6 +313,7 @@ class _TransferTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMine = transfer.fromMemberId == ledger.me?.id;
+    final involvesMe = isMine || transfer.toMemberId == ledger.me?.id;
     final from = ledger.nameOf(transfer.fromMemberId);
     final to = ledger.nameOf(transfer.toMemberId);
     // Whoever is not you, since that is who the payment is with.
@@ -346,37 +347,45 @@ class _TransferTile extends StatelessWidget {
     return Semantics(
       hint: 'Shows how this payment was worked out',
       child: ListTile(
-        onTap: () => _explain(context),
+        onTap: () => _explain(context, onRecord: involvesMe ? null : settle),
         leading: other == null
             ? null
             : MemberAvatar(ledger: ledger, member: other),
         title: Semantics(
           label: words,
           excludeSemantics: true,
-          child: Row(
+          // Wrapped rather than squeezed into one row, so both names are
+          // read in full and a long one moves to the next line.
+          child: Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Flexible(
-                child: SharedText(
-                  tag: ('settlement-from', identity),
-                  text: isMine ? 'You' : from,
-                  style: textStyle,
-                ),
+              SharedText(
+                tag: ('settlement-from', identity),
+                text: isMine ? 'You' : from,
+                style: textStyle,
               ),
-              Text(isMine ? ' pay ' : ' pays '),
-              Flexible(
-                child: SharedText(
-                  tag: ('settlement-to', identity),
-                  text: transfer.toMemberId == ledger.me?.id ? 'you' : to,
-                  style: textStyle,
-                ),
-              ),
-              const SizedBox(width: 6),
-              ExcludeSemantics(
-                child: Icon(
-                  Icons.help_outline,
-                  size: 16,
-                  color: scheme.onSurfaceVariant,
-                ),
+              Text(isMine ? ' pay ' : ' pays ', style: textStyle),
+              // The help icon travels with the last name rather than being
+              // left alone on a line of its own.
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: SharedText(
+                      tag: ('settlement-to', identity),
+                      text: transfer.toMemberId == ledger.me?.id ? 'you' : to,
+                      style: textStyle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  ExcludeSemantics(
+                    child: Icon(
+                      Icons.help_outline,
+                      size: 16,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -388,7 +397,10 @@ class _TransferTile extends StatelessWidget {
             Theme.of(context).textTheme.titleMedium!,
           ).copyWith(color: scheme.onSurface),
         ),
-        trailing: !ledger.canEdit
+        // Only on payments you are part of. The others' stay a tap away in
+        // their explanation and in Settle up, rather than putting a button
+        // on every row that is not yours to act on.
+        trailing: !ledger.canEdit || !involvesMe
             ? null
             : FilledButton.tonal(
                 onPressed: settle,
@@ -398,15 +410,21 @@ class _TransferTile extends StatelessWidget {
     );
   }
 
-  void _explain(BuildContext context) {
+  void _explain(BuildContext context, {VoidCallback? onRecord}) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (context) => _TransferExplanation(
+      builder: (sheetContext) => _TransferExplanation(
         ledger: ledger,
         transfer: transfer,
         currency: currency,
+        onRecord: !ledger.canEdit || onRecord == null
+            ? null
+            : () {
+                Navigator.of(sheetContext).pop();
+                onRecord();
+              },
       ),
     );
   }
@@ -418,11 +436,16 @@ class _TransferExplanation extends StatelessWidget {
     required this.ledger,
     required this.transfer,
     required this.currency,
+    this.onRecord,
   });
 
   final GroupLedger ledger;
   final Transfer transfer;
   final Currency? currency;
+
+  /// Records this payment for the two people making it, when it is somebody
+  /// else's and so has no button of its own on the list.
+  final VoidCallback? onRecord;
 
   @override
   Widget build(BuildContext context) {
@@ -549,6 +572,14 @@ class _TransferExplanation extends StatelessWidget {
                         ),
                       ],
                     ),
+                    if (onRecord case final record?) ...[
+                      const SizedBox(height: 24),
+                      FilledButton.tonalIcon(
+                        onPressed: record,
+                        icon: const Icon(Icons.handshake_outlined),
+                        label: const Text('Record this payment'),
+                      ),
+                    ],
                   ],
                 ),
               ],

@@ -158,4 +158,58 @@ void main() {
       await tester.pump(Duration.zero);
     },
   );
+
+  testWidgets(
+    'removing somebody who is not settled names the action and the way out',
+    (tester) async {
+      final db = await testDatabase();
+      addTearDown(db.close);
+      final groups = DriftGroupRepository(db, accountId: testAccountId);
+      final entries = DriftEntryRepository(db, accountId: testAccountId);
+      final made = await groups.createGroup(
+        name: 'Trip',
+        defaultCurrency: 'INR',
+        creatorDisplayName: 'Ravi',
+        creatorProfileId: testAccountId,
+      );
+      final priya = await groups.addMember(made.group.id, displayName: 'Priya');
+      await entries.create(
+        EntryDraft(
+          groupId: made.group.id,
+          currency: 'INR',
+          amountMinor: 20000,
+          description: 'Dinner',
+          split: EqualSplit([made.creator.id, priya.id]),
+          payerAmounts: {made.creator.id: 20000},
+        ),
+        createdBy: made.creator.id,
+      );
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      await tester.pumpWidget(
+        signedInApp(db: db, prefs: prefs, child: const OpenSplitApp()),
+      );
+      await tester.pumpAndSettle();
+      final router = GoRouter.of(tester.element(find.byType(Scaffold).first));
+      router.go('/g/${made.group.id}/members');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.more_vert).last);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('not settled'), findsNothing);
+      await tester.tap(find.text('Remove from group'));
+      await tester.pumpAndSettle();
+
+      expect(find.text("Can't remove Priya yet"), findsOneWidget);
+      expect(find.textContaining('owes ₹100.00'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Settle up'), findsOneWidget);
+      expect(
+        (await groups.getMembers(made.group.id)).any((m) => m.id == priya.id),
+        isTrue,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(Duration.zero);
+    },
+  );
 }

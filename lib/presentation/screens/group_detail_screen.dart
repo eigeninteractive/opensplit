@@ -473,7 +473,6 @@ class _EntryTile extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final me = ledger.me;
     final isSettlement = entry.row.kind == EntryKind.settlement;
-    final largeText = MediaQuery.textScalerOf(context).scale(12) > 16;
 
     // What this entry did to your position: what you paid, less what you owe.
     var myDelta = 0;
@@ -495,6 +494,8 @@ class _EntryTile extends StatelessWidget {
               ? 'you lent ${formatMoneyAbs(currency, myDelta)}'
               : 'you owe ${formatMoneyAbs(currency, myDelta)}');
 
+    String nameOrYou(String memberId) =>
+        memberId == me?.id ? 'you' : ledger.nameOf(memberId);
     final payerNames = entry.payers
         .map((p) => ledger.nameOf(p.memberId))
         .join(', ');
@@ -536,7 +537,11 @@ class _EntryTile extends StatelessWidget {
       title: SharedText(
         tag: ('entry-description', entry.id),
         text: isSettlement
-            ? '$payerNames paid ${entry.shares.isEmpty ? '—' : ledger.nameOf(entry.shares.first.memberId)}'
+            ? _capitalised(
+                '${entry.payers.map((p) => nameOrYou(p.memberId)).join(', ')} '
+                'paid '
+                '${entry.shares.isEmpty ? '—' : nameOrYou(entry.shares.first.memberId)}',
+              )
             : entry.row.description.isEmpty
             ? 'Expense'
             : entry.row.description,
@@ -544,13 +549,16 @@ class _EntryTile extends StatelessWidget {
           context,
         ).textTheme.titleMedium!.copyWith(color: scheme.onSurface),
       ),
-      isThreeLine: largeText && me != null && myDelta != 0,
+      // What it meant for you sits under who paid rather than beside the
+      // amount, so the description and payer get the row's full width
+      // instead of being cut short by a second trailing line.
+      isThreeLine: me != null && myDelta != 0,
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
-          if (largeText && me != null && myDelta != 0)
+          if (me != null && myDelta != 0)
             BalanceAmount(
               balanceMinor: myDelta,
               text: myDeltaWords,
@@ -561,32 +569,19 @@ class _EntryTile extends StatelessWidget {
             ),
         ],
       ),
-      trailing: Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          SharedText(
-            tag: ('entry-amount', entry.id),
-            text: formatMoney(currency, entry.row.amountMinor),
-            style: moneyStyle(
-              Theme.of(context).textTheme.titleMedium!,
-            ).copyWith(color: scheme.onSurface),
-          ),
-          if (!largeText && me != null && myDelta != 0)
-            BalanceAmount(
-              balanceMinor: myDelta,
-              text: myDeltaWords,
-              semanticsLabel: myDeltaWords,
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
-            ),
-        ],
+      trailing: SharedText(
+        tag: ('entry-amount', entry.id),
+        text: formatMoney(currency, entry.row.amountMinor),
+        style: moneyStyle(
+          Theme.of(context).textTheme.titleMedium!,
+        ).copyWith(color: scheme.onSurface),
       ),
     );
   }
 }
+
+String _capitalised(String text) =>
+    text.isEmpty ? text : text[0].toUpperCase() + text.substring(1);
 
 class _EmptyEntries extends StatelessWidget {
   const _EmptyEntries({required this.canEdit});
