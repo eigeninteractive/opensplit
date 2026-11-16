@@ -13,7 +13,7 @@ What changed in each version of the app, newest first. The format is
 - Expense rows show what each expense means for you on the right, with the full description and who paid. Recorded payments appear as a tinted row, without red or green.
 - Balances lead with your own payments. Everyone's balances and payments between others are folded underneath, and names are shown in full.
 - Activity and expense history name the expense or payment they are about, with real category names, amounts and dates.
-- Your own row reads "You" throughout. The Add expense button shrinks to its icon while you scroll.
+- Your own row reads "You" throughout. The Add expense button shrinks to its icon as you scroll down and returns as you scroll up.
 
 ### Fixed
 - Removing someone who is not settled up explains why and offers to settle. Group settings rows line up.

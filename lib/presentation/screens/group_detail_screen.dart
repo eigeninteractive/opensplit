@@ -47,20 +47,24 @@ class GroupDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
-  /// Whether a list is being scrolled, which is when the button gives the
-  /// rows under it their room back.
-  final _scrolling = ValueNotifier(false);
+  /// Whether the button shows its label. Material's guidance: scrolling
+  /// down the list shrinks it to its icon, scrolling back up restores it.
+  final _fabExtended = ValueNotifier(true);
 
   @override
   void dispose() {
-    _scrolling.dispose();
+    _fabExtended.dispose();
     super.dispose();
   }
 
   bool _onScroll(UserScrollNotification notification) {
     // A swipe between the tabs is not a reason to shrink anything.
     if (notification.metrics.axis == Axis.vertical) {
-      _scrolling.value = notification.direction != ScrollDirection.idle;
+      _fabExtended.value = switch (notification.direction) {
+        ScrollDirection.reverse => false,
+        ScrollDirection.forward => true,
+        ScrollDirection.idle => _fabExtended.value,
+      };
     }
     return false;
   }
@@ -105,7 +109,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
       floatingActionButton: !ledger.canEdit
           ? null
           : ScrollAwareFab(
-              scrolling: _scrolling,
+              extended: _fabExtended,
               onPressed: () => context.push('/g/$groupId/add'),
               icon: Icons.add,
               label: 'Add expense',
