@@ -18,3 +18,27 @@ AppUpdateService appUpdateService(Ref ref) => const AppUpdateService();
 @Riverpod(keepAlive: true)
 ReviewPrompt reviewPrompt(Ref ref) =>
     ReviewPrompt(ref.watch(sharedPreferencesProvider));
+
+/// When this device last had a group open, which is what "new since you
+/// last looked" is measured from. Null until its first visit.
+///
+/// Kept on the device rather than with the account: it records what this
+/// screen has shown, not anything about the group.
+@riverpod
+class GroupSeenAt extends _$GroupSeenAt {
+  String get _key => 'group_seen_at.$groupId';
+
+  @override
+  DateTime? build(String groupId) {
+    final stored = ref.watch(sharedPreferencesProvider).getInt(_key);
+    return stored == null ? null : DateTime.fromMillisecondsSinceEpoch(stored);
+  }
+
+  Future<void> markNow() async {
+    final now = DateTime.now();
+    state = now;
+    await ref
+        .read(sharedPreferencesProvider)
+        .setInt(_key, now.millisecondsSinceEpoch);
+  }
+}

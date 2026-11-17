@@ -8,6 +8,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:opensplit_api/opensplit_api.dart' show EntryKind;
 
 import '../../application/ledger_providers.dart';
+import '../../application/preferences_providers.dart';
 import '../../application/backend_providers.dart';
 import '../../application/sync_providers.dart';
 import '../../data/local/database.dart';
@@ -50,6 +51,29 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
   /// Whether the button shows its label. Material's guidance: scrolling
   /// down the list shrinks it to its icon, scrolling back up restores it.
   final _fabExtended = ValueNotifier(true);
+
+  /// When this group was last open before now. Changes other people made
+  /// after it are new to this visit, until the activity feed has been read.
+  DateTime? _newSince;
+
+  @override
+  void initState() {
+    super.initState();
+    final seen = groupSeenAtProvider(widget.groupId);
+    _newSince = ref.read(seen);
+    // After the frame, since a provider may not change while widgets build.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.read(seen.notifier).markNow();
+    });
+  }
+
+  /// Leaving counts as having seen what happened while the group was open,
+  /// your own changes included.
+  void _onPop(bool didPop, Object? result) {
+    if (didPop) {
+      ref.read(groupSeenAtProvider(widget.groupId).notifier).markNow();
+    }
+  }
 
   @override
   void dispose() {
@@ -105,55 +129,62 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
 
     final wide = MediaQuery.sizeOf(context).width >= _wideBreakpoint;
 
-    final scaffold = Scaffold(
-      floatingActionButton: !ledger.canEdit
-          ? null
-          : ScrollAwareFab(
-              extended: _fabExtended,
-              onPressed: () => context.push('/g/$groupId/add'),
-              icon: Icons.add,
-              label: 'Add expense',
-            ),
-      body: NotificationListener<UserScrollNotification>(
-        onNotification: _onScroll,
-        child: NestedScrollView(
-          headerSliverBuilder: (context, scrolled) => [
-            SliverOverlapAbsorber(
-              handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
-              sliver: _GroupAppBar(
-                ledger: ledger,
-                tabs: !wide,
-                measure: wide ? 1200 : 760,
+    final scaffold = PopScope(
+      onPopInvokedWithResult: _onPop,
+      child: Scaffold(
+        floatingActionButton: !ledger.canEdit
+            ? null
+            : ScrollAwareFab(
+                extended: _fabExtended,
+                onPressed: () => context.push('/g/$groupId/add'),
+                icon: Icons.add,
+                label: 'Add expense',
               ),
-            ),
-          ],
-          // The header spans the window; the panes keep to a readable measure.
-          // Two panes are a master–detail layout and can take more width than a
-          // single column, but not an unbounded amount: on a 27-inch monitor an
-          // uncapped Row puts the expense list and the balances a foot apart.
-          body: PageBody(
-            maxWidth: wide ? 1200 : 760,
-            child: wide
-                ? Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(flex: 3, child: _EntriesPane(ledger: ledger)),
-                      const VerticalDivider(width: 1),
-                      Expanded(
-                        flex: 2,
-                        child: BalancesPanel(
-                          ledger: ledger,
-                          showsBanners: false,
+        body: NotificationListener<UserScrollNotification>(
+          onNotification: _onScroll,
+          child: NestedScrollView(
+            headerSliverBuilder: (context, scrolled) => [
+              SliverOverlapAbsorber(
+                handle: NestedScrollView.sliverOverlapAbsorberHandleFor(
+                  context,
+                ),
+                sliver: _GroupAppBar(
+                  newSince: _newSince,
+                  onActivityRead: () => setState(() => _newSince = null),
+                  ledger: ledger,
+                  tabs: !wide,
+                  measure: wide ? 1200 : 760,
+                ),
+              ),
+            ],
+            // The header spans the window; the panes keep to a readable measure.
+            // Two panes are a master–detail layout and can take more width than a
+            // single column, but not an unbounded amount: on a 27-inch monitor an
+            // uncapped Row puts the expense list and the balances a foot apart.
+            body: PageBody(
+              maxWidth: wide ? 1200 : 760,
+              child: wide
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(flex: 3, child: _EntriesPane(ledger: ledger)),
+                        const VerticalDivider(width: 1),
+                        Expanded(
+                          flex: 2,
+                          child: BalancesPanel(
+                            ledger: ledger,
+                            showsBanners: false,
+                          ),
                         ),
-                      ),
-                    ],
-                  )
-                : TabBarView(
-                    children: [
-                      _EntriesPane(ledger: ledger),
-                      BalancesPanel(ledger: ledger),
-                    ],
-                  ),
+                      ],
+                    )
+                  : TabBarView(
+                      children: [
+                        _EntriesPane(ledger: ledger),
+                        BalancesPanel(ledger: ledger),
+                      ],
+                    ),
+            ),
           ),
         ),
       ),
@@ -169,10 +200,18 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
 /// you stand, collapsing to the name and the tabs once you scroll.
 class _GroupAppBar extends ConsumerWidget {
   const _GroupAppBar({
+    required this.newSince,
+    required this.onActivityRead,
     required this.ledger,
     required this.tabs,
     required this.measure,
   });
+
+  /// Changes by other people after this moment are flagged as new.
+  final DateTime? newSince;
+
+  /// Called once the activity feed has been opened and come back from.
+  final VoidCallback onActivityRead;
 
   final GroupLedger ledger;
   final bool tabs;
@@ -187,11 +226,26 @@ class _GroupAppBar extends ConsumerWidget {
     final compactRefresh = kIsWeb && MediaQuery.sizeOf(context).width < 400;
     final sync = ref.watch(syncControllerProvider);
     final canRefresh = sync.enabled && !ref.watch(requiresAppUpdateProvider);
-    void open(String path) {
+    final since = newSince;
+    final fresh = since == null
+        ? 0
+        : (ref.watch(groupActivityProvider(groupId)).value ?? const [])
+              .where(
+                (event) =>
+                    event.createdAt.isAfter(since) &&
+                    event.actorId != ledger.me?.id,
+              )
+              .length;
+    Future<void> open(String path) async {
       if (path == 'refresh') {
-        ref.read(syncControllerProvider.notifier).syncGroup(groupId);
+        await ref.read(syncControllerProvider.notifier).syncGroup(groupId);
+      } else if (path == 'activity' && since != null) {
+        await context.push(
+          '/g/$groupId/activity?since=${since.millisecondsSinceEpoch}',
+        );
+        onActivityRead();
       } else {
-        context.push('/g/$groupId/$path');
+        await context.push('/g/$groupId/$path');
       }
     }
 
@@ -218,7 +272,11 @@ class _GroupAppBar extends ConsumerWidget {
           icon: const Icon(Icons.people_outline),
         ),
         PopupMenuButton<String>(
-          tooltip: 'More',
+          tooltip: fresh == 0 ? 'More' : 'More, with new activity',
+          icon: Badge(
+            isLabelVisible: fresh > 0,
+            child: const Icon(Icons.more_vert),
+          ),
           onSelected: open,
           itemBuilder: (context) => [
             if (compactRefresh && canRefresh)
@@ -237,6 +295,9 @@ class _GroupAppBar extends ConsumerWidget {
                 child: ListTile(
                   leading: Icon(action.icon),
                   title: Text(action.label),
+                  trailing: action.path == 'activity' && fresh > 0
+                      ? Badge.count(count: fresh)
+                      : null,
                   contentPadding: EdgeInsets.zero,
                 ),
               ),

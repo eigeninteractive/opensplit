@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:opensplit_api/opensplit_api.dart' show EntryKind;
+import 'package:share_plus/share_plus.dart';
 
 import '../../application/ledger_providers.dart';
 import '../../data/local/database.dart';
@@ -10,10 +11,12 @@ import '../../domain/balance/member_balance.dart';
 import '../../domain/balance/simplify.dart';
 import '../../domain/balance/transfer_basis.dart';
 import '../../domain/money_format.dart';
+import '../../domain/settle/reminder.dart';
 import '../theme.dart';
 import 'avatar_view.dart';
 import 'balance_arrow.dart';
 import 'empty_state.dart';
+import 'folded_section.dart';
 import 'group_pane.dart';
 import 'segmented_list.dart';
 import 'shared_element.dart';
@@ -231,7 +234,7 @@ class _CurrencySection extends StatelessWidget {
         // What you act on leads. The rest is reference, so it stays folded
         // away unless there is nothing of yours above it.
         const SizedBox(height: 16),
-        _Fold(
+        FoldedSection(
           storageKey: 'everyone-${ledger.group.id}-$code',
           title: "Everyone's balances",
           summary: '${balances.length} people',
@@ -247,7 +250,7 @@ class _CurrencySection extends StatelessWidget {
         ),
         if (others.isNotEmpty) ...[
           const SizedBox(height: 8),
-          _Fold(
+          FoldedSection(
             storageKey: 'others-${ledger.group.id}-$code',
             title: yours.isEmpty
                 ? 'Payments that settle the group'
@@ -269,45 +272,6 @@ class _CurrencySection extends StatelessWidget {
       ],
     );
   }
-}
-
-/// A group of rows folded under its own heading: Material's expansion
-/// tile, on the surface and corners the lists around it use.
-class _Fold extends StatelessWidget {
-  const _Fold({
-    required this.storageKey,
-    required this.title,
-    required this.summary,
-    required this.initiallyExpanded,
-    required this.children,
-  });
-
-  /// Keeps the fold open or shut while the other tab is showing.
-  final String storageKey;
-  final String title;
-  final String summary;
-  final bool initiallyExpanded;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) => Material(
-    color: Theme.of(context).colorScheme.surfaceContainerHigh,
-    clipBehavior: Clip.antiAlias,
-    shape: RoundedRectangleBorder(
-      borderRadius: Segment.radiusAt(index: 0, count: 1),
-    ),
-    child: ExpansionTile(
-      key: PageStorageKey(storageKey),
-      initiallyExpanded: initiallyExpanded,
-      // The surface already has its outline; the tile's own dividers
-      // would draw a second one inside it.
-      shape: const Border(),
-      collapsedShape: const Border(),
-      title: Text(title),
-      subtitle: Text(summary),
-      children: children,
-    ),
-  );
 }
 
 /// A currency's name, heading its section.
@@ -399,8 +363,20 @@ class _TransferTile extends StatelessWidget {
       '&currency=${transfer.currency}',
     );
 
-    // One control in `trailing`, which is all a Material list item has room
-    // for.
+    // Money owed to you can be asked for as well as recorded.
+    final owedToMe = !isMine && involvesMe;
+    final me = ledger.me;
+    void remind() => SharePlus.instance.share(
+      ShareParams(
+        text: reminderText(
+          debtorName: from,
+          amount: formatMoney(currency, transfer.amountMinor),
+          groupName: ledger.group.name,
+          upiVpa: me == null ? null : ledger.upiOf(me),
+        ),
+      ),
+    );
+
     return Semantics(
       hint: 'Shows how this payment was worked out',
       child: ListTile(
@@ -459,9 +435,20 @@ class _TransferTile extends StatelessWidget {
         // on every row that is not yours to act on.
         trailing: !ledger.canEdit || !involvesMe
             ? null
-            : FilledButton.tonal(
-                onPressed: settle,
-                child: const Text('Settle'),
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (owedToMe)
+                    IconButton(
+                      tooltip: 'Remind $from',
+                      onPressed: remind,
+                      icon: const Icon(Icons.notifications_active_outlined),
+                    ),
+                  FilledButton.tonal(
+                    onPressed: settle,
+                    child: const Text('Settle'),
+                  ),
+                ],
               ),
       ),
     );

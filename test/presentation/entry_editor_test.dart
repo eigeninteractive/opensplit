@@ -46,6 +46,36 @@ Future<void> _openEditor(WidgetTester tester) async {
   await _go(tester, '/g/g1');
   await tester.tap(find.widgetWithText(FloatingActionButton, 'Add expense'));
   await _beats(tester);
+  await _unfold(tester);
+}
+
+/// Opens who paid and how it is split, which start folded to a line each.
+Future<void> _unfold(WidgetTester tester) async {
+  Future<void> open(String title) async {
+    final tile = find.widgetWithText(ExpansionTile, title);
+    await tester.ensureVisible(tile);
+    await _beats(tester);
+    await tester.tap(find.descendant(of: tile, matching: find.text(title)));
+    await _beats(tester);
+  }
+
+  if (find.widgetWithText(TextButton, 'Several people').evaluate().isEmpty &&
+      find.widgetWithText(TextButton, 'One person').evaluate().isEmpty) {
+    await open('Paid by');
+  }
+  if (find.byType(SegmentedButton<SplitKind>).evaluate().isEmpty &&
+      find.byType(DropdownMenu<SplitKind>).evaluate().isEmpty) {
+    await open('Split');
+  }
+}
+
+/// Opens a saved expense from its row: the read-only view, then its editor.
+Future<void> _editRow(WidgetTester tester, String description) async {
+  await tester.tap(find.text(description));
+  await _beats(tester);
+  await tester.tap(find.widgetWithText(FilledButton, 'Edit'));
+  await _beats(tester);
+  await _unfold(tester);
 }
 
 Future<void> _beats(WidgetTester tester) async {
@@ -465,8 +495,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await _beats(tester);
 
-    await tester.tap(find.text('Chai'));
-    await _beats(tester);
+    await _editRow(tester, 'Chai');
     expect(find.text('Restaurants'), findsOneWidget);
 
     await tester.enterText(_field('What was it?'), 'Chai and an Uber');
@@ -495,8 +524,7 @@ void main() {
     expect(await DriftEntryRepository(db).getEntries('g1'), hasLength(1));
 
     // Back on the group, the expense is a row; opening it is the edit path.
-    await tester.tap(find.text('Chai'));
-    await _beats(tester);
+    await _editRow(tester, 'Chai');
 
     // Seeding an edit needs the entry as well as the ledger and the currency
     // list, and the entry is the one that arrives last.
@@ -546,8 +574,7 @@ void main() {
       {for (final share in saved.shares) share.memberId: share.amountMinor},
       {'m-ravi': 12000, 'm-priya': 8000, 'm-arun': 10000},
     );
-    await tester.tap(find.text('Dinner'));
-    await _beats(tester);
+    await _editRow(tester, 'Dinner');
     expect(find.byIcon(Icons.push_pin_outlined), findsNWidgets(3));
     expect(_allocationText(tester, 'exact', 'm-ravi'), '120.00');
     await tester.enterText(_field('Amount').first, '350');

@@ -9,6 +9,7 @@ import '../../application/local_providers.dart';
 import '../../domain/calendar_date.dart';
 import '../../domain/export/csv_export.dart';
 import '../../domain/export/json_export.dart';
+import '../../domain/models/entry.dart';
 import 'leading_icon.dart';
 
 /// Exports the group, in whichever of the two formats is wanted.
@@ -104,20 +105,14 @@ class _ExportButtonState extends ConsumerState<ExportButton> {
     setState(() => _busy = true);
     try {
       final ledger = ref.read(groupLedgerProvider(widget.groupId));
-      final filter = ref.read(
-        analyticsFilterControllerProvider(widget.groupId),
-      );
-      final entries = await ref
-          .read(analyticsRepositoryProvider)
-          .search(filter)
-          .first;
       final categories = await ref.read(categoryRepositoryProvider).all();
       final currencies = ref.read(currenciesProvider).value ?? const {};
 
       final csv = entriesToCsv(
-        entries.isEmpty && !filter.isNarrowed
-            ? (ledger?.entries ?? const [])
-            : entries,
+        [
+          for (final entry in ledger?.entries ?? const <Entry>[])
+            if (entry.isSpend) entry,
+        ],
         memberNames: {
           for (final member in [...?ledger?.members, ...?ledger?.pastMembers])
             // The resolved name, so somebody who has claimed an account appears

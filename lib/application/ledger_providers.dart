@@ -4,7 +4,6 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../data/local/database.dart';
 import '../data/repositories/drift_group_repository.dart';
-import '../domain/analytics/analytics_query.dart';
 import '../domain/avatar.dart';
 import '../domain/balance/balance_fold.dart';
 import '../domain/balance/member_balance.dart';
@@ -317,37 +316,58 @@ Future<({int solo, int shared})> deletionImpact(Ref ref) async {
 Stream<List<Category>> categories(Ref ref) =>
     ref.watch(categoryRepositoryProvider).watchAll();
 
-/// The current analytics question. Held in a provider so the filter survives
-/// navigating into an entry and back out.
-@riverpod
-class AnalyticsFilterController extends _$AnalyticsFilterController {
-  @override
-  AnalyticsFilter build(String groupId) => AnalyticsFilter(groupId: groupId);
+/// What this account is owed and owes across the groups it is in, each
+/// keyed by currency, and how many groups have anything outstanding.
+typedef OverallStanding = ({
+  Map<String, int> owed,
+  Map<String, int> owing,
+  int groupsWithBalance,
+});
 
-  void update(AnalyticsFilter filter) => state = filter;
-  void reset() => state = AnalyticsFilter(groupId: groupId);
+/// The home screen's own summary and ordering, from every group's ledger.
+///
+/// This folds every group at once, where a group's own tile folds only when
+/// it scrolls into view. A person's groups number in the tens, and the
+/// summary cannot be right without all of them.
+@riverpod
+({OverallStanding standing, Set<String> quietGroupIds}) groupsOverview(
+  Ref ref,
+) {
+  final listings = ref.watch(groupListingsProvider).value ?? const [];
+  final owed = <String, int>{};
+  final owing = <String, int>{};
+  final quiet = <String>{};
+  var groupsWithBalance = 0;
+  final quietBefore = DateTime.now().subtract(quietGroupAfter);
+
+  for (final listing in listings) {
+    if (!listing.isCurrent) continue;
+    final ledger = ref.watch(groupLedgerProvider(listing.group.id));
+    final me = ledger?.me;
+    if (ledger == null || me == null) continue;
+
+    var outstanding = false;
+    for (final code in ledger.activeCurrencies) {
+      final balance = ledger.balanceOf(me.id, code);
+      if (balance == 0) continue;
+      outstanding = true;
+      final side = balance > 0 ? owed : owing;
+      side[code] = (side[code] ?? 0) + balance.abs();
+    }
+    if (outstanding) {
+      groupsWithBalance++;
+    } else if (ledger.entries.isNotEmpty &&
+        listing.lastActivityAt.isBefore(quietBefore)) {
+      quiet.add(listing.group.id);
+    }
+  }
+
+  return (
+    standing: (owed: owed, owing: owing, groupsWithBalance: groupsWithBalance),
+    quietGroupIds: quiet,
+  );
 }
 
-@riverpod
-Stream<List<SpendBucket>> spendByCategory(Ref ref, String groupId) => ref
-    .watch(analyticsRepositoryProvider)
-    .spendByCategory(ref.watch(analyticsFilterControllerProvider(groupId)));
-
-@riverpod
-Stream<List<SpendBucket>> spendByMember(Ref ref, String groupId) => ref
-    .watch(analyticsRepositoryProvider)
-    .spendByMember(ref.watch(analyticsFilterControllerProvider(groupId)));
-
-@riverpod
-Stream<List<SpendBucket>> spendByMonth(Ref ref, String groupId) => ref
-    .watch(analyticsRepositoryProvider)
-    .spendByMonth(ref.watch(analyticsFilterControllerProvider(groupId)));
-
-@riverpod
-Stream<List<Entry>> analyticsResults(Ref ref, String groupId) => ref
-    .watch(analyticsRepositoryProvider)
-    .search(ref.watch(analyticsFilterControllerProvider(groupId)));
-
-@riverpod
-Stream<List<String>> groupCurrencies(Ref ref, String groupId) =>
-    ref.watch(analyticsRepositoryProvider).currenciesUsed(groupId);
+/// How long a settled group goes untouched before the home screen folds it
+/// away with the others that are done.
+const quietGroupAfter = Duration(days: 30);

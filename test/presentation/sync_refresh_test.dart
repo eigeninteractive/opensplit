@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:opensplit/application/preferences_providers.dart';
 import 'package:opensplit/application/ledger_providers.dart';
 import 'package:opensplit/application/local_providers.dart';
 import 'package:opensplit/application/session_providers.dart';
@@ -57,33 +59,38 @@ Future<void> _mount(
   _TestSync sync,
   Widget screen, {
   Stream<List<Group>>? groups,
-}) => tester.pumpWidget(
-  ProviderScope(
-    overrides: [
-      syncControllerProvider.overrideWith(() => sync),
-      groupListingsProvider.overrideWith(
-        (ref) => (groups ?? Stream.value([_group])).map(
-          (list) => [
-            for (final group in list)
-              GroupListing(
-                group: group,
-                hasLeft: false,
-                lastActivityAt: group.createdAt,
-              ),
-          ],
+}) async {
+  SharedPreferences.setMockInitialValues({});
+  final prefs = await SharedPreferences.getInstance();
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        syncControllerProvider.overrideWith(() => sync),
+        groupListingsProvider.overrideWith(
+          (ref) => (groups ?? Stream.value([_group])).map(
+            (list) => [
+              for (final group in list)
+                GroupListing(
+                  group: group,
+                  hasLeft: false,
+                  lastActivityAt: group.createdAt,
+                ),
+            ],
+          ),
         ),
-      ),
-      groupProvider(_group.id).overrideWith((ref) => Stream.value(_group)),
-      groupLedgerProvider(_group.id).overrideWith((ref) => _ledger),
-      groupSyncProvider(_group.id).overrideWith((ref) async {}),
-      currenciesProvider.overrideWith((ref) => Stream.value({})),
-      failedWritesProvider.overrideWith((ref) => Stream.value([])),
-      pendingConflictsProvider.overrideWith((ref) => Stream.value([])),
-      accountProvider.overrideWith((ref) => Stream.value(null)),
-    ],
-    child: MaterialApp(home: screen),
-  ),
-);
+        groupProvider(_group.id).overrideWith((ref) => Stream.value(_group)),
+        groupLedgerProvider(_group.id).overrideWith((ref) => _ledger),
+        groupSyncProvider(_group.id).overrideWith((ref) async {}),
+        currenciesProvider.overrideWith((ref) => Stream.value({})),
+        failedWritesProvider.overrideWith((ref) => Stream.value([])),
+        pendingConflictsProvider.overrideWith((ref) => Stream.value([])),
+        accountProvider.overrideWith((ref) => Stream.value(null)),
+      ],
+      child: MaterialApp(home: screen),
+    ),
+  );
+}
 
 void main() {
   testWidgets('refresh targets the account and disables clicks while syncing', (

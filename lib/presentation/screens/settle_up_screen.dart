@@ -19,7 +19,6 @@ import '../navigation.dart';
 import '../feedback.dart';
 import '../widgets/amount_card.dart';
 import '../widgets/form_leave_guard.dart';
-import '../widgets/entry_history.dart';
 import '../widgets/page_body.dart';
 import '../widgets/shared_element.dart';
 
@@ -343,10 +342,6 @@ class _SettleUp extends ConsumerWidget {
                   ),
                 ),
               ),
-              if (editing != null) ...[
-                const SizedBox(height: 24),
-                EntryHistory(entryId: editing.id, ledger: ledger),
-              ],
             ],
           ),
         ),

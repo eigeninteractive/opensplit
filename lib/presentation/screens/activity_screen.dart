@@ -21,9 +21,13 @@ import '../widgets/sync_status_notice.dart';
 
 /// What has happened to this group's expenses, and who did it.
 class ActivityScreen extends ConsumerWidget {
-  const ActivityScreen({super.key, required this.groupId});
+  const ActivityScreen({super.key, required this.groupId, this.newSince});
 
   final String groupId;
+
+  /// When the group was last looked at. What other people did after it is
+  /// marked as new.
+  final DateTime? newSince;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -65,6 +69,12 @@ class ActivityScreen extends ConsumerWidget {
                 ledger: ledger,
                 categoryNames: categoryNames,
                 pending: syncs && event.isProvisional,
+                isNew: switch (newSince) {
+                  final since? =>
+                    event.createdAt.isAfter(since) &&
+                        event.actorId != ledger?.me?.id,
+                  null => false,
+                },
                 description: entry?.row.description,
                 currency: currencies[currencyCode],
                 // Only while there is still an expense to open.
@@ -131,6 +141,7 @@ class _Line extends StatelessWidget {
     required this.ledger,
     required this.categoryNames,
     required this.pending,
+    required this.isNew,
     required this.description,
     required this.currency,
     required this.onTap,
@@ -143,6 +154,9 @@ class _Line extends StatelessWidget {
 
   /// This device's own account of a change the server has not confirmed.
   final bool pending;
+
+  /// Whether this happened since the group was last looked at.
+  final bool isNew;
 
   /// The expense's description, for an entry line. Null for every other kind.
   final String? description;
@@ -232,26 +246,30 @@ class _Line extends StatelessWidget {
 
     return ListTile(
       onTap: onTap,
-      leading: switch ((ledger, who)) {
-        (final ledger?, final who?) => MemberAvatar(
-          ledger: ledger,
-          member: who,
-        ),
-        _ => CircleAvatar(
-          backgroundColor: scheme.secondaryContainer,
-          foregroundColor: scheme.onSecondaryContainer,
-          child: Icon(icon),
-        ),
-      },
+      leading: Badge(
+        isLabelVisible: isNew,
+        child: switch ((ledger, who)) {
+          (final ledger?, final who?) => MemberAvatar(
+            ledger: ledger,
+            member: who,
+          ),
+          _ => CircleAvatar(
+            backgroundColor: scheme.secondaryContainer,
+            foregroundColor: scheme.onSecondaryContainer,
+            child: Icon(icon),
+          ),
+        },
+      ),
       title: Text('$title${pending ? ' — not synced yet' : ''}'),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           for (final detail in details) Text(detail),
           Text(
-            DateFormat.jm().format(event.createdAt.toLocal()),
+            '${isNew ? 'New · ' : ''}'
+            '${DateFormat.jm().format(event.createdAt.toLocal())}',
             style: theme.textTheme.labelMedium?.copyWith(
-              color: scheme.onSurfaceVariant,
+              color: isNew ? scheme.primary : scheme.onSurfaceVariant,
             ),
           ),
         ],

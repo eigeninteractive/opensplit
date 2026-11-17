@@ -8,11 +8,18 @@ What changed in each version of the app, newest first. The format is
 ### Added
 - Invite links preview with the group's name and who invited you, instead of the general OpenSplit card.
 - Activity is grouped by day, shows who made each change, and opens the expense when you tap a line.
+- Opening an expense or payment shows it to read first: what it cost you, who paid, how it was split and its history. Edit is one tap away.
+- The groups list adds up what you owe and are owed across groups, and folds groups that are settled and quiet for a month under Settled groups.
+- A dot marks groups with changes since you last opened them, and Activity marks what is new.
+- Remind someone who owes you from Balances, with a message ready to share.
 
 ### Changed
 - Expense rows show what each expense means for you on the right, with the full description and who paid. Recorded payments appear as a tinted row, without red or green.
 - Balances lead with your own payments. Everyone's balances and payments between others are folded underneath, and names are shown in full.
 - Activity and expense history name the expense or payment they are about, with real category names, amounts and dates.
+- Insights is rebuilt: switch between the group's spending and your own share, pick a period, and tap a category or a bar to see the expenses behind it. It also shows who paid and who spent, and the biggest expenses.
+- The expense form is shorter. Paid by and Split fold to a one-line summary until you need them.
+- Insights no longer has its own search; use search in the group toolbar. Exporting saves all of the group's expenses.
 - Your own row reads "You" throughout. The Add expense button shrinks to its icon as you scroll down and returns as you scroll up.
 
 ### Fixed

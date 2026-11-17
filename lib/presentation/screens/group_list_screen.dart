@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../application/ledger_providers.dart';
+import '../../application/preferences_providers.dart';
 import '../../application/sync_providers.dart';
 import '../../data/local/database.dart';
 import '../../data/repositories/drift_group_repository.dart';
@@ -16,7 +17,9 @@ import '../widgets/segmented_list.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/conflicting_edit_banner.dart';
 import '../widgets/create_group_sheet.dart';
+import '../../domain/money_format.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/folded_section.dart';
 import '../widgets/group_standing.dart';
 import '../widgets/link_account_prompt.dart';
 import '../widgets/offline_indicator.dart';
@@ -37,8 +40,10 @@ class GroupListScreen extends ConsumerWidget {
     final all = groupsAsync.value ?? const <GroupListing>[];
     final groups = [
       for (final listing in all)
-        if (listing.isCurrent) listing.group,
+        if (listing.isCurrent) listing,
     ];
+    final overview = ref.watch(groupsOverviewProvider);
+    final currencies = ref.watch(currenciesProvider).value ?? const {};
 
     return DestinationScaffold(
       titleWidget: const BrandLockup(),
@@ -75,7 +80,18 @@ class GroupListScreen extends ConsumerWidget {
             child: _Message(text: 'Could not load groups.\n$error'),
           ),
         ],
-        AsyncValue(hasValue: true) => _GroupList.slivers(groups: groups),
+        AsyncValue(hasValue: true) => _GroupList.slivers(
+          groups: [
+            for (final listing in groups)
+              if (!overview.quietGroupIds.contains(listing.group.id)) listing,
+          ],
+          settled: [
+            for (final listing in groups)
+              if (overview.quietGroupIds.contains(listing.group.id)) listing,
+          ],
+          standing: overview.standing,
+          currencies: currencies,
+        ),
         // Nothing, rather than placeholder cards: at launch the splash covers
         // this, and afterwards a local read is too quick to be worth drawing.
         _ => const [LaunchPlaceholder(child: SliverToBoxAdapter())],
@@ -88,7 +104,14 @@ class GroupListScreen extends ConsumerWidget {
 abstract final class _GroupList {
   static const _noticeGap = EdgeInsets.only(bottom: 8);
 
-  static List<Widget> slivers({required List<Group> groups}) => [
+  /// [settled] are the groups with nothing owed and nothing happening,
+  /// folded away under the ones still in use.
+  static List<Widget> slivers({
+    required List<GroupListing> groups,
+    required List<GroupListing> settled,
+    required OverallStanding standing,
+    required Map<String, Currency> currencies,
+  }) => [
     // The notices, each of which renders as nothing until it has something to
     // say.
     SliverPadding(
@@ -102,7 +125,12 @@ abstract final class _GroupList {
         ],
       ),
     ),
-    if (groups.isEmpty)
+    // One group's figure is already the whole story.
+    if (standing.groupsWithBalance > 1)
+      SliverToBoxAdapter(
+        child: _Overall(standing: standing, currencies: currencies),
+      ),
+    if (groups.isEmpty && settled.isEmpty)
       const SliverToBoxAdapter(child: _EmptyState())
     else
       SliverPadding(
@@ -116,9 +144,28 @@ abstract final class _GroupList {
             index: index,
             count: groups.length,
             child: _GroupTile(
-              group: groups[index],
+              listing: groups[index],
               corners: Segment.radiusAt(index: index, count: groups.length),
             ),
+          ),
+        ),
+      ),
+    if (settled.isNotEmpty)
+      SliverPadding(
+        padding: const EdgeInsets.only(top: 16),
+        sliver: SliverToBoxAdapter(
+          child: FoldedSection(
+            storageKey: 'settled-groups',
+            title: 'Settled groups',
+            summary:
+                '${settled.length} '
+                '${settled.length == 1 ? 'group' : 'groups'} with nothing owed '
+                'and no recent activity',
+            initiallyExpanded: groups.isEmpty,
+            children: [
+              for (final listing in settled)
+                _GroupTile(listing: listing, corners: BorderRadius.zero),
+            ],
           ),
         ),
       ),
@@ -126,16 +173,64 @@ abstract final class _GroupList {
   ];
 }
 
+/// Where you stand across every group, above the groups themselves.
+class _Overall extends StatelessWidget {
+  const _Overall({required this.standing, required this.currencies});
+
+  final OverallStanding standing;
+  final Map<String, Currency> currencies;
+
+  List<String> _figures(Map<String, int> amounts) => [
+    for (final code in amounts.keys.toList()..sort())
+      formatMoneyAbs(currencies[code], amounts[code]!),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Semantics(
+            header: true,
+            child: Text(
+              'Across ${standing.groupsWithBalance} groups',
+              style: theme.textTheme.titleSmall?.copyWith(
+                color: theme.colorScheme.primary,
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          StandingLines(
+            owed: _figures(standing.owed),
+            owing: _figures(standing.owing),
+            style: theme.textTheme.titleMedium!,
+            overflow: TextOverflow.clip,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// A group's identity and balances, opening its expenses and people.
 class _GroupTile extends ConsumerWidget {
-  const _GroupTile({required this.group, required this.corners});
+  const _GroupTile({required this.listing, required this.corners});
 
-  final Group group;
+  final GroupListing listing;
   final BorderRadius corners;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final group = listing.group;
     final ledger = ref.watch(groupLedgerProvider(group.id));
+    // Something happened here since this device last had the group open.
+    final hasNews = switch (ref.watch(groupSeenAtProvider(group.id))) {
+      final seen? => listing.lastActivityAt.isAfter(seen),
+      null => false,
+    };
     final currencies = ref.watch(currenciesProvider).value ?? const {};
     final theme = Theme.of(context);
     // The segment owns containment; the tile keeps Material's ink and focus.
@@ -159,14 +254,21 @@ class _GroupTile extends ConsumerWidget {
             ),
             minLeadingWidth: 56,
             titleAlignment: ListTileTitleAlignment.top,
-            leading: GroupAvatarHero(group: group, radius: 28),
-            title: SharedText(
-              tag: ('group-name', group.id),
-              text: group.name,
-              maxLines: null,
-              style: theme.textTheme.titleLarge!.copyWith(
-                color: theme.colorScheme.onSurface,
-                fontWeight: FontWeight.w600,
+            leading: Badge(
+              isLabelVisible: hasNews,
+              smallSize: 12,
+              child: GroupAvatarHero(group: group, radius: 28),
+            ),
+            title: Semantics(
+              hint: hasNews ? 'New activity' : null,
+              child: SharedText(
+                tag: ('group-name', group.id),
+                text: group.name,
+                maxLines: null,
+                style: theme.textTheme.titleLarge!.copyWith(
+                  color: theme.colorScheme.onSurface,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
             subtitle: ledger == null

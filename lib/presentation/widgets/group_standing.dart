@@ -55,29 +55,55 @@ class GroupStanding extends StatelessWidget {
 
     if (owed.isEmpty && owing.isEmpty) return Text('Settled up', style: quiet);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (owed.isNotEmpty)
-          _Direction(
-            lead: 'You are owed',
-            figures: owed,
-            direction: 1,
-            style: base,
-            overflow: overflow,
-          ),
-        if (owing.isNotEmpty)
-          _Direction(
-            lead: 'You owe',
-            figures: owing,
-            direction: -1,
-            style: base,
-            overflow: overflow,
-          ),
-      ],
+    return StandingLines(
+      owed: owed,
+      owing: owing,
+      style: base,
+      overflow: overflow,
     );
   }
+}
+
+/// "You are owed" and "You owe", each over the currencies that go that way.
+class StandingLines extends StatelessWidget {
+  const StandingLines({
+    super.key,
+    required this.owed,
+    required this.owing,
+    required this.style,
+    this.overflow = TextOverflow.ellipsis,
+  });
+
+  /// Formatted, unsigned amounts, one per currency.
+  final List<String> owed;
+  final List<String> owing;
+
+  final TextStyle style;
+  final TextOverflow overflow;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      if (owed.isNotEmpty)
+        _Direction(
+          lead: 'You are owed',
+          figures: owed,
+          direction: 1,
+          style: style,
+          overflow: overflow,
+        ),
+      if (owing.isNotEmpty)
+        _Direction(
+          lead: 'You owe',
+          figures: owing,
+          direction: -1,
+          style: style,
+          overflow: overflow,
+        ),
+    ],
+  );
 }
 
 /// One direction of a group's balance: an arrow, the words, and every

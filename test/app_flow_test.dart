@@ -227,9 +227,14 @@ void main() {
     await _settle(tester);
     await tester.tap(find.text('Groceries'));
     await _settle(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Edit'));
+    await _settle(tester);
 
     await _enterInto(tester, 'Amount', '2000');
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await _settle(tester);
+    expect(find.text('₹2,000.00'), findsWidgets);
+    await tester.tap(find.byIcon(Icons.arrow_back));
     await _settle(tester);
 
     await tester.tap(find.byTooltip('More'));
