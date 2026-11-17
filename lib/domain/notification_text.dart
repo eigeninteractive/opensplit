@@ -57,6 +57,18 @@ import 'money_format.dart';
   );
 }
 
+/// The text for a notification asking the reader to pay somebody back.
+///
+/// [amount] is already formatted, symbol included.
+({String title, String body}) describeReminder({
+  required String groupName,
+  required String creditorName,
+  required String amount,
+}) => (
+  title: groupName,
+  body: '$creditorName sent a reminder: you owe them $amount.',
+);
+
 /// The text for a notification about somebody arriving or leaving.
 ({String title, String body})? describeMemberEvent({
   required String groupName,

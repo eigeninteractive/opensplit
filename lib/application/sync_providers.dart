@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../data/network/network_signal.dart';
@@ -5,6 +7,7 @@ import '../data/sync/sync_engine.dart';
 import '../data/sync/api_client.dart';
 import 'backend_providers.dart';
 import 'local_providers.dart';
+import 'preferences_providers.dart';
 import 'sync_coordinator.dart';
 
 part 'sync_providers.g.dart';
@@ -19,6 +22,13 @@ SyncEngine? syncEngine(Ref ref) {
     client: client,
     outbox: ref.watch(outboxQueueProvider),
     accountId: ref.watch(currentAccountIdProvider),
+    onSeen: (seenByGroup) {
+      for (final MapEntry(key: groupId, value: seenAt) in seenByGroup.entries) {
+        unawaited(
+          ref.read(groupSeenAtProvider(groupId).notifier).adopt(seenAt),
+        );
+      }
+    },
   );
   ref.onDispose(engine.dispose);
   return engine;

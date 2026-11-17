@@ -248,10 +248,36 @@ export const PullRequestSchema = z
 /** A group in the request that could not be read, and why. Every other group in the same pull is still answered. */
 export const GroupRefusalSchema = z.object({ groupId: IdSchema, code: ErrorCodeSchema, message: z.string() }).openapi("GroupRefusal");
 
+/** How far one account has read one group: the time of the newest activity it has looked at. */
+export const GroupSeenSchema = z.object({ groupId: IdSchema, seenAt: TimestampSchema }).openapi("GroupSeen");
+
+/** The newest activity a device has shown. The server keeps the latest it has been told, never past its own clock. */
+export const SeenInputSchema = z.object({ seenAt: TimestampSchema }).openapi("SeenInput");
+
+/** Who is being asked to pay, and in which currency. */
+export const ReminderInputSchema = z.object({ memberId: IdSchema, currency: CurrencyCodeSchema }).openapi("ReminderInput");
+
+/** How long somebody is left alone after being reminded by the same person. */
+export const REMINDER_INTERVAL_SECONDS = 24 * 60 * 60;
+
+/**
+ * What became of a reminder. `already_reminded` carries when the earlier one
+ * went; `unreachable` means the person has no device registered for
+ * notifications, so nothing was sent and nothing was counted.
+ */
+export const ReminderSchema = z
+  .object({
+    outcome: z.enum(["sent", "already_reminded", "unreachable"]).openapi("ReminderOutcome"),
+    sentAt: TimestampSchema.nullable(),
+  })
+  .openapi("Reminder");
+
 export const PullSchema = z
   .object({
     /** Every group this account actively participates in: how a device finds a group joined elsewhere. */
     groupIds: z.array(IdSchema),
+    /** Where this account has read to in each of those groups it has opened, from any device. */
+    seen: z.array(GroupSeenSchema),
     /** One page per group read, in the order asked. */
     pages: z.array(ChangePageSchema),
     refusals: z.array(GroupRefusalSchema),
@@ -261,13 +287,21 @@ export const PullSchema = z
 /** The kinds that wake a device: an expense, somebody arriving, somebody leaving. */
 export const notifiableKinds = ["entry", "member_joined", "member_left"] as const satisfies readonly (typeof tables.eventKinds)[number][];
 
-/** The data-only push message: which event to fetch, not what it says. */
+/** What a push is about: a recorded event, or one member asking another to pay. */
+export const PushKindSchema = z.enum([...tables.eventKinds, "reminder"]).openapi("PushKind");
+
+/**
+ * The data-only push message: which event to fetch, not what it says. A
+ * reminder is no event: its `subjectId` is the member asking, `currency` says
+ * for which balance, and the device works out the amount from its own ledger.
+ */
 export const PushDataSchema = z
   .object({
     groupId: IdSchema,
     eventId: IdSchema,
-    kind: EventKindSchema,
+    kind: PushKindSchema,
     subjectId: IdSchema,
+    currency: CurrencyCodeSchema.optional(),
   })
   .openapi("PushData");
 
@@ -300,3 +334,5 @@ export type PullRequest = z.infer<typeof PullRequestSchema>;
 export type GroupRefusal = z.infer<typeof GroupRefusalSchema>;
 export type Pull = z.infer<typeof PullSchema>;
 export type PushData = z.infer<typeof PushDataSchema>;
+export type GroupSeen = z.infer<typeof GroupSeenSchema>;
+export type Reminder = z.infer<typeof ReminderSchema>;

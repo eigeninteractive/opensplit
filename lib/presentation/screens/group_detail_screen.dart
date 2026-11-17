@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' show max;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -13,6 +14,7 @@ import '../../application/backend_providers.dart';
 import '../../application/sync_providers.dart';
 import '../../data/local/database.dart';
 import '../../domain/models/entry.dart';
+import '../../domain/models/group_event.dart';
 import '../../domain/money_format.dart';
 import '../navigation.dart';
 import '../theme.dart';
@@ -59,20 +61,25 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
   @override
   void initState() {
     super.initState();
-    final seen = groupSeenAtProvider(widget.groupId);
-    _newSince = ref.read(seen);
+    _newSince = ref.read(groupSeenAtProvider(widget.groupId));
     // After the frame, since a provider may not change while widgets build.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) ref.read(seen.notifier).markNow();
+      if (mounted) {
+        _markSeen(ref.read(groupActivityProvider(widget.groupId)).value);
+      }
     });
   }
 
-  /// Leaving counts as having seen what happened while the group was open,
-  /// your own changes included.
-  void _onPop(bool didPop, Object? result) {
-    if (didPop) {
-      ref.read(groupSeenAtProvider(widget.groupId).notifier).markNow();
-    }
+  /// Having the group open counts as having seen everything in it so far,
+  /// your own changes included, on this device and the account's others.
+  void _markSeen(List<GroupEvent>? events) {
+    if (events == null || events.isEmpty) return;
+    final newest = events
+        .map((event) => event.createdAt)
+        .reduce((a, b) => a.isAfter(b) ? a : b);
+    unawaited(
+      ref.read(groupSeenAtProvider(widget.groupId).notifier).markSeen(newest),
+    );
   }
 
   @override
@@ -101,6 +108,10 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
 
     // The ledger stays usable during a refresh; status is shown separately.
     ref.watch(groupSyncProvider(groupId));
+    ref.listen(
+      groupActivityProvider(groupId),
+      (_, activity) => _markSeen(activity.value),
+    );
 
     if (groupAsync.hasValue && groupAsync.value == null) {
       return Scaffold(
@@ -129,62 +140,57 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
 
     final wide = MediaQuery.sizeOf(context).width >= _wideBreakpoint;
 
-    final scaffold = PopScope(
-      onPopInvokedWithResult: _onPop,
-      child: Scaffold(
-        floatingActionButton: !ledger.canEdit
-            ? null
-            : ScrollAwareFab(
-                extended: _fabExtended,
-                onPressed: () => context.push('/g/$groupId/add'),
-                icon: Icons.add,
-                label: 'Add expense',
-              ),
-        body: NotificationListener<UserScrollNotification>(
-          onNotification: _onScroll,
-          child: NestedScrollView(
-            headerSliverBuilder: (context, scrolled) => [
-              SliverOverlapAbsorber(
-                handle: NestedScrollView.sliverOverlapAbsorberHandleFor(
-                  context,
-                ),
-                sliver: _GroupAppBar(
-                  newSince: _newSince,
-                  onActivityRead: () => setState(() => _newSince = null),
-                  ledger: ledger,
-                  tabs: !wide,
-                  measure: wide ? 1200 : 760,
-                ),
-              ),
-            ],
-            // The header spans the window; the panes keep to a readable measure.
-            // Two panes are a master–detail layout and can take more width than a
-            // single column, but not an unbounded amount: on a 27-inch monitor an
-            // uncapped Row puts the expense list and the balances a foot apart.
-            body: PageBody(
-              maxWidth: wide ? 1200 : 760,
-              child: wide
-                  ? Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(flex: 3, child: _EntriesPane(ledger: ledger)),
-                        const VerticalDivider(width: 1),
-                        Expanded(
-                          flex: 2,
-                          child: BalancesPanel(
-                            ledger: ledger,
-                            showsBanners: false,
-                          ),
-                        ),
-                      ],
-                    )
-                  : TabBarView(
-                      children: [
-                        _EntriesPane(ledger: ledger),
-                        BalancesPanel(ledger: ledger),
-                      ],
-                    ),
+    final scaffold = Scaffold(
+      floatingActionButton: !ledger.canEdit
+          ? null
+          : ScrollAwareFab(
+              extended: _fabExtended,
+              onPressed: () => context.push('/g/$groupId/add'),
+              icon: Icons.add,
+              label: 'Add expense',
             ),
+      body: NotificationListener<UserScrollNotification>(
+        onNotification: _onScroll,
+        child: NestedScrollView(
+          headerSliverBuilder: (context, scrolled) => [
+            SliverOverlapAbsorber(
+              handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
+              sliver: _GroupAppBar(
+                newSince: _newSince,
+                onActivityRead: () => setState(() => _newSince = null),
+                ledger: ledger,
+                tabs: !wide,
+                measure: wide ? 1200 : 760,
+              ),
+            ),
+          ],
+          // The header spans the window; the panes keep to a readable measure.
+          // Two panes are a master–detail layout and can take more width than a
+          // single column, but not an unbounded amount: on a 27-inch monitor an
+          // uncapped Row puts the expense list and the balances a foot apart.
+          body: PageBody(
+            maxWidth: wide ? 1200 : 760,
+            child: wide
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(flex: 3, child: _EntriesPane(ledger: ledger)),
+                      const VerticalDivider(width: 1),
+                      Expanded(
+                        flex: 2,
+                        child: BalancesPanel(
+                          ledger: ledger,
+                          showsBanners: false,
+                        ),
+                      ),
+                    ],
+                  )
+                : TabBarView(
+                    children: [
+                      _EntriesPane(ledger: ledger),
+                      BalancesPanel(ledger: ledger),
+                    ],
+                  ),
           ),
         ),
       ),

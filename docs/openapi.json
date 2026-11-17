@@ -402,13 +402,18 @@
             "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
           },
           "kind": {
-            "$ref": "#/components/schemas/EventKind"
+            "$ref": "#/components/schemas/PushKind"
           },
           "subjectId": {
             "type": "string",
             "minLength": 1,
             "maxLength": 64,
             "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "example": "INR"
           }
         },
         "required": [
@@ -418,7 +423,7 @@
           "subjectId"
         ]
       },
-      "EventKind": {
+      "PushKind": {
         "type": "string",
         "enum": [
           "entry",
@@ -428,7 +433,8 @@
           "member_renamed",
           "group_renamed",
           "link_created",
-          "link_revoked"
+          "link_revoked",
+          "reminder"
         ]
       },
       "Health": {
@@ -719,6 +725,12 @@
               "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
             }
           },
+          "seen": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupSeen"
+            }
+          },
           "pages": {
             "type": "array",
             "items": {
@@ -734,8 +746,29 @@
         },
         "required": [
           "groupIds",
+          "seen",
           "pages",
           "refusals"
+        ]
+      },
+      "GroupSeen": {
+        "type": "object",
+        "properties": {
+          "groupId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "seenAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          }
+        },
+        "required": [
+          "groupId",
+          "seenAt"
         ]
       },
       "ChangePage": {
@@ -1219,6 +1252,19 @@
           "ordinal"
         ]
       },
+      "EventKind": {
+        "type": "string",
+        "enum": [
+          "entry",
+          "member_added",
+          "member_joined",
+          "member_left",
+          "member_renamed",
+          "group_renamed",
+          "link_created",
+          "link_revoked"
+        ]
+      },
       "GroupRefusal": {
         "type": "object",
         "properties": {
@@ -1509,6 +1555,65 @@
           "payers",
           "shares",
           "baseSeq"
+        ]
+      },
+      "SeenInput": {
+        "type": "object",
+        "properties": {
+          "seenAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          }
+        },
+        "required": [
+          "seenAt"
+        ]
+      },
+      "Reminder": {
+        "type": "object",
+        "properties": {
+          "outcome": {
+            "$ref": "#/components/schemas/ReminderOutcome"
+          },
+          "sentAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": "2026-09-23T11:20:41.865Z"
+          }
+        },
+        "required": [
+          "outcome",
+          "sentAt"
+        ]
+      },
+      "ReminderOutcome": {
+        "type": "string",
+        "enum": [
+          "sent",
+          "already_reminded",
+          "unreachable"
+        ]
+      },
+      "ReminderInput": {
+        "type": "object",
+        "properties": {
+          "memberId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "example": "INR"
+          }
+        },
+        "required": [
+          "memberId",
+          "currency"
         ]
       },
       "Invite": {
@@ -2889,6 +2994,212 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Entry"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "You are not a member of this group, or not allowed to change that.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such group, entry, member or link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The request conflicts with the group's current state. Read `error.retry` before retrying.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The group was collected, or the link has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The expense does not add up.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/groups/{groupId}/seen": {
+      "put": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "putSeen",
+        "tags": [
+          "groups"
+        ],
+        "summary": "Say how far this account has read a group's activity",
+        "description": "Kept per account, so a group read on one device is read on the others, which learn it from `seen` in their next pull. Only ever moves forward, and never past the server's clock: the answer is where it stands now, which may be later than what was sent.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            },
+            "required": true,
+            "name": "groupId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeenInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Where this account has read to",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupSeen"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "You are not a member of this group, or not allowed to change that.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/groups/{groupId}/reminders": {
+      "post": {
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "operationId": "remind",
+        "tags": [
+          "groups"
+        ],
+        "summary": "Notify somebody who owes you that you would like to be paid",
+        "description": "Only somebody the group owes in that currency may ask, and only a current member with an account who owes can be asked. One person reminds another at most once a day; a second attempt is answered `already_reminded` with when the first went. Nothing is recorded in the group.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "example": "0195f3a2-8b1e-7c3d-9f42-1a2b3c4d5e6f"
+            },
+            "required": true,
+            "name": "groupId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReminderInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "What became of the reminder",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reminder"
                 }
               }
             }

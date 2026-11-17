@@ -3,7 +3,7 @@
 //
 
 // ignore_for_file: unused_element
-import 'package:opensplit_api/src/model/event_kind.dart';
+import 'package:opensplit_api/src/model/push_kind.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 part 'push_data.g.dart';
@@ -24,6 +24,8 @@ class PushData {
     required this.kind,
 
     required this.subjectId,
+
+    this.currency,
   });
 
   @JsonKey(name: r'groupId', required: true, includeIfNull: false)
@@ -36,12 +38,15 @@ class PushData {
     name: r'kind',
     required: true,
     includeIfNull: false,
-    unknownEnumValue: EventKind.unknownDefaultOpenApi,
+    unknownEnumValue: PushKind.unknownDefaultOpenApi,
   )
-  final EventKind kind;
+  final PushKind kind;
 
   @JsonKey(name: r'subjectId', required: true, includeIfNull: false)
   final String subjectId;
+
+  @JsonKey(name: r'currency', required: false, includeIfNull: false)
+  final String? currency;
 
   @override
   bool operator ==(Object other) =>
@@ -50,11 +55,16 @@ class PushData {
           other.groupId == groupId &&
           other.eventId == eventId &&
           other.kind == kind &&
-          other.subjectId == subjectId;
+          other.subjectId == subjectId &&
+          other.currency == currency;
 
   @override
   int get hashCode =>
-      groupId.hashCode + eventId.hashCode + kind.hashCode + subjectId.hashCode;
+      groupId.hashCode +
+      eventId.hashCode +
+      kind.hashCode +
+      subjectId.hashCode +
+      currency.hashCode;
 
   factory PushData.fromJson(Map<String, dynamic> json) =>
       _$PushDataFromJson(json);

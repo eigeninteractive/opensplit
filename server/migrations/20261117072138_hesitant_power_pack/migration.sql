@@ -1,0 +1,1 @@
+ALTER TABLE `memberships` ADD `seen_at` text;

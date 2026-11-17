@@ -66,6 +66,7 @@ Future<void> _mount(
     ProviderScope(
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
+        currentAccountIdProvider.overrideWithValue('me'),
         syncControllerProvider.overrideWith(() => sync),
         groupListingsProvider.overrideWith(
           (ref) => (groups ?? Stream.value([_group])).map(

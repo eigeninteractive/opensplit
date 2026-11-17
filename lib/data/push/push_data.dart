@@ -4,7 +4,7 @@ import 'package:opensplit_api/opensplit_api.dart' as api;
 api.PushData? readPushData(Map<String, dynamic> data) {
   try {
     final push = api.PushData.fromJson(data);
-    return push.kind == api.EventKind.unknownDefaultOpenApi ? null : push;
+    return push.kind == api.PushKind.unknownDefaultOpenApi ? null : push;
   } on Object {
     return null;
   }

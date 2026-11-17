@@ -7,8 +7,8 @@ import '../data/repositories/drift_group_repository.dart';
 import '../domain/avatar.dart';
 import '../domain/balance/balance_fold.dart';
 import '../domain/balance/member_balance.dart';
-import '../domain/balance/pairwise.dart';
 import '../domain/balance/simplify.dart';
+import '../domain/balance/suggested_transfers.dart';
 import '../domain/fx/estimated_total.dart';
 import '../domain/member_identity.dart';
 import '../domain/models/entry.dart';
@@ -268,9 +268,7 @@ GroupLedger? groupLedger(Ref ref, String groupId) {
     ],
     entries: entryList,
     balances: balances,
-    transfers: group.simplifyDebts
-        ? simplifyDebts(balances)
-        : pairwiseDebts(entryList),
+    transfers: suggestedTransfers(entryList, simplified: group.simplifyDebts),
     me: everyone.where((m) => m.profileId == accountId).firstOrNull,
     profiles: profiles,
     brokenEntries: broken,

@@ -2,11 +2,15 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:opensplit_api/opensplit_api.dart' show EntryKind;
+import 'package:opensplit_api/opensplit_api.dart'
+    show EntryKind, ReminderOutcome;
 import 'package:share_plus/share_plus.dart';
 
+import '../../application/backend_providers.dart';
 import '../../application/ledger_providers.dart';
 import '../../data/local/database.dart';
+import '../../data/sync/api_client.dart';
+import '../../data/sync/group_signals.dart';
 import '../../domain/balance/member_balance.dart';
 import '../../domain/balance/simplify.dart';
 import '../../domain/balance/transfer_basis.dart';
@@ -457,6 +461,15 @@ class _TransferTile extends StatelessWidget {
                   icon: const Icon(Icons.share_outlined),
                   label: const Text('Share'),
                 ),
+              // A notification needs an account to go to. A name added by
+              // hand has none, and is asked through Share instead.
+              if (owedToMe && other?.profileId != null)
+                _RemindButton(
+                  groupId: ledger.group.id,
+                  memberId: transfer.fromMemberId,
+                  currency: transfer.currency,
+                  name: from,
+                ),
               FilledButton.tonal(
                 onPressed: settle,
                 child: Text(isMine ? 'Pay' : 'Settle'),
@@ -484,6 +497,71 @@ class _TransferTile extends StatelessWidget {
                 onRecord();
               },
       ),
+    );
+  }
+}
+
+/// Sends a notification to somebody who owes you, and says what became of
+/// it. Absent when there is no server to send it through.
+class _RemindButton extends ConsumerStatefulWidget {
+  const _RemindButton({
+    required this.groupId,
+    required this.memberId,
+    required this.currency,
+    required this.name,
+  });
+
+  final String groupId;
+  final String memberId;
+  final String currency;
+  final String name;
+
+  @override
+  ConsumerState<_RemindButton> createState() => _RemindButtonState();
+}
+
+class _RemindButtonState extends ConsumerState<_RemindButton> {
+  bool _sending = false;
+
+  Future<void> _remind(GroupSignals signals) async {
+    setState(() => _sending = true);
+    final name = widget.name;
+    String message;
+    try {
+      final reminder = await signals.remind(
+        groupId: widget.groupId,
+        memberId: widget.memberId,
+        currency: widget.currency,
+      );
+      message = switch (reminder.outcome) {
+        ReminderOutcome.sent => 'Reminder sent to $name.',
+        ReminderOutcome.alreadyReminded =>
+          'You already reminded $name today. Share the reminder instead, '
+              'or try again tomorrow.',
+        ReminderOutcome.unreachable =>
+          '$name has notifications turned off. Share the reminder instead.',
+        _ => 'Could not send the reminder.',
+      };
+    } on ApiFailure catch (failure) {
+      message = failure.unreachable
+          ? 'You are offline. Share the reminder instead.'
+          : failure.message;
+    }
+    if (!mounted) return;
+    setState(() => _sending = false);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final signals = ref.watch(groupSignalsProvider);
+    if (signals == null) return const SizedBox.shrink();
+    return TextButton.icon(
+      onPressed: _sending ? null : () => _remind(signals),
+      icon: const Icon(Icons.notifications_active_outlined),
+      label: const Text('Remind'),
     );
   }
 }

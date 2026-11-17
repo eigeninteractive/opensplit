@@ -23,7 +23,7 @@ const TOKEN_KEY = "fcm:access-token";
 
 /** Wakes every device of the group's current members except the actor's, once per message. */
 export async function wakeDevices(env: Env, groupId: string, actorProfileId: string, messages: PushData[]): Promise<void> {
-  if (messages.length === 0 || !env.FCM_PROJECT_ID || !env.FCM_SERVICE_ACCOUNT) return;
+  if (messages.length === 0 || !pushConfigured(env)) return;
 
   const db = drizzle(env.DB);
   const devices = await db
@@ -32,7 +32,33 @@ export async function wakeDevices(env: Env, groupId: string, actorProfileId: str
     .innerJoin(memberships, eq(memberships.profileId, deviceTokens.profileId))
     .where(and(eq(memberships.groupId, groupId), isNull(memberships.leftAt), ne(deviceTokens.profileId, actorProfileId)))
     .all();
-  if (devices.length === 0) return;
+  await deliver(
+    env,
+    devices.map((device) => device.token),
+    messages,
+  );
+}
+
+/** Wakes one person's devices, and says how many there were: none means nobody will see it. */
+export async function wakeProfile(env: Env, profileId: string, message: PushData): Promise<number> {
+  if (!pushConfigured(env)) return 0;
+
+  const devices = await drizzle(env.DB).select({ token: deviceTokens.token }).from(deviceTokens).where(eq(deviceTokens.profileId, profileId)).all();
+  await deliver(
+    env,
+    devices.map((device) => device.token),
+    [message],
+  );
+  return devices.length;
+}
+
+function pushConfigured(env: Env): boolean {
+  return Boolean(env.FCM_PROJECT_ID && env.FCM_SERVICE_ACCOUNT);
+}
+
+/** Sends every message to every registration, and forgets the registrations FCM says are dead. */
+async function deliver(env: Env, registrations: string[], messages: PushData[]): Promise<void> {
+  if (registrations.length === 0) return;
 
   let accessToken: string;
   try {
@@ -43,8 +69,9 @@ export async function wakeDevices(env: Env, groupId: string, actorProfileId: str
   }
 
   const dead = new Set<string>();
-  await Promise.allSettled(messages.flatMap((data) => devices.map((device) => send(env, accessToken, device.token, data, dead))));
+  await Promise.allSettled(messages.flatMap((data) => registrations.map((registration) => send(env, accessToken, registration, data, dead))));
 
+  const db = drizzle(env.DB);
   for (const tokens of chunked([...dead])) await db.delete(deviceTokens).where(inArray(deviceTokens.token, tokens));
 }
 

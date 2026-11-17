@@ -10,8 +10,8 @@ What changed in each version of the app, newest first. The format is
 - Activity is grouped by day, shows who made each change, and opens the expense when you tap a line.
 - Opening an expense or payment shows it to read first: what it cost you, who paid, how it was split and its history. Edit is one tap away.
 - The groups list adds up what you owe and are owed across groups, and folds groups that are settled and quiet for a month under Settled groups.
-- A dot marks groups with changes since you last opened them, and Activity marks what is new.
-- Payments on Balances have their own actions: Pay when you owe, and Settle or Share a ready-made reminder when you are owed.
+- A dot marks groups with changes since you last opened them, and Activity marks what is new. This follows your account, so a group read on one device is read on the others.
+- Payments on Balances have their own actions: Pay when you owe. When you are owed: Settle, Remind, which sends a notification at most once a day, or Share a ready-made message.
 
 ### Changed
 - Expense rows show what each expense means for you on the right, with the full description and who paid. Recorded payments appear as a tinted row, without red or green.

@@ -4,6 +4,7 @@
 
 // ignore_for_file: unused_element
 import 'package:opensplit_api/src/model/group_refusal.dart';
+import 'package:opensplit_api/src/model/group_seen.dart';
 import 'package:opensplit_api/src/model/change_page.dart';
 import 'package:json_annotation/json_annotation.dart';
 
@@ -17,10 +18,21 @@ part 'pull.g.dart';
 )
 class Pull {
   /// Returns a new [Pull] instance.
-  Pull({required this.groupIds, required this.pages, required this.refusals});
+  Pull({
+    required this.groupIds,
+
+    required this.seen,
+
+    required this.pages,
+
+    required this.refusals,
+  });
 
   @JsonKey(name: r'groupIds', required: true, includeIfNull: false)
   final List<String> groupIds;
+
+  @JsonKey(name: r'seen', required: true, includeIfNull: false)
+  final List<GroupSeen> seen;
 
   @JsonKey(name: r'pages', required: true, includeIfNull: false)
   final List<ChangePage> pages;
@@ -33,11 +45,13 @@ class Pull {
       identical(this, other) ||
       other is Pull &&
           other.groupIds == groupIds &&
+          other.seen == seen &&
           other.pages == pages &&
           other.refusals == refusals;
 
   @override
-  int get hashCode => groupIds.hashCode + pages.hashCode + refusals.hashCode;
+  int get hashCode =>
+      groupIds.hashCode + seen.hashCode + pages.hashCode + refusals.hashCode;
 
   factory Pull.fromJson(Map<String, dynamic> json) => _$PullFromJson(json);
 
