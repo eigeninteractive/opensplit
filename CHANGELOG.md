@@ -11,7 +11,7 @@ What changed in each version of the app, newest first. The format is
 - Opening an expense or payment shows it to read first: what it cost you, who paid, how it was split and its history. Edit is one tap away.
 - The groups list adds up what you owe and are owed across groups, and folds groups that are settled and quiet for a month under Settled groups.
 - A dot marks groups with changes since you last opened them, and Activity marks what is new.
-- Remind someone who owes you from Balances, with a message ready to share.
+- Payments on Balances have their own actions: Pay when you owe, and Settle or Share a ready-made reminder when you are owed.
 
 ### Changed
 - Expense rows show what each expense means for you on the right, with the full description and who paid. Recorded payments appear as a tinted row, without red or green.

@@ -363,10 +363,11 @@ class _TransferTile extends StatelessWidget {
       '&currency=${transfer.currency}',
     );
 
-    // Money owed to you can be asked for as well as recorded.
+    // Money owed to you can be asked for as well as recorded: the message
+    // goes out through whichever app the person picks.
     final owedToMe = !isMine && involvesMe;
     final me = ledger.me;
-    void remind() => SharePlus.instance.share(
+    void share() => SharePlus.instance.share(
       ShareParams(
         text: reminderText(
           debtorName: from,
@@ -377,7 +378,7 @@ class _TransferTile extends StatelessWidget {
       ),
     );
 
-    return Semantics(
+    final tile = Semantics(
       hint: 'Shows how this payment was worked out',
       child: ListTile(
         onTap: () => _explain(context, onRecord: involvesMe ? null : settle),
@@ -430,27 +431,40 @@ class _TransferTile extends StatelessWidget {
             Theme.of(context).textTheme.titleMedium!,
           ).copyWith(color: scheme.onSurface),
         ),
-        // Only on payments you are part of. The others' stay a tap away in
-        // their explanation and in Settle up, rather than putting a button
-        // on every row that is not yours to act on.
-        trailing: !ledger.canEdit || !involvesMe
-            ? null
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (owedToMe)
-                    IconButton(
-                      tooltip: 'Remind $from',
-                      onPressed: remind,
-                      icon: const Icon(Icons.notifications_active_outlined),
-                    ),
-                  FilledButton.tonal(
-                    onPressed: settle,
-                    child: const Text('Settle'),
-                  ),
-                ],
-              ),
       ),
+    );
+    // Only on payments you are part of. The others' stay a tap away in
+    // their explanation and in Settle up, rather than putting buttons on
+    // every row that is not yours to act on.
+    if (!ledger.canEdit || !involvesMe) return tile;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        tile,
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: OverflowBar(
+            alignment: MainAxisAlignment.end,
+            overflowAlignment: OverflowBarAlignment.end,
+            spacing: 8,
+            overflowSpacing: 4,
+            children: [
+              // Asking is for whoever is owed. Whoever owes can only pay.
+              if (owedToMe)
+                TextButton.icon(
+                  onPressed: share,
+                  icon: const Icon(Icons.share_outlined),
+                  label: const Text('Share'),
+                ),
+              FilledButton.tonal(
+                onPressed: settle,
+                child: Text(isMine ? 'Pay' : 'Settle'),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

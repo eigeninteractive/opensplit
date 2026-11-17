@@ -175,7 +175,7 @@
     "lib/presentation/widgets/amount_card.dart": "191ad9dc429b878a14fb9682674686de55e65fc4ba5c4fb8fb50cc8ff878edbd",
     "lib/presentation/widgets/avatar_view.dart": "84836bb1a6330ba3e013fdf4840b1cbb921ca97200e6cd881ae2cfdc8c038e71",
     "lib/presentation/widgets/balance_arrow.dart": "f61c8cda2b0cce6ade80ad838547ca7e3cc6ff18c74687cd0d085d17963d0c2e",
-    "lib/presentation/widgets/balances_panel.dart": "e67c7eb06328c6eb0fb1d7691eb44cb951f918a3046c9d17c755b0101d1526e7",
+    "lib/presentation/widgets/balances_panel.dart": "70388d38f76f50676e57764c9850d99d279d248b5de76cdf73a99dbb3b260ff3",
     "lib/presentation/widgets/brand_mark.dart": "99c8bceb9772cb6b14d7f659a3e5b375e109c6d8f7140b511822daaecb10dfa4",
     "lib/presentation/widgets/category_icon.dart": "c05e448c7bd4c49e36835e499fc49976fc109670cbe99686cf5e7779888051ab",
     "lib/presentation/widgets/conflicting_edit_banner.dart": "246e3ffd5fc40515fecc8012a380e598ef925345f22e8fadb86a258a6ee2574f",
@@ -366,13 +366,13 @@
   "outputs": {
     "site/store/screenshot-1-groups.png": "6a4b3e8bb23986ce61f3a674c199c60c57f75f446ed472682c75cef06c7ba6ba",
     "site/store/screenshot-2-expenses.png": "dc4546bf3f62b5cb8afb315cc778757a4990e326796766393b6f4a15b6b2dd55",
-    "site/store/screenshot-3-balances.png": "1848a81d61a48935a5708b43e4feacbfd4470fd0b404a250c44636b2528463b0",
-    "site/store/screenshot-4-add-expense.png": "3fbad9f20c47174b03f7ede49bdab14776b0b35fb09aa19180178005b357191c",
+    "site/store/screenshot-3-balances.png": "96975cc835dac8d994ea892be4db39aebb382fdd9317e3e1816559c43e2389fb",
+    "site/store/screenshot-4-add-expense.png": "1e63d4e42fc0a16c6fa0d4786e848a0064f3c3fe74b8c86e82ace6660e6f19a0",
     "site/store/screenshot-5-insights.png": "704914373f87545e1c1b8a47a41bc89495af4fb4f60fb8064959a37ab8347405",
-    "site/store/web-app.png": "dfce4cc5a46daa1b8dcbf8363d1b6f2fe6c20f0e0b3e66f2c724080e896a7938",
-    "site/store/og-card.png": "15980f003f3b8f847fb5899d516e75902b7c636c605302636d2a55d20dbebe02",
+    "site/store/web-app.png": "76743f62b4c3ccdbc96d1235d32fc6f264b1e64b220073cff5ac75f50f3bb5aa",
+    "site/store/og-card.png": "71f12140b80b1872c5d5b8586fa34a476cc5105f0e9abf33028f83fa20b848a9",
     "site/store/og-invite.png": "7577434e3635c36178cccb08fa6a524bdf0ada9e3bab3e7685f6747e6c1d52e8",
-    "site/store/feature-graphic.jpg": "0242049ceb5a41a47f966a635b2fb73d93cc262b435b09be48ebf9a1cdc067e5",
+    "site/store/feature-graphic.jpg": "8f77af1a415b854366c46d77aa413466e3015e42aa049a6125241c2168cfb24f",
     "site/email/wordmark.png": "2da752459c3bbbf2f7c9b93d8c942b57ccf49a39c1f85921174a204b78587d64"
   }
 }

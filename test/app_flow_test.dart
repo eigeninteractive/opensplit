@@ -139,8 +139,9 @@ void main() {
     await _settle(tester);
 
     // ---- Settle up -------------------------------------------------------
-    final transferRow = find.ancestor(
-      of: find.widgetWithText(FilledButton, 'Settle').first,
+    final settleButton = find.widgetWithText(FilledButton, 'Settle').first;
+    final transferRow = find.descendant(
+      of: find.ancestor(of: settleButton, matching: find.byType(Column)).first,
       matching: find.byType(ListTile),
     );
     final transferTags = tester
@@ -150,7 +151,7 @@ void main() {
         .map((hero) => hero.tag)
         .toSet();
     expect(transferTags, hasLength(3));
-    await tester.tap(find.widgetWithText(FilledButton, 'Settle').first);
+    await tester.tap(settleButton);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     for (final tag in transferTags) {
