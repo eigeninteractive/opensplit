@@ -24,7 +24,7 @@ dependencies:
   # Flutter has frozen and is removing. Its types are not the framework's, so
   # every dependency that hands one across (go_router, google_fonts,
   # dynamic_color) has to be on its material_ui release too.
-  material_ui: ^1.6.0
+  material_ui: ^1.11.1
   # Only for `flutter gen-l10n`, whose output imports it. The app takes its
   # Material localizations from material_ui instead; see app.dart.
   flutter_localizations:
