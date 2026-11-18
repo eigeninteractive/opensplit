@@ -160,9 +160,7 @@ ThemeData buildTheme(Brightness brightness, [ColorScheme? dynamicScheme]) {
       // Not a Material value.
       margin: EdgeInsets.zero,
     ),
-    // Icon buttons are the one component material_ui already ships in its
-    // Material 3 Expressive form, which is where the rest of the app is
-    // headed: opted in here, once, for every icon button.
+    // Opt into Material 3 Expressive for every icon button.
     iconButtonTheme: const IconButtonThemeData(
       variant: StyleVariant.material3Expressive,
     ),

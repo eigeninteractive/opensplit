@@ -8,6 +8,9 @@ What changed in each version of the app, newest first. The format is
 ### Changed
 - Updated the libraries that handle connectivity, notifications, settings and Material controls.
 
+### Fixed
+- Removed duplicate screen reader tap targets from the expense and currency search buttons.
+
 ## [4.2.0] - 2026-11-16
 ### Added
 - Invite links preview with the group's name and who invited you, instead of the general OpenSplit card.

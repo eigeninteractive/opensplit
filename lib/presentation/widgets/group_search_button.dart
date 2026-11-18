@@ -18,6 +18,7 @@ class GroupSearchButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SearchAnchor(
+      enableTapHandling: false,
       viewHintText: 'Search descriptions and notes',
       builder: (context, controller) => IconButton(
         tooltip: 'Search expenses and payments',
