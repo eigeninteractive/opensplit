@@ -104,6 +104,9 @@ its service worker to the rebuilt release.
 
 ### Android: the emulator, then a phone
 
+Install Android SDK Platform 37 through Android Studio's SDK Manager or run
+`sdkmanager 'platforms;android-37.0'`. The Gradle wrapper supplies Gradle 9.3.1.
+
 ```sh
 cd server && pnpm dev                # in one terminal
 

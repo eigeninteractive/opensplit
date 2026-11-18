@@ -61,6 +61,7 @@ class CurrencyButton extends ConsumerWidget {
     final codes = currencies.keys.toList()..sort();
 
     return SearchAnchor(
+      enableTapHandling: false,
       viewHintText: 'Search currencies',
       builder: (context, controller) => OutlinedButton.icon(
         onPressed: controller.openView,

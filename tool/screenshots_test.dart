@@ -108,9 +108,10 @@ void main() {
         ),
       ),
     );
-    final router = ProviderScope.containerOf(
+    final providers = ProviderScope.containerOf(
       tester.element(find.byType(OpenSplitApp)),
-    ).read(routerProvider);
+    );
+    final router = providers.read(routerProvider);
     Future<void> shoot(String name) => _capture(tester, frame, name);
 
     if (const bool.fromEnvironment('RENDER_SEARCH_REVIEW')) {
@@ -247,6 +248,10 @@ void main() {
     router.go('/g/$trip/add');
     await _settle(tester);
     await _fillExpense(tester);
+    // The sample time should not change when the capture is rerun.
+    providers
+        .read(entryFormProvider(trip).notifier)
+        .chooseTime(hour: 15, minute: 27, zone: 'Europe/Lisbon');
     await shoot('screenshot-4-add-expense');
 
     router.go('/g/$trip/insights');

@@ -4,6 +4,13 @@ What changed in each version of the app, newest first. The format is
 [Semantic Versioning](https://semver.org/), and the file is kept by
 [cider](https://pub.dev/packages/cider): see "Versions" in docs/runbook.md.
 
+## [4.2.1] - 2026-11-18
+### Changed
+- Updated the libraries that handle connectivity, notifications, settings and Material controls.
+
+### Fixed
+- Removed duplicate screen reader tap targets from the expense and currency search buttons.
+
 ## [4.2.0] - 2026-11-16
 ### Added
 - Invite links preview with the group's name and who invited you, instead of the general OpenSplit card.
@@ -138,6 +145,7 @@ What changed in each version of the app, newest first. The format is
 ### Added
 - The first build, to Play internal testing.
 
+[4.2.1]: https://github.com/eigeninteractive/opensplit/compare/v4.2.0...v4.2.1
 [4.2.0]: https://github.com/eigeninteractive/opensplit/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/eigeninteractive/opensplit/compare/v4.0.0...v4.1.0
 [4.0.0]: https://github.com/eigeninteractive/opensplit/compare/v3.1.0...v4.0.0
