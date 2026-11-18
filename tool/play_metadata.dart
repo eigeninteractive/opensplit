@@ -1,4 +1,4 @@
-// Packages the committed artwork and Cider notes in Fastlane supply's layout.
+// Packages listing text, artwork and Cider notes in Fastlane supply's layout.
 // Run from the repository root; the output must be a new or empty directory:
 //
 //     dart run tool/play_metadata.dart --output=build/play-metadata
@@ -15,11 +15,16 @@ import 'release_notes.dart';
 Future<void> main(List<String> arguments) async {
   final parser = ArgParser()
     ..addOption('output', help: 'New or empty Fastlane metadata directory.')
+    ..addFlag(
+      'listing-only',
+      help: 'Package the listing without app release notes.',
+      negatable: false,
+    )
     ..addFlag('help', abbr: 'h', negatable: false);
   try {
     final options = parser.parse(arguments);
     if (options.flag('help')) {
-      stdout.writeln('Package the Play artwork and release notes.');
+      stdout.writeln('Package the Play listing and optional release notes.');
       stdout.writeln(parser.usage);
       return;
     }
@@ -32,7 +37,9 @@ Future<void> main(List<String> arguments) async {
     writePlayMetadata(
       source: Directory.current,
       output: Directory(output),
-      notes: await currentPlayReleaseNotes(),
+      notes: options.flag('listing-only')
+          ? null
+          : await currentPlayReleaseNotes(),
     );
     stdout.writeln('Play metadata ready: ${Directory(output).absolute.path}');
   } on FormatException catch (error) {
@@ -53,20 +60,20 @@ const _screenshots = [
   'screenshot-5-insights.png',
 ];
 
-/// Writes the complete en-US listing artwork and notes for one release.
+/// Writes the en-US listing and, when supplied, app release [notes].
 ///
 /// Validates all sources before writing. A nonempty [output] is refused so
 /// stale screenshots cannot be uploaded alongside the current set. Only the
 /// icon is resized; feature art and screenshots keep their exact source bytes.
 ///
 /// Throws if any source is missing, unreadable, incorrectly sized or contains
-/// transparency, or if [notes] is empty or exceeds Play's limit.
+/// transparency, or if listing text or [notes] exceeds Play's limits.
 void writePlayMetadata({
   required Directory source,
   required Directory output,
-  required String notes,
+  String? notes,
 }) {
-  if (notes.trim().isEmpty || notes.length > playLimit) {
+  if (notes != null && (notes.trim().isEmpty || notes.length > playLimit)) {
     throw const FormatException('Play notes must contain 1–500 characters.');
   }
   if (output.existsSync() && output.listSync().isNotEmpty) {
@@ -75,6 +82,18 @@ void writePlayMetadata({
       output.path,
     );
   }
+  final text = <String, String>{
+    for (final (name, limit) in [
+      ('title', 30),
+      ('short_description', 80),
+      ('full_description', 4000),
+    ])
+      '$name.txt': _readText(
+        File('${source.path}/fastlane/metadata/android/en-US/$name.txt'),
+        limit: limit,
+        singleLine: name != 'full_description',
+      ),
+  };
   final icon = _readImage(File('${source.path}/assets/icon/icon.png'));
   if (icon.decoded.width != icon.decoded.height) {
     throw const FormatException('The source Play icon must be square.');
@@ -96,7 +115,7 @@ void writePlayMetadata({
     ).bytes,
     for (final name in _screenshots)
       'images/phoneScreenshots/$name': _readImage(
-        File('${source.path}/site/store/$name'),
+        File('${source.path}/site/store/play/$name'),
         size: (1080, 1920),
       ).bytes,
   };
@@ -105,9 +124,23 @@ void writePlayMetadata({
     target.parent.createSync(recursive: true);
     target.writeAsBytesSync(value);
   }
-  final changelog = File('${output.path}/en-US/changelogs/default.txt');
-  changelog.parent.createSync(recursive: true);
-  changelog.writeAsStringSync(notes);
+  if (notes != null) text['changelogs/default.txt'] = notes;
+  for (final MapEntry(:key, :value) in text.entries) {
+    final target = File('${output.path}/en-US/$key');
+    target.parent.createSync(recursive: true);
+    target.writeAsStringSync(value);
+  }
+}
+
+String _readText(File file, {required int limit, required bool singleLine}) {
+  final value = file.readAsStringSync().trim();
+  if (value.isEmpty || value.runes.length > limit) {
+    throw FormatException('${file.path} must contain 1–$limit characters.');
+  }
+  if (singleLine && (value.contains('\n') || value.contains('\r'))) {
+    throw FormatException('${file.path} must be a single line.');
+  }
+  return value;
 }
 
 ({Uint8List bytes, image.Image decoded}) _readImage(

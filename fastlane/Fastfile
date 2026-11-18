@@ -33,6 +33,15 @@ platform :android do
     distribute(track: "production", status: "completed", priority: production_priority)
   end
 
+  desc "Publish store text and artwork without a build or release-note update"
+  lane :listing do
+    upload_to_play_store(
+      play_upload_options(listing: true, notes: false).merge(
+        track: "production", skip_upload_aab: true
+      )
+    )
+  end
+
   private_lane :production_priority do
     previous, current = %w[PLAY_PREVIOUS_VERSION PLAY_APP_VERSION].map do |name|
       value = ENV.fetch(name, "")
@@ -74,29 +83,17 @@ platform :android do
       UI.user_error!("PLAY_RELEASE_STATUS must be completed or draft")
     end
 
-    credentials = ENV.fetch("GOOGLE_APPLICATION_CREDENTIALS")
-    unless File.file?(credentials)
-      UI.user_error!("Google credentials file is missing")
-    end
-
     # Resolve against this file, not Fastlane's changing working directory.
     bundle = File.expand_path(
       "../build/app/outputs/bundle/release/app-release.aab", __dir__
     )
     UI.user_error!("Build the signed release AAB first") unless File.file?(bundle)
 
-    # The complete supply tree: Cider notes plus the committed listing artwork.
-    # Prepare it with tool/play_metadata.dart before any production upload.
-    metadata = File.expand_path(ENV.fetch("PLAY_METADATA_DIR"))
-    required_files = [
-      "en-US/changelogs/default.txt",
-      "en-US/images/icon.png",
-      "en-US/images/featureGraphic.jpg"
-    ]
-    unless required_files.all? { |path| File.file?(File.join(metadata, path)) } &&
-           Dir.glob(File.join(metadata, "en-US/images/phoneScreenshots/*.png")).size == 5
-      UI.user_error!("Prepare the complete PLAY_METADATA_DIR with tool/play_metadata.dart")
+    update_listing = ENV.fetch("PLAY_UPDATE_LISTING", "true")
+    unless %w[true false].include?(update_listing)
+      UI.user_error!("PLAY_UPDATE_LISTING must be true or false")
     end
+    upload = play_upload_options(listing: update_listing == "true", notes: true)
 
     if priority >= 4
       UI.important(
@@ -106,21 +103,52 @@ platform :android do
     end
     UI.message("Uploading to the #{track} track with status #{status}")
 
-    upload_to_play_store(
+    upload_to_play_store(upload.merge(
       track: track,
       release_status: status,
       in_app_update_priority: priority,
-      json_key: credentials,
       aab: bundle,
-      skip_upload_apk: true,
+      skip_upload_aab: false
+    ))
+  end
+
+  private_lane :play_upload_options do |options|
+    credentials = ENV.fetch("GOOGLE_APPLICATION_CREDENTIALS")
+    unless File.file?(credentials)
+      UI.user_error!("Google credentials file is missing")
+    end
+
+    # Resolve the prepared supply tree independently of Fastlane's cwd.
+    # A listing-only edit never changes a track, priority or What's new.
+    metadata = File.expand_path(ENV.fetch("PLAY_METADATA_DIR"))
+    listing = options.fetch(:listing)
+    notes = options.fetch(:notes)
+    required_files = []
+    required_files << "en-US/changelogs/default.txt" if notes
+    if listing
+      required_files += %w[
+        en-US/title.txt en-US/short_description.txt en-US/full_description.txt
+        en-US/images/icon.png en-US/images/featureGraphic.jpg
+      ]
+      unless Dir.glob(File.join(metadata, "en-US/images/phoneScreenshots/*.png")).size == 5
+        UI.user_error!("Prepare the complete PLAY_METADATA_DIR with tool/play_metadata.dart")
+      end
+    end
+    unless required_files.all? { |path| File.file?(File.join(metadata, path)) }
+      UI.user_error!("Prepare the complete PLAY_METADATA_DIR with tool/play_metadata.dart")
+    end
+
+    {
+      json_key: credentials,
       metadata_path: metadata,
-      skip_upload_metadata: true,
-      skip_upload_changelogs: false,
-      skip_upload_images: false,
-      skip_upload_screenshots: false,
+      skip_upload_apk: true,
+      skip_upload_metadata: !listing,
+      skip_upload_changelogs: !notes,
+      skip_upload_images: !listing,
+      skip_upload_screenshots: !listing,
       sync_image_upload: true,
       # Fail visibly rather than silently changing review semantics on retry.
       rescue_changes_not_sent_for_review: false
-    )
+    }
   end
 end

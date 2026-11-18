@@ -1,11 +1,12 @@
-"""Generates the raster brand images: two promotional ones from the landing
-page's hero, and the lockup the sign-in email opens with.
+"""Frames real app captures for Play, social previews and the sign-in email.
 
     dart run tool/store_artifacts.dart
 
 The orchestrator captures screens, invokes this producer and records provenance.
 To run this producer alone: python3 tool/store_graphics.py.
-The first two outputs frame a real screenshot:
+The website keeps the original uncaptioned captures. Play gets a separate
+1080 x 1920 gallery in site/store/play/ with readable benefit captions and the
+complete app screen below them. Other outputs:
 
 - site/store/og-card.png, 1200 x 630, the link preview Open Graph asks for.
 - site/store/og-invite.png, 1200 x 630, the preview an invite link unfurls
@@ -140,7 +141,7 @@ def compose(width, height, layout):
     wordmark(draw, (margin, layout['wordmark_y'] * H), layout['wordmark'] * H)
     headline = ImageFont.truetype(SEMIBOLD, round(layout['headline'] * H))
     y = layout['headline_y'] * H
-    for line in ['Split expenses', 'with friends,', 'free forever.']:
+    for line in layout['headlines']:
         draw.text((margin, y), line, font=headline, fill=INK, anchor='ls')
         y += layout['headline'] * H * 1.02
     body = ImageFont.truetype(REGULAR, round(layout['body'] * H))
@@ -149,6 +150,38 @@ def compose(width, height, layout):
         draw.text((margin, y), line, font=body, fill=SLATE, anchor='ls')
         y += layout['body'] * H * 1.45
 
+    return canvas.resize((width, height), Image.LANCZOS).convert('RGB')
+
+
+def store_screenshot(name, headlines, subtitle):
+    """Adds benefit copy around a complete capture, without changing its UI."""
+    width, height = 1080, 1920
+    canvas = Image.new('RGBA', (width * S, height * S), PAPER + (255,))
+    draw = ImageDraw.Draw(canvas)
+    margin = 72 * S
+    wordmark(draw, (margin, 80 * S), 32 * S)
+
+    headline = ImageFont.truetype(SEMIBOLD, 84 * S)
+    body = ImageFont.truetype(REGULAR, 34 * S)
+    for index, line in enumerate(headlines):
+        if draw.textlength(line, font=headline) > (width - 144) * S:
+            raise ValueError(f'Play headline is too wide: {line}')
+        draw.text((margin, (190 + index * 90) * S), line,
+                  font=headline, fill=INK, anchor='ls')
+    if draw.textlength(subtitle, font=body) > (width - 144) * S:
+        raise ValueError(f'Play subtitle is too wide: {subtitle}')
+    draw.text((margin, 354 * S), subtitle,
+              font=body, fill=SLATE, anchor='ls')
+
+    # A tonal backdrop separates the screen from the page without inventing
+    # a device frame. Keep the whole screenshot, including bottom controls.
+    draw.rounded_rectangle(
+        (40 * S, 480 * S, 1040 * S, 1840 * S), 160 * S,
+        fill=PRIMARY_CONTAINER)
+    shot = Image.open(f'site/store/{name}').convert('RGB')
+    shot = shot.resize((830 * S, round(shot.height * 830 * S / shot.width)),
+                       Image.LANCZOS)
+    lifted(canvas, shot, (125 * S, 416 * S), 36 * S)
     return canvas.resize((width, height), Image.LANCZOS).convert('RGB')
 
 
@@ -210,23 +243,42 @@ def build():
         'screen': 0.62, 'screen_top': 0.10,
         'margin': 0.13, 'wordmark': 0.058, 'wordmark_y': 0.20,
         'headline': 0.118, 'headline_y': 0.42,
+        'headlines': ['Split expenses', 'with friends,', 'free forever.'],
         'body': 0.042,
         'lines': ['Free and open source, offline and in any',
                   'currency. No ads, no tracking.'],
     })
     og.save('site/store/og-card.png', optimize=True)
 
-    # Play crops nothing from a feature graphic but may overlay a play button
-    # in the middle, so the screen keeps to the right third.
+    # Play may crop or overlay the graphic on different surfaces. Keep the
+    # screen to the right and focus the copy on the experience, not price.
     play = compose(1024, 500, {
         'ring': 0.52, 'ring_right': 0.40,
         'screen': 0.62, 'screen_top': 0.10,
         'margin': 0.13, 'wordmark': 0.062, 'wordmark_y': 0.21,
         'headline': 0.122, 'headline_y': 0.44,
+        'headlines': ['Split expenses.', 'Settle up.', 'Stay friends.'],
         'body': 0.044,
-        'lines': ['Free and open source. No ads, no tracking.'],
+        'lines': ['Trips, flatmates and everyday plans.'],
     })
     play.save('site/store/feature-graphic.jpg', quality=92, optimize=True)
+
+    os.makedirs('site/store/play', exist_ok=True)
+    for name, headlines, subtitle in [
+        ('screenshot-1-groups.png', ['Every group.', 'One clear view.'],
+         'Trips, flatmates and everyday plans.'),
+        ('screenshot-2-expenses.png', ['Know who paid.', 'See what you owe.'],
+         'A shared history everyone can follow.'),
+        ('screenshot-3-balances.png', ['Settle up with', 'fewer payments.'],
+         'Clear balances, currency by currency.'),
+        ('screenshot-4-add-expense.png', ['Split bills', 'your way.'],
+         'Equally, by amounts, shares or percentages.'),
+        ('screenshot-5-insights.png', ['Know where', 'the money went.'],
+         'Spending by category and by person.'),
+    ]:
+        image = store_screenshot(name, headlines, subtitle)
+        image.save(f'site/store/play/{name}', optimize=True)
+        print(f'site/store/play/{name}: {image.width}x{image.height}')
 
     invite = invite_card(1200, 630)
     invite.save('site/store/og-invite.png', optimize=True)
