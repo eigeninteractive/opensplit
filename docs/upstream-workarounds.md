@@ -61,8 +61,9 @@ upstream defects that a dependency bump would remove:
   is open. The [Flutter migration guide](https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin)
   describes the flag as temporary AGP 9 compatibility.
 
-`flutter_local_notifications` 22.3.3 brings in a Linux implementation that
-accepts `dbus` 0.8, which `connectivity_plus` 7.3.2 requires through `nm`.
-Both updates work with the existing Android build settings. Notifications 23
-still requires compile SDK 37 and AGP 9.1.1. The Android toolchain upgrade and
-the Drizzle prerelease remain deferred.
+The Linux implementation published with `flutter_local_notifications` 22.3.2
+and later accepts `dbus` 0.8, which `connectivity_plus` 7.3.2 requires through
+`nm`. The app uses Notifications 23 with compile SDK 37, AGP 9.1.1 and Gradle
+9.3.1. `minSdk` and `targetSdk` still come from Flutter, and the legacy Kotlin
+flag remains necessary for `in_app_review`. The Drizzle prerelease remains
+deferred.
