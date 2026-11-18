@@ -1,0 +1,31 @@
+Split shared expenses with friends, flatmates and travel groups. OpenSplit keeps track of who paid, who owes whom and the payments that settle everyone up.
+
+Every feature is free for everyone, forever. There are no ads, premium tiers or limits on how many expenses you can add.
+
+FOR TRIPS, FLATMATES AND EVERYDAY PLANS
+Keep a separate group for each trip, household or shared activity. Add friends by name and start splitting straight away. They can join later using an invite link.
+
+SPLIT BILLS YOUR WAY
+Split equally, by exact amounts, by shares or by percentage. Include the people who took part in each expense, and record who paid.
+
+KEEP GOING OFFLINE
+Add and edit expenses, check balances and record settlements without a signal. Your records live on your device, and changes sync when you are back online.
+
+HANDLE MULTIPLE CURRENCIES
+Keep balances in their original currencies, so euros stay euros and pounds stay pounds. An approximate converted total uses each expense's historical exchange rate and explains how it was calculated.
+
+SETTLE UP WITH FEWER PAYMENTS
+See suggested transfers that simplify what everyone owes. Record payments as you settle, and add your UPI ID to make it easier for friends to pay you. OpenSplit tracks your shared expenses and settlements; it does not hold or transfer your money.
+
+UNDERSTAND YOUR SPENDING
+See spending by category and by person. Export a group's records to CSV whenever you need them.
+
+ANDROID AND THE WEB
+Use OpenSplit on your Android phone or in your browser. Sign in with the same account to access your groups across devices. Friends on other phones can use the web app too.
+
+OPEN SOURCE, WITH PRIVACY BUILT IN
+OpenSplit is open source under the AGPL-3.0 licence. There are no analytics SDKs, no ads and no sale of your data. The server stores the records needed to sync shared groups, while balances are calculated on your device.
+
+Try the web app: https://opensplit.eigeninteractive.com/app
+Read the source and report issues: https://github.com/eigeninteractive/opensplit
+Get help: hello@eigeninteractive.com

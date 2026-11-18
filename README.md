@@ -2,11 +2,15 @@
 
 Split expenses with friends. Free forever, open source, no ads, works offline.
 
-OpenSplit is a local-first expense splitter for Android and the web. It exists
-because every alternative either paywalls the act of logging an expense or has
-no real mobile app.
+OpenSplit is a local-first expense splitter for Android and the web, with no
+expense limits, premium tiers or ads.
 
-**Status: in development.** Not yet released.
+[Get it on Google Play](https://play.google.com/store/apps/details?id=com.eigeninteractive.opensplit)
+or [open the web app](https://opensplit.eigeninteractive.com/app).
+
+Store copy and artwork are managed in this repository and publish on merge to
+main, independently of app releases. See the
+[store listing workflow](docs/runbook.md#store-listing-changes).
 
 ## What makes it different
 

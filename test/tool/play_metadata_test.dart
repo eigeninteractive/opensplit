@@ -13,18 +13,27 @@ void main() {
   final artwork = [
     'assets/icon/icon.png',
     'site/store/feature-graphic.jpg',
-    'site/store/screenshot-1-groups.png',
-    'site/store/screenshot-2-expenses.png',
-    'site/store/screenshot-3-balances.png',
-    'site/store/screenshot-4-add-expense.png',
-    'site/store/screenshot-5-insights.png',
+    'site/store/play/screenshot-1-groups.png',
+    'site/store/play/screenshot-2-expenses.png',
+    'site/store/play/screenshot-3-balances.png',
+    'site/store/play/screenshot-4-add-expense.png',
+    'site/store/play/screenshot-5-insights.png',
   ];
+  const textLimits = {
+    'title': 30,
+    'short_description': 80,
+    'full_description': 4000,
+  };
 
   setUp(() {
     temporary = Directory.systemTemp.createTempSync('opensplit-play-metadata-');
     source = Directory('${temporary.path}/source');
     output = Directory('${temporary.path}/metadata');
-    for (final path in artwork) {
+    for (final path in [
+      ...artwork,
+      for (final name in textLimits.keys)
+        'fastlane/metadata/android/en-US/$name.txt',
+    ]) {
       final target = File('${source.path}/$path');
       target.parent.createSync(recursive: true);
       File(path).copySync(target.path);
@@ -36,11 +45,19 @@ void main() {
     expect(temporary.existsSync(), isFalse);
   });
 
-  test('packages current artwork in supply order without changing sources', () {
+  test('packages copy and framed artwork without changing sources', () {
     writePlayMetadata(source: source, output: output, notes: notes);
 
     final locale = '${output.path}/en-US';
     expect(File('$locale/changelogs/default.txt').readAsStringSync(), notes);
+    for (final name in textLimits.keys) {
+      expect(
+        File('$locale/$name.txt').readAsStringSync(),
+        File(
+          'fastlane/metadata/android/en-US/$name.txt',
+        ).readAsStringSync().trim(),
+      );
+    }
     final icon = image.decodePng(
       File('$locale/images/icon.png').readAsBytesSync(),
     )!;
@@ -67,7 +84,45 @@ void main() {
         File(path).readAsBytesSync(),
       );
     }
-    expect(output.listSync(recursive: true).whereType<File>().length, 8);
+    expect(output.listSync(recursive: true).whereType<File>().length, 11);
+  });
+
+  for (final MapEntry(:key, :value) in textLimits.entries) {
+    for (final invalid in ['   ', 'x' * (value + 1)]) {
+      test('refuses invalid $key before writing output', () {
+        File(
+          '${source.path}/fastlane/metadata/android/en-US/$key.txt',
+        ).writeAsStringSync(invalid);
+
+        expect(
+          () => writePlayMetadata(source: source, output: output, notes: notes),
+          throwsA(isA<FormatException>()),
+        );
+        expect(output.existsSync(), isFalse);
+      });
+    }
+  }
+
+  test('title and short description must each fit on one line', () {
+    File(
+      '${source.path}/fastlane/metadata/android/en-US/title.txt',
+    ).writeAsStringSync('OpenSplit\nSplit Expenses');
+    expect(
+      () => writePlayMetadata(source: source, output: output),
+      throwsA(isA<FormatException>()),
+    );
+    expect(output.existsSync(), isFalse);
+  });
+
+  test('a missing description fails before any output is written', () {
+    File(
+      '${source.path}/fastlane/metadata/android/en-US/full_description.txt',
+    ).deleteSync();
+    expect(
+      () => writePlayMetadata(source: source, output: output),
+      throwsA(isA<FileSystemException>()),
+    );
+    expect(output.existsSync(), isFalse);
   });
 
   test('a missing screenshot fails before any output is written', () {
@@ -151,5 +206,18 @@ void main() {
     expect(result.exitCode, 64);
     expect('${result.stderr}', contains('--output'));
     expect(output.existsSync(), isFalse);
+  });
+
+  test('CLI can prepare a listing without touching release notes', () async {
+    final result = await Process.run('dart', [
+      'run',
+      'tool/play_metadata.dart',
+      '--listing-only',
+      '--output=${output.path}',
+    ]);
+
+    expect(result.exitCode, 0, reason: '${result.stderr}');
+    expect(File('${output.path}/en-US/title.txt').existsSync(), isTrue);
+    expect(Directory('${output.path}/en-US/changelogs').existsSync(), isFalse);
   });
 }

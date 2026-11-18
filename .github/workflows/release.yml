@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       deploy:
-        description: Deploy web/backend and a pending app version (uncheck for artifacts only)
+        description: Deploy web/backend, changed Play listing and pending app version (uncheck for artifacts only)
         type: boolean
         default: false
 
@@ -36,6 +36,7 @@ jobs:
       cancel-in-progress: false
     permissions:
       contents: read
+      actions: read
       id-token: write
     outputs:
       version: ${{ steps.build.outputs.version }}
@@ -131,8 +132,28 @@ jobs:
           fi
           echo "BUILD_ANDROID=$build_android" >> "$GITHUB_ENV"
           echo "Android release pending: $app_release"
+      - name: Check for Play listing changes
+        id: listing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # Compare actual listing content with the last successful deployment,
+        # not the preceding commit: failed or superseded changes stay pending.
+        # Artifact-only manual runs never advance this baseline.
+        run: |
+          baseline="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/release.yml/runs?branch=main&event=push&status=success&per_page=1" \
+            --jq '.workflow_runs[0].head_sha // empty')"
+          changed=true
+          if [[ -n "$baseline" ]] && git cat-file -e "$baseline^{commit}"; then
+            if git diff --quiet "$baseline" HEAD -- \
+              fastlane/metadata/android assets/icon/icon.png \
+              site/store/feature-graphic.jpg site/store/play; then
+              changed=false
+            fi
+          fi
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+          echo "Play listing content changed: $changed"
       - uses: ruby/setup-ruby@v1
-        if: env.BUILD_ANDROID == 'true'
+        if: env.BUILD_ANDROID == 'true' || steps.listing.outputs.changed == 'true'
         with:
           bundler-cache: true
       # Gradle's downloads are cached, keyed on the Gradle files and wrapper
@@ -146,13 +167,14 @@ jobs:
           java-version: "17"
           cache: gradle
       # Before the slow build, so a changelog Play would refuse fails in
-      # seconds. Package the notes and artwork into the runner's temporary
+      # seconds. Package the listing and notes into the runner's temporary
       # directory, leaving the checkout and generated screenshots untouched.
       - name: Prepare the Play listing and release notes
-        if: env.BUILD_ANDROID == 'true'
+        if: env.BUILD_ANDROID == 'true' || steps.listing.outputs.changed == 'true'
         run: |
-          dart run tool/play_metadata.dart --output="$RUNNER_TEMP/play-metadata"
-          cat "$RUNNER_TEMP/play-metadata/en-US/changelogs/default.txt"
+          flags=()
+          if [[ "$BUILD_ANDROID" != 'true' ]]; then flags+=(--listing-only); fi
+          dart run tool/play_metadata.dart --output="$RUNNER_TEMP/play-metadata" "${flags[@]}"
       - run: dart run build_runner build
       - name: Build the web bundle
         env:
@@ -200,7 +222,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v7
-        if: env.BUILD_ANDROID == 'true'
+        if: env.BUILD_ANDROID == 'true' || steps.listing.outputs.changed == 'true'
         with:
           name: opensplit-play-metadata-${{ github.sha }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/play-metadata
@@ -264,7 +286,7 @@ jobs:
           echo "The deployed Worker did not answer /api/health." >&2
           exit 1
       - name: Authenticate to Google Play (keyless)
-        if: steps.build.outputs.app_release == 'true' && (github.event_name == 'push' || inputs.deploy)
+        if: (steps.build.outputs.app_release == 'true' || steps.listing.outputs.changed == 'true') && (github.event_name == 'push' || inputs.deploy)
         uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
@@ -278,12 +300,18 @@ jobs:
           # urgency across failed uploads and superseding backend-only merges.
           PLAY_APP_VERSION: ${{ steps.build.outputs.version }}
           PLAY_PREVIOUS_VERSION: ${{ steps.build.outputs.previous_version }}
-          # Written above, from CHANGELOG.md and the committed artwork.
+          PLAY_UPDATE_LISTING: ${{ steps.listing.outputs.changed }}
+          # Written above, from CHANGELOG.md, listing copy and committed artwork.
           # en-US is the store listing's language; images affect the listing
           # across tracks. The production lane fixes the destination and full
           # rollout status; Play review and managed publishing still apply.
           PLAY_METADATA_DIR: ${{ runner.temp }}/play-metadata
         run: bundle exec fastlane android production
+      - name: Publish the changed Play listing without an app release
+        if: steps.build.outputs.app_release == 'false' && steps.listing.outputs.changed == 'true' && (github.event_name == 'push' || inputs.deploy)
+        env:
+          PLAY_METADATA_DIR: ${{ runner.temp }}/play-metadata
+        run: bundle exec fastlane android listing
       - name: Remove temporary upload key
         if: always()
         run: rm -f -- "${RUNNER_TEMP:?}/opensplit-upload.jks"

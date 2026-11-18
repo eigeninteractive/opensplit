@@ -86,7 +86,7 @@ individually rendering screenshots does not update the complete artwork record.
 | `dart run tool/brand_icons.dart` | root web icons, the favicon and the notification icon, after the command above | the transparent artwork in `assets/icon/` |
 | `dart run flutter_native_splash:create` | the native splash screens | `assets/splash/`, configured in `flutter_native_splash.yaml` |
 | `flutter test tool/screenshots_test.dart` | `site/store/screenshot-*.png` and `web-app.png` | the real screens over demo data |
-| `python3 tool/store_graphics.py` | `site/store/og-card.png` and `feature-graphic.jpg`, and `site/email/wordmark.png` for the sign-in email | the balances screenshot, the mark's geometry and the bundled font |
+| `python3 tool/store_graphics.py` | captioned screenshots in `site/store/play/`, `site/store/og-card.png`, `og-invite.png`, `feature-graphic.jpg`, and `site/email/wordmark.png` | real app captures, the mark's geometry and the bundled font |
 
 `assets/icon/icon.png` is opaque because iOS and legacy Android icons cannot
 carry alpha. The adaptive foreground keeps the mark inside the circle a
@@ -100,7 +100,14 @@ splash for the same reason.
 |---|---|---|
 | Hi-res icon | 512 × 512, opaque | `assets/icon/icon.png`, resized |
 | Feature graphic | 1024 × 500, JPEG | `site/store/feature-graphic.jpg` |
-| Phone screenshots | 1080 × 1920, PNG | `site/store/screenshot-1-groups.png` to `-5-insights.png`, in that order |
+| Phone screenshots | 1080 × 1920, PNG | `site/store/play/screenshot-1-groups.png` to `-5-insights.png`, in that order |
+
+The Play gallery pairs short benefit captions with complete, scaled captures of
+the real app. `tool/store_graphics.py` draws the captions in the bundled font,
+then frames each capture without changing its UI. Keep the five originals in
+`site/store/` uncaptioned: the website and social graphics use those directly.
+The Play feature graphic describes the experience without price-focused copy;
+the website and social preview keep the free-forever promise.
 
 The feature graphic is uploaded as `images/featureGraphic.jpg` alongside the
 screenshots. Google Play uses it in preview-video and promotional placements;
@@ -108,7 +115,8 @@ it is not a guaranteed permanent banner on the public listing. Verify upload
 results in the release log or Play Console store listing, independently of
 where Play chooses to display it. See [Google Play preview asset guidance](https://support.google.com/googleplay/android-developer/answer/9866151?hl=en-GB).
 
-All of it is generated (above). To package the committed assets and Cider notes:
+Artwork is generated; the English title and descriptions are edited directly in
+`fastlane/metadata/android/en-US/`. To package the copy, assets and Cider notes:
 
 ```sh
 dart run tool/play_metadata.dart --output=build/play-metadata
@@ -117,9 +125,12 @@ dart run tool/play_metadata.dart --output=build/play-metadata
 The tool uses Fastlane's `en-US` metadata layout, resizing the icon to an opaque
 512 × 512 PNG. The release workflow prepares this tree before building and
 saves it as a separate release artifact. Fastlane uploads the artwork with the
-bundle and notes, skipping unchanged images by checksum. The screenshots replace the
-phone gallery in their listed order. Listing images apply across Play tracks,
-even when the bundle is sent to closed testing; listing text is left alone.
+bundle and notes when listing content changed, skipping unchanged images by
+checksum. Without an app release, changed copy or artwork uses a listing-only
+upload. App-only releases leave the listing alone. The screenshots replace the
+phone gallery in their listed order. Listing text and images apply across Play
+tracks, even when a bundle is sent to closed testing. See the runbook's
+[store listing workflow](../runbook.md#store-listing-changes).
 
 The output must be new or empty, so stale images cannot slip into a release.
 The tool checks image dimensions and opacity and fails if anything is missing.

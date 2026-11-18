@@ -48,6 +48,9 @@ begin
   File.write(credentials, "{}")
   metadata = File.join(temporary, "metadata")
   files = %w[
+    en-US/title.txt
+    en-US/short_description.txt
+    en-US/full_description.txt
     en-US/changelogs/default.txt
     en-US/images/icon.png
     en-US/images/featureGraphic.jpg
@@ -64,6 +67,7 @@ begin
   ENV["PLAY_UPDATE_PRIORITY"] = "0"
   ENV["PLAY_PREVIOUS_VERSION"] = "4.1.0"
   ENV["PLAY_APP_VERSION"] = "4.1.1"
+  ENV["PLAY_UPDATE_LISTING"] = "true"
 
   Dir.chdir(temporary) do
     fastfile = Fastlane::FastFile.new("fastlane/Fastfile")
@@ -72,7 +76,7 @@ begin
     options = uploads.last
     assert(options[:metadata_path] == metadata, "Metadata path changed with Fastlane's working directory")
     assert(options[:track] == "alpha", "Release should go to closed testing")
-    assert(options[:skip_upload_metadata], "Listing text should be preserved")
+    assert(options[:skip_upload_metadata] == false, "Changed listing text must be uploaded")
     %i[skip_upload_changelogs skip_upload_images skip_upload_screenshots].each do |key|
       assert(options[key] == false, "#{key} must be disabled")
     end
@@ -92,6 +96,19 @@ begin
     assert(File.realpath(options[:aab]) == File.realpath(bundle), "Production must use the signed CI bundle")
     assert(options[:metadata_path] == metadata, "Production must include the prepared notes and artwork")
     assert(options[:rescue_changes_not_sent_for_review] == false, "Production review failures must remain visible")
+
+    # An app-only release must not resubmit unchanged listing content.
+    ENV["PLAY_UPDATE_LISTING"] = "false"
+    fastfile.runner.execute(:production, :android)
+    options = uploads.last
+    %i[skip_upload_metadata skip_upload_images skip_upload_screenshots].each do |key|
+      assert(options[key], "App-only releases must set #{key}")
+    end
+    assert(options[:skip_upload_changelogs] == false, "App-only releases still update What's new")
+    assert(options[:skip_upload_aab] == false, "App-only releases still upload the bundle")
+    ENV["PLAY_UPDATE_LISTING"] = "invalid"
+    refuses_upload(fastfile, uploads, :production, "PLAY_UPDATE_LISTING")
+    ENV["PLAY_UPDATE_LISTING"] = "true"
 
     # Production's priority comes from the version delta, not old hosted vars.
     ENV["PLAY_UPDATE_PRIORITY"] = "5"
@@ -142,7 +159,25 @@ begin
     File.write(File.join(metadata, "en-US/images/phoneScreenshots/5.png"), "test metadata")
     File.delete(bundle)
     refuses_upload(fastfile, uploads, :production, "signed release AAB")
+
+    # Store edits do not need an AAB, release notes, version bump or priority.
+    File.delete(File.join(metadata, "en-US/changelogs/default.txt"))
+    ENV["PLAY_APP_VERSION"] = "invalid"
+    ENV["PLAY_UPDATE_PRIORITY"] = "invalid"
+    fastfile.runner.execute(:listing, :android)
+    options = uploads.last
+    assert(options[:skip_upload_aab] && options[:skip_upload_apk], "Listing-only uploads must skip all binaries")
+    assert(options[:aab].nil? && options[:apk].nil?, "Listing-only uploads must not name a binary")
+    assert(options[:skip_upload_changelogs], "Listing-only uploads must preserve What's new")
+    assert(options[:skip_upload_metadata] == false, "Listing-only uploads must update copy")
+    assert(options[:track_promote_to].nil? && options[:rollout].nil?, "Store edits must not promote or roll out builds")
+    File.delete(File.join(metadata, "en-US/title.txt"))
+    refuses_upload(fastfile, uploads, :listing, "PLAY_METADATA_DIR")
+    File.write(File.join(metadata, "en-US/title.txt"), "OpenSplit")
+
     File.write(bundle, "test bundle")
+    ENV["PLAY_APP_VERSION"] = "4.1.1"
+    ENV["PLAY_UPDATE_PRIORITY"] = "0"
     File.delete(credentials)
     refuses_upload(fastfile, uploads, :production, "credentials file")
   end
@@ -208,7 +243,53 @@ begin
   assert(number_build.call("5.0.1")["previous_version"] == "5.0.0", "Submitted major must reset patch baseline")
   git.call("tag", "v5.0.1")
   assert(number_build.call("5.0.1")["app_release"] == "false", "Submitted patch must not upload again")
-  puts "Fastlane priority mapping, upload configuration and release tag selection passed."
+
+  # Listing changes are compared with the last successful deployment. A failed
+  # listing edit followed by a backend-only merge must still be published.
+  listing_script = steps.find { |step| step["name"] == "Check for Play listing changes" }.fetch("run")
+  File.write(File.join(bin, "gh"), <<~SH)
+    #!/bin/sh
+    case "$*" in
+      *'event=push&status=success'*) printf '%s\\n' "$LISTING_TEST_BASELINE" ;;
+      *) exit 1 ;;
+    esac
+  SH
+  FileUtils.chmod(0o755, File.join(bin, "gh"))
+  listing_changed = lambda do |baseline|
+    output = File.join(temporary, "listing-output")
+    File.write(output, "")
+    run_command({
+      "PATH" => "#{bin}:#{ENV.fetch('PATH')}",
+      "LISTING_TEST_BASELINE" => baseline,
+      "GITHUB_REPOSITORY" => "example/opensplit", "GITHUB_OUTPUT" => output
+    }, "bash", "-e", "-o", "pipefail", "-c", listing_script, chdir: history)
+    File.read(output).strip == "changed=true"
+  end
+  previous = git.call("rev-parse", "HEAD")
+  assert(listing_changed.call(""), "First sync must publish the listing")
+  assert(!listing_changed.call(previous), "Identical content must not be resubmitted")
+  commit.call("App release with unchanged listing")
+  assert(!listing_changed.call(previous), "App-only changes must leave the listing alone")
+  %w[
+    fastlane/metadata/android/en-US/title.txt
+    fastlane/metadata/android/en-US/short_description.txt
+    fastlane/metadata/android/en-US/full_description.txt
+    site/store/play/screenshot-1-groups.png
+    site/store/feature-graphic.jpg
+    assets/icon/icon.png
+  ].each do |path|
+    previous = git.call("rev-parse", "HEAD")
+    target = File.join(history, path)
+    FileUtils.mkdir_p(File.dirname(target))
+    File.write(target, "changed listing content")
+    git.call("add", path)
+    git.call("commit", "--quiet", "-m", "Update #{path}")
+    assert(listing_changed.call(previous), "#{path} must trigger a listing upload")
+    commit.call("Backend-only merge after failed #{path} upload")
+    assert(listing_changed.call(previous), "Pending #{path} must survive subsequent merges")
+    assert(!listing_changed.call(git.call("rev-parse", "HEAD")), "Successful listing sync must stop retries")
+  end
+  puts "Fastlane app/listing uploads, priority mapping and deployment change detection passed."
 ensure
   ENV.replace(original_environment)
   FileUtils.remove_entry(temporary)

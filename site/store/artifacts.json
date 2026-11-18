@@ -372,19 +372,24 @@
     "test/fixtures/android_wallpaper.dart": "588b5037842a5c6ab2f4842e47b679b6d9de3f16c7f4670c2c125af707633c84",
     "test/harness.dart": "0e85c632a2251eb3f8052c9d6ed11b6a5e56ee1a63faf472c045c577cab53387",
     "tool/screenshots_test.dart": "2189a830a722421541ea5a3b05a8ce4c47faaf40c7a2ba9f9793cd1c69aefc09",
-    "tool/store_artifacts.dart": "2c7a343b8251341cd3f36da24eee5e6d33fa407c96f82ca593a57b338ea7bfd0",
-    "tool/store_graphics.py": "acc66cd3f3f8868f5cf8f91f5e954aaa2ff88ea96ea4b3755cf3d6f4edd90e64"
+    "tool/store_artifacts.dart": "6ed74f8ec11ff7c8aca702c12f1534140dfd3f79fc06946e099d77b7a441929b",
+    "tool/store_graphics.py": "e4b13e1dcc29502536355950b8c795e11f5a5081c4d9456dbd59add1c499c2b7"
   },
   "outputs": {
-    "site/store/screenshot-1-groups.png": "6a4b3e8bb23986ce61f3a674c199c60c57f75f446ed472682c75cef06c7ba6ba",
-    "site/store/screenshot-2-expenses.png": "dc4546bf3f62b5cb8afb315cc778757a4990e326796766393b6f4a15b6b2dd55",
-    "site/store/screenshot-3-balances.png": "96975cc835dac8d994ea892be4db39aebb382fdd9317e3e1816559c43e2389fb",
-    "site/store/screenshot-4-add-expense.png": "7d6696dc5acd4899021a3fabb62ca4933ac55283cab27d9ac4c9a255d5c6046a",
-    "site/store/screenshot-5-insights.png": "704914373f87545e1c1b8a47a41bc89495af4fb4f60fb8064959a37ab8347405",
-    "site/store/web-app.png": "76743f62b4c3ccdbc96d1235d32fc6f264b1e64b220073cff5ac75f50f3bb5aa",
-    "site/store/og-card.png": "71f12140b80b1872c5d5b8586fa34a476cc5105f0e9abf33028f83fa20b848a9",
-    "site/store/og-invite.png": "7577434e3635c36178cccb08fa6a524bdf0ada9e3bab3e7685f6747e6c1d52e8",
-    "site/store/feature-graphic.jpg": "8f77af1a415b854366c46d77aa413466e3015e42aa049a6125241c2168cfb24f",
-    "site/email/wordmark.png": "2da752459c3bbbf2f7c9b93d8c942b57ccf49a39c1f85921174a204b78587d64"
+    "site/store/screenshot-1-groups.png": "929d3732c6bbfb36970b95552e9f7a8cf0c5df68c4044144bacfb95b2f7f0bf5",
+    "site/store/screenshot-2-expenses.png": "d0a78842d518fcfc6eadc7eecd339aacd3070a33b9dfcd51f6a3cf6342ec33e7",
+    "site/store/screenshot-3-balances.png": "ffae649b68eab601398b265bb9ea81048254bd382cd2439673878c91dc06c34a",
+    "site/store/screenshot-4-add-expense.png": "027b0ec3e715f13fb78c9a5e04a6af17f700e5270bfd8c91db0be7cea9d05eaf",
+    "site/store/screenshot-5-insights.png": "3e01656d98b499169b213fddfcf0f8946242c6c9270c3c5d3417d6967a72586c",
+    "site/store/play/screenshot-1-groups.png": "e7bfe0a7fb4930a2b3a12772a1bdd96e139c180eb7a3323cd0cdbf5b5a60a429",
+    "site/store/play/screenshot-2-expenses.png": "da032a26704b4aacc1a883ee740742f5c61490384fa8f74316811f7f18536176",
+    "site/store/play/screenshot-3-balances.png": "dd25b3db82ec44a1ad122ebea31e7c51b4060419440106d61b98576bfbd7c3bb",
+    "site/store/play/screenshot-4-add-expense.png": "22e2f6f4a8d68435ddb405f926a506351aff6fd9bc2da3969b7bcb2d3d0a47ff",
+    "site/store/play/screenshot-5-insights.png": "4da51f99bb80cb2737d6b6ddb807867a28363090fb097c50581fa68a9f4b424f",
+    "site/store/web-app.png": "f113c70c5244082f623f3c1f97c51fba5a7180b5e006bf42b7ad732347e4cf54",
+    "site/store/og-card.png": "e24a02357fe8c4a69c9bfca59e66fdad55dd601be7703bec1ca3d22296aeff94",
+    "site/store/og-invite.png": "953f6e81003c7f099fe4554bad427120ff9ecfc0fd8bd2b87e6a36c9509998ed",
+    "site/store/feature-graphic.jpg": "3d1c22e9cbb321e2f5a927b1c32bcd3e2b455821112cd67e264bee5960b78126",
+    "site/email/wordmark.png": "8c43232387a3464261b7b86957495f972a1b4540d122d0cbfb33e5b18ad50b4c"
   }
 }

@@ -6,7 +6,8 @@ release after that does.
 
 Commands that change something in a Cloudflare, Google, Resend, GitHub or Play
 account are in the production sections. After CI passes, pushes to `main`
-deploy the web/backend; an app version change also submits to Play production.
+deploy the web/backend and changed store listing content; an app version change
+also submits to Play production.
 A manual **Release** run deploys only when **deploy** is checked.
 
 ---
@@ -338,14 +339,16 @@ A push to `main` runs `.github/workflows/release.yml`:
 2. The resource-id check, before anything slow.
 3. The build number and complete web bundle, uploaded as an artifact.
 4. When the app version has no `v<version>` release tag, a signed Android bundle
-   and Play metadata: release notes from `CHANGELOG.md` (see *Versions*) plus artwork.
-   Android and web share the build number on these releases.
+   and release notes from `CHANGELOG.md` (see *Versions*). Android and web share
+   the build number on these releases. Changed Play listing text and artwork
+   are packaged independently, even without an app version bump.
 5. `wrangler d1 migrations apply opensplit --remote`: whatever is pending.
 6. `wrangler deploy`: the script and the bundle, together, as one version.
-7. A wait for `/api/health`, then, for a pending app version, a Play production
-   submission with status `completed`, the notes and artwork. This requests full
-   rollout subject to Google review and managed publishing. Fastlane skips
-   unchanged images by checksum and preserves listing text.
+7. A wait for `/api/health`, then any pending Play upload. An app release goes
+   to production with status `completed` and its release notes. Changed listing
+   content accompanies the bundle, or uses a listing-only upload if there is
+   no app release. Unchanged listing text and artwork are not resubmitted.
+   Google review and managed publishing still apply.
 8. A `v<version>` tag after an app release submission. This records that Play
    accepted the upload; it does not mean review is complete. Web-only deployments
    do not create app version tags.
@@ -354,6 +357,49 @@ The tag is the release-completion marker. If a newer web-only merge supersedes
 the version-bump build, or an upload fails, that app version stays pending for
 the next successful run. Otherwise an ordinary merge could lose the requested
 Android release. Once tagged, subsequent merges skip Android until the next bump.
+
+### Store listing changes
+
+The main English listing is managed in code:
+
+- `fastlane/metadata/android/en-US/title.txt`: at most 30 characters.
+- `short_description.txt` in that directory: at most 80 characters.
+- `full_description.txt`: at most 4,000 characters.
+- `site/store/play/`: five captioned phone screenshots, generated from the
+  original app captures by `tool/store_graphics.py`.
+- `site/store/feature-graphic.jpg` and `assets/icon/icon.png`: the feature
+  graphic and the icon, packaged at Play's required dimensions.
+
+Edit the copy files directly. For artwork, edit the generator and run
+`dart run tool/store_artifacts.dart`; commit the generated images and manifest.
+The website keeps using the original uncaptioned captures in `site/store/`.
+Store copy and artwork alone need no app version bump. An app icon change also
+changes the installed app and therefore does require the normal app release.
+
+On merge, the workflow compares these listing files with the last successful
+automatic Release run on main. A failed or superseded upload stays pending
+across later merges. Artifact-only manual runs do not advance the baseline.
+An app-only release skips listing text, images and screenshots; it still uploads
+the AAB and Cider notes. A listing-only upload skips binaries and release notes,
+does not change a track's rollout or update priority, and creates no app tag.
+If neither changed, the workflow does not authenticate to Play.
+
+`dart run tool/play_metadata.dart --output=build/play-metadata` validates and
+packages everything locally. Add `--listing-only` to omit Cider notes. The output
+must be new or empty. CI runs the packager's tests and checks committed artwork
+provenance before deployment. Fastlane's `android listing` lane handles the
+listing-only path; `android production` uses `PLAY_UPDATE_LISTING=true|false`
+from the workflow to include or skip listing content alongside the bundle.
+
+The repository is the source of truth for these English listing fields; Play
+Console edits to them can be overwritten by a later listing change in code.
+The listing is shared across tracks. Manage store presence permission is
+required for `opensplit-play-ci@opensplit-app.iam.gserviceaccount.com` under
+Play Console → Users and permissions → App permissions → OpenSplit.
+Account details, policy declarations, country availability and other Console
+settings are not managed by this Fastlane pipeline.
+
+### App release priority and compatibility
 
 The previous version is the nearest release tag on main's first-parent history,
 not the previous merge or the newest changelog section. A pending major followed
@@ -365,8 +411,9 @@ Every app-changing PR, including cosmetic fixes and app dependency updates,
 needs a version bump and finalized notes. Its merge deploys the web/backend
 and submits Android from the same commit. Website, backend-only, documentation,
 tests and release tooling need no app bump; they skip Android unless a previous
-app release is still pending. A backend change that needs a new client must
-include that client change and its app version bump.
+app release is still pending. Store listing changes publish independently as
+described above. A backend change that needs a new client must include that
+client change and its app version bump.
 
 `tool/check_app_release.dart` runs inside the required **Analyse and test** job.
 It treats `lib/`, `assets/`, `android/`, `web/`, the generated API package's
@@ -394,7 +441,7 @@ an initial schema or testing-era storage reset must not replace production data.
 A manual run (*Actions → Release → Run workflow*) with **deploy** unchecked
 builds web and Android artifacts without deploying anything. Checking **deploy**
 deploys the web/backend and submits Android only if the app version is still
-untagged.
+untagged. Changed listing content also publishes, with or without an app release.
 Its production update priority is also derived from the version bump.
 
 ---
@@ -517,12 +564,13 @@ rest on a last line. The notes are in `en-US`, the store listing's language,
 because Play refuses notes in a language the listing lacks. Add a language to
 the listing, and the workflow has to write that language too.
 
-**Play's artwork.** First run `dart run tool/store_artifacts.dart` to refresh
+**Play's listing.** First run `dart run tool/store_artifacts.dart` to refresh
 screenshots, the feature graphic and their derivatives together. CI runs its
-`--check` mode and rejects stale sources or outputs. `tool/play_metadata.dart` packages the notes and the current
-committed artwork into a fresh `en-US` supply tree. It checks all inputs before
-writing, resizes the icon to 512 × 512 and retains the feature graphic and
-screenshots byte-for-byte. The workflow passes that directory as
+`--check` mode and rejects stale sources or outputs. `tool/play_metadata.dart`
+packages the committed title, descriptions, notes and artwork into a fresh
+`en-US` supply tree. It checks all inputs before writing, resizes the icon to
+512 × 512 and retains the feature graphic and framed screenshots byte-for-byte.
+The workflow passes that directory as
 `PLAY_METADATA_DIR`; the lane refuses incomplete artwork. See
 `docs/brand/README.md` for the source files and generation commands. Run
 `bundle exec ruby test/tool/fastlane_test.rb` to exercise the upload configuration
@@ -625,7 +673,7 @@ Anything else means links open in a browser instead of the app, silently.
 The release service account needs the app-level
 [Manage store presence](https://support.google.com/googleplay/android-developer/answer/9844686)
 permission as well as access to release on testing tracks, so Fastlane can
-update the listing artwork. For automatic production submissions, also grant
+update listing text and artwork. For automatic production submissions, also grant
 **Release to production, exclude devices, and use Play App Signing** under
 **Play Console → Users and permissions → CI service account → App permissions →
 OpenSplit**. Use the account named by `PLAY_DEPLOY_SERVICE_ACCOUNT`.
@@ -636,11 +684,13 @@ off for approved changes to publish automatically. Review pending changes first:
 merging the production workflow can initiate the public launch. First production
 releases have no percentage rollout; this workflow also requests 100% for updates.
 Review or setup failures stay visible instead of silently saving an unsubmitted
-release. The upload does not change listing text.
+release. Changed listing text and artwork publish from the repository as
+described in [Store listing changes](#store-listing-changes).
 
 The `closed` and `internal` Fastlane lanes remain available for manual testing;
 their track/status overrides cannot redirect the production lane. Testing uploads
-can still change the shared store artwork. Halting production stops further
+can still change the shared listing text and artwork unless
+`PLAY_UPDATE_LISTING=false`. Halting production stops further
 distribution but leaves installed copies in place; fixes need a higher build code.
 
 Verify the feature graphic under **Grow users → Store presence → Main store
