@@ -135,11 +135,16 @@ jobs:
         if: env.BUILD_ANDROID == 'true'
         with:
           bundler-cache: true
+      # Gradle's downloads are cached, keyed on the Gradle files and wrapper
+      # version, so a release does not fetch the whole Android toolchain from
+      # Maven Central again. Central rate-limits shared runner addresses, and
+      # a 429 there once failed a release before anything was deployed.
       - uses: actions/setup-java@v6
         if: env.BUILD_ANDROID == 'true'
         with:
           distribution: temurin
           java-version: "17"
+          cache: gradle
       # Before the slow build, so a changelog Play would refuse fails in
       # seconds. Package the notes and artwork into the runner's temporary
       # directory, leaving the checkout and generated screenshots untouched.
