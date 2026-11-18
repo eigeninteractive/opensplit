@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:opensplit/application/ledger_providers.dart';
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/data/repositories/drift_group_repository.dart';
@@ -99,17 +98,12 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('search keeps all toolbar actions and uses independent filters', (
+  testWidgets('search keeps all toolbar actions and covers every currency', (
     tester,
   ) async {
-    final scope = await mount(tester);
+    await mount(tester);
     expect(find.byTooltip('People'), findsOneWidget);
     expect(find.byTooltip('Settle up'), findsOneWidget);
-    final filter = analyticsFilterControllerProvider(groupId);
-    final held = scope.listen(filter, (_, _) {});
-    scope
-        .read(filter.notifier)
-        .update(scope.read(filter).copyWith(currency: 'JPY', query: 'other'));
     await open(tester);
     expect(find.textContaining('across this group'), findsOneWidget);
     await tester.enterText(_search, 'cof');
@@ -127,8 +121,6 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('JPY 10,000'), findsOneWidget);
-    expect(scope.read(filter).query, 'other');
-    expect(scope.read(filter).currency, 'JPY');
 
     await tester.tap(find.byTooltip('Clear text'));
     await _settle(tester);
@@ -148,7 +140,8 @@ void main() {
       find.widgetWithText(ListTile, 'Maya paid Ana').hitTestable(),
     );
     await _settle(tester);
-    expect(find.text('Edit payment'), findsOneWidget);
+    expect(find.text('Payment'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Edit'), findsOneWidget);
     expect(find.byType(SearchBar), findsNothing);
     await tester.tap(find.byType(BackButton).last);
     await _settle(tester);
@@ -157,12 +150,11 @@ void main() {
     await tester.binding.handlePopRoute();
     await _settle(tester);
     expect(find.byType(SearchBar), findsNothing);
-    held.close();
     expect(tester.takeException(), isNull);
     await unmount(tester);
   });
 
-  testWidgets('results react while open and expenses open their editor', (
+  testWidgets('results react while open and an expense opens to be read', (
     tester,
   ) async {
     await mount(tester);
@@ -179,7 +171,8 @@ void main() {
     expect(find.textContaining('USD 100.00'), findsNothing);
     await tester.tap(find.widgetWithText(ListTile, 'Coffee').hitTestable());
     await _settle(tester);
-    expect(find.text('Edit expense'), findsOneWidget);
+    expect(find.text('Expense'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Edit'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await unmount(tester);
   });

@@ -15,7 +15,6 @@ import '../navigation.dart';
 import '../theme.dart';
 import '../widgets/amount_card.dart';
 import '../widgets/form_leave_guard.dart';
-import '../widgets/entry_history.dart';
 import '../widgets/avatar_view.dart';
 import '../widgets/category_icon.dart';
 import '../widgets/shared_element.dart';
@@ -264,22 +263,11 @@ class _Editor extends ConsumerWidget {
                             ],
                           ),
                           const SizedBox(height: 24),
-                          _EditorCard(
-                            child: _PayerSection(
-                              ledger: ledger,
-                              currency: currency,
-                              form: form,
-                              controller: controller,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          _EditorCard(
-                            child: _SplitSection(
-                              ledger: ledger,
-                              currency: currency,
-                              form: form,
-                              controller: controller,
-                            ),
+                          _PaymentAndSplit(
+                            ledger: ledger,
+                            currency: currency,
+                            form: form,
+                            controller: controller,
                           ),
                           const SizedBox(height: 16),
                           ExpansionTile(
@@ -336,10 +324,6 @@ class _Editor extends ConsumerWidget {
                       ),
                     ),
                   ),
-                  if (form.editing case final editing?) ...[
-                    const SizedBox(height: 32),
-                    EntryHistory(entryId: editing.id, ledger: ledger),
-                  ],
                 ],
               ),
             ),
@@ -361,39 +345,106 @@ class _Editor extends ConsumerWidget {
   }
 }
 
-/// Separates a money decision from the expense's supporting details.
-class _EditorCard extends StatelessWidget {
-  const _EditorCard({required this.child});
+/// Who paid and how it is split, each folded down to a line saying what is
+/// chosen.
+///
+/// Most expenses are one person paying for everyone, split equally, and
+/// those two lines say so without the lists behind them. Anything else is a
+/// tap away, and an expense that already differs opens unfolded.
+class _PaymentAndSplit extends StatelessWidget {
+  const _PaymentAndSplit({
+    required this.ledger,
+    required this.currency,
+    required this.form,
+    required this.controller,
+  });
 
-  final Widget child;
+  final GroupLedger ledger;
+  final Currency? currency;
+  final EntryFormState form;
+  final EntryForm controller;
 
-  @override
-  Widget build(BuildContext context) => Card.outlined(
-    child: Padding(padding: const EdgeInsets.all(16), child: child),
-  );
-}
+  String _names(Iterable<String> memberIds) {
+    final names = [
+      for (final id in memberIds)
+        switch (ledger.memberById(id)) {
+          final member? => ledger.titleOfMember(member),
+          null => ledger.nameOf(id),
+        },
+    ];
+    return switch (names) {
+      [] => 'Nobody yet',
+      [final one] => one,
+      [final one, final two] => '$one and $two',
+      [final first, ...final rest] => '$first and ${rest.length} others',
+    };
+  }
 
-/// A section of the editor, named.
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.text, {this.action});
-
-  final String text;
-  final Widget? action;
+  String get _splitSummary {
+    final how = switch (form.splitKind) {
+      SplitKind.exact => 'By amounts',
+      SplitKind.shares => 'By shares',
+      SplitKind.percent => 'By percentage',
+      _ => 'Equally',
+    };
+    final everyone = _membersForEntry(ledger, form);
+    final count = form.participants.length;
+    return switch (count) {
+      0 => '$how, nobody chosen yet',
+      1 => '$how, ${_names(form.participants)} only',
+      _ when count == everyone.length => '$how between everyone',
+      _ => '$how between $count of ${everyone.length} people',
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
+    const padding = EdgeInsets.fromLTRB(16, 0, 16, 16);
+    final everyone = _membersForEntry(ledger, form);
+
+    return Card.outlined(
+      clipBehavior: Clip.antiAlias,
+      child: Column(
         children: [
-          Expanded(
-            child: Semantics(
-              header: true,
-              child: Text(text, style: theme.textTheme.titleMedium),
-            ),
+          ExpansionTile(
+            initiallyExpanded: form.severalPayers,
+            shape: const Border(),
+            collapsedShape: const Border(),
+            leading: const Icon(Icons.account_balance_wallet_outlined),
+            title: const Text('Paid by'),
+            subtitle: Text(_names(form.payers)),
+            childrenPadding: padding,
+            expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _PayerSection(
+                ledger: ledger,
+                currency: currency,
+                form: form,
+                controller: controller,
+              ),
+            ],
           ),
-          ?action,
+          const Divider(height: 1),
+          ExpansionTile(
+            initiallyExpanded:
+                form.splitKind != SplitKind.equal ||
+                form.participants.length != everyone.length,
+            shape: const Border(),
+            collapsedShape: const Border(),
+            leading: const Icon(Icons.call_split),
+            title: const Text('Split'),
+            subtitle: Text(_splitSummary),
+            childrenPadding: padding,
+            expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _SplitSection(
+                ledger: ledger,
+                currency: currency,
+                form: form,
+                controller: controller,
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -434,9 +485,9 @@ class _PayerSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _SectionTitle(
-          'Paid by',
-          action: TextButton(
+        Align(
+          alignment: AlignmentDirectional.centerEnd,
+          child: TextButton(
             onPressed: () => controller.setSeveralPayers(!form.severalPayers),
             child: Text(form.severalPayers ? 'One person' : 'Several people'),
           ),
@@ -454,10 +505,7 @@ class _PayerSection extends StatelessWidget {
                     member: member,
                     radius: 12,
                   ),
-                  label: Text(
-                    ledger.nameOfMember(member) +
-                        (member.id == ledger.me?.id ? ' (you)' : ''),
-                  ),
+                  label: Text(ledger.titleOfMember(member)),
                   selected: form.payers.contains(member.id),
                   onSelected: (_) => controller.choosePayer(member.id),
                 ),
@@ -527,7 +575,6 @@ class _SplitSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _SectionTitle('Split'),
         LayoutBuilder(
           builder: (context, constraints) {
             if (constraints.maxWidth < 360 ||
@@ -567,9 +614,7 @@ class _SplitSection extends StatelessWidget {
         const SizedBox(height: 8),
         for (final member in _membersForEntry(ledger, form))
           _AllocationRow(
-            title:
-                ledger.nameOfMember(member) +
-                (member.id == ledger.me?.id ? ' (you)' : ''),
+            title: ledger.titleOfMember(member),
             selected: form.participants.contains(member.id),
             subtitle: form.splitKind == SplitKind.exact
                 ? null

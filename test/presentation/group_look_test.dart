@@ -14,7 +14,7 @@ import 'package:opensplit/domain/avatar.dart';
 import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:opensplit/presentation/app.dart';
-import 'package:opensplit/presentation/screens/group_detail_screen.dart';
+import 'package:opensplit/presentation/widgets/day_header.dart';
 import 'package:opensplit/presentation/widgets/group_cover.dart';
 import 'package:opensplit/presentation/widgets/group_avatar_hero.dart';
 import 'package:opensplit/presentation/screens/avatar_picker_screen.dart';
@@ -168,7 +168,7 @@ void main() {
     expect(find.text('Today'), findsOneWidget);
     expect(find.text('Yesterday'), findsOneWidget);
     // The day is the header's to say, not every row's.
-    expect(find.textContaining('Ana paid'), findsNWidgets(3));
+    expect(find.textContaining('You paid'), findsNWidgets(3));
     await unmount(tester);
   });
 
@@ -218,50 +218,51 @@ void main() {
     },
   );
 
-  testWidgets(
-    'editing carries the expense into usable fields on the first frame',
-    (tester) async {
-      final id = await seed(tester);
-      await open(tester, '/g/$id');
-      final row = find.widgetWithText(ListTile, 'Spent').first;
-      final tags = tester
-          .widgetList<Hero>(
-            find.descendant(of: row, matching: find.byType(Hero)),
-          )
-          .map((hero) => hero.tag)
-          .toSet();
-      expect(tags, hasLength(3));
-      await tester.tap(row);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-      expect(find.text('Edit expense'), findsOneWidget);
-      for (final tag in tags) {
-        final endpoints = find.byWidgetPredicate(
-          (widget) => widget is Hero && widget.tag == tag,
-        );
-        expect(
-          find.descendant(of: endpoints, matching: find.byType(Text)),
-          findsNothing,
-          reason: 'the shared contents are flying in the overlay',
-        );
-      }
-      await settle(tester);
-      final amount = find.ancestor(
-        of: find.text('Amount'),
-        matching: find.byType(TextField),
+  testWidgets('an expense opens to be read, then into usable fields to edit', (
+    tester,
+  ) async {
+    final id = await seed(tester);
+    await open(tester, '/g/$id');
+    final row = find.widgetWithText(ListTile, 'Spent').first;
+    final tags = tester
+        .widgetList<Hero>(find.descendant(of: row, matching: find.byType(Hero)))
+        .map((hero) => hero.tag)
+        .toSet();
+    expect(tags, hasLength(3));
+    await tester.tap(row);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Expense'), findsOneWidget);
+    for (final tag in tags) {
+      final endpoints = find.byWidgetPredicate(
+        (widget) => widget is Hero && widget.tag == tag,
       );
-      await tester.enterText(amount, '12.50');
-      await tester.pump();
-      expect(tester.widget<TextField>(amount).controller?.text, '12.50');
-      await tester.tap(find.byType(CloseButton));
-      await settle(tester);
-      expect(find.text('Discard changes?'), findsOneWidget);
-      await tapAndSettle(tester, find.text('Discard'));
-      expect(find.text('Spent'), findsNWidgets(3));
-      expect(tester.takeException(), isNull);
-      await unmount(tester);
-    },
-  );
+      expect(
+        find.descendant(of: endpoints, matching: find.byType(Text)),
+        findsNothing,
+        reason: 'the shared contents are flying in the overlay',
+      );
+    }
+    await settle(tester);
+    await tapAndSettle(tester, find.widgetWithText(FilledButton, 'Edit'));
+    expect(find.text('Edit expense'), findsOneWidget);
+    final amount = find.ancestor(
+      of: find.text('Amount'),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(amount, '12.50');
+    await tester.pump();
+    expect(tester.widget<TextField>(amount).controller?.text, '12.50');
+    await tester.tap(find.byType(CloseButton));
+    await settle(tester);
+    expect(find.text('Discard changes?'), findsOneWidget);
+    await tapAndSettle(tester, find.text('Discard'));
+    expect(find.widgetWithText(FilledButton, 'Edit'), findsOneWidget);
+    await tapAndSettle(tester, find.byType(BackButton));
+    expect(find.text('Spent'), findsNWidgets(3));
+    expect(tester.takeException(), isNull);
+    await unmount(tester);
+  });
 
   testWidgets('the group picture opens into its editable preview and returns', (
     tester,

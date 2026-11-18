@@ -66,6 +66,7 @@ class SyncEngine {
     required this.outbox,
     this.accountId,
     this.access,
+    this.onSeen,
     SyncGate? gate,
     DateTime Function()? clock,
     this.pageSize = 200,
@@ -83,6 +84,10 @@ class SyncEngine {
   }
 
   final ApiAccess? access;
+
+  /// Told, after every pull, how far the account has read each of its
+  /// groups by the server's record: null for one it has never opened.
+  final void Function(Map<String, DateTime?> seenByGroup)? onSeen;
   final AppDatabase db;
   final api.OpensplitApi client;
   final OutboxQueue outbox;
@@ -644,6 +649,10 @@ class SyncEngine {
           level: 900,
         );
       }
+      onSeen?.call({
+        for (final groupId in answer.groupIds) groupId: null,
+        for (final seen in answer.seen) seen.groupId: seen.seenAt,
+      });
       if (everything) answer.groupIds.forEach(want);
     }
     return applied;

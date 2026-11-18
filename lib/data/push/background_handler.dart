@@ -28,7 +28,7 @@ bool _firebaseReady = false;
 Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
   final push = readPushData(message.data);
   if (push == null) return;
-  final PushData(:groupId, :subjectId, :kind) = push;
+  final PushData(:groupId, :subjectId) = push;
   if (!hasPush || !hasBackend) return;
 
   // Platform channels are available in this isolate, but only once the binding
@@ -98,9 +98,7 @@ Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
       currencies: DriftCurrencyRepository(db),
       activity: DriftActivityRepository(db),
       myProfileId: profileId,
-      groupId: groupId,
-      kind: kind,
-      subjectId: subjectId,
+      push: push,
     );
     if (text == null) return;
     final after = await readSyncSession(db);

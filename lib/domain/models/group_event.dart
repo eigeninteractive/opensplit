@@ -1,4 +1,4 @@
-import 'package:opensplit_api/opensplit_api.dart' show EventKind;
+import 'package:opensplit_api/opensplit_api.dart' show EntrySnapshot, EventKind;
 
 import 'entry_event.dart';
 
@@ -36,10 +36,15 @@ final class EntryChanged extends GroupEvent {
     required this.entryId,
     required this.kind,
     this.changes = const <FieldChange>[],
+    this.snapshot,
   });
 
   final String entryId;
   final EntryEventKind kind;
+
+  /// The expense as this event left it, so a line can name it and say what
+  /// it came to even once it has been deleted.
+  final EntrySnapshot? snapshot;
 
   /// Empty for anything but an edit.
   final List<FieldChange> changes;

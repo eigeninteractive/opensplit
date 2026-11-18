@@ -4,6 +4,27 @@ What changed in each version of the app, newest first. The format is
 [Semantic Versioning](https://semver.org/), and the file is kept by
 [cider](https://pub.dev/packages/cider): see "Versions" in docs/runbook.md.
 
+## [4.2.0] - 2026-11-16
+### Added
+- Invite links preview with the group's name and who invited you, instead of the general OpenSplit card.
+- Activity is grouped by day, shows who made each change, and opens the expense when you tap a line.
+- Opening an expense or payment shows it to read first: what it cost you, who paid, how it was split and its history. Edit is one tap away.
+- The groups list adds up what you owe and are owed across groups, and folds groups that are settled and quiet for a month under Settled groups.
+- A dot marks groups with changes since you last opened them, and Activity marks what is new. This follows your account, so a group read on one device is read on the others.
+- Payments on Balances have their own actions: Pay when you owe. When you are owed: Settle, Remind, which sends a notification at most once a day, or Share a ready-made message.
+
+### Changed
+- Expense rows show what each expense means for you on the right, with the full description and who paid. Recorded payments appear as a tinted row, without red or green.
+- Balances lead with your own payments. Everyone's balances and payments between others are folded underneath, and names are shown in full.
+- Activity and expense history name the expense or payment they are about, with real category names, amounts and dates.
+- Insights is rebuilt: switch between the group's spending and your own share, pick a period, and tap a category or a bar to see the expenses behind it. It also shows who paid and who spent, and the biggest expenses.
+- The expense form is shorter. Paid by and Split fold to a one-line summary until you need them.
+- Insights no longer has its own search; use search in the group toolbar. Exporting saves all of the group's expenses.
+- Your own row reads "You" throughout. The Add expense button shrinks to its icon as you scroll down and returns as you scroll up.
+
+### Fixed
+- Removing someone who is not settled up explains why and offers to settle. Group settings rows line up.
+
 ## [4.1.0] - 2026-10-16
 ### Added
 - Search expenses and recorded payments from the group toolbar, across currencies, using descriptions and notes saved on this device.
@@ -117,6 +138,7 @@ What changed in each version of the app, newest first. The format is
 ### Added
 - The first build, to Play internal testing.
 
+[4.2.0]: https://github.com/eigeninteractive/opensplit/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/eigeninteractive/opensplit/compare/v4.0.0...v4.1.0
 [4.0.0]: https://github.com/eigeninteractive/opensplit/compare/v3.1.0...v4.0.0
 [3.1.0]: https://github.com/eigeninteractive/opensplit/compare/v3.0.0...v3.1.0

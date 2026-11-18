@@ -2,7 +2,6 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../data/fx/drift_fx_repository.dart';
 import '../data/local/database.dart';
 import '../data/platform/device_time_zone.dart';
-import '../data/repositories/drift_analytics_repository.dart';
 import '../data/repositories/drift_category_repository.dart';
 import '../data/repositories/drift_currency_repository.dart';
 import '../data/repositories/drift_conflict_repository.dart';
@@ -112,10 +111,3 @@ DriftActivityRepository activityRepository(Ref ref) =>
 @Riverpod(keepAlive: true)
 DriftCategoryRepository categoryRepository(Ref ref) =>
     DriftCategoryRepository(ref.watch(appDatabaseProvider));
-
-@Riverpod(keepAlive: true)
-DriftAnalyticsRepository analyticsRepository(Ref ref) =>
-    DriftAnalyticsRepository(
-      ref.watch(appDatabaseProvider),
-      ref.watch(entryRepositoryProvider),
-    );

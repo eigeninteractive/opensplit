@@ -8,10 +8,24 @@ import 'package:opensplit/data/repositories/drift_group_repository.dart';
 import 'package:opensplit/data/repositories/drift_profile_repository.dart';
 import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/split/splitter.dart';
-import 'package:opensplit_api/opensplit_api.dart' show AvatarKind, EventKind;
+import 'package:opensplit_api/opensplit_api.dart'
+    show AvatarKind, PushData, PushKind;
 import 'package:test/test.dart';
 
 import '../harness.dart';
+
+PushData _push(
+  String groupId,
+  PushKind kind,
+  String subjectId, {
+  String? currency,
+}) => PushData(
+  groupId: groupId,
+  eventId: 'event',
+  kind: kind,
+  subjectId: subjectId,
+  currency: currency,
+);
 
 /// The composer both push paths use.
 void main() {
@@ -84,9 +98,7 @@ void main() {
       currencies: currencies,
       activity: activity,
       myProfileId: 'profile-priya',
-      groupId: g.groupId,
-      kind: EventKind.entry,
-      subjectId: entryId,
+      push: _push(g.groupId, PushKind.entry, entryId),
     );
 
     expect(text, isNotNull);
@@ -116,9 +128,7 @@ void main() {
       currencies: currencies,
       activity: activity,
       myProfileId: 'profile-priya',
-      groupId: g.groupId,
-      kind: EventKind.entry,
-      subjectId: entryId,
+      push: _push(g.groupId, PushKind.entry, entryId),
     );
 
     expect(text?.body, contains('Ravi D'));
@@ -135,9 +145,7 @@ void main() {
       currencies: currencies,
       activity: activity,
       myProfileId: 'profile-ravi',
-      groupId: g.groupId,
-      kind: EventKind.entry,
-      subjectId: entryId,
+      push: _push(g.groupId, PushKind.entry, entryId),
     );
     final forPriya = await composeEventNotification(
       entries: entries,
@@ -146,9 +154,7 @@ void main() {
       currencies: currencies,
       activity: activity,
       myProfileId: 'profile-priya',
-      groupId: g.groupId,
-      kind: EventKind.entry,
-      subjectId: entryId,
+      push: _push(g.groupId, PushKind.entry, entryId),
     );
 
     // Same expense, same total, and both are told their own half.
@@ -170,9 +176,7 @@ void main() {
       // Nobody this device knows: a member of the group who is not on the
       // expense, or a profile that has not been reconciled yet.
       myProfileId: 'profile-nobody',
-      groupId: g.groupId,
-      kind: EventKind.entry,
-      subjectId: entryId,
+      push: _push(g.groupId, PushKind.entry, entryId),
     );
 
     expect(text!.body, contains('₹2,400.00'));
@@ -193,13 +197,59 @@ void main() {
       currencies: currencies,
       activity: activity,
       myProfileId: 'profile-priya',
-      groupId: g.groupId,
-      kind: EventKind.entry,
-      subjectId: 'an-id-this-device-has-never-seen',
+      push: _push(
+        g.groupId,
+        PushKind.entry,
+        'an-id-this-device-has-never-seen',
+      ),
     );
 
     // Rather than a banner about an expense nobody can open.
     expect(text, isNull);
+  });
+
+  test('a reminder names who is asking and what this device owes', () async {
+    final g = await seed();
+    await addExpense(g, description: 'Dinner');
+
+    final text = await composeEventNotification(
+      entries: entries,
+      groups: groups,
+      profiles: profiles,
+      currencies: currencies,
+      activity: activity,
+      myProfileId: 'profile-priya',
+      push: _push(g.groupId, PushKind.reminder, g.ravi, currency: 'INR'),
+    );
+
+    expect(text!.title, 'Goa Trip');
+    expect(text.body, 'Ravi sent a reminder: you owe them ₹1,200.00.');
+  });
+
+  test('a reminder for a debt that is gone produces nothing', () async {
+    final g = await seed();
+    await addExpense(g, description: 'Dinner');
+
+    Future<({String title, String body})?> remind({
+      required String reader,
+      required String from,
+      String currency = 'INR',
+    }) => composeEventNotification(
+      entries: entries,
+      groups: groups,
+      profiles: profiles,
+      currencies: currencies,
+      activity: activity,
+      myProfileId: reader,
+      push: _push(g.groupId, PushKind.reminder, from, currency: currency),
+    );
+
+    // Ravi is owed, so a reminder addressed to him has nothing to say.
+    expect(await remind(reader: 'profile-ravi', from: g.priya), isNull);
+    expect(
+      await remind(reader: 'profile-priya', from: g.ravi, currency: 'EUR'),
+      isNull,
+    );
   });
 
   test('the route opens the group, which owns refresh', () {

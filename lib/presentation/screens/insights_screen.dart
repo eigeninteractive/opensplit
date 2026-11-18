@@ -1,42 +1,52 @@
-import 'package:material_ui/material_ui.dart';
+import 'dart:math' show max;
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../application/ledger_providers.dart';
 import '../../data/local/database.dart';
-import '../../domain/analytics/analytics_query.dart';
+import '../../domain/analytics/spending.dart';
+import '../../domain/calendar_date.dart';
 import '../../domain/money_format.dart';
 import '../navigation.dart';
 import '../theme.dart';
 import '../widgets/avatar_view.dart';
+import '../widgets/category_icon.dart';
+import '../widgets/empty_state.dart';
 import '../widgets/export_button.dart';
 import '../widgets/page_body.dart';
+import '../widgets/segmented_list.dart';
 
-/// Spend analytics and search.
-class InsightsScreen extends ConsumerWidget {
+/// The days an insight covers.
+typedef _Period = ({String label, DateTime? from, DateTime? to});
+
+const _Period _allTime = (label: 'All time', from: null, to: null);
+
+/// What a group spent: how much, on what, by whom and when.
+///
+/// Every figure is in one currency, because adding two together would need a
+/// rate nobody agreed to, and every figure opens the expenses behind it.
+class InsightsScreen extends ConsumerStatefulWidget {
   const InsightsScreen({super.key, required this.groupId});
 
   final String groupId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final ledger = ref.watch(groupLedgerProvider(groupId));
-    final filter = ref.watch(analyticsFilterControllerProvider(groupId));
-    final controller = ref.read(
-      analyticsFilterControllerProvider(groupId).notifier,
-    );
-    final currencies = ref.watch(currenciesProvider).value ?? const {};
-    final used = ref.watch(groupCurrenciesProvider(groupId)).value ?? const [];
+  ConsumerState<InsightsScreen> createState() => _InsightsScreenState();
+}
 
-    // Analytics are per currency by construction; default to whichever the
-    // group uses most rather than silently summing across rates.
-    final active = filter.currency ?? (used.isEmpty ? null : used.first);
-    if (filter.currency == null && active != null) {
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => controller.update(filter.copyWith(currency: active)),
-      );
-    }
+class _InsightsScreenState extends ConsumerState<InsightsScreen> {
+  /// Whether the figures are your own shares rather than whole bills.
+  bool _mine = false;
+  String? _currency;
+  _Period _period = _allTime;
+
+  @override
+  Widget build(BuildContext context) {
+    final groupId = widget.groupId;
+    final ledger = ref.watch(groupLedgerProvider(groupId));
 
     return Scaffold(
       appBar: AppBar(
@@ -45,334 +55,535 @@ class InsightsScreen extends ConsumerWidget {
         actions: [ExportButton(groupId: groupId)],
       ),
       body: PageBody(
-        child: ledger == null
-            ? const SizedBox.shrink()
-            // A CustomScrollView rather than a ListView because the search
-            // results underneath are unbounded — every entry in the group can
-            // match — and a ListView's children are all built at once.
-            : CustomScrollView(
-                slivers: [
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-                    sliver: SliverMainAxisGroup(
-                      slivers: [
-                        SliverList.list(
-                          children: [
-                            _InsightsSearchBar(
-                              key: ValueKey(groupId),
-                              groupId: groupId,
-                            ),
-                            const SizedBox(height: 12),
-                            if (used.length > 1)
-                              Wrap(
-                                spacing: 8,
-                                children: [
-                                  for (final code in used)
-                                    ChoiceChip(
-                                      label: Text(code),
-                                      selected: active == code,
-                                      onSelected: (_) => controller.update(
-                                        filter.copyWith(currency: code),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            const SizedBox(height: 8),
-                            _MemberFilter(
-                              groupId: groupId,
-                              filter: filter,
-                              onChanged: controller.update,
-                            ),
-                            if (filter.isNarrowed)
-                              Align(
-                                alignment: Alignment.centerLeft,
-                                child: TextButton.icon(
-                                  onPressed: controller.reset,
-                                  icon: const Icon(
-                                    Icons.filter_alt_off_outlined,
-                                  ),
-                                  label: const Text('Clear filters'),
-                                ),
-                              ),
-                            _Total(
-                              buckets: ref.watch(
-                                spendByCategoryProvider(groupId),
-                              ),
-                              currencies: currencies,
-                            ),
-                            _Section(
-                              title: 'By category',
-                              buckets: ref.watch(
-                                spendByCategoryProvider(groupId),
-                              ),
-                              currencies: currencies,
-                            ),
-                            _Section(
-                              title: 'By person',
-                              subtitle:
-                                  'What each person consumed, not what they '
-                                  'happened to pay.',
-                              buckets: ref.watch(
-                                spendByMemberProvider(groupId),
-                              ),
-                              currencies: currencies,
-                            ),
-                            _Section(
-                              title: 'Over time',
-                              buckets: ref.watch(spendByMonthProvider(groupId)),
-                              currencies: currencies,
-                              sorted: false,
-                            ),
-                            const SizedBox(height: 8),
-                          ],
-                        ),
-                        _Results(groupId: groupId, currencies: currencies),
-                      ],
-                    ),
-                  ),
+        child: ledger == null ? const SizedBox.shrink() : _body(ledger),
+      ),
+    );
+  }
+
+  Widget _body(GroupLedger ledger) {
+    final currencies = ref.watch(currenciesProvider).value ?? const {};
+    final categories = {
+      for (final category
+          in ref.watch(categoriesProvider).value ?? const <Category>[])
+        category.id: category,
+    };
+    final used = _currenciesSpentIn(ledger);
+    if (used.isEmpty) {
+      return const EmptyState(
+        icon: Icons.insights_outlined,
+        title: 'Nothing to show yet',
+        message: 'Insights appear once the group has an expense.',
+      );
+    }
+
+    final code = used.contains(_currency) ? _currency! : used.first;
+    final me = ledger.me;
+    final summary = SpendingSummary.of(
+      ledger.entries,
+      currency: code,
+      memberId: _mine ? me?.id : null,
+      from: _period.from,
+      to: _period.to,
+    );
+    final view = _View(
+      ledger: ledger,
+      currency: currencies[code],
+      categories: categories,
+      summary: summary,
+    );
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 48),
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            if (me != null)
+              SegmentedButton<bool>(
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(value: false, label: Text('Group')),
+                  ButtonSegment(value: true, label: Text('You')),
                 ],
+                selected: {_mine},
+                onSelectionChanged: (selection) =>
+                    setState(() => _mine = selection.single),
               ),
+            _PeriodChip(
+              period: _period,
+              onChanged: (period) => setState(() => _period = period),
+            ),
+            if (used.length > 1)
+              for (final option in used)
+                ChoiceChip(
+                  label: Text(option),
+                  selected: option == code,
+                  onSelected: (_) => setState(() => _currency = option),
+                ),
+          ],
+        ),
+        _Headline(view: view),
+        if (summary.expenses.isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(top: 24),
+            child: EmptyState(
+              icon: Icons.event_busy_outlined,
+              title: 'Nothing spent here',
+              message: 'No expenses match these choices.',
+            ),
+          )
+        else ...[
+          _Categories(view: view),
+          if (!_mine) _People(view: view),
+          _OverTime(view: view),
+          _Biggest(view: view),
+        ],
+      ],
+    );
+  }
+
+  /// Currencies with any spending, most used first.
+  static List<String> _currenciesSpentIn(GroupLedger ledger) {
+    final counts = <String, int>{};
+    for (final entry in ledger.entries) {
+      if (!entry.isSpend) continue;
+      counts[entry.row.currency] = (counts[entry.row.currency] ?? 0) + 1;
+    }
+    return counts.keys.toList()
+      ..sort((a, b) => counts[b]!.compareTo(counts[a]!));
+  }
+}
+
+/// What every section draws from.
+class _View {
+  const _View({
+    required this.ledger,
+    required this.currency,
+    required this.categories,
+    required this.summary,
+  });
+
+  final GroupLedger ledger;
+  final Currency? currency;
+  final Map<String, Category> categories;
+  final SpendingSummary summary;
+
+  String money(int amountMinor) => formatMoney(currency, amountMinor);
+
+  String categoryName(String id) => categories[id]?.name ?? 'Uncategorised';
+
+  /// Lists [expenses] in a sheet, each opening its expense.
+  void open(
+    BuildContext context,
+    String title,
+    Iterable<CountedExpense> expenses,
+  ) {
+    final rows = expenses.toList()
+      ..sort((a, b) => b.entry.row.entryDate.compareTo(a.entry.row.entryDate));
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        maxChildSize: 0.9,
+        builder: (context, scroll) =>
+            _ExpenseSheet(view: this, title: title, rows: rows, scroll: scroll),
       ),
     );
   }
 }
 
-class _InsightsSearchBar extends ConsumerStatefulWidget {
-  const _InsightsSearchBar({super.key, required this.groupId});
+/// A chip naming the days covered, opening the choice of others.
+class _PeriodChip extends StatelessWidget {
+  const _PeriodChip({required this.period, required this.onChanged});
 
-  final String groupId;
+  final _Period period;
+  final ValueChanged<_Period> onChanged;
 
-  @override
-  ConsumerState<_InsightsSearchBar> createState() => _InsightsSearchBarState();
-}
+  static List<_Period> _presets(DateTime today) => [
+    _allTime,
+    (
+      label: 'This month',
+      from: DateTime.utc(today.year, today.month),
+      to: DateTime.utc(today.year, today.month + 1, 0),
+    ),
+    (
+      label: 'Last month',
+      from: DateTime.utc(today.year, today.month - 1),
+      to: DateTime.utc(today.year, today.month, 0),
+    ),
+    (
+      label: 'Last 30 days',
+      from: today.subtract(const Duration(days: 29)),
+      to: today,
+    ),
+  ];
 
-class _InsightsSearchBarState extends ConsumerState<_InsightsSearchBar> {
-  late final TextEditingController _text;
-
-  @override
-  void initState() {
-    super.initState();
-    final provider = analyticsFilterControllerProvider(widget.groupId);
-    _text = TextEditingController(text: ref.read(provider).query);
-    ref.listenManual(provider.select((filter) => filter.query), (_, query) {
-      // Preserve selection and IME composition when the update came from typing.
-      if (_text.text == query) return;
-      _text.value = TextEditingValue(
-        text: query,
-        selection: TextSelection.collapsed(offset: query.length),
-      );
-    });
-  }
-
-  @override
-  void dispose() {
-    _text.dispose();
-    super.dispose();
-  }
-
-  void _updateQuery(String query) {
-    final provider = analyticsFilterControllerProvider(widget.groupId);
-    final filter = ref.read(provider);
-    if (filter.query == query) return;
-    ref.read(provider.notifier).update(filter.copyWith(query: query));
+  Future<void> _pickRange(BuildContext context, DateTime today) async {
+    final range = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime.utc(2000),
+      lastDate: DateTime.utc(today.year + 1, 12, 31),
+      initialDateRange: period.from == null || period.to == null
+          ? null
+          : DateTimeRange(start: period.from!, end: period.to!),
+    );
+    if (range == null) return;
+    final from = calendarDay(range.start);
+    final to = calendarDay(range.end);
+    final format = DateFormat.MMMd();
+    onChanged((
+      label: '${format.format(from)} – ${format.format(to)}',
+      from: from,
+      to: to,
+    ));
   }
 
   @override
   Widget build(BuildContext context) {
-    final query = ref.watch(
-      analyticsFilterControllerProvider(
-        widget.groupId,
-      ).select((filter) => filter.query),
-    );
-    return SearchBar(
-      controller: _text,
-      hintText: 'Search descriptions and notes',
-      leading: const Icon(Icons.search),
-      trailing: [
-        if (query.isNotEmpty)
-          IconButton(
-            icon: const Icon(Icons.clear),
-            tooltip: 'Clear search',
-            onPressed: () => _updateQuery(''),
+    final today = calendarDay(DateTime.now());
+    return MenuAnchor(
+      menuChildren: [
+        for (final preset in _presets(today))
+          MenuItemButton(
+            onPressed: () => onChanged(preset),
+            child: Text(preset.label),
           ),
-      ],
-      onChanged: _updateQuery,
-    );
-  }
-}
-
-class _MemberFilter extends ConsumerWidget {
-  const _MemberFilter({
-    required this.groupId,
-    required this.filter,
-    required this.onChanged,
-  });
-
-  final String groupId;
-  final AnalyticsFilter filter;
-  final ValueChanged<AnalyticsFilter> onChanged;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final ledger = ref.watch(groupLedgerProvider(groupId));
-    if (ledger == null) return const SizedBox.shrink();
-
-    return Wrap(
-      spacing: 8,
-      children: [
-        for (final member in ledger.members)
-          FilterChip(
-            showCheckmark: false,
-            avatar: MemberAvatar(ledger: ledger, member: member, radius: 12),
-            label: Text(ledger.nameOfMember(member)),
-            selected: filter.memberId == member.id,
-            onSelected: (selected) => onChanged(
-              selected
-                  ? filter.copyWith(memberId: member.id)
-                  : filter.copyWith(clearMember: true),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _Section extends StatelessWidget {
-  const _Section({
-    required this.title,
-    required this.buckets,
-    required this.currencies,
-    this.subtitle,
-    this.sorted = true,
-  });
-
-  final String title;
-  final String? subtitle;
-  final AsyncValue<List<SpendBucket>> buckets;
-  final Map<String, Currency> currencies;
-  final bool sorted;
-
-  @override
-  Widget build(BuildContext context) {
-    final rows = buckets.value ?? const <SpendBucket>[];
-    if (rows.isEmpty) return const SizedBox.shrink();
-
-    final max = rows.map((b) => b.amountMinor).reduce((a, b) => a > b ? a : b);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 24),
-        Semantics(
-          header: true,
-          child: Text(
-            title,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: Theme.of(context).colorScheme.primary,
-            ),
-          ),
-        ),
-        if (subtitle != null) ...[
-          const SizedBox(height: 2),
-          Text(subtitle!, style: Theme.of(context).textTheme.bodySmall),
-        ],
-        const SizedBox(height: 8),
-        Card.filled(
-          color: Theme.of(context).colorScheme.surfaceContainerHigh,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Column(
-              children: [
-                for (final bucket in rows)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                bucket.label,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            Text(
-                              formatMoney(
-                                currencies[bucket.currency],
-                                bucket.amountMinor,
-                              ),
-                              style: moneyStyle(
-                                Theme.of(context).textTheme.bodyMedium!,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        _ShareBar(
-                          fraction: max == 0 ? 0 : bucket.amountMinor / max,
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ),
+        MenuItemButton(
+          onPressed: () => _pickRange(context, today),
+          child: const Text('Choose dates…'),
         ),
       ],
+      builder: (context, menu, _) => ActionChip(
+        avatar: const Icon(Icons.event_outlined),
+        label: Text(period.label),
+        tooltip: 'Change the dates',
+        onPressed: () => menu.isOpen ? menu.close() : menu.open(),
+      ),
     );
   }
 }
 
-/// How big one row is against the biggest row in its section.
-class _ShareBar extends StatelessWidget {
-  const _ShareBar({required this.fraction});
+/// The figure the screen is about, and the few words that frame it.
+class _Headline extends StatelessWidget {
+  const _Headline({required this.view});
 
-  /// 0…1 of the widest bar in this section.
-  final double fraction;
-
-  @override
-  Widget build(BuildContext context) => ExcludeSemantics(
-    child: LinearProgressIndicator(value: fraction.clamp(0.0, 1.0)),
-  );
-}
-
-/// Everything the current filters cover, in the chosen currency: the screen's
-/// headline.
-class _Total extends StatelessWidget {
-  const _Total({required this.buckets, required this.currencies});
-
-  final AsyncValue<List<SpendBucket>> buckets;
-  final Map<String, Currency> currencies;
+  final _View view;
 
   @override
   Widget build(BuildContext context) {
-    final rows = buckets.value ?? const <SpendBucket>[];
-    if (rows.isEmpty) return const SizedBox.shrink();
-
     final theme = Theme.of(context);
-    final total = rows.fold(0, (sum, bucket) => sum + bucket.amountMinor);
-    final count = rows.fold(0, (sum, bucket) => sum + bucket.entryCount);
+    final summary = view.summary;
+    final muted = theme.textTheme.bodyMedium?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    final count = summary.expenses.length;
+    final span = summary.span;
+    final days = span == null ? 0 : span.last.difference(span.first).inDays + 1;
+    final format = DateFormat.MMMd();
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 16, 4, 0),
+      padding: const EdgeInsets.fromLTRB(4, 24, 4, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Spent',
+            summary.memberId == null ? 'The group spent' : 'Your share',
             style: theme.textTheme.titleSmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
           Text(
-            formatMoney(currencies[rows.first.currency], total),
+            view.money(summary.totalMinor),
             style: moneyStyle(theme.textTheme.displaySmall!),
           ),
-          Text(
-            '$count ${count == 1 ? 'expense' : 'expenses'}',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+          const SizedBox(height: 4),
+          if (span != null)
+            Text(
+              [
+                '$count ${count == 1 ? 'expense' : 'expenses'}',
+                days == 1
+                    ? format.format(span.first)
+                    : '${format.format(span.first)} – '
+                          '${format.format(span.last)}',
+                if (days > 1)
+                  '${view.money((summary.totalMinor / days).round())} a day',
+              ].join(' · '),
+              style: muted,
+            ),
+          if (summary.paidMinor case final paid? when span != null)
+            Text('You paid ${view.money(paid)} of the bills.', style: muted),
+        ],
+      ),
+    );
+  }
+}
+
+/// A section's heading, in the style of the lists elsewhere in a group.
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle(this.title, {this.detail});
+
+  final String title;
+  final String? detail;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 28, 4, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Semantics(
+            header: true,
+            child: Text(
+              title,
+              style: theme.textTheme.titleSmall?.copyWith(
+                color: theme.colorScheme.primary,
+              ),
+            ),
+          ),
+          if (detail != null)
+            Text(
+              detail!,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The fill and the colour drawn on it for the [index]th largest category.
+///
+/// The few biggest get a role of their own so the bar and the rows can be
+/// matched by eye; the long tail shares a quiet one.
+(Color, Color) _categoryColors(ColorScheme scheme, int index) =>
+    switch (index) {
+      0 => (scheme.primary, scheme.onPrimary),
+      1 => (scheme.tertiary, scheme.onTertiary),
+      2 => (scheme.secondary, scheme.onSecondary),
+      3 => (scheme.primaryContainer, scheme.onPrimaryContainer),
+      4 => (scheme.tertiaryContainer, scheme.onTertiaryContainer),
+      _ => (scheme.surfaceContainerHighest, scheme.onSurfaceVariant),
+    };
+
+/// Where the money went: one bar cut in proportion, then a row for each cut.
+class _Categories extends StatelessWidget {
+  const _Categories({required this.view});
+
+  final _View view;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final summary = view.summary;
+    final slices = summary.byCategory;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _SectionTitle('Where it went'),
+        ExcludeSemantics(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: SizedBox(
+              height: 16,
+              child: Row(
+                spacing: 2,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final (index, slice) in slices.indexed)
+                    Expanded(
+                      flex: max(1, slice.amountMinor),
+                      child: ColoredBox(
+                        color: _categoryColors(scheme, index).$1,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SegmentedList(
+          children: [
+            for (final (index, slice) in slices.indexed)
+              ListTile(
+                onTap: () => view.open(
+                  context,
+                  view.categoryName(slice.key),
+                  summary.expenses.where(
+                    (e) => (e.entry.row.categoryId ?? '') == slice.key,
+                  ),
+                ),
+                leading: CircleAvatar(
+                  backgroundColor: _categoryColors(scheme, index).$1,
+                  foregroundColor: _categoryColors(scheme, index).$2,
+                  child: Icon(
+                    categoryIcon(view.categories[slice.key]?.icon ?? ''),
+                  ),
+                ),
+                title: Text(view.categoryName(slice.key)),
+                subtitle: Text(
+                  '${_percent(slice.amountMinor, summary.totalMinor)} · '
+                  '${slice.entryCount} '
+                  '${slice.entryCount == 1 ? 'expense' : 'expenses'}',
+                ),
+                trailing: _Amount(view.money(slice.amountMinor)),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+String _percent(int part, int whole) {
+  if (whole == 0) return '0%';
+  final percent = part * 100 / whole;
+  return percent > 0 && percent < 1 ? 'Under 1%' : '${percent.round()}%';
+}
+
+/// A row's trailing figure.
+class _Amount extends StatelessWidget {
+  const _Amount(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Text(
+      text,
+      style: moneyStyle(
+        theme.textTheme.titleMedium!,
+      ).copyWith(color: theme.colorScheme.onSurface),
+    );
+  }
+}
+
+/// What each person paid beside what they used.
+class _People extends StatelessWidget {
+  const _People({required this.view});
+
+  final _View view;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final summary = view.summary;
+    final ledger = view.ledger;
+    final most = summary.byPerson
+        .map((person) => max(person.paidMinor, person.shareMinor))
+        .fold(0, max);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _SectionTitle(
+          'Who paid and who spent',
+          detail:
+              'Paid is what someone handed over. Share is what they '
+              'used up.',
+        ),
+        SegmentedList(
+          children: [
+            for (final person in summary.byPerson)
+              ListTile(
+                onTap: () => view.open(
+                  context,
+                  ledger.nameOf(person.memberId),
+                  summary.expenses.where(
+                    (e) =>
+                        e.entry.shares.any(
+                          (share) => share.memberId == person.memberId,
+                        ) ||
+                        e.entry.payers.any(
+                          (payer) => payer.memberId == person.memberId,
+                        ),
+                  ),
+                ),
+                leading: switch (ledger.memberById(person.memberId)) {
+                  final member? => MemberAvatar(ledger: ledger, member: member),
+                  null => null,
+                },
+                title: Text(
+                  person.memberId == ledger.me?.id
+                      ? 'You'
+                      : ledger.nameOf(person.memberId),
+                ),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Column(
+                    spacing: 4,
+                    children: [
+                      _Meter(
+                        label: 'Paid',
+                        amount: view.money(person.paidMinor),
+                        fraction: most == 0 ? 0 : person.paidMinor / most,
+                        color: scheme.primary,
+                      ),
+                      _Meter(
+                        label: 'Share',
+                        amount: view.money(person.shareMinor),
+                        fraction: most == 0 ? 0 : person.shareMinor / most,
+                        color: scheme.tertiary,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// A labelled amount with a bar showing its size against the largest.
+class _Meter extends StatelessWidget {
+  const _Meter({
+    required this.label,
+    required this.amount,
+    required this.fraction,
+    required this.color,
+  });
+
+  final String label;
+  final String amount;
+  final double fraction;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Semantics(
+      label: '$label $amount',
+      excludeSemantics: true,
+      child: Row(
+        spacing: 8,
+        children: [
+          SizedBox(width: 44, child: Text(label)),
+          Expanded(
+            child: LinearProgressIndicator(
+              value: fraction.clamp(0.0, 1.0),
+              color: color,
+            ),
+          ),
+          // A common width, so the bars in a list end at the same place.
+          ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 88),
+            child: Text(
+              amount,
+              textAlign: TextAlign.end,
+              style: moneyStyle(theme.textTheme.bodyMedium!),
             ),
           ),
         ],
@@ -381,58 +592,281 @@ class _Total extends StatelessWidget {
   }
 }
 
-class _Results extends ConsumerWidget {
-  const _Results({required this.groupId, required this.currencies});
+/// Spending as a bar for each day, week or month.
+class _OverTime extends StatelessWidget {
+  const _OverTime({required this.view});
 
-  final String groupId;
-  final Map<String, Currency> currencies;
+  final _View view;
+
+  /// Narrower than this and the labels under the bars collide; wider and a
+  /// chart of two bars is two slabs.
+  static const _minBarWidth = 36.0;
+  static const _maxBarWidth = 72.0;
+
+  String _label(DateTime start) => switch (view.summary.interval) {
+    SpendingInterval.day => DateFormat.MMMd().format(start),
+    SpendingInterval.week => 'Week of ${DateFormat.MMMd().format(start)}',
+    SpendingInterval.month => DateFormat.yMMM().format(start),
+  };
+
+  String _tick(DateTime start) => switch (view.summary.interval) {
+    SpendingInterval.day => DateFormat.d().format(start),
+    SpendingInterval.week => DateFormat.Md().format(start),
+    SpendingInterval.month => DateFormat.MMM().format(start),
+  };
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final filter = ref.watch(analyticsFilterControllerProvider(groupId));
-    if (!filter.isNarrowed) return const SliverToBoxAdapter();
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final summary = view.summary;
+    final slices = summary.overTime;
+    final peak = slices.reduce(
+      (a, b) => a.amountMinor >= b.amountMinor ? a : b,
+    );
 
-    final results = ref.watch(analyticsResultsProvider(groupId)).value;
-    if (results == null) return const SliverToBoxAdapter();
-
-    // Slivers rather than widgets, so the rows are built as they are scrolled
-    // to.
-    return SliverMainAxisGroup(
-      slivers: [
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 16, bottom: 8),
-            child: Text(
-              '${results.length} matching '
-              '${results.length == 1 ? 'entry' : 'entries'}',
-              style: Theme.of(context).textTheme.titleMedium,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _SectionTitle(
+          switch (summary.interval) {
+            SpendingInterval.day => 'Day by day',
+            SpendingInterval.week => 'Week by week',
+            SpendingInterval.month => 'Month by month',
+          },
+          detail: 'Most: ${view.money(peak.amountMinor)}, ${_label(peak.key)}.',
+        ),
+        Material(
+          color: scheme.surfaceContainerHigh,
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(
+            borderRadius: Segment.radiusAt(index: 0, count: 1),
+          ),
+          child: SizedBox(
+            height: 184,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final room = constraints.maxWidth - 16;
+                final width = (room / slices.length).clamp(
+                  _minBarWidth,
+                  _maxBarWidth,
+                );
+                // The newest bars are the ones in view when there are more
+                // than fit.
+                return SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  reverse: true,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minWidth: room),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        for (final slice in slices)
+                          SizedBox(
+                            width: width,
+                            child: _Bar(
+                              fraction: peak.amountMinor == 0
+                                  ? 0
+                                  : slice.amountMinor / peak.amountMinor,
+                              tick: _tick(slice.key),
+                              label:
+                                  '${_label(slice.key)}: '
+                                  '${view.money(slice.amountMinor)}',
+                              onTap: slice.entryCount == 0
+                                  ? null
+                                  : () => view.open(
+                                      context,
+                                      _label(slice.key),
+                                      summary.expensesIn(slice.key),
+                                    ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              },
             ),
           ),
         ),
-        SliverList.builder(
-          itemCount: results.length,
-          itemBuilder: (context, index) {
-            final entry = results[index];
-            return ListTile(
-              contentPadding: EdgeInsets.zero,
-              onTap: () => context.push('/g/$groupId/e/${entry.id}'),
-              title: Text(
-                entry.row.description.isEmpty
-                    ? 'Expense'
-                    : entry.row.description,
-              ),
-              subtitle: Text(DateFormat.yMMMd().format(entry.row.entryDate)),
-              trailing: Text(
-                formatMoney(
-                  currencies[entry.row.currency],
-                  entry.row.amountMinor,
+      ],
+    );
+  }
+}
+
+/// One bar of the chart over its tick label.
+class _Bar extends StatelessWidget {
+  const _Bar({
+    required this.fraction,
+    required this.tick,
+    required this.label,
+    required this.onTap,
+  });
+
+  /// 0…1 of the tallest bar.
+  final double fraction;
+  final String tick;
+
+  /// What the bar says to a tooltip or a screen reader.
+  final String label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Tooltip(
+      message: label,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
+          child: Column(
+            children: [
+              Expanded(
+                child: FractionallySizedBox(
+                  alignment: Alignment.bottomCenter,
+                  // An empty stretch keeps a sliver of bar, so it reads as
+                  // nothing spent rather than as missing.
+                  heightFactor: max(0.02, fraction.clamp(0.0, 1.0)),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: fraction == 0
+                          ? scheme.outlineVariant
+                          : scheme.primary,
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(4),
+                      ),
+                    ),
+                    child: const SizedBox.expand(),
+                  ),
                 ),
-                style: moneyStyle(Theme.of(context).textTheme.bodyMedium!),
               ),
-            );
-          },
+              const SizedBox(height: 6),
+              ExcludeSemantics(
+                child: Text(
+                  tick,
+                  maxLines: 1,
+                  overflow: TextOverflow.clip,
+                  softWrap: false,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The few expenses that account for the most.
+class _Biggest extends StatelessWidget {
+  const _Biggest({required this.view});
+
+  final _View view;
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = view.summary.expenses.toList()
+      ..sort((a, b) => b.amountMinor.compareTo(a.amountMinor));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _SectionTitle('Biggest expenses'),
+        SegmentedList(
+          children: [
+            for (final row in rows.take(5)) _ExpenseTile(view: view, row: row),
+          ],
         ),
       ],
+    );
+  }
+}
+
+/// One expense in a list of them, opening it.
+class _ExpenseTile extends StatelessWidget {
+  const _ExpenseTile({required this.view, required this.row});
+
+  final _View view;
+  final CountedExpense row;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final entry = row.entry;
+    final category = view.categories[entry.row.categoryId];
+    final payers = entry.payers
+        .map(
+          (payer) => payer.memberId == view.ledger.me?.id
+              ? 'You'
+              : view.ledger.nameOf(payer.memberId),
+        )
+        .join(', ');
+
+    return ListTile(
+      onTap: () => context.push('/g/${view.ledger.group.id}/e/${entry.id}'),
+      leading: CircleAvatar(
+        backgroundColor: scheme.secondaryContainer,
+        foregroundColor: scheme.onSecondaryContainer,
+        child: Icon(categoryIcon(category?.icon ?? '')),
+      ),
+      title: Text(
+        entry.row.description.isEmpty ? 'Expense' : entry.row.description,
+      ),
+      subtitle: Text(
+        '${DateFormat.MMMd().format(entry.row.entryDate)} · $payers paid',
+      ),
+      trailing: _Amount(view.money(row.amountMinor)),
+    );
+  }
+}
+
+/// The expenses behind one figure.
+class _ExpenseSheet extends StatelessWidget {
+  const _ExpenseSheet({
+    required this.view,
+    required this.title,
+    required this.rows,
+    required this.scroll,
+  });
+
+  final _View view;
+  final String title;
+  final List<CountedExpense> rows;
+  final ScrollController scroll;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final total = rows.fold(0, (sum, row) => sum + row.amountMinor);
+
+    return ListView.builder(
+      controller: scroll,
+      padding: const EdgeInsets.only(bottom: 24),
+      itemCount: rows.length + 1,
+      itemBuilder: (context, index) => index == 0
+          ? Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: theme.textTheme.titleLarge),
+                  Text(
+                    '${view.money(total)} · ${rows.length} '
+                    '${rows.length == 1 ? 'expense' : 'expenses'}',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : _ExpenseTile(view: view, row: rows[index - 1]),
     );
   }
 }

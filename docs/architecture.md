@@ -355,6 +355,27 @@ An access token is minted from the service-account key with `jose` and cached in
 KV under one key, so a hundred groups notified at once do not mint a hundred
 tokens.
 
+### Reminders
+
+One push is not a ledger write: somebody who is owed asking somebody who owes
+to pay (`POST /groups/{id}/reminders`). The group's object only answers whether
+it may be sent — the caller is owed in that currency, the other member owes,
+is still here and has an account — and the Worker sends it to that one
+account's devices. It carries who is asking and the currency, never an amount:
+the device syncs, reads what it owes that person from its own ledger, and shows
+nothing if the debt is gone. Nothing is recorded in the group. One person
+reminds another at most once a day, kept as a KV key that expires by itself; KV
+is eventually consistent, so this is a brake and not a ledger.
+
+### What an account has read
+
+`memberships.seen_at` in D1 is the time of the newest activity an account has
+looked at in a group, so "new since you last looked" agrees across its devices.
+It is in D1 and not in the group because a group's rows are read by every
+member. A device sends it with `PUT /groups/{id}/seen` and reads all of its
+own back in `seen` on each pull; the later value wins on both sides, and
+the server never accepts one past its own clock.
+
 ---
 
 ## Cron: two schedules

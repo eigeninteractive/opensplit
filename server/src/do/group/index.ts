@@ -14,6 +14,7 @@ import { putEntry } from "./ledger";
 import migrations from "./migrations/migrations";
 import { pendingNotices } from "./notices";
 import { attempt, type Result } from "./refusal";
+import { reminderRoute } from "./reminders";
 import { createGroup, forgetProfile, handOver, putMember, updateGroup } from "./roster";
 import { currentSeq, findMemberByProfile, findMeta, findTombstone, type GroupDb, nowIso, requireActiveMember, requireMeta, type Tx, type WriteContext } from "./store";
 import { backoffOutbox, clearOutbox, collectUnowned, nextDue, type OutboxRow, pendingOutbox, touchActivity, type UpkeepOutcome } from "./upkeep";
@@ -86,6 +87,11 @@ export class Group extends DurableObject<Env> {
       as(tx, profileId, now);
       return { link: liveLink(tx, now) };
     });
+  }
+
+  /** Whether the caller may remind somebody, and where the reminder would go. Sending it is the Worker's job. */
+  async reminderRoute(memberId: string, currency: string, profileId: string) {
+    return this.read((tx, now) => reminderRoute(tx, memberId, currency, as(tx, profileId, now)));
   }
 
   /** Callable with no session: whoever tapped the link is nobody yet. */

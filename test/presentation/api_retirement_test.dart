@@ -70,7 +70,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       final router = GoRouter.of(tester.element(find.byType(Scaffold).first));
-      router.go('/g/${made.group.id}/e/${expense.id}');
+      router.go('/g/${made.group.id}/e/${expense.id}/edit');
       await tester.pumpAndSettle();
       expect(
         tester
@@ -98,17 +98,6 @@ void main() {
             .onPressed,
         isNull,
       );
-      await tester.scrollUntilVisible(
-        find.text('History'),
-        350,
-        scrollable: find
-            .descendant(
-              of: find.byType(ListView).last,
-              matching: find.byType(Scrollable),
-            )
-            .first,
-      );
-      expect(find.text('History'), findsOneWidget);
       if (!kIsWeb) {
         await tester.tap(find.text('Update OpenSplit'));
         await tester.pumpAndSettle();

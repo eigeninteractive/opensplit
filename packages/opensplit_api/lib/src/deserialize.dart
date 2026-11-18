@@ -27,6 +27,7 @@ import 'package:opensplit_api/src/model/group_event_payload.dart';
 import 'package:opensplit_api/src/model/group_input.dart';
 import 'package:opensplit_api/src/model/group_link.dart';
 import 'package:opensplit_api/src/model/group_refusal.dart';
+import 'package:opensplit_api/src/model/group_seen.dart';
 import 'package:opensplit_api/src/model/health.dart';
 import 'package:opensplit_api/src/model/identity_outcome.dart';
 import 'package:opensplit_api/src/model/invite.dart';
@@ -52,6 +53,9 @@ import 'package:opensplit_api/src/model/push_data.dart';
 import 'package:opensplit_api/src/model/reauth_start.dart';
 import 'package:opensplit_api/src/model/reauth_verify_request.dart';
 import 'package:opensplit_api/src/model/reference.dart';
+import 'package:opensplit_api/src/model/reminder.dart';
+import 'package:opensplit_api/src/model/reminder_input.dart';
+import 'package:opensplit_api/src/model/seen_input.dart';
 import 'package:opensplit_api/src/model/session.dart';
 import 'package:opensplit_api/src/model/share.dart';
 
@@ -155,6 +159,8 @@ ReturnType deserialize<ReturnType, BaseType>(
       return GroupLink.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'GroupRefusal':
       return GroupRefusal.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'GroupSeen':
+      return GroupSeen.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'Health':
       return Health.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'IdentityOutcome':
@@ -208,6 +214,7 @@ ReturnType deserialize<ReturnType, BaseType>(
       return PullRequest.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'PushData':
       return PushData.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'PushKind':
     case 'ReauthStart':
       return ReauthStart.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'ReauthVerifyRequest':
@@ -215,7 +222,15 @@ ReturnType deserialize<ReturnType, BaseType>(
           as ReturnType;
     case 'Reference':
       return Reference.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'Reminder':
+      return Reminder.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'ReminderInput':
+      return ReminderInput.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
+    case 'ReminderOutcome':
     case 'Retry':
+    case 'SeenInput':
+      return SeenInput.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'Session':
       return Session.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'Share':

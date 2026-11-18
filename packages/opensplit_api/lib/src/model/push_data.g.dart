@@ -18,12 +18,13 @@ PushData _$PushDataFromJson(Map<String, dynamic> json) =>
         kind: $checkedConvert(
           'kind',
           (v) => $enumDecode(
-            _$EventKindEnumMap,
+            _$PushKindEnumMap,
             v,
-            unknownValue: EventKind.unknownDefaultOpenApi,
+            unknownValue: PushKind.unknownDefaultOpenApi,
           ),
         ),
         subjectId: $checkedConvert('subjectId', (v) => v as String),
+        currency: $checkedConvert('currency', (v) => v as String?),
       );
       return val;
     });
@@ -31,18 +32,20 @@ PushData _$PushDataFromJson(Map<String, dynamic> json) =>
 Map<String, dynamic> _$PushDataToJson(PushData instance) => <String, dynamic>{
   'groupId': instance.groupId,
   'eventId': instance.eventId,
-  'kind': _$EventKindEnumMap[instance.kind]!,
+  'kind': _$PushKindEnumMap[instance.kind]!,
   'subjectId': instance.subjectId,
+  'currency': ?instance.currency,
 };
 
-const _$EventKindEnumMap = {
-  EventKind.entry: 'entry',
-  EventKind.memberAdded: 'member_added',
-  EventKind.memberJoined: 'member_joined',
-  EventKind.memberLeft: 'member_left',
-  EventKind.memberRenamed: 'member_renamed',
-  EventKind.groupRenamed: 'group_renamed',
-  EventKind.linkCreated: 'link_created',
-  EventKind.linkRevoked: 'link_revoked',
-  EventKind.unknownDefaultOpenApi: 'unknown_default_open_api',
+const _$PushKindEnumMap = {
+  PushKind.entry: 'entry',
+  PushKind.memberAdded: 'member_added',
+  PushKind.memberJoined: 'member_joined',
+  PushKind.memberLeft: 'member_left',
+  PushKind.memberRenamed: 'member_renamed',
+  PushKind.groupRenamed: 'group_renamed',
+  PushKind.linkCreated: 'link_created',
+  PushKind.linkRevoked: 'link_revoked',
+  PushKind.reminder: 'reminder',
+  PushKind.unknownDefaultOpenApi: 'unknown_default_open_api',
 };

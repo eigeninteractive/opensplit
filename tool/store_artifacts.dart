@@ -15,6 +15,7 @@ const _outputs = [
   'site/store/screenshot-5-insights.png',
   'site/store/web-app.png',
   'site/store/og-card.png',
+  'site/store/og-invite.png',
   'site/store/feature-graphic.jpg',
   'site/email/wordmark.png',
 ];

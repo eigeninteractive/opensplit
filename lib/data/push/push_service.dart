@@ -5,8 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:opensplit_api/opensplit_api.dart'
-    show EventKind, Platform, PushData;
+import 'package:opensplit_api/opensplit_api.dart' show Platform, PushData;
 
 import '../../config.dart';
 import 'background_handler.dart';
@@ -28,12 +27,7 @@ class PushService {
   final Future<void> Function(String groupId) onWake;
 
   /// Produce the notification text, after the delta has landed.
-  final Future<({String title, String body})?> Function(
-    String groupId,
-    EventKind kind,
-    String subjectId,
-  )
-  describe;
+  final Future<({String title, String body})?> Function(PushData push) describe;
 
   /// Register a token with the server. Called on first registration and again
   /// every time FCM rotates it.
@@ -196,7 +190,7 @@ class PushService {
     if (!isEnabled()) return;
     final push = readPushData(message.data);
     if (push == null) return;
-    final PushData(:groupId, :subjectId, :kind) = push;
+    final PushData(:groupId, :subjectId) = push;
 
     // Sync first. The notification describes what is now on the device, not
     // what a server guessed the recipient's share would be.
@@ -206,7 +200,7 @@ class PushService {
     // has just redrawn with the change. A banner on top would repeat it.
     if (kIsWeb || !isEnabled()) return;
 
-    final text = await describe(groupId, kind, subjectId);
+    final text = await describe(push);
     if (text == null || !isEnabled()) return;
 
     await _local.show(
@@ -235,7 +229,7 @@ class PushService {
     if (push == null || !isEnabled()) return null;
     await onWake(push.groupId);
     if (!isEnabled()) return null;
-    return describe(push.groupId, push.kind, push.subjectId);
+    return describe(push);
   }
 
   void _open(RemoteMessage message) {

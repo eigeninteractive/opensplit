@@ -2,18 +2,25 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:opensplit_api/opensplit_api.dart' show EntryKind;
+import 'package:opensplit_api/opensplit_api.dart'
+    show EntryKind, ReminderOutcome;
+import 'package:share_plus/share_plus.dart';
 
+import '../../application/backend_providers.dart';
 import '../../application/ledger_providers.dart';
 import '../../data/local/database.dart';
+import '../../data/sync/api_client.dart';
+import '../../data/sync/group_signals.dart';
 import '../../domain/balance/member_balance.dart';
 import '../../domain/balance/simplify.dart';
 import '../../domain/balance/transfer_basis.dart';
 import '../../domain/money_format.dart';
+import '../../domain/settle/reminder.dart';
 import '../theme.dart';
 import 'avatar_view.dart';
 import 'balance_arrow.dart';
 import 'empty_state.dart';
+import 'folded_section.dart';
 import 'group_pane.dart';
 import 'segmented_list.dart';
 import 'shared_element.dart';
@@ -228,8 +235,14 @@ class _CurrencySection extends StatelessWidget {
           const _Subheading('Your payments'),
           transfersOf(yours),
         ],
-        const _Subheading('Everyone'),
-        SegmentedList(
+        // What you act on leads. The rest is reference, so it stays folded
+        // away unless there is nothing of yours above it.
+        const SizedBox(height: 16),
+        FoldedSection(
+          storageKey: 'everyone-${ledger.group.id}-$code',
+          title: "Everyone's balances",
+          summary: '${balances.length} people',
+          initiallyExpanded: yours.isEmpty,
           children: [
             for (final balance in balances)
               _MemberBalanceRow(
@@ -240,13 +253,25 @@ class _CurrencySection extends StatelessWidget {
           ],
         ),
         if (others.isNotEmpty) ...[
-          _Subheading(
-            yours.isEmpty
-                ? 'Settle with ${others.length} '
-                      '${others.length == 1 ? 'payment' : 'payments'}'
-                : 'Between the others',
+          const SizedBox(height: 8),
+          FoldedSection(
+            storageKey: 'others-${ledger.group.id}-$code',
+            title: yours.isEmpty
+                ? 'Payments that settle the group'
+                : 'Payments between others',
+            summary:
+                '${others.length} '
+                '${others.length == 1 ? 'payment' : 'payments'}',
+            initiallyExpanded: yours.isEmpty,
+            children: [
+              for (final transfer in others)
+                _TransferTile(
+                  ledger: ledger,
+                  transfer: transfer,
+                  currency: currency,
+                ),
+            ],
           ),
-          transfersOf(others),
         ],
       ],
     );
@@ -313,6 +338,7 @@ class _TransferTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMine = transfer.fromMemberId == ledger.me?.id;
+    final involvesMe = isMine || transfer.toMemberId == ledger.me?.id;
     final from = ledger.nameOf(transfer.fromMemberId);
     final to = ledger.nameOf(transfer.toMemberId);
     // Whoever is not you, since that is who the payment is with.
@@ -341,42 +367,63 @@ class _TransferTile extends StatelessWidget {
       '&currency=${transfer.currency}',
     );
 
-    // One control in `trailing`, which is all a Material list item has room
-    // for.
-    return Semantics(
+    // Money owed to you can be asked for as well as recorded: the message
+    // goes out through whichever app the person picks.
+    final owedToMe = !isMine && involvesMe;
+    final me = ledger.me;
+    void share() => SharePlus.instance.share(
+      ShareParams(
+        text: reminderText(
+          debtorName: from,
+          amount: formatMoney(currency, transfer.amountMinor),
+          groupName: ledger.group.name,
+          upiVpa: me == null ? null : ledger.upiOf(me),
+        ),
+      ),
+    );
+
+    final tile = Semantics(
       hint: 'Shows how this payment was worked out',
       child: ListTile(
-        onTap: () => _explain(context),
+        onTap: () => _explain(context, onRecord: involvesMe ? null : settle),
         leading: other == null
             ? null
             : MemberAvatar(ledger: ledger, member: other),
         title: Semantics(
           label: words,
           excludeSemantics: true,
-          child: Row(
+          // Wrapped rather than squeezed into one row, so both names are
+          // read in full and a long one moves to the next line.
+          child: Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Flexible(
-                child: SharedText(
-                  tag: ('settlement-from', identity),
-                  text: isMine ? 'You' : from,
-                  style: textStyle,
-                ),
+              SharedText(
+                tag: ('settlement-from', identity),
+                text: isMine ? 'You' : from,
+                style: textStyle,
               ),
-              Text(isMine ? ' pay ' : ' pays '),
-              Flexible(
-                child: SharedText(
-                  tag: ('settlement-to', identity),
-                  text: transfer.toMemberId == ledger.me?.id ? 'you' : to,
-                  style: textStyle,
-                ),
-              ),
-              const SizedBox(width: 6),
-              ExcludeSemantics(
-                child: Icon(
-                  Icons.help_outline,
-                  size: 16,
-                  color: scheme.onSurfaceVariant,
-                ),
+              Text(isMine ? ' pay ' : ' pays ', style: textStyle),
+              // The help icon travels with the last name rather than being
+              // left alone on a line of its own.
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: SharedText(
+                      tag: ('settlement-to', identity),
+                      text: transfer.toMemberId == ledger.me?.id ? 'you' : to,
+                      style: textStyle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  ExcludeSemantics(
+                    child: Icon(
+                      Icons.help_outline,
+                      size: 16,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -388,26 +435,133 @@ class _TransferTile extends StatelessWidget {
             Theme.of(context).textTheme.titleMedium!,
           ).copyWith(color: scheme.onSurface),
         ),
-        trailing: !ledger.canEdit
-            ? null
-            : FilledButton.tonal(
-                onPressed: settle,
-                child: const Text('Settle'),
-              ),
       ),
+    );
+    // Only on payments you are part of. The others' stay a tap away in
+    // their explanation and in Settle up, rather than putting buttons on
+    // every row that is not yours to act on.
+    if (!ledger.canEdit || !involvesMe) return tile;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        tile,
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: OverflowBar(
+            alignment: MainAxisAlignment.end,
+            overflowAlignment: OverflowBarAlignment.end,
+            spacing: 8,
+            overflowSpacing: 4,
+            children: [
+              // Asking is for whoever is owed. Whoever owes can only pay.
+              if (owedToMe)
+                TextButton.icon(
+                  onPressed: share,
+                  icon: const Icon(Icons.share_outlined),
+                  label: const Text('Share'),
+                ),
+              // A notification needs an account to go to. A name added by
+              // hand has none, and is asked through Share instead.
+              if (owedToMe && other?.profileId != null)
+                _RemindButton(
+                  groupId: ledger.group.id,
+                  memberId: transfer.fromMemberId,
+                  currency: transfer.currency,
+                  name: from,
+                ),
+              FilledButton.tonal(
+                onPressed: settle,
+                child: Text(isMine ? 'Pay' : 'Settle'),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
-  void _explain(BuildContext context) {
+  void _explain(BuildContext context, {VoidCallback? onRecord}) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (context) => _TransferExplanation(
+      builder: (sheetContext) => _TransferExplanation(
         ledger: ledger,
         transfer: transfer,
         currency: currency,
+        onRecord: !ledger.canEdit || onRecord == null
+            ? null
+            : () {
+                Navigator.of(sheetContext).pop();
+                onRecord();
+              },
       ),
+    );
+  }
+}
+
+/// Sends a notification to somebody who owes you, and says what became of
+/// it. Absent when there is no server to send it through.
+class _RemindButton extends ConsumerStatefulWidget {
+  const _RemindButton({
+    required this.groupId,
+    required this.memberId,
+    required this.currency,
+    required this.name,
+  });
+
+  final String groupId;
+  final String memberId;
+  final String currency;
+  final String name;
+
+  @override
+  ConsumerState<_RemindButton> createState() => _RemindButtonState();
+}
+
+class _RemindButtonState extends ConsumerState<_RemindButton> {
+  bool _sending = false;
+
+  Future<void> _remind(GroupSignals signals) async {
+    setState(() => _sending = true);
+    final name = widget.name;
+    String message;
+    try {
+      final reminder = await signals.remind(
+        groupId: widget.groupId,
+        memberId: widget.memberId,
+        currency: widget.currency,
+      );
+      message = switch (reminder.outcome) {
+        ReminderOutcome.sent => 'Reminder sent to $name.',
+        ReminderOutcome.alreadyReminded =>
+          'You already reminded $name today. Share the reminder instead, '
+              'or try again tomorrow.',
+        ReminderOutcome.unreachable =>
+          '$name has notifications turned off. Share the reminder instead.',
+        _ => 'Could not send the reminder.',
+      };
+    } on ApiFailure catch (failure) {
+      message = failure.unreachable
+          ? 'You are offline. Share the reminder instead.'
+          : failure.message;
+    }
+    if (!mounted) return;
+    setState(() => _sending = false);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final signals = ref.watch(groupSignalsProvider);
+    if (signals == null) return const SizedBox.shrink();
+    return TextButton.icon(
+      onPressed: _sending ? null : () => _remind(signals),
+      icon: const Icon(Icons.notifications_active_outlined),
+      label: const Text('Remind'),
     );
   }
 }
@@ -418,11 +572,16 @@ class _TransferExplanation extends StatelessWidget {
     required this.ledger,
     required this.transfer,
     required this.currency,
+    this.onRecord,
   });
 
   final GroupLedger ledger;
   final Transfer transfer;
   final Currency? currency;
+
+  /// Records this payment for the two people making it, when it is somebody
+  /// else's and so has no button of its own on the list.
+  final VoidCallback? onRecord;
 
   @override
   Widget build(BuildContext context) {
@@ -549,6 +708,14 @@ class _TransferExplanation extends StatelessWidget {
                         ),
                       ],
                     ),
+                    if (onRecord case final record?) ...[
+                      const SizedBox(height: 24),
+                      FilledButton.tonalIcon(
+                        onPressed: record,
+                        icon: const Icon(Icons.handshake_outlined),
+                        label: const Text('Record this payment'),
+                      ),
+                    ],
                   ],
                 ),
               ],
@@ -575,16 +742,19 @@ class _MemberBalanceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final amount = formatMoneyAbs(currency, balance.balanceMinor);
-    final who = ledger.nameOf(balance.memberId);
-    final verb = balance.balanceMinor > 0 ? 'is owed' : 'owes';
     final isMe = balance.memberId == ledger.me?.id;
+    final who = isMe ? 'You' : ledger.nameOf(balance.memberId);
+    final owed = balance.balanceMinor > 0;
+    final verb = isMe
+        ? (owed ? 'are owed' : 'owe')
+        : (owed ? 'is owed' : 'owes');
     final member = ledger.memberById(balance.memberId);
 
     return ListTile(
       leading: member == null
           ? null
           : MemberAvatar(ledger: ledger, member: member),
-      title: Text(isMe ? '$who (you)' : who),
+      title: Text(who),
       trailing: BalanceAmount(
         balanceMinor: balance.balanceMinor,
         text: '$verb $amount',

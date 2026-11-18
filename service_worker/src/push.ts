@@ -50,6 +50,7 @@ export function fallbackText(kind: string): NotificationText {
     entry: "An expense in one of your groups changed.",
     member_joined: "Someone joined one of your groups.",
     member_left: "Someone left one of your groups.",
+    reminder: "Someone sent you a payment reminder.",
   }[kind];
   return { title: "OpenSplit", body: body ?? "There is new activity in one of your groups." };
 }

@@ -106,7 +106,15 @@ void main() {
     await tester.tap(find.text('Balances'));
     await _settle(tester);
 
-    expect(find.textContaining('is owed ₹1,200.00'), findsOneWidget);
+    // Your own payment leads; everyone's standing is one tap under it.
+    expect(find.textContaining('owes ₹1,200.00'), findsNothing);
+    await tester.tap(find.text("Everyone's balances"));
+    await _settle(tester);
+    // The row's own words; the header above says "You are owed" as well.
+    expect(
+      find.textContaining(RegExp(r'^are owed ₹1,200\.00')),
+      findsOneWidget,
+    );
     expect(find.textContaining('owes ₹1,200.00'), findsOneWidget);
     expect(
       find.bySemanticsLabel(RegExp('You pay Ravi')),
@@ -131,8 +139,9 @@ void main() {
     await _settle(tester);
 
     // ---- Settle up -------------------------------------------------------
-    final transferRow = find.ancestor(
-      of: find.widgetWithText(FilledButton, 'Settle').first,
+    final settleButton = find.widgetWithText(FilledButton, 'Settle').first;
+    final transferRow = find.descendant(
+      of: find.ancestor(of: settleButton, matching: find.byType(Column)).first,
       matching: find.byType(ListTile),
     );
     final transferTags = tester
@@ -142,7 +151,7 @@ void main() {
         .map((hero) => hero.tag)
         .toSet();
     expect(transferTags, hasLength(3));
-    await tester.tap(find.widgetWithText(FilledButton, 'Settle').first);
+    await tester.tap(settleButton);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     for (final tag in transferTags) {
@@ -173,7 +182,7 @@ void main() {
     await tester.tap(find.text('Expenses'));
     await _settle(tester);
 
-    expect(find.textContaining('you received ₹1,200.00'), findsOneWidget);
+    expect(find.text('Priya paid you'), findsOneWidget);
     expect(
       find.textContaining('you owe'),
       findsNothing,
@@ -197,9 +206,14 @@ void main() {
 
     expect(find.text('Nothing yet'), findsNothing);
     expect(
-      find.textContaining('added this'),
-      findsNWidgets(2),
-      reason: 'the groceries, and the settlement that squared them',
+      find.text('Ravi added “Groceries”'),
+      findsOneWidget,
+      reason: 'a line names the expense it is about',
+    );
+    expect(
+      find.text('Ravi recorded a payment from Priya to Ravi'),
+      findsOneWidget,
+      reason: 'and the settlement that squared it says who paid whom',
     );
     expect(
       find.textContaining('Ravi'),
@@ -214,9 +228,14 @@ void main() {
     await _settle(tester);
     await tester.tap(find.text('Groceries'));
     await _settle(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Edit'));
+    await _settle(tester);
 
     await _enterInto(tester, 'Amount', '2000');
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await _settle(tester);
+    expect(find.text('₹2,000.00'), findsWidgets);
+    await tester.tap(find.byIcon(Icons.arrow_back));
     await _settle(tester);
 
     await tester.tap(find.byTooltip('More'));
@@ -224,9 +243,9 @@ void main() {
     await tester.tap(find.text('Activity'));
     await _settle(tester);
 
-    expect(find.textContaining('edited this'), findsOneWidget);
+    expect(find.text('Ravi edited “Groceries”'), findsOneWidget);
     expect(
-      find.textContaining('the amount, from ₹2400.00 to ₹2000.00'),
+      find.textContaining('Amount changed from ₹2,400.00 to ₹2,000.00'),
       findsOneWidget,
       reason: 'the diff is rendered in what the group actually said out loud',
     );

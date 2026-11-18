@@ -11,6 +11,7 @@ import 'screens/account_screen.dart';
 import 'screens/activity_screen.dart';
 import 'screens/avatar_picker_screen.dart';
 import 'screens/edit_profile_screen.dart';
+import 'screens/entry_detail_screen.dart';
 import 'screens/entry_editor_screen.dart';
 import 'screens/group_detail_screen.dart';
 import 'screens/group_list_screen.dart';
@@ -164,7 +165,15 @@ GoRouter buildRouter({
           path: 'activity',
           builder: (context, state) => _GroupScreen(
             groupId: state.pathParameters['groupId']!,
-            child: ActivityScreen(groupId: state.pathParameters['groupId']!),
+            child: ActivityScreen(
+              groupId: state.pathParameters['groupId']!,
+              newSince: switch (int.tryParse(
+                state.uri.queryParameters['since'] ?? '',
+              )) {
+                final since? => DateTime.fromMillisecondsSinceEpoch(since),
+                null => null,
+              },
+            ),
           ),
         ),
         GoRoute(
@@ -222,11 +231,23 @@ GoRouter buildRouter({
           path: 'e/:entryId',
           builder: (context, state) => _GroupScreen(
             groupId: state.pathParameters['groupId']!,
-            child: EntryEditorScreen(
+            child: EntryDetailScreen(
               groupId: state.pathParameters['groupId']!,
-              entryId: state.pathParameters['entryId'],
+              entryId: state.pathParameters['entryId']!,
             ),
           ),
+          routes: [
+            GoRoute(
+              path: 'edit',
+              builder: (context, state) => _GroupScreen(
+                groupId: state.pathParameters['groupId']!,
+                child: EntryEditorScreen(
+                  groupId: state.pathParameters['groupId']!,
+                  entryId: state.pathParameters['entryId'],
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     ),

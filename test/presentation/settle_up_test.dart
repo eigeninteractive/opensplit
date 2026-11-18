@@ -187,15 +187,14 @@ void main() {
         createdBy: 'm-priya',
       ),
     ))!;
-    await _open(tester, db, '/g/g1/e/${payment.id}');
+    await _open(tester, db, '/g/g1/e/${payment.id}/edit');
     expect(find.text('Edit payment'), findsOneWidget);
     expect(find.text('Priya paid Ravi'), findsOneWidget);
     expect(find.text('What was it?'), findsNothing);
     expect(find.text('Split'), findsNothing);
     expect(find.text('Pay by UPI'), findsNothing);
-    expect(find.text('History'), findsOneWidget);
     expect(_shownIn(tester, 'Paid by'), 'Priya');
-    expect(_shownIn(tester, 'Paid to'), 'Ravi (you)');
+    expect(_shownIn(tester, 'Paid to'), 'You');
     Finder field(String label) =>
         find.ancestor(of: find.text(label), matching: find.byType(TextField));
     await tester.enterText(field('Amount'), '900');
@@ -234,7 +233,7 @@ void main() {
         createdBy: 'm-priya',
       ),
     ))!;
-    await _open(tester, db, '/g/g1/e/${payment.id}');
+    await _open(tester, db, '/g/g1/e/${payment.id}/edit');
     await tester.enterText(
       find.ancestor(
         of: find.text('Payment note (optional)'),
@@ -292,7 +291,7 @@ void main() {
           ..platformBrightnessTestValue = brightness;
         addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
         addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
-        await _open(tester, db, '/g/g1/e/${payment.id}');
+        await _open(tester, db, '/g/g1/e/${payment.id}/edit');
         tester.view.physicalSize = const Size(320, 640);
         await _beats(tester);
         expect(tester.takeException(), isNull);

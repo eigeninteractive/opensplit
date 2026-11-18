@@ -19,7 +19,6 @@ import '../navigation.dart';
 import '../feedback.dart';
 import '../widgets/amount_card.dart';
 import '../widgets/form_leave_guard.dart';
-import '../widgets/entry_history.dart';
 import '../widgets/page_body.dart';
 import '../widgets/shared_element.dart';
 
@@ -343,10 +342,6 @@ class _SettleUp extends ConsumerWidget {
                   ),
                 ),
               ),
-              if (editing != null) ...[
-                const SizedBox(height: 24),
-                EntryHistory(entryId: editing.id, ledger: ledger),
-              ],
             ],
           ),
         ),
@@ -681,7 +676,7 @@ class _MemberDropdown extends StatelessWidget {
         for (final member in options)
           DropdownMenuEntry(
             value: member.id,
-            label: nameOf(member) + (member.id == meId ? ' (you)' : ''),
+            label: member.id == meId ? 'You' : nameOf(member),
           ),
       ],
       onSelected: onChanged,
@@ -690,7 +685,7 @@ class _MemberDropdown extends StatelessWidget {
     if (heroTag == null || selected == null) return dropdown;
     return SharedText(
       tag: heroTag!,
-      text: nameOf(selected) + (selected.id == meId ? ' (you)' : ''),
+      text: selected.id == meId ? 'You' : nameOf(selected),
       style: Theme.of(context).textTheme.bodyLarge!.copyWith(
         color: Theme.of(context).colorScheme.onSurface,
       ),

@@ -30,6 +30,7 @@ EntryChanged describeSnapshot({
     isProvisional: current.isProvisional,
     entryId: current.subjectId ?? '',
     kind: kind,
+    snapshot: after,
     // A deletion or a restoration is fully described by what it is.
     changes: kind == EntryEventKind.edited && before != null
         ? diffSnapshots(before, after)

@@ -259,3 +259,46 @@ describe("a token that names nothing", () => {
     expect((await json<ApiError>(await call(`/links/${unknown}`, null))).error.code).toBe("invite_invalid");
   });
 });
+
+describe("a pasted link's preview", () => {
+  const page = (token: string) => workerExports.default.fetch(`https://opensplit.test/app/join/${token}`);
+
+  it("names the group and who is inviting, in place of the landing page's pitch", async () => {
+    const { id, slotId } = await makeGroup(ravi);
+    const minted = await json<Invite>(await call(`/groups/${id}/members/${slotId}/invite`, ravi, { method: "POST" }));
+
+    const response = await page(minted.token);
+    const body = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(body).toContain("Client shell");
+    expect(body).toContain('property="og:title" content="Join Goa trip on OpenSplit"');
+    expect(body).toContain("Ravi invited you to split expenses with 2 people.");
+    expect(body).toContain(`content="https://opensplit.test/app/join/${minted.token}"`);
+    expect(body).toContain('content="https://opensplit.test/store/og-invite.png"');
+    expect(body).not.toContain("Free, open-source expense splitting");
+  });
+
+  it("escapes a group name rather than letting it write markup", async () => {
+    const id = freshId("link");
+    const created = await call(`/groups/${id}`, ravi, {
+      method: "PUT",
+      body: JSON.stringify({ name: 'Trip "><script>x</script>', defaultCurrency: "INR", isDirect: false, simplifyDebts: true, baseSeq: null, ...defaultGroupLook, creatorId: `${id}-host`, creatorName: "Ravi" }),
+    });
+    expect(created.status).toBe(200);
+    const link = await json<GroupLink>(await call(`/groups/${id}/link`, ravi, { method: "POST" }));
+
+    const body = await (await page(link.token)).text();
+
+    // The quote is what would end the attribute; inside one, the rest is text.
+    expect(body).toContain('content="Join Trip &quot;><script>x</script> on OpenSplit"');
+    expect(body).not.toContain('content="Join Trip ">');
+  });
+
+  it("leaves the document alone for a token nobody minted", async () => {
+    const response = await page("no-such-token");
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("Free, open-source expense splitting");
+  });
+});

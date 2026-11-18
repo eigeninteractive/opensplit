@@ -59,6 +59,12 @@ export const memberships = sqliteTable(
     updatedAt: text("updated_at").notNull(),
     /** The group's outbox id for this write: an older write arriving late is ignored. */
     version: integer("version").notNull(),
+    /**
+     * The newest activity this person has looked at, on any of their devices.
+     * Theirs alone, so it lives here and not in the group, whose rows every
+     * member reads. Written by the Worker and only ever moved forward.
+     */
+    seenAt: text("seen_at"),
   },
   (table) => [primaryKey({ columns: [table.profileId, table.groupId] }), index("memberships_group").on(table.groupId)],
 );

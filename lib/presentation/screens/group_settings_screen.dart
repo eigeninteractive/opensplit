@@ -14,6 +14,7 @@ import '../feedback.dart';
 import '../navigation.dart';
 import '../widgets/avatar_view.dart';
 import '../widgets/export_button.dart';
+import '../widgets/leading_icon.dart';
 import '../widgets/page_body.dart';
 import '../widgets/group_access.dart';
 import '../widgets/segmented_list.dart';
@@ -206,7 +207,7 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
             SegmentedList(
               children: [
                 ListTile(
-                  leading: const Icon(Icons.badge_outlined),
+                  leading: const LeadingIcon(Icons.badge_outlined),
                   title: const Text('Name'),
                   subtitle: Text(ledger.group.name),
                   trailing: const Icon(Icons.chevron_right),
@@ -273,24 +274,17 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
               SegmentedList(
                 children: [
                   ListTile(
-                    leading: Icon(Icons.logout, color: scheme.error),
+                    leading: LeadingIcon(Icons.logout, color: scheme.error),
                     title: Text(
                       'Leave group',
                       style: TextStyle(color: scheme.error),
                     ),
                     subtitle: const Text(
-                      'Export any records you want to keep first.',
+                      'Ends your access. Export a copy first if you need one.',
                     ),
                     onTap: _busy ? null : () => _leave(ledger, me),
                   ),
                 ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Leaving ends your access. Export a copy beforehand if you need it.',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
               ),
             ],
           ],

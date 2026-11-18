@@ -24,16 +24,14 @@ PushService pushService(Ref ref) {
         ref.read(syncControllerProvider.notifier).syncGroup(groupId),
     // The same composer the background isolate calls, so a notification says
     // the same thing whether the app was open when it arrived or not.
-    describe: (groupId, kind, subjectId) => composeEventNotification(
+    describe: (push) => composeEventNotification(
       entries: ref.read(entryRepositoryProvider),
       groups: ref.read(groupRepositoryProvider),
       profiles: ref.read(profileRepositoryProvider),
       currencies: ref.read(currencyRepositoryProvider),
       activity: ref.read(activityRepositoryProvider),
       myProfileId: ref.read(currentAccountIdProvider),
-      groupId: groupId,
-      kind: kind,
-      subjectId: subjectId,
+      push: push,
     ),
     onOpenGroup: (groupId) {
       // The background isolate writes through another Drift connection.
