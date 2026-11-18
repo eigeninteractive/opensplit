@@ -38,7 +38,7 @@ val hasUploadKey = keystoreProperties.getProperty("storeFile") != null
 android {
     namespace = "com.eigeninteractive.opensplit"
     // flutter_local_notifications 23 requires API 37 to compile.
-    compileSdk = maxOf(flutter.compileSdkVersion, 37)
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

@@ -166,9 +166,6 @@ jobs:
           distribution: temurin
           java-version: "17"
           cache: gradle
-      - name: Install Android API 37
-        if: env.BUILD_ANDROID == 'true'
-        run: sdkmanager "platforms;android-37.0"
       # Before the slow build, so a changelog Play would refuse fails in
       # seconds. Package the listing and notes into the runner's temporary
       # directory, leaving the checkout and generated screenshots untouched.
