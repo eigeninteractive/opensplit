@@ -41,8 +41,8 @@ afternoon.
 keytool -list -v -keystore ~/opensplit-upload.jks -alias upload | grep SHA256
 ```
 
-All four certificates are shown under *Play Console → Test and release → Setup
-→ App signing*. Copy every SHA-256 fingerprint from the three App signing key
+All four certificates are shown under _Play Console → Test and release → Setup
+→ App signing_. Copy every SHA-256 fingerprint from the three App signing key
 sections, then add the upload certificate manually if Play's generated Digital
 Asset Links snippet omits it.
 
@@ -69,7 +69,7 @@ beginning `/app` and no others.
 
 By hand, because none of the platform's three `not_found_handling` settings
 answers the right document. `single-page-application` would hand `/app/join/xyz`
-the *landing page*, and `404-page` would hand it `/404.html`. That is also what
+the _landing page_, and `404-page` would hand it `/404.html`. That is also what
 keeps this file clear of the fallback: it lives at the host root, alongside the
 landing page and the policy pages, and nothing there is reachable by a rule
 scoped to `/app`.

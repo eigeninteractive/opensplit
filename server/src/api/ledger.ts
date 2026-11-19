@@ -155,11 +155,9 @@ export function ledgerRoutes(routes: OpenAPIHono<AppEnv>) {
   routes.openapi(putSeenRoute, async (c) => {
     const { groupId } = c.req.valid("param");
     const viewer = c.var.session.userId;
-    const now = new Date().toISOString();
-    // Re-rendered, so every stored value has the same precision and compares as text.
-    const sent = new Date(c.req.valid("json").seenAt).toISOString();
-    // ISO-8601 in UTC, so the earlier string is the earlier time.
-    const seenAt = sent < now ? sent : now;
+    const sent = Date.parse(c.req.valid("json").seenAt);
+    // Clamp future values and store normalized UTC timestamps for text comparisons.
+    const seenAt = new Date(Math.min(sent, Date.now())).toISOString();
     const mine = and(eq(memberships.profileId, viewer), eq(memberships.groupId, groupId), isNull(memberships.leftAt));
 
     await c.var.db

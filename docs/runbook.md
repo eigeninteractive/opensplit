@@ -14,17 +14,17 @@ A manual **Release** run deploys only when **deploy** is checked.
 
 ## Local and production are separate by construction
 
-| | Local: `pnpm dev`, the test suites, CI | Production |
-|---|---|---|
-| Worker configuration | the `env.test` block of `server/wrangler.jsonc` | the top level of `server/wrangler.jsonc` |
-| D1, KV, Durable Objects | files under `server/.wrangler/state` | your Cloudflare account |
-| Secrets | `server/.dev.vars` (gitignored) | stored against the Worker; the first deploy, then `wrangler secret put` |
-| Google sign-in | off: no client in `.dev.vars` | the Google OAuth web client |
-| Sign-in codes | printed in the Worker's terminal | emailed by Resend |
-| Push | skipped: no FCM credentials | sent through FCM |
-| Rate limits | raised out of the way | the real ones |
-| Web client's API | the page's origin, `http://localhost:8787` | the page's origin, the domain |
-| Android client's API | `env/local.json`, passed last | `env/app.json` (from GitHub variables in CI) |
+|                         | Local: `pnpm dev`, the test suites, CI          | Production                                                              |
+| ----------------------- | ----------------------------------------------- | ----------------------------------------------------------------------- |
+| Worker configuration    | the `env.test` block of `server/wrangler.jsonc` | the top level of `server/wrangler.jsonc`                                |
+| D1, KV, Durable Objects | files under `server/.wrangler/state`            | your Cloudflare account                                                 |
+| Secrets                 | `server/.dev.vars` (gitignored)                 | stored against the Worker; the first deploy, then `wrangler secret put` |
+| Google sign-in          | off: no client in `.dev.vars`                   | the Google OAuth web client                                             |
+| Sign-in codes           | printed in the Worker's terminal                | emailed by Resend                                                       |
+| Push                    | skipped: no FCM credentials                     | sent through FCM                                                        |
+| Rate limits             | raised out of the way                           | the real ones                                                           |
+| Web client's API        | the page's origin, `http://localhost:8787`      | the page's origin, the domain                                           |
+| Android client's API    | `env/local.json`, passed last                   | `env/app.json` (from GitHub variables in CI)                            |
 
 What keeps them apart:
 
@@ -195,13 +195,13 @@ and the FCM access token. Losing it costs one cron run.
 ### 2. Google OAuth
 
 In the **Google Cloud Console** for the project behind `FCM_PROJECT_ID`, under
-*APIs & Services → Credentials*:
+_APIs & Services → Credentials_:
 
-**The Web client**, an OAuth client of type *Web application*. Its id and
+**The Web client**, an OAuth client of type _Web application_. Its id and
 secret are the `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` secrets below, and
 its id is also `GOOGLE_WEB_CLIENT_ID` in `env/app.json`, so it is in every
 build: replace the secret, never the client. Google shows a secret only when it
-is made, so a lost one is replaced by *Add secret* on the client, put in with
+is made, so a lost one is replaced by _Add secret_ on the client, put in with
 `wrangler secret put`, and then the old one disabled. Add exactly one
 authorized redirect URI, and the origin:
 
@@ -218,7 +218,7 @@ request reaches the Worker, so there is no trace of it in our logs.
 **The Android client** must exist, bound to the package name
 `com.eigeninteractive.opensplit` and to each signing certificate in
 `site/.well-known/assetlinks.json`. Its id is never configured: Android mints
-an ID token with the *web* client as its audience, which is the audience this
+an ID token with the _web_ client as its audience, which is the audience this
 server verifies. The Android client exists only so Google will issue that token
 to this app.
 
@@ -232,11 +232,11 @@ API key scoped to sending only. The message and the sending address are in
 
 The group's Durable Object calls the FCM v1 HTTP API directly, so what is
 needed is a service account with the **Firebase Cloud Messaging API** enabled:
-*Firebase console → Project settings → Service accounts → Generate new private
-key.* The whole JSON file becomes `FCM_SERVICE_ACCOUNT`, and the `project_id`
+_Firebase console → Project settings → Service accounts → Generate new private
+key._ The whole JSON file becomes `FCM_SERVICE_ACCOUNT`, and the `project_id`
 inside it becomes `FCM_PROJECT_ID`. A key cannot be downloaded again, so a lost
 one is replaced the same way: generate another, put it in, and delete the old
-one in *Google Cloud → IAM → Service accounts → Keys*.
+one in _Google Cloud → IAM → Service accounts → Keys_.
 
 ### 5. Exchange rates
 
@@ -253,18 +253,18 @@ checks them: it refuses to go out while any is unset, so a forgotten one is a
 failed release rather than a quietly broken feature. The values come from the
 steps above:
 
-| Secret | Value | If the value is wrong |
-|---|---|---|
-| `BETTER_AUTH_SECRET` | `openssl rand -base64 32` | Better Auth refuses to construct. Every request 500s. |
-| `GOOGLE_CLIENT_ID` / `_SECRET` | step 2, the web client's pair | Google sign-in fails. Email codes and guests still work. |
-| `RESEND_API_KEY` | step 3 | Resend rejects the send, so the code never arrives. |
+| Secret                                   | Value                                 | If the value is wrong                                                              |
+| ---------------------------------------- | ------------------------------------- | ---------------------------------------------------------------------------------- |
+| `BETTER_AUTH_SECRET`                     | `openssl rand -base64 32`             | Better Auth refuses to construct. Every request 500s.                              |
+| `GOOGLE_CLIENT_ID` / `_SECRET`           | step 2, the web client's pair         | Google sign-in fails. Email codes and guests still work.                           |
+| `RESEND_API_KEY`                         | step 3                                | Resend rejects the send, so the code never arrives.                                |
 | `FCM_PROJECT_ID` / `FCM_SERVICE_ACCOUNT` | step 4; the account is the whole JSON | Pushes fail and are logged. Deliberate: a notification must never stop an expense. |
-| `EXCHANGERATE_API_KEY` | step 5 | The second rate provider fails; those six currencies get no rate that day. |
+| `EXCHANGERATE_API_KEY`                   | step 5                                | The second rate provider fails; those six currencies get no rate that day.         |
 
 The Worker does not exist until its first deploy, and `wrangler secret put`
 needs one to exist, so the first deploy carries all seven in a file (step 7).
-After that, change one at a time with `wrangler secret put`; see *Rotating a
-secret*.
+After that, change one at a time with `wrangler secret put`; see _Rotating a
+secret_.
 
 ### 7. The first deploy
 
@@ -291,19 +291,19 @@ rm "$secrets"
 quotes, which keep the private key's `\n` escapes as they are:
 `FCM_SERVICE_ACCOUNT='<the output of jq -c . service-account.json>'`.
 
-Then *Verify* (below).
+Then _Verify_ (below).
 
 ### 8. GitHub
 
-In *Settings → Environments → `production`*:
+In _Settings → Environments → `production`_:
 
 **Secrets**
 
-| Secret | Where from |
-|---|---|
-| `CLOUDFLARE_API_TOKEN` | *My Profile → API Tokens → Create Token*, from the **Edit Cloudflare Workers** template, plus *Account → D1 → Edit* (the release applies migrations), scoped to this account and the `eigeninteractive.com` zone |
-| `CLOUDFLARE_ACCOUNT_ID` | *Workers & Pages → Overview*, in the right-hand column |
-| `ANDROID_UPLOAD_KEYSTORE_BASE64`, `_STORE_PASSWORD`, `_KEY_ALIAS`, `_KEY_PASSWORD` | the upload keystore, base64-encoded, and its passwords and alias |
+| Secret                                                                             | Where from                                                                                                                                                                                                       |
+| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CLOUDFLARE_API_TOKEN`                                                             | _My Profile → API Tokens → Create Token_, from the **Edit Cloudflare Workers** template, plus _Account → D1 → Edit_ (the release applies migrations), scoped to this account and the `eigeninteractive.com` zone |
+| `CLOUDFLARE_ACCOUNT_ID`                                                            | _Workers & Pages → Overview_, in the right-hand column                                                                                                                                                           |
+| `ANDROID_UPLOAD_KEYSTORE_BASE64`, `_STORE_PASSWORD`, `_KEY_ALIAS`, `_KEY_PASSWORD` | the upload keystore, base64-encoded, and its passwords and alias                                                                                                                                                 |
 
 **Variables.** They become `env/app.json` at build time and are all public:
 
@@ -342,7 +342,7 @@ A push to `main` runs `.github/workflows/release.yml`:
 2. The resource-id check, before anything slow.
 3. The build number and complete web bundle, uploaded as an artifact.
 4. When the app version has no `v<version>` release tag, a signed Android bundle
-   and release notes from `CHANGELOG.md` (see *Versions*). Android and web share
+   and release notes from `CHANGELOG.md` (see _Versions_). Android and web share
    the build number on these releases. Changed Play listing text and artwork
    are packaged independently, even without an app version bump.
 5. `wrangler d1 migrations apply opensplit --remote`: whatever is pending.
@@ -441,7 +441,7 @@ API needs an explicit transition plan before merge; an urgent update priority
 does not provide compatibility. Normal schema changes use incremental migrations;
 an initial schema or testing-era storage reset must not replace production data.
 
-A manual run (*Actions → Release → Run workflow*) with **deploy** unchecked
+A manual run (_Actions → Release → Run workflow_) with **deploy** unchecked
 builds web and Android artifacts without deploying anything. Checking **deploy**
 deploys the web/backend and submits Android only if the app version is still
 untagged. Changed listing content also publishes, with or without an app release.
@@ -496,7 +496,7 @@ pins, the same everywhere.
 
 ### In every pull request
 
-Every app-changing PR, including cosmetic fixes, gets an entry under *Unreleased*:
+Every app-changing PR, including cosmetic fixes, gets an entry under _Unreleased_:
 
 ```sh
 dart run cider log fixed 'Totals no longer round twice.'
@@ -539,11 +539,11 @@ tag before building Android. Semantic bump size remains a review decision.
 Which part to bump: patch for fixes, minor for features, and major for breaking
 changes. Fastlane maps the bump relative to the last submitted version to:
 
-| Bump | Play priority | App behavior when Play permits the flow |
-|---|---|---|
-| Major | 5 | Request the immediate update flow |
-| Minor | 2 | Offer a dismissible flexible update |
-| Patch | 0 | Keep the dismissible flexible update |
+| Bump  | Play priority | App behavior when Play permits the flow |
+| ----- | ------------- | --------------------------------------- |
+| Major | 5             | Request the immediate update flow       |
+| Minor | 2             | Offer a dismissible flexible update     |
+| Patch | 0             | Keep the dismissible flexible update    |
 
 Users can cancel the immediate flow; this policy does not add a client lockout.
 Play reports the highest priority across releases skipped by an installed
@@ -559,7 +559,7 @@ version-changing commits or push to `main`.
 
 ### What a release does with them
 
-**Play's notes.** `tool/release_notes.dart` takes the *Unreleased* entries,
+**Play's notes.** `tool/release_notes.dart` takes the _Unreleased_ entries,
 since they are what this build has that the last version did not. Straight
 after a version is cut there are none, and it takes that version's section
 instead. It drops the headings and the Markdown, which Play would show
@@ -601,7 +601,7 @@ highest code so far couples every build to the API being reachable.
 **What would break it:** GitHub numbers runs per workflow file. Rename or
 recreate `release.yml` and the count starts again at 1, below every code Play
 has seen, so every upload is refused. If it ever has to be renamed, add an
-offset above the last run number to the formula in the *Number this build*
+offset above the last run number to the formula in the _Number this build_
 step.
 
 ---
@@ -704,7 +704,7 @@ the preview-video cover and on selected promotional surfaces. A missing public
 banner alone does not establish an upload failure. See
 [Google's preview asset guidance](https://support.google.com/googleplay/android-developer/answer/9866151).
 
-Under *App content*, the three URLs, each a real static file answering 200 with
+Under _App content_, the three URLs, each a real static file answering 200 with
 no redirect, and the same constants the app's Settings screen opens
 (`lib/config.dart`):
 

@@ -236,7 +236,7 @@ needs a [CHANGELOG.md](CHANGELOG.md) entry with
 CI checks the bump against the PR's base. Merging deploys the web/backend and
 submits Android to Play production. Backend-only, website, documentation and
 tooling PRs need no app bump and deploy without an Android submission, unless
-an earlier app version is still awaiting a successful submission. See *Versions*
+an earlier app version is still awaiting a successful submission. See _Versions_
 in [docs/runbook.md](docs/runbook.md).
 
 Production Play priority follows the Cider bump from the last submitted release:
@@ -327,13 +327,13 @@ creates artifacts only, for first-upload bootstrap.
 
 Every integration is off unless configured, and hidden rather than shown broken:
 
-| Key | Enables |
-|---|---|
-| `API_BASE_URL` | Sync and accounts |
-| `GOOGLE_WEB_CLIENT_ID` | Sign in with Google |
-| `FCM_PROJECT_ID`, `FCM_SENDER_ID`, and the `ANDROID_`/`WEB_` key and app id | Push |
-| `FCM_VAPID_KEY` | Web push, in addition to the above |
-| `LINK_HOST` | The host used in invite links |
+| Key                                                                         | Enables                            |
+| --------------------------------------------------------------------------- | ---------------------------------- |
+| `API_BASE_URL`                                                              | Sync and accounts                  |
+| `GOOGLE_WEB_CLIENT_ID`                                                      | Sign in with Google                |
+| `FCM_PROJECT_ID`, `FCM_SENDER_ID`, and the `ANDROID_`/`WEB_` key and app id | Push                               |
+| `FCM_VAPID_KEY`                                                             | Web push, in addition to the above |
+| `LINK_HOST`                                                                 | The host used in invite links      |
 
 The app API uses one base path, defined in `server/src/paths.ts`. OpenAPI
 `servers.url` carries it into the generated Dart client; operation paths below
@@ -346,7 +346,7 @@ Rates are fetched by the server, never by devices — so every member of a group
 converts with the same numbers, and a modified client cannot put a rate in
 front of anyone else. Everything is stored against a single base (USD), one row
 per currency per day, so any pair is a division and there is no such thing as a
-supported *pair*.
+supported _pair_.
 
 ```bash
 # Required for a deploy, like every secret in wrangler.jsonc — see the table below.
@@ -367,10 +367,10 @@ serves, so a rate pull never crosses the planet to reach it.
 
 Two providers run in order, the second filling what the first could not:
 
-| Provider | Covers | History |
-|---|---|---|
-| Frankfurter (ECB) | ~30 currencies | yes, free |
-| ExchangeRate-API | 166 currencies | no — free plan is latest only |
+| Provider          | Covers         | History                       |
+| ----------------- | -------------- | ----------------------------- |
+| Frankfurter (ECB) | ~30 currencies | yes, free                     |
+| ExchangeRate-API  | 166 currencies | no — free plan is latest only |
 
 The ExchangeRate-API key is what covers AED, KWD, BHD, LKR, NPR and VND, which
 Frankfurter does not publish, so a deploy refuses to go out without it. Locally
@@ -391,7 +391,7 @@ unanswerable, and without a ceiling every device retries them forever against
 a quota. Six devices in one group sync the same backdated expense within a
 second of each other, so this is the common case rather than the edge one.
 
-The device reaches *backwards* for those. A high-water mark alone cannot
+The device reaches _backwards_ for those. A high-water mark alone cannot
 deliver a rate older than the ones already held, which is exactly what a
 backfill produces — so the pull widens to the oldest expense it has no rate
 for, once, and records how far back it went.
@@ -422,15 +422,15 @@ offer you the file anyway — skip it.
 Register the Android app under package name `com.eigeninteractive.opensplit`,
 and a separate web app for the web build. Then, in Project settings → General:
 
-| Key in `env/app.json` | Where it comes from |
-|---|---|
-| `FCM_PROJECT_ID` | Project ID |
-| `FCM_SENDER_ID` | Project number (digits only) |
-| `WEB_FCM_API_KEY` | Your apps → the **web** app → SDK setup and configuration → Config → `apiKey` |
-| `WEB_FCM_APP_ID` | the same snippet's `appId` (contains `:web:`) |
-| `FCM_VAPID_KEY` | Cloud Messaging tab → Web Push certificates → Generate key pair |
-| `ANDROID_FCM_API_KEY` | see below |
-| `ANDROID_FCM_APP_ID` | see below |
+| Key in `env/app.json` | Where it comes from                                                           |
+| --------------------- | ----------------------------------------------------------------------------- |
+| `FCM_PROJECT_ID`      | Project ID                                                                    |
+| `FCM_SENDER_ID`       | Project number (digits only)                                                  |
+| `WEB_FCM_API_KEY`     | Your apps → the **web** app → SDK setup and configuration → Config → `apiKey` |
+| `WEB_FCM_APP_ID`      | the same snippet's `appId` (contains `:web:`)                                 |
+| `FCM_VAPID_KEY`       | Cloud Messaging tab → Web Push certificates → Generate key pair               |
+| `ANDROID_FCM_API_KEY` | see below                                                                     |
+| `ANDROID_FCM_APP_ID`  | see below                                                                     |
 
 The Android app offers no config snippet in the console — only a
 `google-services.json` download. Download it and let the tool read it, rather
@@ -445,7 +445,7 @@ That fills `FCM_PROJECT_ID`, `FCM_SENDER_ID`, `ANDROID_FCM_APP_ID` and
 then checks the rest. The download is not needed at build time and must not be
 committed — delete it afterwards.
 
-**`FCM_PROJECT_ID` is the project *id*, not the display name.** The console
+**`FCM_PROJECT_ID` is the project _id_, not the display name.** The console
 shows "OpenSplit" in large type and `opensplit-4a2b1` in small type; every API
 wants the second. It is also the path segment in the console's own URL:
 `console.firebase.google.com/project/<this>/overview`.
@@ -453,7 +453,7 @@ wants the second. It is also the path segment in the console's own URL:
 ### Google sign-in
 
 **Nothing here is created for you.** Firebase auto-creates OAuth clients only
-when *Firebase Auth* is enabled, and this app authenticates through its own
+when _Firebase Auth_ is enabled, and this app authenticates through its own
 Worker, so Firebase Auth is never switched on and Credentials stays empty.
 Create both clients by hand, in the same Google Cloud project the Firebase
 project made:
@@ -475,7 +475,7 @@ project made:
    and post-quantum keys used by Android 17+. A missing client may surface as a
    `clientConfigurationError`, or even as `canceled`, in Credential Manager.
 4. **The Worker's own secrets:** `wrangler secret put GOOGLE_CLIENT_ID` and
-   `GOOGLE_CLIENT_SECRET`, the *web* client's pair. Locally they live in
+   `GOOGLE_CLIENT_SECRET`, the _web_ client's pair. Locally they live in
    `server/.dev.vars`, which is gitignored; `server/.dev.vars.example` shows
    the shape.
 
@@ -491,7 +491,7 @@ A session begins because somebody chose one of three things — Google, an email
 code, or being a guest — and being a guest is a real account with no credential
 attached, not a lesser mode. Attaching a credential to a guest session later has
 to **link**: same account id, same rows, nothing to migrate. Signing in instead
-mints or resumes a *different* account and leaves the guest holding every group
+mints or resumes a _different_ account and leaves the guest holding every group
 the person has created so far, at which point they are a stranger to their own
 data.
 
@@ -504,7 +504,7 @@ branches is reachable from `vitest`, including the one that fires when an
 identity is already claimed, which is exactly where the damage happens and
 exactly what no Flutter test could reach before.
 
-The app deliberately does *not* create a session on startup. It used to, and
+The app deliberately does _not_ create a session on startup. It used to, and
 that broke the arrival it was meant to protect: somebody who already had an
 account and tapped an invite link had the single-use token spent by a throwaway
 anonymous account, and no way into the group afterwards. `/join/:token` now
@@ -526,11 +526,11 @@ or is revoked. It is the link you paste into the chat you
 already have, for a trip whose guest list does not exist yet. Possession is the
 whole authorisation, which is a larger claim than an invite makes, so:
 
-* there is one live link per group — a single row the group's Durable Object
+- there is one live link per group — a single row the group's Durable Object
   overwrites, which needs no unique index because the object is its only
   writer — and minting revokes whatever preceded it;
-* it can be turned off without minting another;
-* `link_created`, `link_revoked` and `member_joined` all land in the activity
+- it can be turned off without minting another;
+- `link_created`, `link_revoked` and `member_joined` all land in the activity
   feed, so the group can see the door open, close, and be walked
   through. A group that can see who arrived has a better remedy than an
   approval queue, which is why there is not one.
@@ -665,8 +665,8 @@ reaches a Cloudflare account. With `server/.dev.vars` copied from the example
 nothing leaves the machine either: no Google credentials (sign in as a guest or
 by email code), no email provider (the code is printed in the Worker's
 terminal), and no FCM credentials (push is skipped). The step-by-step version,
-including a phone, is in [docs/runbook.md](docs/runbook.md) under *Testing a
-branch locally*.
+including a phone, is in [docs/runbook.md](docs/runbook.md) under _Testing a
+branch locally_.
 
 **The web client** is served by the Worker it talks to, exactly as in
 production, and on the web it uses its page's origin as the API: the same
@@ -699,10 +699,10 @@ flutter run \
 **The URL depends on where the app runs**, and this is the step that wastes an
 afternoon:
 
-| Running on | `API_BASE_URL` in `env/local.json` |
-|---|---|
-| Android emulator | `http://10.0.2.2:8787` — the emulator's own 127.0.0.1 is the emulator |
-| Physical Android device | `http://<this machine's LAN address>:8787`, same Wi-Fi |
+| Running on              | `API_BASE_URL` in `env/local.json`                                    |
+| ----------------------- | --------------------------------------------------------------------- |
+| Android emulator        | `http://10.0.2.2:8787` — the emulator's own 127.0.0.1 is the emulator |
+| Physical Android device | `http://<this machine's LAN address>:8787`, same Wi-Fi                |
 
 For a physical phone, start the Worker with `pnpm dev --ip 0.0.0.0`, which it
 does not do by default.
@@ -840,8 +840,8 @@ by Android 17+. Play re-signs each upload with the keys appropriate for the
 installing device, so every one must be authorized.
 
 It should also list the **upload key**, so that release APKs installed directly
-verify too. All four certificates are shown under *Play Console → Test and
-release → Setup → App signing*. Getting this wrong is silent in the worst way:
+verify too. All four certificates are shown under _Play Console → Test and
+release → Setup → App signing_. Getting this wrong is silent in the worst way:
 links simply open in a browser, with nothing in the app to say why.
 
 Anonymous sign-in is unauthenticated row creation, so it is swept and
@@ -910,18 +910,18 @@ Copyright © 2026 EigenInteractive.
 
 [AGPL-3.0](LICENSE). If you run a modified OpenSplit as a service, your users
 are entitled to your changes. The app carries that obligation rather than
-leaving it to this file: *Settings → About* links to the source, and
+leaving it to this file: _Settings → About_ links to the source, and
 `REPOSITORY_URL` is a build-time define so that a fork's copy points at the
 fork.
 
 The typeface is not ours and is not under that licence. Google Sans Flex is
 bundled under the SIL Open Font License 1.1, with the notice
 and the licence text in [assets/google_fonts/LICENSE](assets/google_fonts/LICENSE)
-— which the app also shows, under *About → Open-source licences*.
+— which the app also shows, under _About → Open-source licences_.
 
 ### The name and the mark
 
-AGPL-3.0 covers the code. The name *OpenSplit* and the brand assets in
+AGPL-3.0 covers the code. The name _OpenSplit_ and the brand assets in
 `assets/brand/`, `assets/icon/`, `assets/splash/` and `docs/brand/` stay with
 EigenInteractive, so a fork will want its own name and its own mark. That is the usual arrangement —
 GPLv3 §7(e), which AGPL-3.0 incorporates, exists so that a copyright licence

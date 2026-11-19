@@ -4,6 +4,10 @@ What changed in each version of the app, newest first. The format is
 [Semantic Versioning](https://semver.org/), and the file is kept by
 [cider](https://pub.dev/packages/cider): see "Versions" in docs/runbook.md.
 
+## [4.2.3] - 2026-11-19
+### Fixed
+- Updated the local database library for faster reads and more reliable batch updates.
+
 ## [4.2.2] - 2026-11-19
 ### Fixed
 - Kept web controls clear of screen cutouts and improved status bar contrast across light and dark themes.
@@ -152,6 +156,7 @@ What changed in each version of the app, newest first. The format is
 ### Added
 - The first build, to Play internal testing.
 
+[4.2.3]: https://github.com/eigeninteractive/opensplit/compare/v4.2.2...v4.2.3
 [4.2.2]: https://github.com/eigeninteractive/opensplit/compare/v4.2.1...v4.2.2
 [4.2.1]: https://github.com/eigeninteractive/opensplit/compare/v4.2.0...v4.2.1
 [4.2.0]: https://github.com/eigeninteractive/opensplit/compare/v4.1.0...v4.2.0

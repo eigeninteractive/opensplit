@@ -37,12 +37,12 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: [version-update:semver-major]
-      # Keep the database toolchain on the reviewed rc.4 until its next
+      # Keep the database toolchain on the reviewed rc.5 until its next
       # prerelease has been assessed explicitly. Stable 1.0 remains eligible.
       - dependency-name: drizzle-orm
-        versions: [">=1.0.0-rc.5 <1.0.0"]
+        versions: [">1.0.0-rc.5 <1.0.0"]
       - dependency-name: drizzle-kit
-        versions: [">=1.0.0-rc.5 <1.0.0"]
+        versions: [">1.0.0-rc.5 <1.0.0"]
 
   - package-ecosystem: pub
     directories:

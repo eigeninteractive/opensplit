@@ -12,13 +12,13 @@ cannot reach data handlers and receive no special upgrade handling.
 
 For example, when the current version becomes 2:
 
-| Request | Result |
-| --- | --- |
-| `/api/v1/...` | `410 / update_required` |
-| Valid `/api/v2/...` operation | Normal handling |
-| Unknown `/api/v2/...` operation | `404 / not_found` |
-| `/api/v3/...` | `404 / not_found` |
-| Unversioned `/api/...` | `404 / not_found` |
+| Request                         | Result                  |
+| ------------------------------- | ----------------------- |
+| `/api/v1/...`                   | `410 / update_required` |
+| Valid `/api/v2/...` operation   | Normal handling         |
+| Unknown `/api/v2/...` operation | `404 / not_found`       |
+| `/api/v3/...`                   | `404 / not_found`       |
+| Unversioned `/api/...`          | `404 / not_found`       |
 
 The client never guesses incompatibility from an arbitrary 404, redirects an
 old request, or changes its own API version.

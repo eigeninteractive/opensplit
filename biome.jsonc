@@ -1,10 +1,10 @@
 // Biome formats and lints everything in the repository that it understands:
 // the Worker's TypeScript, the web shell's and the site's HTML, CSS and
-// JavaScript, the SVGs, and the JSON. Dart is `dart format` and `dart analyze`.
+// JavaScript, Markdown, SVGs, and JSON. Dart uses its own formatter and analyzer.
 // One config at the root, so the CLI from server/ (`pnpm lint`, which CI runs)
 // and an editor opened here read the same rules.
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.6.8/schema.json",
   "root": true,
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "files": {
@@ -35,6 +35,10 @@
       // The skills and openapi-generator CLIs'.
       "!skills-lock.json",
       "!openapitools.json",
+      // Imported skills and the changelog written by Cider.
+      "!.agents/skills",
+      "!.claude/skills",
+      "!CHANGELOG.md",
       // The designer's canvases and their tool's runtime, kept as written.
       "!docs/brand/*.dc.html",
       "!docs/brand/support.js"
@@ -60,6 +64,9 @@
   "html": {
     "formatter": { "enabled": true },
     "linter": { "enabled": true }
+  },
+  "markdown": {
+    "formatter": { "formatEmbeds": false }
   },
   "overrides": [
     {
