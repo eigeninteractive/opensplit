@@ -4,6 +4,10 @@ What changed in each version of the app, newest first. The format is
 [Semantic Versioning](https://semver.org/), and the file is kept by
 [cider](https://pub.dev/packages/cider): see "Versions" in docs/runbook.md.
 
+## [4.2.2] - 2026-11-19
+### Security
+- Updated Android certificate validation to reject compromised certificates.
+
 ## [4.2.1] - 2026-11-18
 ### Changed
 - Updated the libraries that handle connectivity, notifications, settings and Material controls.
@@ -145,6 +149,7 @@ What changed in each version of the app, newest first. The format is
 ### Added
 - The first build, to Play internal testing.
 
+[4.2.2]: https://github.com/eigeninteractive/opensplit/compare/v4.2.1...v4.2.2
 [4.2.1]: https://github.com/eigeninteractive/opensplit/compare/v4.2.0...v4.2.1
 [4.2.0]: https://github.com/eigeninteractive/opensplit/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/eigeninteractive/opensplit/compare/v4.0.0...v4.1.0

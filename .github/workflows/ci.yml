@@ -40,7 +40,7 @@ jobs:
           cache-dependency-path: server/pnpm-lock.yaml
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.47.4"
+          flutter-version: "3.50.0"
           cache: true
       - run: flutter pub get --enforce-lockfile
       - name: Require a Cider release for app changes
@@ -119,7 +119,7 @@ jobs:
             service_worker/pnpm-lock.yaml
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.47.4"
+          flutter-version: "3.50.0"
           cache: true
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
@@ -244,7 +244,7 @@ jobs:
           cache-dependency-path: service_worker/pnpm-lock.yaml
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.47.4"
+          flutter-version: "3.50.0"
           cache: true
       - run: flutter pub get --enforce-lockfile
       - run: dart run build_runner build
