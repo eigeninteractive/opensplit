@@ -263,6 +263,7 @@ class _GroupTile extends ConsumerWidget {
               hint: hasNews ? 'New activity' : null,
               child: SharedText(
                 tag: ('group-name', group.id),
+                placeholderBuilder: settledRouteHeroPlaceholder,
                 text: group.name,
                 maxLines: null,
                 style: theme.textTheme.titleLarge!.copyWith(

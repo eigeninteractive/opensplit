@@ -14,6 +14,8 @@ import 'package:opensplit/domain/avatar.dart';
 import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:opensplit/presentation/app.dart';
+import 'package:opensplit/presentation/screens/group_list_screen.dart';
+import 'package:opensplit/presentation/widgets/avatar_view.dart';
 import 'package:opensplit/presentation/widgets/day_header.dart';
 import 'package:opensplit/presentation/widgets/group_cover.dart';
 import 'package:opensplit/presentation/widgets/group_avatar_hero.dart';
@@ -106,6 +108,31 @@ void main() {
     await tester.pump(const Duration(seconds: 30));
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(Duration.zero);
+  }
+
+  Future<void> commitBackGesture(WidgetTester tester) async {
+    Future<void> send(String method, [double? progress]) =>
+        tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+          'flutter/backgesture',
+          const StandardMethodCodec().encodeMethodCall(
+            MethodCall(
+              method,
+              progress == null
+                  ? null
+                  : {
+                      'touchOffset': [5 + 300 * progress, 300.0],
+                      'progress': progress,
+                      'swipeEdge': 0,
+                    },
+            ),
+          ),
+          (_) {},
+        );
+    await send('startBackGesture', 0);
+    await tester.pump();
+    await send('updateBackGestureProgress', 0.4);
+    await tester.pump(const Duration(milliseconds: 50));
+    await send('commitBackGesture');
   }
 
   testWidgets('export row and formats remain usable at 200 percent text', (
@@ -290,6 +317,70 @@ void main() {
     expect(tester.takeException(), isNull);
     await unmount(tester);
   });
+
+  for (final (label, target) in [
+    ('expense', find.widgetWithText(ListTile, 'Spent').first),
+    ('settlement', find.widgetWithText(ListTile, 'Paid in cash')),
+    ('picture editor', find.byTooltip('Group picture')),
+  ]) {
+    testWidgets('the group identity returns after a quick Back from $label', (
+      tester,
+    ) async {
+      final id = await seed(tester);
+      if (label == 'settlement') {
+        await tester.runAsync(() async {
+          final groups = DriftGroupRepository(db);
+          final group = (await groups.getGroup(id))!;
+          final guest = await groups.addMember(id, displayName: 'Mateus');
+          await DriftEntryRepository(db).create(
+            EntryDraft.settlement(
+              groupId: id,
+              currency: 'EUR',
+              amountMinor: 1000,
+              fromMemberId: group.createdBy!,
+              toMemberId: guest.id,
+              notes: 'Paid in cash',
+            ),
+            createdBy: group.createdBy!,
+          );
+        });
+      }
+      await open(tester, '/');
+      await tapAndSettle(tester, find.text('Lisbon trip'));
+      await tapAndSettle(tester, target);
+
+      try {
+        await commitBackGesture(tester);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 30));
+        await tester.binding.handlePopRoute();
+        await settle(tester);
+
+        final list = find.byType(GroupListScreen);
+        expect(list, findsOneWidget);
+        expect(
+          find.descendant(of: list, matching: find.text('Lisbon trip')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: list,
+            matching: find.byWidgetPredicate(
+              (widget) => widget is AvatarView && widget.id == id,
+            ),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: list, matching: find.byType(GroupCover)),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      } finally {
+        await unmount(tester);
+      }
+    });
+  }
 
   testWidgets('resizing while leaving a group keeps both routes usable', (
     tester,

@@ -26,6 +26,7 @@ class GroupAvatarHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SharedElement(
     tag: ('group-avatar', group.id),
+    placeholderBuilder: settledRouteHeroPlaceholder,
     child: SizedBox.square(
       dimension: radius * 2,
       child: FittedBox(

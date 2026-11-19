@@ -10,6 +10,7 @@ import '../../domain/avatar.dart';
 import '../theme.dart';
 import 'avatar_view.dart';
 import 'category_icon.dart';
+import 'shared_element.dart';
 
 /// A group's cover: its hue, patterned with what it spends on.
 ///
@@ -175,6 +176,7 @@ class GroupCoverHero extends StatelessWidget {
     child: Hero(
       tag: ('group-cover', ledger.group.id),
       transitionOnUserGestures: true,
+      placeholderBuilder: settledRouteHeroPlaceholder,
       flightShuttleBuilder: (context, animation, direction, from, to) {
         final source = (from.widget as Hero).child as ClipRRect;
         final destination = (to.widget as Hero).child as ClipRRect;

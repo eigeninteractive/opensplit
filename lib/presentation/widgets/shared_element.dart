@@ -2,10 +2,18 @@ import 'package:material_ui/material_ui.dart';
 
 /// A visual shared by two routes, with the system's reduced-motion preference.
 class SharedElement extends StatelessWidget {
-  const SharedElement({super.key, required this.tag, required this.child});
+  const SharedElement({
+    super.key,
+    required this.tag,
+    required this.child,
+    this.placeholderBuilder,
+  });
 
   final Object tag;
   final Widget child;
+
+  /// What occupies this endpoint when the hero is flying.
+  final HeroPlaceholderBuilder? placeholderBuilder;
 
   @override
   Widget build(BuildContext context) => HeroMode(
@@ -13,6 +21,7 @@ class SharedElement extends StatelessWidget {
     child: Hero(
       tag: tag,
       transitionOnUserGestures: true,
+      placeholderBuilder: placeholderBuilder,
       child: Material(type: MaterialType.transparency, child: child),
     ),
   );
@@ -30,6 +39,7 @@ class SharedText extends StatelessWidget {
     required this.style,
     this.maxLines = 1,
     this.child,
+    this.placeholderBuilder,
   });
 
   final Object tag;
@@ -40,12 +50,16 @@ class SharedText extends StatelessWidget {
   final int? maxLines;
   final Widget? child;
 
+  /// What occupies this endpoint when the hero is flying.
+  final HeroPlaceholderBuilder? placeholderBuilder;
+
   @override
   Widget build(BuildContext context) => HeroMode(
     enabled: !MediaQuery.disableAnimationsOf(context),
     child: Hero(
       tag: tag,
       transitionOnUserGestures: true,
+      placeholderBuilder: placeholderBuilder,
       flightShuttleBuilder: _flight,
       child: _TextEndpoint(
         text: text,
@@ -89,6 +103,31 @@ class SharedText extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Restores a static hero if overlapping pops skip its return flight.
+Widget settledRouteHeroPlaceholder(
+  BuildContext context,
+  Size size,
+  Widget child,
+) {
+  // The Groups list lives in a nested navigator. Its first page stays current
+  // there even while the root navigator covers the whole Groups destination.
+  final route =
+      ModalRoute.of(Navigator.of(context).context) ?? ModalRoute.of(context);
+  if (route == null) return SizedBox.fromSize(size: size);
+  final entering = route.animation;
+  final covering = route.secondaryAnimation;
+  return ListenableBuilder(
+    listenable: Listenable.merge([entering, covering]),
+    builder: (context, _) {
+      final settled =
+          route.isCurrent &&
+          (entering?.isCompleted ?? true) &&
+          (covering?.isDismissed ?? true);
+      return settled ? child : SizedBox.fromSize(size: size);
+    },
+  );
 }
 
 class _TextEndpoint extends StatelessWidget {
