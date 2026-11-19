@@ -14,38 +14,50 @@ async function errorOf(response: Response) {
   return ((await response.json()) as { error: { code: string; retry: string } }).error;
 }
 
-describe("rate limits", () => {
-  it("stop one address starting guest after guest", async () => {
-    const ip = randomIp();
+async function rateLimitBurst(count: number, newClient: () => (() => Promise<Response>) | Promise<() => Promise<Response>>) {
+  const periodMs = 60_000;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const request = await newClient();
+    const window = Math.floor(Date.now() / periodMs);
     const statuses: number[] = [];
-    for (let attempt = 0; attempt < 6; attempt++) statuses.push((await post("/identity/guest", {}, { "CF-Connecting-IP": ip })).status);
+    for (let i = 1; i < count; i++) statuses.push((await request()).status);
+    const lastResponse = await request();
+
+    // Miniflare resets its counters at wall-clock minute boundaries. Repeat
+    // once with a fresh key only if the burst crossed a boundary.
+    if (Math.floor(Date.now() / periodMs) === window) {
+      return { statuses: [...statuses, lastResponse.status], lastResponse };
+    }
+  }
+  throw new Error("Both rate-limit test bursts crossed a Miniflare minute boundary.");
+}
+
+describe("rate limits", () => {
+  it("stops one address starting guest after guest and returns a retryable error", async () => {
+    const { statuses, lastResponse } = await rateLimitBurst(6, () => {
+      const ip = randomIp();
+      return () => post("/identity/guest", {}, { "CF-Connecting-IP": ip });
+    });
 
     expect(statuses).toEqual([200, 200, 200, 200, 200, 429]);
-  });
-
-  it("say so in the envelope, as something to try again later", async () => {
-    const ip = randomIp();
-    for (let attempt = 0; attempt < 5; attempt++) await post("/identity/guest", {}, { "CF-Connecting-IP": ip });
-
-    const refused = await post("/identity/guest", {}, { "CF-Connecting-IP": ip });
-    expect(await errorOf(refused)).toMatchObject({ code: "rate_limited", retry: "transient" });
+    expect(await errorOf(lastResponse)).toMatchObject({ code: "rate_limited", retry: "transient" });
   });
 
   it("stop one inbox being sent code after code, whoever asks", async () => {
-    const address = `${crypto.randomUUID()}@example.com`;
-    const statuses: number[] = [];
-    // A different address each time, so only the per-inbox limit can be what refuses.
-    for (let attempt = 0; attempt < 4; attempt++) statuses.push((await post("/identity/email", { email: address }, { "CF-Connecting-IP": randomIp() })).status);
+    const { statuses } = await rateLimitBurst(4, () => {
+      const address = `${crypto.randomUUID()}@example.com`;
+      // A different IP for each request, so only the per-inbox limit can refuse it.
+      return () => post("/identity/email", { email: address }, { "CF-Connecting-IP": randomIp() });
+    });
 
     expect(statuses).toEqual([200, 200, 200, 429]);
   });
 
   it("stop one address guessing codes", async () => {
-    const ip = randomIp();
-    const statuses: number[] = [];
-    for (let attempt = 0; attempt < 11; attempt++) {
-      statuses.push((await post("/identity/email/verify", { email: `${crypto.randomUUID()}@example.com`, code: "00000000", flow: "signInPending" }, { "CF-Connecting-IP": ip })).status);
-    }
+    const { statuses } = await rateLimitBurst(11, () => {
+      const ip = randomIp();
+      return () => post("/identity/email/verify", { email: `${crypto.randomUUID()}@example.com`, code: "00000000", flow: "signInPending" }, { "CF-Connecting-IP": ip });
+    });
 
     expect(statuses.at(-1)).toBe(429);
     expect(statuses.slice(0, 10)).not.toContain(429);
@@ -67,9 +79,10 @@ describe("asking for a rate backfill", () => {
   });
 
   it("is limited per account", async () => {
-    const guest = await signInAsGuest();
-    const statuses: number[] = [];
-    for (let attempt = 0; attempt < 11; attempt++) statuses.push((await post("/fx/backfill", { asOf: "2026-08-14", currency: "INR" }, { Authorization: `Bearer ${guest.token}` })).status);
+    const { statuses } = await rateLimitBurst(11, async () => {
+      const guest = await signInAsGuest();
+      return () => post("/fx/backfill", { asOf: "2026-08-14", currency: "INR" }, { Authorization: `Bearer ${guest.token}` });
+    });
 
     expect(statuses.at(-1)).toBe(429);
     expect(statuses.slice(0, 10)).not.toContain(429);

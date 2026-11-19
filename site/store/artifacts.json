@@ -1,7 +1,7 @@
 {
   "version": 1,
   "inputs": {
-    ".github/workflows/ci.yml": "b4ef90c64c8c219cdad72caafa93baa9979df4197b18a93eef1d3ff00c926176",
+    ".github/workflows/ci.yml": "f0b903be6c0266753272500bb12d50a7fc66ff8d9f0845bb5abfee824c01d0d8",
     "assets/brand/lockup-horizontal.svg": "0d0867f40d2351996ff7a808751d7b6e44e65323e0b4894bff6f6647f032ba15",
     "assets/brand/lockup-vertical.svg": "c32df2988057fc53cd5502a1823f6ce06b41e64e724c09d3f6cf140f1353d9fd",
     "assets/brand/mark-1024-dark.png": "7e19e1c337a842a697b0128163e817e231653c9ae0df56f93d241258d36aed45",
