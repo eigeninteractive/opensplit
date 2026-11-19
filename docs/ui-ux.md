@@ -10,16 +10,16 @@ OpenSplit keeps a shared record of spending and payments. Its main decisions
 are who paid, who shares the cost, and who still owes whom. The visual hierarchy
 should help people verify those decisions before recording them.
 
-| Journey | Presentation and purpose |
-| --- | --- |
-| Start, sign in, save a guest account | A clear primary action, ordinary filled fields, and outlined alternative identity actions. Recovery is available from Account and Settings. |
-| Groups | Group identity, name, and balance remain scannable. Standard FABs create groups; navigation becomes a drawer or rail as space permits. |
-| Group journal | A tonal cover identifies the group. Expenses are grouped by day; amounts and payer summaries remain distinct. Expenses and balances use stock tabs, with both panels visible on wide screens. |
-| Add or edit expense | Amount and currency form the headline. Description, category, and day follow. Separate payer and split cards group the two money decisions. Optional time is in a stock expansion tile. |
-| People and invitations | Member avatars use the active palette by default. Membership actions, placeholders, and invite sheets retain standard lists, buttons, menus, and sheets. |
-| Balances and settlement | Credit and debit use harmonised semantic colours with explanatory text. Settlement shares the expense editor's amount component, followed by payer and payee fields. Currencies remain separate. |
-| Insights and activity | Existing totals, charts, and change history provide context; the same type scale and theme apply. |
-| Account, group settings, and appearance | Readable lists lead to focused editors and confirmation dialogs. Appearance follows the device or a user override. Settings explains whether a device palette is available. |
+| Journey                                 | Presentation and purpose                                                                                                                                                                         |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Start, sign in, save a guest account    | A clear primary action, ordinary filled fields, and outlined alternative identity actions. Recovery is available from Account and Settings.                                                      |
+| Groups                                  | Group identity, name, and balance remain scannable. Standard FABs create groups; navigation becomes a drawer or rail as space permits.                                                           |
+| Group journal                           | A tonal cover identifies the group. Expenses are grouped by day; amounts and payer summaries remain distinct. Expenses and balances use stock tabs, with both panels visible on wide screens.    |
+| Add or edit expense                     | Amount and currency form the headline. Description, category, and day follow. Separate payer and split cards group the two money decisions. Optional time is in a stock expansion tile.          |
+| People and invitations                  | Member avatars use the active palette by default. Membership actions, placeholders, and invite sheets retain standard lists, buttons, menus, and sheets.                                         |
+| Balances and settlement                 | Credit and debit use harmonised semantic colours with explanatory text. Settlement shares the expense editor's amount component, followed by payer and payee fields. Currencies remain separate. |
+| Insights and activity                   | Existing totals, charts, and change history provide context; the same type scale and theme apply.                                                                                                |
+| Account, group settings, and appearance | Readable lists lead to focused editors and confirmation dialogs. Appearance follows the device or a user override. Settings explains whether a device palette is available.                      |
 
 ## Component policy
 
@@ -201,7 +201,6 @@ Live light/dark phone and light desktop captures are under `build/ui-review/`.
 - [Google Sans Flex](https://design.google/library/google-sans-flex-font)
 - [Dynamic colour plugin](https://pub.dev/packages/dynamic_color)
 - [Samsung wallpaper and colour palette settings](https://www.samsung.com/ae/support/mobile-devices/how-to-customize-a-wallpaper-and-color-palette/)
-
 
 ## Payment editing and full-card artwork
 

@@ -52,16 +52,16 @@ The **slashed O**: a ring with one diagonal cut. One shape, one stroke weight,
 legible at 16 px. The cut is a knockout, so on a coloured surface the surface
 shows through it.
 
-| File | Use |
-|---|---|
-| `assets/brand/mark.svg` | generated brand primary (`#515B92`) |
-| `assets/brand/mark-mono.svg` | `currentColor`, tinted at runtime; the only variant bundled into the app (`BrandMark`) |
-| `assets/brand/mark-neutral.svg` | pre-stroked `#E4E1E9`, a light neutral |
-| `assets/brand/mark-on-dark.svg` | pre-stroked `#BAC3FF`, for dark surfaces |
-| `assets/brand/mark-on-primary-container.svg` | pre-stroked `#DEE0FF` |
-| `assets/brand/mark-1024-light.png`, `-dark.png` | rasters for the icon and splash generators |
-| `assets/brand/lockup-horizontal.svg`, `lockup-vertical.svg` | mark and wordmark: "Open" regular, "Split" semibold |
-| `site/favicon.svg` | the browser tab |
+| File                                                        | Use                                                                                    |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `assets/brand/mark.svg`                                     | generated brand primary (`#515B92`)                                                    |
+| `assets/brand/mark-mono.svg`                                | `currentColor`, tinted at runtime; the only variant bundled into the app (`BrandMark`) |
+| `assets/brand/mark-neutral.svg`                             | pre-stroked `#E4E1E9`, a light neutral                                                 |
+| `assets/brand/mark-on-dark.svg`                             | pre-stroked `#BAC3FF`, for dark surfaces                                               |
+| `assets/brand/mark-on-primary-container.svg`                | pre-stroked `#DEE0FF`                                                                  |
+| `assets/brand/mark-1024-light.png`, `-dark.png`             | rasters for the icon and splash generators                                             |
+| `assets/brand/lockup-horizontal.svg`, `lockup-vertical.svg` | mark and wordmark: "Open" regular, "Split" semibold                                    |
+| `site/favicon.svg`                                          | the browser tab                                                                        |
 
 The lockups name Google Sans Flex rather than carrying outlines, so convert the
 text to outlines before using one anywhere the font is not loaded: a store
@@ -79,14 +79,14 @@ records hashes only after every output succeeds. `--check` validates that record
 in CI. Regenerate after changing app code, assets or the capture toolchain;
 individually rendering screenshots does not update the complete artwork record.
 
-| Command | Writes | From |
-|---|---|---|
-| `python3 tool/brand_artwork.py` | the PNG sources in `assets/brand/`, `assets/icon/` and `assets/splash/` | the canonical mark SVG and the generated palette |
-| `dart run flutter_launcher_icons` | Android, iOS and web icons | `assets/icon/`, configured in `flutter_launcher_icons.yaml` |
-| `dart run tool/brand_icons.dart` | root web icons, the favicon and the notification icon, after the command above | the transparent artwork in `assets/icon/` |
-| `dart run flutter_native_splash:create` | the native splash screens | `assets/splash/`, configured in `flutter_native_splash.yaml` |
-| `flutter test tool/screenshots_test.dart` | `site/store/screenshot-*.png` and `web-app.png` | the real screens over demo data |
-| `python3 tool/store_graphics.py` | captioned screenshots in `site/store/play/`, `site/store/og-card.png`, `og-invite.png`, `feature-graphic.jpg`, and `site/email/wordmark.png` | real app captures, the mark's geometry and the bundled font |
+| Command                                   | Writes                                                                                                                                       | From                                                         |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `python3 tool/brand_artwork.py`           | the PNG sources in `assets/brand/`, `assets/icon/` and `assets/splash/`                                                                      | the canonical mark SVG and the generated palette             |
+| `dart run flutter_launcher_icons`         | Android, iOS and web icons                                                                                                                   | `assets/icon/`, configured in `flutter_launcher_icons.yaml`  |
+| `dart run tool/brand_icons.dart`          | root web icons, the favicon and the notification icon, after the command above                                                               | the transparent artwork in `assets/icon/`                    |
+| `dart run flutter_native_splash:create`   | the native splash screens                                                                                                                    | `assets/splash/`, configured in `flutter_native_splash.yaml` |
+| `flutter test tool/screenshots_test.dart` | `site/store/screenshot-*.png` and `web-app.png`                                                                                              | the real screens over demo data                              |
+| `python3 tool/store_graphics.py`          | captioned screenshots in `site/store/play/`, `site/store/og-card.png`, `og-invite.png`, `feature-graphic.jpg`, and `site/email/wordmark.png` | real app captures, the mark's geometry and the bundled font  |
 
 `assets/icon/icon.png` is opaque because iOS and legacy Android icons cannot
 carry alpha. The adaptive foreground keeps the mark inside the circle a
@@ -96,11 +96,11 @@ splash for the same reason.
 
 ## Play listing
 
-| Asset | Size | File |
-|---|---|---|
-| Hi-res icon | 512 × 512, opaque | `assets/icon/icon.png`, resized |
-| Feature graphic | 1024 × 500, JPEG | `site/store/feature-graphic.jpg` |
-| Phone screenshots | 1080 × 1920, PNG | `site/store/play/screenshot-1-groups.png` to `-5-insights.png`, in that order |
+| Asset             | Size              | File                                                                          |
+| ----------------- | ----------------- | ----------------------------------------------------------------------------- |
+| Hi-res icon       | 512 × 512, opaque | `assets/icon/icon.png`, resized                                               |
+| Feature graphic   | 1024 × 500, JPEG  | `site/store/feature-graphic.jpg`                                              |
+| Phone screenshots | 1080 × 1920, PNG  | `site/store/play/screenshot-1-groups.png` to `-5-insights.png`, in that order |
 
 The Play gallery pairs short benefit captions with complete, scaled captures of
 the real app. `tool/store_graphics.py` draws the captions in the bundled font,
@@ -155,12 +155,12 @@ the document pages and the store images have since been redesigned in code, in
 uses indigo with Google Sans Flex. The original canvases remain historical
 references; this document describes the shipped identity.
 
-| File | What it is |
-|---|---|
-| `Brand Directions.dc.html` | the directions explored before this one was chosen |
-| `OpenSplit Brand Kit.dc.html` | this document's visual form: the mark, colours, icons and splash |
-| `Terms.dc.html` | the first design of the document pages |
-| `Play Store Assets.dc.html` | the first feature graphics and mockup screenshots, before both were generated |
+| File                          | What it is                                                                    |
+| ----------------------------- | ----------------------------------------------------------------------------- |
+| `Brand Directions.dc.html`    | the directions explored before this one was chosen                            |
+| `OpenSplit Brand Kit.dc.html` | this document's visual form: the mark, colours, icons and splash              |
+| `Terms.dc.html`               | the first design of the document pages                                        |
+| `Play Store Assets.dc.html`   | the first feature graphics and mockup screenshots, before both were generated |
 
 To view one, serve the repository root and open it from there, since the tool's
 runtime fetches the page it is on and a `file://` page cannot:

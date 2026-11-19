@@ -26,6 +26,7 @@ export function nextSeq(tx: Tx): number {
         on conflict(name) do update set value = ${schema.counter.value} + 1
         returning value`,
   );
+  if (!row) throw new Error("The group sequence counter returned no value.");
   return row.value;
 }
 

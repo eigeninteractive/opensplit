@@ -49,7 +49,7 @@ two requests can stamp their times in one order and commit in the other, and a
 device that read in between would pass one of them for good. A counter rather
 than `max(version) + 1`, which would hand a deleted row's number out again.
 
-A version cannot see a profile that becomes *visible* without changing —
+A version cannot see a profile that becomes _visible_ without changing —
 somebody named long ago claiming a place in your group — so each group page
 carries the profiles of its current members, read by the ids the page itself
 names. The profile feed then only has renames to deliver.
@@ -149,7 +149,7 @@ Drizzle tables ──drizzle-orm/zod──▶ Zod rows, and request bodies picke
   untyped `payload`. The configured Dart-Dio/json_serializable generator has
   no verified working `oneOf` path for these models; separate nullable
   fields give the app a generated class for each without it. The object stores
-  them the same way, so the table *is* the wire row.
+  them the same way, so the table _is_ the wire row.
 - **The push message is a contract type** (`PushData`), registered as a
   component though no route returns it, and parsed on the device with the
   generated class.
@@ -338,7 +338,7 @@ pass; the object's is authoritative.
 ## Push
 
 The group's own object calls FCM directly, inside `ctx.waitUntil`, after its
-write has committed — and it reads the events it *actually appended*, so an edit
+write has committed — and it reads the events it _actually appended_, so an edit
 that changed nothing notifies nobody without anyone having to arrange that.
 Who to wake is one D1 query by group id — device tokens joined to the
 membership index — rather than a list of recipients bound one by one.
@@ -404,7 +404,7 @@ build emits can shadow an endpoint.
 A path under `/app` that matches no asset is answered by the Worker with the
 client's own document, by hand. None of the platform's three `not_found_handling`
 settings answers the right document: two of them would hand `/app/join/<token>`
-the landing page or the 404 page, and that URL is what an invite link *is*.
+the landing page or the 404 page, and that URL is what an invite link _is_.
 
 `site/_headers` carries cross-origin isolation for `/app/*` only — it is what
 lets `sqlite3.wasm` use `SharedArrayBuffer`, and the marketing pages at the root
@@ -431,7 +431,7 @@ own is what makes "free forever" a structure rather than a hope.
 ## Three places the obvious design is wrong
 
 - **The rate window has to reach backwards.** A high-water-mark cursor cannot
-  deliver a day *older* than the ones already held — which is exactly what a
+  deliver a day _older_ than the ones already held — which is exactly what a
   backfill produces, since a backfill exists to fetch a date somebody backdated
   past the window. A cursor alone makes the whole backfill path decorative:
   requested, fetched, unreachable. The client reaches back once to the oldest
