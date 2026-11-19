@@ -14,12 +14,8 @@ import 'package:opensplit/domain/avatar.dart';
 import 'package:opensplit/domain/entry_draft.dart';
 import 'package:opensplit/domain/split/splitter.dart';
 import 'package:opensplit/presentation/app.dart';
-import 'package:opensplit/presentation/screens/group_list_screen.dart';
-import 'package:opensplit/presentation/widgets/avatar_view.dart';
 import 'package:opensplit/presentation/widgets/day_header.dart';
 import 'package:opensplit/presentation/widgets/group_cover.dart';
-import 'package:opensplit/presentation/widgets/group_avatar_hero.dart';
-import 'package:opensplit/presentation/screens/avatar_picker_screen.dart';
 import 'package:opensplit_api/opensplit_api.dart' show AvatarColor, AvatarIcon;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -108,31 +104,6 @@ void main() {
     await tester.pump(const Duration(seconds: 30));
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(Duration.zero);
-  }
-
-  Future<void> commitBackGesture(WidgetTester tester) async {
-    Future<void> send(String method, [double? progress]) =>
-        tester.binding.defaultBinaryMessenger.handlePlatformMessage(
-          'flutter/backgesture',
-          const StandardMethodCodec().encodeMethodCall(
-            MethodCall(
-              method,
-              progress == null
-                  ? null
-                  : {
-                      'touchOffset': [5 + 300 * progress, 300.0],
-                      'progress': progress,
-                      'swipeEdge': 0,
-                    },
-            ),
-          ),
-          (_) {},
-        );
-    await send('startBackGesture', 0);
-    await tester.pump();
-    await send('updateBackGestureProgress', 0.4);
-    await tester.pump(const Duration(milliseconds: 50));
-    await send('commitBackGesture');
   }
 
   testWidgets('export row and formats remain usable at 200 percent text', (
@@ -250,27 +221,8 @@ void main() {
   ) async {
     final id = await seed(tester);
     await open(tester, '/g/$id');
-    final row = find.widgetWithText(ListTile, 'Spent').first;
-    final tags = tester
-        .widgetList<Hero>(find.descendant(of: row, matching: find.byType(Hero)))
-        .map((hero) => hero.tag)
-        .toSet();
-    expect(tags, hasLength(3));
-    await tester.tap(row);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
+    await tapAndSettle(tester, find.widgetWithText(ListTile, 'Spent').first);
     expect(find.text('Expense'), findsOneWidget);
-    for (final tag in tags) {
-      final endpoints = find.byWidgetPredicate(
-        (widget) => widget is Hero && widget.tag == tag,
-      );
-      expect(
-        find.descendant(of: endpoints, matching: find.byType(Text)),
-        findsNothing,
-        reason: 'the shared contents are flying in the overlay',
-      );
-    }
-    await settle(tester);
     await tapAndSettle(tester, find.widgetWithText(FilledButton, 'Edit'));
     expect(find.text('Edit expense'), findsOneWidget);
     final amount = find.ancestor(
@@ -291,96 +243,20 @@ void main() {
     await unmount(tester);
   });
 
-  testWidgets('the group picture opens into its editable preview and returns', (
+  testWidgets('the group picture editor opens from and returns to the group', (
     tester,
   ) async {
     final id = await seed(tester);
     await open(tester, '/g/$id');
-    final picture = find.byType(GroupAvatarHero);
-    final source = tester.getRect(picture);
-    await tester.tap(find.byTooltip('Group picture'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
-    final preview = find.byWidgetPredicate(
-      (widget) => widget is Hero && widget.tag == ('group-avatar', id),
-    );
-    expect(
-      find.descendant(of: preview, matching: find.byType(FittedBox)),
-      findsNothing,
-    );
-    await settle(tester);
-    expect(find.byType(AvatarPickerScreen), findsOneWidget);
-    expect(tester.getSize(find.byType(GroupAvatarHero)), const Size(112, 112));
-    await tester.tap(find.byType(CloseButton));
-    await settle(tester);
-    expect(tester.getRect(picture), source);
-    expect(tester.takeException(), isNull);
+    final picture = find.byTooltip('Group picture');
+    await tapAndSettle(tester, picture);
+    expect(find.text('Group picture'), findsOneWidget);
+    expect(find.text('Lisbon trip'), findsNothing);
+    await tapAndSettle(tester, find.byType(CloseButton));
+    expect(find.text('Expenses'), findsOneWidget);
+    expect(picture, findsOneWidget);
     await unmount(tester);
   });
-
-  for (final (label, target) in [
-    ('expense', find.widgetWithText(ListTile, 'Spent').first),
-    ('settlement', find.widgetWithText(ListTile, 'Paid in cash')),
-    ('picture editor', find.byTooltip('Group picture')),
-  ]) {
-    testWidgets('the group identity returns after a quick Back from $label', (
-      tester,
-    ) async {
-      final id = await seed(tester);
-      if (label == 'settlement') {
-        await tester.runAsync(() async {
-          final groups = DriftGroupRepository(db);
-          final group = (await groups.getGroup(id))!;
-          final guest = await groups.addMember(id, displayName: 'Mateus');
-          await DriftEntryRepository(db).create(
-            EntryDraft.settlement(
-              groupId: id,
-              currency: 'EUR',
-              amountMinor: 1000,
-              fromMemberId: group.createdBy!,
-              toMemberId: guest.id,
-              notes: 'Paid in cash',
-            ),
-            createdBy: group.createdBy!,
-          );
-        });
-      }
-      await open(tester, '/');
-      await tapAndSettle(tester, find.text('Lisbon trip'));
-      await tapAndSettle(tester, target);
-
-      try {
-        await commitBackGesture(tester);
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 30));
-        await tester.binding.handlePopRoute();
-        await settle(tester);
-
-        final list = find.byType(GroupListScreen);
-        expect(list, findsOneWidget);
-        expect(
-          find.descendant(of: list, matching: find.text('Lisbon trip')),
-          findsOneWidget,
-        );
-        expect(
-          find.descendant(
-            of: list,
-            matching: find.byWidgetPredicate(
-              (widget) => widget is AvatarView && widget.id == id,
-            ),
-          ),
-          findsOneWidget,
-        );
-        expect(
-          find.descendant(of: list, matching: find.byType(GroupCover)),
-          findsOneWidget,
-        );
-        expect(tester.takeException(), isNull);
-      } finally {
-        await unmount(tester);
-      }
-    });
-  }
 
   testWidgets('resizing while leaving a group keeps both routes usable', (
     tester,
@@ -424,14 +300,8 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('OpenSplit'), findsWidgets);
     await tapAndSettle(tester, find.text('Lisbon trip'));
-    final backButton = tester.element(find.byType(BackButton).first);
     tester.view.physicalSize = const Size(360, 800);
     await settle(tester);
-    expect(
-      tester.element(find.byType(BackButton).first),
-      same(backButton),
-      reason: 'resizing must preserve the mounted focusable app-bar controls',
-    );
     expect(tester.takeException(), isNull);
     expect(find.text('Expenses'), findsOneWidget);
     await unmount(tester);

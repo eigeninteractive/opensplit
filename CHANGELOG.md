@@ -4,6 +4,10 @@ What changed in each version of the app, newest first. The format is
 [Semantic Versioning](https://semver.org/), and the file is kept by
 [cider](https://pub.dev/packages/cider): see "Versions" in docs/runbook.md.
 
+## [4.2.4] - 2026-11-19
+### Changed
+- Group cards, expenses and payments now expand into their details, with simpler transitions for editing.
+
 ## [4.2.3] - 2026-11-19
 ### Fixed
 - Updated the local database library for faster reads and more reliable batch updates.
@@ -157,6 +161,7 @@ What changed in each version of the app, newest first. The format is
 ### Added
 - The first build, to Play internal testing.
 
+[4.2.4]: https://github.com/eigeninteractive/opensplit/compare/v4.2.3...v4.2.4
 [4.2.3]: https://github.com/eigeninteractive/opensplit/compare/v4.2.2...v4.2.3
 [4.2.2]: https://github.com/eigeninteractive/opensplit/compare/v4.2.1...v4.2.2
 [4.2.1]: https://github.com/eigeninteractive/opensplit/compare/v4.2.0...v4.2.1

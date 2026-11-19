@@ -139,33 +139,7 @@ void main() {
     await _settle(tester);
 
     // ---- Settle up -------------------------------------------------------
-    final settleButton = find.widgetWithText(FilledButton, 'Settle').first;
-    final transferRow = find.descendant(
-      of: find.ancestor(of: settleButton, matching: find.byType(Column)).first,
-      matching: find.byType(ListTile),
-    );
-    final transferTags = tester
-        .widgetList<Hero>(
-          find.descendant(of: transferRow, matching: find.byType(Hero)),
-        )
-        .map((hero) => hero.tag)
-        .toSet();
-    expect(transferTags, hasLength(3));
-    await tester.tap(settleButton);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
-    for (final tag in transferTags) {
-      expect(
-        find.descendant(
-          of: find.byWidgetPredicate(
-            (widget) => widget is Hero && widget.tag == tag,
-          ),
-          matching: find.byType(Text),
-        ),
-        findsNothing,
-        reason: 'payer, recipient and amount fly into their fields',
-      );
-    }
+    await tester.tap(find.widgetWithText(FilledButton, 'Settle').first);
     await _settle(tester);
 
     expect(find.text('Settle up'), findsWidgets);

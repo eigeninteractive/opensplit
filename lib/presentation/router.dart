@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:animations/animations.dart';
 
 import '../l10n/app_localizations.dart';
+import 'detail_transition.dart';
 import 'navigation.dart';
 import 'widgets/group_access.dart';
 import 'widgets/update_required_notice.dart';
@@ -145,9 +146,12 @@ GoRouter buildRouter({
     ),
     GoRoute(
       path: '/g/:groupId',
-      builder: (context, state) => _GroupScreen(
-        groupId: state.pathParameters['groupId']!,
-        child: GroupDetailScreen(groupId: state.pathParameters['groupId']!),
+      pageBuilder: (context, state) => detailPage(
+        state,
+        _GroupScreen(
+          groupId: state.pathParameters['groupId']!,
+          child: GroupDetailScreen(groupId: state.pathParameters['groupId']!),
+        ),
       ),
       routes: [
         GoRoute(
@@ -229,11 +233,14 @@ GoRouter buildRouter({
         ),
         GoRoute(
           path: 'e/:entryId',
-          builder: (context, state) => _GroupScreen(
-            groupId: state.pathParameters['groupId']!,
-            child: EntryDetailScreen(
+          pageBuilder: (context, state) => detailPage(
+            state,
+            _GroupScreen(
               groupId: state.pathParameters['groupId']!,
-              entryId: state.pathParameters['entryId']!,
+              child: EntryDetailScreen(
+                groupId: state.pathParameters['groupId']!,
+                entryId: state.pathParameters['entryId']!,
+              ),
             ),
           ),
           routes: [

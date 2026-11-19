@@ -19,7 +19,6 @@ import '../widgets/amount_card.dart';
 import '../widgets/form_leave_guard.dart';
 import '../widgets/avatar_view.dart';
 import '../widgets/category_icon.dart';
-import '../widgets/shared_element.dart';
 import '../widgets/page_body.dart';
 import '../widgets/remainder_field.dart';
 import 'settle_up_screen.dart';
@@ -207,9 +206,6 @@ class _Editor extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           AmountCard(
-                            heroTag: form.editing == null
-                                ? null
-                                : ('entry-amount', form.editing!.id),
                             currency: currency,
                             currencyCode: form.currencyCode,
                             amount: form.amount,
@@ -227,24 +223,14 @@ class _Editor extends ConsumerWidget {
                               ),
                             ),
                           const SizedBox(height: 16),
-                          SharedText(
-                            tag: (
-                              'entry-description',
-                              form.editing?.id ?? ('draft', ledger.group.id),
+                          TextFormField(
+                            initialValue: form.description,
+                            textCapitalization: TextCapitalization.sentences,
+                            decoration: const InputDecoration(
+                              labelText: 'What was it?',
+                              hintText: 'Dinner at Toit',
                             ),
-                            text: form.description,
-                            style: textTheme.bodyLarge!.copyWith(
-                              color: Theme.of(context).colorScheme.onSurface,
-                            ),
-                            child: TextFormField(
-                              initialValue: form.description,
-                              textCapitalization: TextCapitalization.sentences,
-                              decoration: const InputDecoration(
-                                labelText: 'What was it?',
-                                hintText: 'Dinner at Toit',
-                              ),
-                              onChanged: controller.setDescription,
-                            ),
+                            onChanged: controller.setDescription,
                           ),
                           const SizedBox(height: 16),
                           // The details most expenses leave as they are, as chips rather
@@ -254,9 +240,6 @@ class _Editor extends ConsumerWidget {
                             runSpacing: 8,
                             children: [
                               _CategoryChip(
-                                heroTag: form.editing == null
-                                    ? null
-                                    : ('entry-category', form.editing!.id),
                                 value: form.categoryId,
                                 onChanged: controller.chooseCategory,
                               ),
@@ -802,15 +785,10 @@ class _AllocationStatus extends StatelessWidget {
 
 /// The category, as a chip that opens the fixed global list.
 class _CategoryChip extends ConsumerWidget {
-  const _CategoryChip({
-    required this.value,
-    required this.onChanged,
-    this.heroTag,
-  });
+  const _CategoryChip({required this.value, required this.onChanged});
 
   final String? value;
   final ValueChanged<String?> onChanged;
-  final Object? heroTag;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -823,9 +801,7 @@ class _CategoryChip extends ConsumerWidget {
       color: Theme.of(context).colorScheme.primary,
     );
     return ActionChip(
-      avatar: heroTag == null
-          ? icon
-          : SharedElement(tag: heroTag!, child: icon),
+      avatar: icon,
       label: Text(chosen?.name ?? 'Uncategorised'),
       tooltip: 'Change the category',
       onPressed: () async {

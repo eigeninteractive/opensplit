@@ -10,7 +10,6 @@ import '../../domain/avatar.dart';
 import '../theme.dart';
 import 'avatar_view.dart';
 import 'category_icon.dart';
-import 'shared_element.dart';
 
 /// A group's cover: its hue, patterned with what it spends on.
 ///
@@ -18,7 +17,7 @@ import 'shared_element.dart';
 /// categories, so a trip fills with flights and dinners and a flat with bills
 /// and groceries, and the picture follows the group as it goes on. Before
 /// anything is spent it uses the group's own avatar. The layout is seeded by
-/// the group's id. Cards and headers share one sparse composition in flight.
+/// the group's id so cards and headers share one sparse composition.
 class GroupCover extends ConsumerWidget {
   const GroupCover({super.key, required this.ledger, this.patternFade = 0});
 
@@ -155,60 +154,4 @@ class GroupCover extends ConsumerWidget {
       ),
     );
   }
-}
-
-/// Shares a cover between routes, animating its corners and pattern contrast.
-class GroupCoverHero extends StatelessWidget {
-  const GroupCoverHero({
-    super.key,
-    required this.ledger,
-    this.borderRadius = BorderRadius.zero,
-    this.patternFade = 0,
-  });
-
-  final GroupLedger ledger;
-  final BorderRadius borderRadius;
-  final double patternFade;
-
-  @override
-  Widget build(BuildContext context) => HeroMode(
-    enabled: !MediaQuery.disableAnimationsOf(context),
-    child: Hero(
-      tag: ('group-cover', ledger.group.id),
-      transitionOnUserGestures: true,
-      placeholderBuilder: settledRouteHeroPlaceholder,
-      flightShuttleBuilder: (context, animation, direction, from, to) {
-        final source = (from.widget as Hero).child as ClipRRect;
-        final destination = (to.widget as Hero).child as ClipRRect;
-        final sourceCover = source.child! as GroupCover;
-        final destinationCover = destination.child! as GroupCover;
-        return AnimatedBuilder(
-          animation: animation,
-          builder: (context, _) {
-            final progress = direction == HeroFlightDirection.push
-                ? animation.value
-                : 1 - animation.value;
-            return ClipRRect(
-              borderRadius: BorderRadiusGeometry.lerp(
-                source.borderRadius,
-                destination.borderRadius,
-                progress,
-              )!,
-              child: GroupCover(
-                ledger: destinationCover.ledger,
-                patternFade:
-                    sourceCover.patternFade +
-                    (destinationCover.patternFade - sourceCover.patternFade) *
-                        progress,
-              ),
-            );
-          },
-        );
-      },
-      child: ClipRRect(
-        borderRadius: borderRadius,
-        child: GroupCover(ledger: ledger, patternFade: patternFade),
-      ),
-    ),
-  );
 }
