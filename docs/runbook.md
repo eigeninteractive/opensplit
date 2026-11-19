@@ -518,7 +518,8 @@ dart run tool/store_artifacts.dart
 ```
 
 The artwork provenance includes `pubspec.yaml`, so regenerate after every
-version bump. This refreshes its manifest and any date-dependent screenshot data.
+version bump. The capture uses a fixed date to keep sample dates and relative
+labels consistent across runs.
 
 Both files go in the PR. CI compares app inputs with the PR base and requires
 a higher stable app version, a released section with nonempty Play-compatible

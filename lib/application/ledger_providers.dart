@@ -13,6 +13,7 @@ import '../domain/fx/estimated_total.dart';
 import '../domain/member_identity.dart';
 import '../domain/models/entry.dart';
 import '../domain/models/group_event.dart';
+import 'clock_provider.dart';
 import 'local_providers.dart';
 import 'backend_providers.dart';
 
@@ -336,7 +337,7 @@ typedef OverallStanding = ({
   final owing = <String, int>{};
   final quiet = <String>{};
   var groupsWithBalance = 0;
-  final quietBefore = DateTime.now().subtract(quietGroupAfter);
+  final quietBefore = ref.watch(clockProvider)().subtract(quietGroupAfter);
 
   for (final listing in listings) {
     if (!listing.isCurrent) continue;

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../application/clock_provider.dart';
 import '../../application/ledger_providers.dart';
 import '../../data/local/database.dart';
 import '../../domain/analytics/spending.dart';
@@ -112,6 +113,7 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
                     setState(() => _mine = selection.single),
               ),
             _PeriodChip(
+              today: calendarDay(ref.watch(clockProvider)()),
               period: _period,
               onChanged: (period) => setState(() => _period = period),
             ),
@@ -199,8 +201,13 @@ class _View {
 
 /// A chip naming the days covered, opening the choice of others.
 class _PeriodChip extends StatelessWidget {
-  const _PeriodChip({required this.period, required this.onChanged});
+  const _PeriodChip({
+    required this.today,
+    required this.period,
+    required this.onChanged,
+  });
 
+  final DateTime today;
   final _Period period;
   final ValueChanged<_Period> onChanged;
 
@@ -223,11 +230,12 @@ class _PeriodChip extends StatelessWidget {
     ),
   ];
 
-  Future<void> _pickRange(BuildContext context, DateTime today) async {
+  Future<void> _pickRange(BuildContext context) async {
     final range = await showDateRangePicker(
       context: context,
       firstDate: DateTime.utc(2000),
       lastDate: DateTime.utc(today.year + 1, 12, 31),
+      currentDate: today,
       initialDateRange: period.from == null || period.to == null
           ? null
           : DateTimeRange(start: period.from!, end: period.to!),
@@ -245,7 +253,6 @@ class _PeriodChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final today = calendarDay(DateTime.now());
     return MenuAnchor(
       menuChildren: [
         for (final preset in _presets(today))
@@ -254,7 +261,7 @@ class _PeriodChip extends StatelessWidget {
             child: Text(preset.label),
           ),
         MenuItemButton(
-          onPressed: () => _pickRange(context, today),
+          onPressed: () => _pickRange(context),
           child: const Text('Choose dates…'),
         ),
       ],

@@ -9,6 +9,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:opensplit/domain/avatar.dart';
 import 'package:opensplit/presentation/theme.dart';
 import 'package:opensplit/presentation/widgets/app_viewport.dart';
+import 'package:opensplit/presentation/widgets/status_bar_surface.dart';
 
 /// Relative luminance, per WCAG 2.1.
 double _luminance(Color c) {
@@ -27,6 +28,25 @@ double _contrast(Color a, Color b) {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  testWidgets('the native viewport leaves system bar styling to app bars', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => AppViewport(child: child!),
+        home: Scaffold(appBar: AppBar()),
+      ),
+    );
+
+    expect(
+      find.ancestor(
+        of: find.byType(AppBar),
+        matching: find.byType(AnnotatedRegion<SystemUiOverlayStyle>),
+      ),
+      findsNothing,
+    );
+  });
+
   for (final brightness in Brightness.values) {
     testWidgets('status bar icons contrast with a $brightness surface', (
       tester,
@@ -41,7 +61,7 @@ void main() {
       await tester.pumpWidget(
         Theme(
           data: theme,
-          child: const AppViewport(child: SizedBox.expand()),
+          child: const StatusBarSurface(child: SizedBox.expand()),
         ),
       );
 
@@ -54,8 +74,9 @@ void main() {
       final iconColor = annotation.statusBarIconBrightness == Brightness.light
           ? Colors.white
           : Colors.black;
-      expect(annotation.statusBarColor, theme.colorScheme.surface);
-      expect(_contrast(iconColor, theme.colorScheme.surface), greaterThan(4.5));
+      final background = theme.scaffoldBackgroundColor;
+      expect(annotation.statusBarColor, background);
+      expect(_contrast(iconColor, background), greaterThan(4.5));
     });
   }
 
