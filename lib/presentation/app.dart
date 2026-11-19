@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'dart:developer' as developer;
 
-import 'package:material_ui/material_ui.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:in_app_update/in_app_update.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../application/local_providers.dart';
 import '../application/backend_providers.dart';
@@ -20,6 +21,7 @@ import '../l10n/app_localizations.dart';
 import 'dynamic_colors.dart';
 import 'theme.dart';
 import 'theme_mode.dart';
+import 'widgets/app_viewport.dart';
 import 'widgets/update_required_notice.dart';
 
 class OpenSplitApp extends ConsumerStatefulWidget {
@@ -193,9 +195,7 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp>
     return MaterialApp.router(
       onGenerateTitle: (context) => AppLocalizations.of(context).appTitle,
       debugShowCheckedModeBanner: false,
-      // Not the generated `AppLocalizations.localizationsDelegates`: that
-      // names flutter_localizations' Material delegates, which material_ui's
-      // widgets never read, so they would fall back to hard-coded defaults.
+      // The standalone Material widgets read the delegates from material_ui.
       localizationsDelegates: const [
         AppLocalizations.delegate,
         ...GlobalMaterialLocalizations.delegates,
@@ -207,12 +207,15 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp>
       // Both themes are always supplied, and this decides between them.
       // Defaults to following the platform — see [ThemeModeController].
       themeMode: ref.watch(themeModeProvider),
+      themeAnimationStyle: kIsWeb ? AnimationStyle.noAnimation : null,
       routerConfig: ref.watch(routerProvider),
       // Order route scopes without measuring their transitional geometry.
       // Each screen retains standard visual reading order within its scope.
-      builder: (context, child) => FocusTraversalGroup(
-        policy: WidgetOrderTraversalPolicy(),
-        child: UpdateRequiredNotice(child: child!),
+      builder: (context, child) => AppViewport(
+        child: FocusTraversalGroup(
+          policy: WidgetOrderTraversalPolicy(),
+          child: UpdateRequiredNotice(child: child!),
+        ),
       ),
     );
   }

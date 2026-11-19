@@ -1,24 +1,27 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../application/clock_provider.dart';
 import '../../domain/calendar_date.dart';
 
 /// The calendar day the rows under it happened on.
-class DayHeader extends StatelessWidget {
+class DayHeader extends ConsumerWidget {
   const DayHeader({super.key, required this.day});
 
   /// A calendar day at UTC midnight, as [calendarDay] gives it.
   final DateTime day;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final today = calendarDay(ref.watch(clockProvider)());
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
       child: Semantics(
         header: true,
         child: Text(
-          dayLabel(day, today: calendarDay(DateTime.now())),
+          dayLabel(day, today: today),
           style: theme.textTheme.titleSmall?.copyWith(
             color: theme.colorScheme.primary,
           ),

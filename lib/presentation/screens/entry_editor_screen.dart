@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:opensplit_api/opensplit_api.dart' show EntryKind, SplitKind;
 
+import '../../application/clock_provider.dart';
 import '../../application/entry_form.dart';
 import '../../application/ledger_providers.dart';
 import '../../application/local_providers.dart';
 import '../../data/local/database.dart';
+import '../../domain/calendar_date.dart';
 import '../../domain/decimal_text.dart';
 import '../../domain/money_format.dart';
 import '../amount_input.dart';
@@ -119,24 +121,27 @@ class _Editor extends ConsumerWidget {
     }
   }
 
-  Future<void> _pickDay(BuildContext context) async {
+  Future<void> _pickDay(BuildContext context, DateTime now) async {
     final day = form.day;
     final picked = await showDatePicker(
       context: context,
       initialDate: DateTime(day.year, day.month, day.day),
       firstDate: DateTime(2000),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      lastDate: now.add(const Duration(days: 365)),
+      currentDate: now,
     );
     if (picked != null) controller.chooseDay(picked);
   }
 
   /// A time picked on this device's clock happened in this device's zone.
-  Future<void> _pickTime(BuildContext context, String device) async {
+  Future<void> _pickTime(
+    BuildContext context,
+    String device,
+    DateTime now,
+  ) async {
     final picked = await showTimePicker(
       context: context,
-      initialTime: TimeOfDay.fromDateTime(
-        form.occurredAt?.toLocal() ?? DateTime.now(),
-      ),
+      initialTime: TimeOfDay.fromDateTime(form.occurredAt?.toLocal() ?? now),
     );
     if (picked == null) return;
     controller.chooseTime(
@@ -148,6 +153,7 @@ class _Editor extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final clock = ref.watch(clockProvider);
     final device = ref.watch(deviceZoneProvider).value;
     final currencies = ref.watch(currenciesProvider).value ?? const {};
     final currency = currencies[form.currencyCode];
@@ -256,9 +262,9 @@ class _Editor extends ConsumerWidget {
                               ),
                               ActionChip(
                                 avatar: const Icon(Icons.event_outlined),
-                                label: Text(_dayName(form.day)),
+                                label: Text(_dayName(form.day, clock())),
                                 tooltip: 'Change the day',
-                                onPressed: () => _pickDay(context),
+                                onPressed: () => _pickDay(context, clock()),
                               ),
                             ],
                           ),
@@ -296,7 +302,7 @@ class _Editor extends ConsumerWidget {
                                 shown: form.occurredAt?.toLocal(),
                                 onPick: device == null
                                     ? null
-                                    : () => _pickTime(context, device),
+                                    : () => _pickTime(context, device, clock()),
                                 onClear: controller.clearTime,
                               ),
                             ],
@@ -334,13 +340,12 @@ class _Editor extends ConsumerWidget {
   }
 
   /// "Today", "Yesterday", or the date, for a day stored at UTC midnight.
-  static String _dayName(DateTime day) {
-    final local = DateTime(day.year, day.month, day.day);
-    final daysAgo = DateUtils.dateOnly(DateTime.now()).difference(local).inDays;
+  static String _dayName(DateTime day, DateTime now) {
+    final daysAgo = calendarDay(now).difference(day).inDays;
     return switch (daysAgo) {
       0 => 'Today',
       1 => 'Yesterday',
-      _ => DateFormat.yMMMEd().format(local),
+      _ => DateFormat.yMMMEd().format(day),
     };
   }
 }

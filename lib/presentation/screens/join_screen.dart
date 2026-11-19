@@ -12,6 +12,7 @@ import '../../data/sync/invites.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/identity_choices.dart';
 import '../widgets/page_body.dart';
+import '../widgets/status_bar_surface.dart';
 
 /// The critical path: someone taps a link a friend sent them.
 class JoinScreen extends ConsumerStatefulWidget {
@@ -171,15 +172,20 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Scaffold(
-      body: BrandWash(
-        child: PageBody(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
-                child: _body(theme),
+    return StatusBarSurface(
+      child: Scaffold(
+        body: BrandWash(
+          child: PageBody(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 40,
+                ),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: _body(theme),
+                ),
               ),
             ),
           ),

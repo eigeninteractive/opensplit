@@ -20,6 +20,7 @@ import '../domain/money_format.dart';
 import '../domain/split/allocation.dart';
 import '../domain/split/remainder.dart';
 import '../domain/split/splitter.dart';
+import 'clock_provider.dart';
 import 'ledger_providers.dart';
 import 'local_providers.dart';
 import 'sync_providers.dart';
@@ -388,7 +389,7 @@ class EntryForm extends _$EntryForm {
       if (ledger == null || currencies == null) return;
 
       if (entryId == null) {
-        ready = EntryFormState.blank(ledger, now: DateTime.now());
+        ready = EntryFormState.blank(ledger, now: ref.read(clockProvider)());
         seeded.complete(ready);
         return;
       }

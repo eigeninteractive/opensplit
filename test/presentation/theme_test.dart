@@ -2,11 +2,14 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:material_ui/material_ui.dart';
+import 'package:flutter/services.dart' show SystemUiOverlayStyle;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
-import 'package:opensplit/presentation/theme.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:opensplit/domain/avatar.dart';
+import 'package:opensplit/presentation/theme.dart';
+import 'package:opensplit/presentation/widgets/app_viewport.dart';
+import 'package:opensplit/presentation/widgets/status_bar_surface.dart';
 
 /// Relative luminance, per WCAG 2.1.
 double _luminance(Color c) {
@@ -25,6 +28,58 @@ double _contrast(Color a, Color b) {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  testWidgets('the native viewport leaves system bar styling to app bars', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => AppViewport(child: child!),
+        home: Scaffold(appBar: AppBar()),
+      ),
+    );
+
+    expect(
+      find.ancestor(
+        of: find.byType(AppBar),
+        matching: find.byType(AnnotatedRegion<SystemUiOverlayStyle>),
+      ),
+      findsNothing,
+    );
+  });
+
+  for (final brightness in Brightness.values) {
+    testWidgets('status bar icons contrast with a $brightness surface', (
+      tester,
+    ) async {
+      final theme = buildTheme(
+        brightness,
+        ColorScheme.fromSeed(
+          seedColor: const Color(0xFF006B5F),
+          brightness: brightness,
+        ),
+      );
+      await tester.pumpWidget(
+        Theme(
+          data: theme,
+          child: const StatusBarSurface(child: SizedBox.expand()),
+        ),
+      );
+
+      final annotation = tester
+          .widget<AnnotatedRegion<SystemUiOverlayStyle>>(
+            find.byType(AnnotatedRegion<SystemUiOverlayStyle>),
+          )
+          .value;
+      expect(annotation.statusBarBrightness, brightness);
+      final iconColor = annotation.statusBarIconBrightness == Brightness.light
+          ? Colors.white
+          : Colors.black;
+      final background = theme.scaffoldBackgroundColor;
+      expect(annotation.statusBarColor, background);
+      expect(_contrast(iconColor, background), greaterThan(4.5));
+    });
+  }
+
   group('avatar contrast', () {
     for (final brightness in Brightness.values) {
       for (final seed in [const Color(0xFF5B5891), const Color(0xFF006B5F)]) {

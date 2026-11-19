@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../application/backend_providers.dart';
 import '../../application/preferences_providers.dart';
 import '../../data/web/release_updates.dart';
+import 'status_bar_surface.dart';
 
 /// Keeps navigation and saved data available while an incompatible app updates.
 class UpdateRequiredNotice extends ConsumerStatefulWidget {
@@ -49,33 +50,37 @@ class _UpdateRequiredNoticeState extends ConsumerState<UpdateRequiredNotice> {
     if (!ref.watch(requiresAppUpdateProvider)) return widget.child;
     final colors = Theme.of(context).colorScheme;
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Material(
-          color: colors.secondaryContainer,
-          child: SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Wrap(
-                spacing: 12,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Semantics(
-                    liveRegion: true,
-                    child: Text(
-                      _error ??
-                          'Update required. Saved data is read-only. Pending changes are kept.',
-                      style: TextStyle(color: colors.onSecondaryContainer),
+        StatusBarSurface(
+          backgroundColor: colors.secondaryContainer,
+          child: Material(
+            color: colors.secondaryContainer,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        _error ??
+                            'Update required. Saved data is read-only. Pending changes are kept.',
+                        style: TextStyle(color: colors.onSecondaryContainer),
+                      ),
                     ),
-                  ),
-                  FilledButton(
-                    onPressed: _updating ? null : _update,
-                    child: Text(
-                      _updating ? 'Opening update…' : 'Update OpenSplit',
+                    FilledButton(
+                      onPressed: _updating ? null : _update,
+                      child: Text(
+                        _updating ? 'Opening update…' : 'Update OpenSplit',
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

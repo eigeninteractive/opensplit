@@ -12,8 +12,8 @@
 // rewrite committed images on every run.
 //
 // The data goes in through the app's own repositories, so every figure on the
-// screens is one the app computed. Dates are relative to today; fixture ids
-// are seeded so avatars, covers and tie-breaks stay consistent between runs.
+// screens is one the app computed. Dates and relative labels share a fixed
+// clock. Seeded ids keep avatars, covers and tie-breaks stable between runs.
 
 import 'dart:convert';
 import 'dart:io';
@@ -28,6 +28,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:opensplit/application/clock_provider.dart';
 import 'package:opensplit/application/entry_form.dart';
 import 'package:opensplit/application/ledger_providers.dart';
 import 'package:opensplit/application/router_provider.dart';
@@ -67,6 +68,7 @@ const _desktop = (size: Size(2560, 1600), pixelRatio: 2.0);
 
 void main() {
   testWidgets('screenshots', (tester) async {
+    final today = DateTime(2026, 11, 18, 12);
     GoogleFonts.config.allowRuntimeFetching = false;
     // A tap that misses would otherwise only warn, and the picture would
     // quietly show the screen without whatever it was meant to set.
@@ -79,7 +81,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     final db = (await tester.runAsync(testDatabase))!;
-    final trip = (await tester.runAsync(() => _seed(db)))!;
+    final trip = (await tester.runAsync(() => _seed(db, today)))!;
 
     // ignore: invalid_use_of_visible_for_testing_member
     SharedPreferences.setMockInitialValues({});
@@ -97,6 +99,7 @@ void main() {
           db: db,
           prefs: prefs,
           overrides: [
+            clockProvider.overrideWithValue(() => today),
             if (const bool.fromEnvironment('REVIEW_SINGLE_GROUP'))
               groupListingsProvider.overrideWith(
                 (ref) => DriftGroupRepository(
@@ -458,11 +461,16 @@ Future<void> _loadFonts() async {
 /// Four groups in three currencies, the first of them a trip with two.
 ///
 /// Returns the trip's id. Groups list newest first, so it is created last.
-Future<String> _seed(AppDatabase db) async {
+Future<String> _seed(AppDatabase db, DateTime today) async {
   final uuid = Uuid(goptions: GlobalOptions(MathRNG(seed: 42)));
-  final groups = DriftGroupRepository(db, uuid: uuid);
-  final entries = DriftEntryRepository(db, uuid: uuid);
-  final today = DateTime.now();
+  var timestamp = today;
+  DateTime nextTimestamp() {
+    timestamp = timestamp.add(const Duration(seconds: 1));
+    return timestamp;
+  }
+
+  final groups = DriftGroupRepository(db, uuid: uuid, clock: nextTimestamp);
+  final entries = DriftEntryRepository(db, uuid: uuid, clock: nextTimestamp);
 
   Future<({String group, List<String> members})> group(
     String name,
