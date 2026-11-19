@@ -5,7 +5,7 @@ import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/presentation/app.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'harness.dart';
+import '../harness.dart';
 
 /// Drives the real screens, with only the storage swapped for an in-memory
 /// database — no network exists in this build at all, so "offline" is not
