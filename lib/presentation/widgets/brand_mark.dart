@@ -136,10 +136,9 @@ class BrandWash extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         gradient: RadialGradient(
-          // Above centre, where the mark is, rather than in the middle of the
-          // page — a glow centred on the form looks like a selection.
-          center: const Alignment(0, -0.6),
-          radius: 1.1,
+          // Fade back to the surface before reaching any system inset.
+          center: const Alignment(0, -0.2),
+          radius: 0.4,
           colors: [
             scheme.primaryContainer.withValues(alpha: 0.38),
             scheme.primaryContainer.withValues(alpha: 0),

@@ -2,11 +2,13 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:material_ui/material_ui.dart';
+import 'package:flutter/services.dart' show SystemUiOverlayStyle;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
-import 'package:opensplit/presentation/theme.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:opensplit/domain/avatar.dart';
+import 'package:opensplit/presentation/theme.dart';
+import 'package:opensplit/presentation/widgets/app_viewport.dart';
 
 /// Relative luminance, per WCAG 2.1.
 double _luminance(Color c) {
@@ -25,6 +27,38 @@ double _contrast(Color a, Color b) {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  for (final brightness in Brightness.values) {
+    testWidgets('status bar icons contrast with a $brightness surface', (
+      tester,
+    ) async {
+      final theme = buildTheme(
+        brightness,
+        ColorScheme.fromSeed(
+          seedColor: const Color(0xFF006B5F),
+          brightness: brightness,
+        ),
+      );
+      await tester.pumpWidget(
+        Theme(
+          data: theme,
+          child: const AppViewport(child: SizedBox.expand()),
+        ),
+      );
+
+      final annotation = tester
+          .widget<AnnotatedRegion<SystemUiOverlayStyle>>(
+            find.byType(AnnotatedRegion<SystemUiOverlayStyle>),
+          )
+          .value;
+      expect(annotation.statusBarBrightness, brightness);
+      final iconColor = annotation.statusBarIconBrightness == Brightness.light
+          ? Colors.white
+          : Colors.black;
+      expect(annotation.statusBarColor, theme.colorScheme.surface);
+      expect(_contrast(iconColor, theme.colorScheme.surface), greaterThan(4.5));
+    });
+  }
+
   group('avatar contrast', () {
     for (final brightness in Brightness.values) {
       for (final seed in [const Color(0xFF5B5891), const Color(0xFF006B5F)]) {

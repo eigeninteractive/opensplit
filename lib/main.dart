@@ -17,6 +17,8 @@ import 'data/auth/session_store.dart';
 import 'data/sync/api_client.dart';
 import 'presentation/app.dart';
 import 'presentation/launch_hold.dart';
+import 'presentation/theme.dart';
+import 'presentation/widgets/app_viewport.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -85,22 +87,27 @@ class _Misconfigured extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
     debugShowCheckedModeBanner: false,
+    theme: buildTheme(Brightness.light),
+    darkTheme: buildTheme(Brightness.dark),
+    builder: (context, child) => AppViewport(child: child!),
     home: Scaffold(
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.build_outlined, size: 40),
-              const SizedBox(height: 16),
-              const Text(
-                'This build is not configured',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 12),
-              Text(problem, textAlign: TextAlign.center),
-            ],
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.build_outlined, size: 40),
+                const SizedBox(height: 16),
+                const Text(
+                  'This build is not configured',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 12),
+                Text(problem, textAlign: TextAlign.center),
+              ],
+            ),
           ),
         ),
       ),

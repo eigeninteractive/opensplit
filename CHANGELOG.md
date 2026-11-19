@@ -5,6 +5,9 @@ What changed in each version of the app, newest first. The format is
 [cider](https://pub.dev/packages/cider): see "Versions" in docs/runbook.md.
 
 ## [4.2.2] - 2026-11-19
+### Fixed
+- Kept web controls clear of screen cutouts and improved status bar contrast across light and dark themes.
+
 ### Security
 - Updated Android certificate validation to reject compromised certificates.
 

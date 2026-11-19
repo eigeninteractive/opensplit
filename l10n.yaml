@@ -3,6 +3,6 @@ template-arb-file: app_en.arb
 output-localization-file: app_localizations.dart
 nullable-getter: false
 use-escaping: true
-# Flutter 3.50 still generates references to its deprecated design delegates.
-# OpenSplit supplies the Material delegates from material_ui in app.dart.
+# Remove this when gen-l10n supports the standalone Material delegates.
+# OpenSplit supplies those delegates from material_ui in app.dart.
 header: "// ignore_for_file: deprecated_member_use"
