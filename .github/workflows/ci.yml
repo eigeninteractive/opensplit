@@ -1,11 +1,10 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
+  # Release calls these checks for pushes to main.
   workflow_call:
 
 permissions:

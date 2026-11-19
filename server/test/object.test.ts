@@ -60,7 +60,6 @@ describe("the one alarm", () => {
     const { groupId, ravi, priya } = await makeGroup();
 
     const before = await runInDurableObject(stub(groupId), async (_instance: Group, state) => state.storage.getAlarm());
-    await new Promise((resolve) => setTimeout(resolve, 5));
     ok(await saveEntry(stub(groupId), evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 300), RAVI));
 
     const after = await runInDurableObject(stub(groupId), async (_instance: Group, state) => state.storage.getAlarm());
@@ -70,13 +69,16 @@ describe("the one alarm", () => {
 
   it("clears a spent alarm when no index work remains", async () => {
     const { groupId } = await makeGroup();
+    const group = stub(groupId);
 
-    await runInDurableObject(stub(groupId), async (_instance: Group, state) => {
-      await state.storage.setAlarm(Date.now() + 10);
+    await runInDurableObject(group, async (_instance: Group, state) => {
+      // The test helper fires the alarm immediately, without racing the timer.
+      await state.storage.setAlarm(Date.now() + 60_000);
     });
 
-    expect(await runDurableObjectAlarm(stub(groupId))).toBe(true);
-    expect(ok(await stub(groupId).changes(RAVI, 0, 100)).purgedAt).toBeNull();
+    expect(await runDurableObjectAlarm(group)).toBe(true);
+    expect(await runDurableObjectAlarm(group)).toBe(false);
+    expect(ok(await group.changes(RAVI, 0, 100)).purgedAt).toBeNull();
   });
 });
 
