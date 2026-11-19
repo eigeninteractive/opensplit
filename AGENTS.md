@@ -13,7 +13,7 @@ Read the runbook's [release lifecycle](docs/runbook.md#every-release) and
 
 - Every app-changing PR, including cosmetic fixes, app assets, native
   configuration, generated API client changes and app dependency updates,
-  must include a Cider version bump and finalized release notes in that PR.
+  must include finalized release notes and normally a Cider version bump.
   App dependency manifests and lockfiles count, including dev dependencies.
 - As part of app-changing work, prepare the release with:
 
@@ -25,9 +25,10 @@ Read the runbook's [release lifecycle](docs/runbook.md#every-release) and
   ```
 
 - Commit the version, changelog and regenerated artwork with the app changes.
-  CI requires a higher stable version than the PR base and no remaining
-  Unreleased entries. If another app PR merges first, update the branch and
-  bump beyond main's new version. After committing, the local check is
+  CI normally requires a higher stable version than the PR base and no remaining
+  Unreleased entries. To amend a pending release on main, keep its version
+  and update its finalized changelog section before a `v<version>` tag exists.
+  After committing, fetch tags and run
   `dart run tool/check_app_release.dart origin/main`.
 - Backend-only, public website, docs, tests and release tooling changes need
   no app version bump. If backend work also changes the generated Flutter

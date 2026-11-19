@@ -21,7 +21,7 @@ Future<void> main(List<String> args) async {
   }
 }
 
-/// Requires a newer, finalized Cider release when app inputs differ from [base].
+/// Requires a newer or still-pending Cider release for app changes.
 ///
 /// Compares [base] with HEAD in [workingDirectory], or the current repository.
 /// Website, backend, documentation, tests and release tooling are exempt.
@@ -64,20 +64,38 @@ Future<String> checkAppRelease(String base, {String? workingDirectory}) async {
     final previous = await _cider(temporary.path, ['version']);
     final root = workingDirectory ?? Directory.current.path;
     final current = await _cider(root, ['version']);
-    if (!_isNewerStableVersion(previous, current)) {
+    final bumped = _isNewerStableVersion(previous, current);
+    final pending =
+        current == previous &&
+        _stableVersion.hasMatch(current) &&
+        (await git(['tag', '--list', 'v$current'])).trim().isEmpty &&
+        await _isAheadOfSubmittedVersion(base, current, git);
+    if (!bumped && !pending) {
       throw FormatException(
         'App changes require a stable version newer than $previous; '
         'found $current. Run dart run cider bump patch (or minor/major), '
         'then dart run cider release.',
       );
     }
-    playReleaseNotes(await _cider(root, ['describe', current, '--only-body']));
+    final describe = ['describe', current, '--only-body'];
+    final body = await _cider(root, describe);
+    playReleaseNotes(body);
+    if (pending) {
+      await File(
+        '${temporary.path}/CHANGELOG.md',
+      ).writeAsString(await git(['show', '$base:CHANGELOG.md']));
+      if (body == await _cider(temporary.path, describe)) {
+        throw FormatException('Update the release notes for pending $current.');
+      }
+    }
     if ((await _cider(root, ['describe', '--only-body'])).isNotEmpty) {
       throw const FormatException(
         'Finalize Unreleased with dart run cider release before merging.',
       );
     }
-    return 'App release: $previous -> $current.';
+    return pending
+        ? 'Updated pending app release: $current.'
+        : 'App release: $previous -> $current.';
   } finally {
     await temporary.delete(recursive: true);
   }
@@ -110,9 +128,35 @@ bool _isAppInput(String path) =>
       'service_worker/tsconfig.node.json',
     }.contains(path);
 
+final _stableVersion = RegExp(r'^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$');
+
+Future<bool> _isAheadOfSubmittedVersion(
+  String base,
+  String current,
+  Future<String> Function(List<String>) git,
+) async {
+  final tags = await git([
+    'tag',
+    '--merged',
+    base,
+    '--sort=-version:refname',
+    '--list',
+    'v[0-9]*',
+  ]);
+  final submitted = tags
+      .trim()
+      .split('\n')
+      .where((tag) => tag.startsWith('v'))
+      .map((tag) => tag.substring(1))
+      .where(_stableVersion.hasMatch)
+      .firstOrNull;
+  return submitted != null && _isNewerStableVersion(submitted, current);
+}
+
 bool _isNewerStableVersion(String previous, String current) {
-  final stable = RegExp(r'^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$');
-  if (!stable.hasMatch(previous) || !stable.hasMatch(current)) return false;
+  if (!_stableVersion.hasMatch(previous) || !_stableVersion.hasMatch(current)) {
+    return false;
+  }
   final before = previous.split('.').map(int.parse).toList();
   final after = current.split('.').map(int.parse).toList();
   for (var index = 0; index < 3; index++) {

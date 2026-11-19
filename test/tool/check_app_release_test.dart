@@ -118,6 +118,37 @@ void main() {
     }
   });
 
+  test('a pending version can take a fix with updated release notes', () async {
+    await git(['tag', 'v1.2.2', base]);
+    await write('lib/new.dart', '// Changed app.\n');
+    await version(
+      '1.2.3',
+      changelog: '${notes('1.2.3')}- Restored the group picture.\n',
+    );
+
+    expect(await check(), 'Updated pending app release: 1.2.3.');
+
+    await git(['tag', 'v1.2.3', base]);
+    await expectLater(check(), throwsA(isA<FormatException>()));
+  });
+
+  test('a pending version still needs release notes for the fix', () async {
+    await git(['tag', 'v1.2.2', base]);
+    await write('lib/new.dart', '// Changed app.\n');
+    await commit();
+
+    await expectLater(
+      check(),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('Update the release notes'),
+        ),
+      ),
+    );
+  });
+
   test('a bump without cider release fails', () async {
     await version('1.2.4');
 
