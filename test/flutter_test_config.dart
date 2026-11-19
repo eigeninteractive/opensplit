@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:material_ui/material_ui.dart';
 import 'package:opensplit/presentation/theme.dart';
 
 /// Preloads bundled fonts before native widget tests can schedule a frame.
