@@ -217,23 +217,20 @@ begin
   FileUtils.chmod(0o755, File.join(bin, "dart"))
   number_build = lambda do |version, event = "push"|
     output = File.join(temporary, "build-output")
-    environment = File.join(temporary, "build-environment")
     File.write(output, "")
-    File.write(environment, "")
     run_command({
       "PATH" => "#{bin}:#{ENV.fetch('PATH')}",
       "CIDER_TEST_VERSION" => version,
       "GITHUB_RUN_NUMBER" => "100", "GITHUB_RUN_ATTEMPT" => "1",
-      "GITHUB_EVENT_NAME" => event, "GITHUB_OUTPUT" => output,
-      "GITHUB_ENV" => environment
+      "GITHUB_EVENT_NAME" => event, "GITHUB_OUTPUT" => output
     }, "bash", "-e", "-o", "pipefail", "-c", script, chdir: history)
-    [output, environment].flat_map { |path| File.readlines(path, chomp: true) }
-                         .to_h { |line| line.split("=", 2) }
+    File.readlines(output, chomp: true).to_h { |line| line.split("=", 2) }
   end
-  assert(number_build.call("4.1.0")["BUILD_ANDROID"] == "false", "Submitted versions skip Android")
-  assert(number_build.call("4.1.0", "workflow_dispatch")["BUILD_ANDROID"] == "true",
+  assert(number_build.call("4.1.0")["build_android"] == "false", "Submitted versions skip Android")
+  assert(number_build.call("4.1.0", "workflow_dispatch")["build_android"] == "true",
          "Manual artifact builds remain available")
   major = commit.call("Pending major 5.0.0")
+  assert(number_build.call("5.0.0")["build_android"] == "true", "Pending versions build Android")
   assert(number_build.call("5.0.0")["previous_version"] == "4.1.0", "Major baseline changed")
   commit.call("Backend-only merge while the major is pending")
   assert(number_build.call("5.0.0")["previous_version"] == "4.1.0", "Backend merge lost major intent")
