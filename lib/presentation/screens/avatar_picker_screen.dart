@@ -194,6 +194,7 @@ class _Picker extends StatelessWidget {
           Center(
             child: SharedText(
               tag: ('group-name', group.id),
+              placeholderBuilder: settledRouteHeroPlaceholder,
               text: group.name,
               style: textTheme.titleMedium!.copyWith(
                 color: Theme.of(context).colorScheme.onSurface,

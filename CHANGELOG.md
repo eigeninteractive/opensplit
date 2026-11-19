@@ -7,6 +7,7 @@ What changed in each version of the app, newest first. The format is
 ## [4.2.3] - 2026-11-19
 ### Fixed
 - Updated the local database library for faster reads and more reliable batch updates.
+- Keep group names, pictures, and covers visible when returning quickly from an expense, payment, or picture editor.
 
 ## [4.2.2] - 2026-11-19
 ### Fixed

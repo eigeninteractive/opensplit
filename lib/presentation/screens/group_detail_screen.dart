@@ -442,6 +442,7 @@ class _GroupHeader extends ConsumerWidget {
             children: [
               SharedText(
                 tag: ('group-name', group.id),
+                placeholderBuilder: settledRouteHeroPlaceholder,
                 text: group.name,
                 style: Theme.of(
                   context,
