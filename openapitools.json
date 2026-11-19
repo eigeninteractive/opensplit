@@ -2,6 +2,9 @@
   "$schema": "https://raw.githubusercontent.com/OpenAPITools/openapi-generator-cli/master/apps/generator-cli/src/config.schema.json",
   "spaces": 2,
   "generator-cli": {
-    "version": "7.25.0"
+    "version": "7.25.0",
+    "repository": {
+      "downloadUrl": "https://maven-central.storage-download.googleapis.com/maven2/${groupId}/${artifactId}/${versionName}/${artifactId}-${versionName}.jar"
+    }
   }
 }
