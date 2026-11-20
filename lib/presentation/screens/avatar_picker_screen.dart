@@ -10,7 +10,6 @@ import '../navigation.dart';
 import '../theme.dart';
 import '../widgets/avatar_view.dart';
 import '../widgets/group_avatar_hero.dart';
-import '../widgets/shared_element.dart';
 import '../widgets/page_body.dart';
 import '../widgets/sync_status_notice.dart';
 
@@ -189,24 +188,14 @@ class _Picker extends StatelessWidget {
             ),
           },
         ),
-        const SizedBox(height: 12),
-        if (subject.group case final group?)
-          Center(
-            child: SharedText(
-              tag: ('group-name', group.id),
-              placeholderBuilder: settledRouteHeroPlaceholder,
-              text: group.name,
-              style: textTheme.titleMedium!.copyWith(
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
-            ),
-          )
-        else
+        if (subject.group == null) ...[
+          const SizedBox(height: 12),
           Text(
             subject.name.isEmpty ? 'No name yet' : subject.name,
             textAlign: TextAlign.center,
             style: textTheme.titleMedium,
           ),
+        ],
         const SizedBox(height: 24),
         Center(
           child: SegmentedButton<_Kind>(

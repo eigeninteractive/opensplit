@@ -237,13 +237,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: test "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$GITHUB_SHA"
-      - name: Recheck the app release after refreshing tags
-        if: github.event_name == 'push'
-        env:
-          BASE_SHA: ${{ github.event.before }}
-        run: |
-          git fetch origin --tags
-          dart run tool/check_app_release.dart "$BASE_SHA"
       # One step, one version: the Worker script and everything in build/web go
       # up together and become live together. That is the reason the bundle is
       # built in this job rather than deployed from somewhere else. Already open

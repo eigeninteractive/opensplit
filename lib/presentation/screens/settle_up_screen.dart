@@ -20,7 +20,6 @@ import '../feedback.dart';
 import '../widgets/amount_card.dart';
 import '../widgets/form_leave_guard.dart';
 import '../widgets/page_body.dart';
-import '../widgets/shared_element.dart';
 
 import '../widgets/group_access.dart';
 
@@ -85,13 +84,6 @@ class SettleUpScreen extends ConsumerWidget {
       ledger: ledger,
       form: form,
       controller: ref.read(provider.notifier),
-      transferIdentity:
-          fromMemberId != null &&
-              toMemberId != null &&
-              currency != null &&
-              amountMinor != null
-          ? (groupId, fromMemberId!, toMemberId!, currency!)
-          : null,
     );
   }
 }
@@ -101,13 +93,11 @@ class _SettleUp extends ConsumerWidget {
     required this.ledger,
     required this.form,
     required this.controller,
-    required this.transferIdentity,
   });
 
   final GroupLedger ledger;
   final SettlementFormState form;
   final SettlementForm controller;
-  final Object? transferIdentity;
 
   Future<void> _record(BuildContext context, WidgetRef ref) async {
     if (!await controller.record() || !context.mounted) return;
@@ -216,22 +206,17 @@ class _SettleUp extends ConsumerWidget {
                       if (editing != null) ...[
                         Row(
                           children: [
-                            SharedElement(
-                              tag: ('entry-category', editing.id),
-                              child: Icon(
-                                Icons.handshake_outlined,
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onTertiaryContainer,
-                              ),
+                            Icon(
+                              Icons.handshake_outlined,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onTertiaryContainer,
                             ),
                             const SizedBox(width: 12),
                             Expanded(
-                              child: SharedText(
-                                tag: ('entry-description', editing.id),
-                                text:
-                                    '${ledger.nameOf(from ?? '')} paid '
-                                    '${ledger.nameOf(to ?? '')}',
+                              child: Text(
+                                '${ledger.nameOf(from ?? '')} paid '
+                                '${ledger.nameOf(to ?? '')}',
                                 style: Theme.of(context).textTheme.titleLarge!
                                     .copyWith(
                                       color: Theme.of(
@@ -239,6 +224,7 @@ class _SettleUp extends ConsumerWidget {
                                       ).colorScheme.onSurface,
                                     ),
                                 maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ],
@@ -246,11 +232,6 @@ class _SettleUp extends ConsumerWidget {
                         const SizedBox(height: 24),
                       ],
                       AmountCard(
-                        heroTag: editing != null
-                            ? ('entry-amount', editing.id)
-                            : transferIdentity == null
-                            ? null
-                            : ('settlement-amount', transferIdentity!),
                         currency: currency,
                         currencyCode: form.currencyCode,
                         amount: form.amount,
@@ -261,9 +242,6 @@ class _SettleUp extends ConsumerWidget {
                       ),
                       const SizedBox(height: 24),
                       _MemberDropdown(
-                        heroTag: transferIdentity == null
-                            ? null
-                            : ('settlement-from', transferIdentity!),
                         label: form.isEditing ? 'Paid by' : 'Who is paying',
                         members: members,
                         nameOf: ledger.nameOfMember,
@@ -273,9 +251,6 @@ class _SettleUp extends ConsumerWidget {
                       ),
                       const SizedBox(height: 16),
                       _MemberDropdown(
-                        heroTag: transferIdentity == null
-                            ? null
-                            : ('settlement-to', transferIdentity!),
                         label: form.isEditing ? 'Paid to' : 'Who is being paid',
                         members: members,
                         nameOf: ledger.nameOfMember,
@@ -637,7 +612,6 @@ class _MemberDropdown extends StatelessWidget {
     required this.onChanged,
     this.meId,
     this.excludeId,
-    this.heroTag,
   });
 
   final String label;
@@ -650,7 +624,6 @@ class _MemberDropdown extends StatelessWidget {
   final String? value;
   final String? meId;
   final String? excludeId;
-  final Object? heroTag;
   final ValueChanged<String?> onChanged;
 
   @override
@@ -660,7 +633,7 @@ class _MemberDropdown extends StatelessWidget {
         if (member.id != excludeId) member,
     ];
 
-    final dropdown = DropdownMenu<String>(
+    return DropdownMenu<String>(
       // DropdownMenu reads its selection once, and on later changes only
       // follows one it can find among its entries: cleared to nobody, it
       // would go on showing the last name. Keyed by the value, a different
@@ -680,16 +653,6 @@ class _MemberDropdown extends StatelessWidget {
           ),
       ],
       onSelected: onChanged,
-    );
-    final selected = options.where((member) => member.id == value).firstOrNull;
-    if (heroTag == null || selected == null) return dropdown;
-    return SharedText(
-      tag: heroTag!,
-      text: selected.id == meId ? 'You' : nameOf(selected),
-      style: Theme.of(context).textTheme.bodyLarge!.copyWith(
-        color: Theme.of(context).colorScheme.onSurface,
-      ),
-      child: dropdown,
     );
   }
 }

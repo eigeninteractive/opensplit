@@ -44,7 +44,7 @@ Future<void> _go(WidgetTester tester, String location) async {
 /// Opens the editor the way a person does: into the group, then the button.
 Future<void> _openEditor(WidgetTester tester) async {
   await _go(tester, '/g/g1');
-  await tester.tap(find.widgetWithText(FloatingActionButton, 'Add expense'));
+  await tester.tap(find.text('Add expense'));
   await _beats(tester);
   await _unfold(tester);
 }

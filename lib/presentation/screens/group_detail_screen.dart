@@ -16,6 +16,7 @@ import '../../data/local/database.dart';
 import '../../domain/models/entry.dart';
 import '../../domain/models/group_event.dart';
 import '../../domain/money_format.dart';
+import '../detail_transition.dart';
 import '../navigation.dart';
 import '../theme.dart';
 import '../widgets/group_avatar_hero.dart';
@@ -25,7 +26,6 @@ import '../widgets/day_header.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/group_cover.dart';
 import '../widgets/leading_icon.dart';
-import '../widgets/shared_element.dart';
 import '../widgets/group_pane.dart';
 import '../widgets/group_standing.dart';
 import '../widgets/group_search_button.dart';
@@ -139,13 +139,16 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
     if (ledger.me?.isActive != true) return const GroupUnavailableScreen();
 
     final wide = MediaQuery.sizeOf(context).width >= _wideBreakpoint;
+    final VoidCallback? addExpense = ledger.canEdit
+        ? () => context.push<void>('/g/$groupId/add')
+        : null;
 
     final scaffold = Scaffold(
-      floatingActionButton: !ledger.canEdit
+      floatingActionButton: wide || addExpense == null
           ? null
           : ScrollAwareFab(
               extended: _fabExtended,
-              onPressed: () => context.push('/g/$groupId/add'),
+              onPressed: addExpense,
               icon: Icons.add,
               label: 'Add expense',
             ),
@@ -174,7 +177,13 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                 ? Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(flex: 3, child: _EntriesPane(ledger: ledger)),
+                      Expanded(
+                        flex: 3,
+                        child: _EntriesPane(
+                          ledger: ledger,
+                          onAddExpense: addExpense,
+                        ),
+                      ),
                       const VerticalDivider(width: 1),
                       Expanded(
                         flex: 2,
@@ -412,7 +421,7 @@ class _GroupHeader extends ConsumerWidget {
           left: 0,
           right: 0,
           height: coverHeight,
-          child: GroupCoverHero(ledger: ledger),
+          child: GroupCover(ledger: ledger),
         ),
         PositionedDirectional(
           start: start,
@@ -440,14 +449,13 @@ class _GroupHeader extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SharedText(
-                tag: ('group-name', group.id),
-                placeholderBuilder: settledRouteHeroPlaceholder,
-                text: group.name,
+              Text(
+                group.name,
                 style: Theme.of(
                   context,
                 ).textTheme.headlineSmall!.copyWith(color: scheme.onSurface),
                 maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 4),
               GroupStanding(ledger: ledger, currencies: currencies),
@@ -460,9 +468,10 @@ class _GroupHeader extends ConsumerWidget {
 }
 
 class _EntriesPane extends ConsumerWidget {
-  const _EntriesPane({required this.ledger});
+  const _EntriesPane({required this.ledger, this.onAddExpense});
 
   final GroupLedger ledger;
+  final VoidCallback? onAddExpense;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -491,6 +500,20 @@ class _EntriesPane extends ConsumerWidget {
       groupId: ledger.group.id,
       storageKey: 'expenses',
       slivers: [
+        if (onAddExpense case final addExpense?)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: FilledButton.icon(
+                  onPressed: addExpense,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add expense'),
+                ),
+              ),
+            ),
+          ),
         if (ledger.entries.isEmpty)
           SliverFillRemaining(
             hasScrollBody: false,
@@ -502,6 +525,7 @@ class _EntriesPane extends ConsumerWidget {
             itemBuilder: (context, index) => switch (rows[index]) {
               final DateTime day => DayHeader(day: day),
               (entry: final Entry entry, day: final List<Entry> day) => Padding(
+                key: ValueKey(entry.id),
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Segment(
                   index: day.indexOf(entry),
@@ -517,6 +541,10 @@ class _EntriesPane extends ConsumerWidget {
                     ledger: ledger,
                     currency: currencies[entry.row.currency],
                     category: categories[entry.row.categoryId],
+                    corners: Segment.radiusAt(
+                      index: day.indexOf(entry),
+                      count: day.length,
+                    ),
                   ),
                 ),
               ),
@@ -534,12 +562,14 @@ class _EntryTile extends StatelessWidget {
     required this.ledger,
     required this.currency,
     required this.category,
+    required this.corners,
   });
 
   final Entry entry;
   final GroupLedger ledger;
   final Currency? currency;
   final Category? category;
+  final BorderRadius corners;
 
   @override
   Widget build(BuildContext context) {
@@ -569,11 +599,19 @@ class _EntryTile extends StatelessWidget {
     final subtitleStyle = theme.textTheme.bodyMedium!.copyWith(
       color: scheme.onSurfaceVariant,
     );
+    void open() => openDetail(
+      context,
+      '/g/${ledger.group.id}/e/${entry.id}',
+      color: isSettlement
+          ? scheme.tertiaryContainer
+          : scheme.surfaceContainerHigh,
+      corners: corners,
+    );
 
     if (isSettlement) {
       return _PaymentTile(
         entry: entry,
-        groupId: ledger.group.id,
+        onTap: open,
         title:
             '$payerNames paid '
             '${entry.shares.isEmpty ? '—' : nameOrYou(entry.shares.first.memberId)}',
@@ -582,22 +620,17 @@ class _EntryTile extends StatelessWidget {
     }
 
     return ListTile(
-      onTap: () => context.push('/g/${ledger.group.id}/e/${entry.id}'),
+      onTap: open,
       leading: CircleAvatar(
         backgroundColor: scheme.secondaryContainer,
         foregroundColor: scheme.onSecondaryContainer,
-        child: SharedElement(
-          tag: ('entry-category', entry.id),
-          child: Icon(
-            categoryIcon(category?.icon ?? ''),
-            color: scheme.onSecondaryContainer,
-          ),
-        ),
+        child: Icon(categoryIcon(category?.icon ?? '')),
       ),
-      title: SharedText(
-        tag: ('entry-description', entry.id),
-        text: entry.row.description.isEmpty ? 'Expense' : entry.row.description,
+      title: Text(
+        entry.row.description.isEmpty ? 'Expense' : entry.row.description,
         style: theme.textTheme.titleMedium!.copyWith(color: scheme.onSurface),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
       // The whole bill lives here, so the trailing figure can be the one
       // that answers "what does this mean for me".
@@ -610,10 +643,11 @@ class _EntryTile extends StatelessWidget {
           Wrap(
             children: [
               Text('$payerNames paid '),
-              SharedText(
-                tag: ('entry-amount', entry.id),
-                text: total,
+              Text(
+                total,
                 style: moneyStyle(subtitleStyle),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
@@ -635,13 +669,13 @@ class _EntryTile extends StatelessWidget {
 class _PaymentTile extends StatelessWidget {
   const _PaymentTile({
     required this.entry,
-    required this.groupId,
+    required this.onTap,
     required this.title,
     required this.total,
   });
 
   final Entry entry;
-  final String groupId;
+  final VoidCallback onTap;
   final String title;
   final String total;
 
@@ -657,26 +691,22 @@ class _PaymentTile extends StatelessWidget {
 
     return ListTile(
       textColor: onTint,
-      onTap: () => context.push('/g/$groupId/e/${entry.id}'),
+      onTap: onTap,
       leading: SizedBox(
         width: LeadingIcon.width,
-        child: Center(
-          child: SharedElement(
-            tag: ('entry-category', entry.id),
-            child: Icon(Icons.handshake_outlined, color: onTint),
-          ),
-        ),
+        child: Center(child: Icon(Icons.handshake_outlined, color: onTint)),
       ),
-      title: SharedText(
-        tag: ('entry-description', entry.id),
-        text: title,
+      title: Text(
+        title,
         maxLines: 2,
+        overflow: TextOverflow.ellipsis,
         style: theme.textTheme.titleMedium!.copyWith(color: onTint),
       ),
       subtitle: Text(detail.isEmpty ? 'Payment' : detail),
-      trailing: SharedText(
-        tag: ('entry-amount', entry.id),
-        text: total,
+      trailing: Text(
+        total,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: moneyStyle(
           theme.textTheme.titleMedium!,
         ).copyWith(color: onTint, fontWeight: FontWeight.w600),

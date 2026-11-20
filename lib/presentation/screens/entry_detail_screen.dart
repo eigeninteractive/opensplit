@@ -16,7 +16,6 @@ import '../widgets/entry_history.dart';
 import '../widgets/group_access.dart';
 import '../widgets/page_body.dart';
 import '../widgets/segmented_list.dart';
-import '../widgets/shared_element.dart';
 
 /// An expense or a payment, to read: what it was, who paid, how it was
 /// split and what has happened to it since.
@@ -51,9 +50,8 @@ class EntryDetailScreen extends ConsumerWidget {
     if (ledger != null && ledger.me?.isActive != true) {
       return const GroupUnavailableScreen();
     }
-    // The ledger already holds a live entry, so the first frame has it and
-    // the row's contents can fly into place. The record follows, and is the
-    // only source for an entry that has been deleted.
+    // The ledger already holds the live entry when opened from its row. The
+    // record follows and also covers deleted entries.
     final entry =
         record.value ??
         ledger?.entries.where((entry) => entry.id == entryId).firstOrNull;
@@ -137,24 +135,19 @@ class _Detail extends ConsumerWidget {
               foregroundColor: isPayment
                   ? scheme.onTertiaryContainer
                   : scheme.onSecondaryContainer,
-              child: SharedElement(
-                tag: ('entry-category', entry.id),
-                child: Icon(
-                  isPayment
-                      ? Icons.handshake_outlined
-                      : categoryIcon(category?.icon ?? ''),
-                  size: 28,
-                ),
+              child: Icon(
+                isPayment
+                    ? Icons.handshake_outlined
+                    : categoryIcon(category?.icon ?? ''),
+                size: 28,
               ),
             ),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SharedText(
-                    tag: ('entry-description', entry.id),
-                    text: _title(isPayment),
-                    maxLines: null,
+                  Text(
+                    _title(isPayment),
                     style: theme.textTheme.titleLarge!.copyWith(
                       color: scheme.onSurface,
                     ),
@@ -172,9 +165,10 @@ class _Detail extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 20),
-        SharedText(
-          tag: ('entry-amount', entry.id),
-          text: money(entry.row.amountMinor),
+        Text(
+          money(entry.row.amountMinor),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: moneyStyle(
             theme.textTheme.displaySmall!,
           ).copyWith(color: scheme.onSurface),

@@ -23,7 +23,6 @@ import 'empty_state.dart';
 import 'folded_section.dart';
 import 'group_pane.dart';
 import 'segmented_list.dart';
-import 'shared_element.dart';
 
 /// Per-currency balances and, when the group wants them, the payments that
 /// would settle it.
@@ -353,12 +352,6 @@ class _TransferTile extends StatelessWidget {
     final words = isMine
         ? 'You pay $to'
         : '$from pays ${transfer.toMemberId == ledger.me?.id ? 'you' : to}';
-    final identity = (
-      ledger.group.id,
-      transfer.fromMemberId,
-      transfer.toMemberId,
-      transfer.currency,
-    );
     void settle() => context.push(
       '/g/${ledger.group.id}/settle'
       '?from=${transfer.fromMemberId}'
@@ -397,10 +390,11 @@ class _TransferTile extends StatelessWidget {
           child: Wrap(
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              SharedText(
-                tag: ('settlement-from', identity),
-                text: isMine ? 'You' : from,
+              Text(
+                isMine ? 'You' : from,
                 style: textStyle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
               Text(isMine ? ' pay ' : ' pays ', style: textStyle),
               // The help icon travels with the last name rather than being
@@ -409,10 +403,11 @@ class _TransferTile extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Flexible(
-                    child: SharedText(
-                      tag: ('settlement-to', identity),
-                      text: transfer.toMemberId == ledger.me?.id ? 'you' : to,
+                    child: Text(
+                      transfer.toMemberId == ledger.me?.id ? 'you' : to,
                       style: textStyle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   const SizedBox(width: 6),
@@ -428,9 +423,10 @@ class _TransferTile extends StatelessWidget {
             ],
           ),
         ),
-        subtitle: SharedText(
-          tag: ('settlement-amount', identity),
-          text: formatMoney(currency, transfer.amountMinor),
+        subtitle: Text(
+          formatMoney(currency, transfer.amountMinor),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: moneyStyle(
             Theme.of(context).textTheme.titleMedium!,
           ).copyWith(color: scheme.onSurface),

@@ -411,7 +411,7 @@ patch after a successfully submitted major gets priority 0. The existing
 `v4.1.0` testing release tag is the baseline for the first new production release.
 
 Every app-changing PR, including cosmetic fixes and app dependency updates,
-normally needs a version bump and finalized notes. Its merge deploys the web/backend
+needs a version bump and finalized notes. Its merge deploys the web/backend
 and submits Android from the same commit. Website, backend-only, documentation,
 tests and release tooling need no app bump; they skip Android unless a previous
 app release is still pending. Store listing changes publish independently as
@@ -425,8 +425,9 @@ lockfiles, code generation/localization/icon/splash configuration, and service
 worker build configuration also count. Dependency manifests are deliberately
 conservative: even a dev-dependency-only edit to an app pubspec requires a bump.
 Tests, store listing artwork, release scripts/workflows and public site files
-are exempt. The check uses Cider to read the versions and changelog and
-validates the released section through the existing Play note formatter.
+are exempt. The check uses Cider to read the versions and changelog, requires
+a newer stable version, and validates the released section through the existing
+Play note formatter. Published changelog history is not audited.
 
 The current-main check skips superseded commits when merges overlap. A green
 upload means Play accepted the submission, not that review has finished or
@@ -520,21 +521,15 @@ The artwork provenance includes `pubspec.yaml`, so regenerate after every
 version bump. The capture uses a fixed date to keep sample dates and relative
 labels consistent across runs.
 
-Both files go in the PR. CI compares app inputs with the PR base and normally
-requires a higher stable app version. The released section needs nonempty
-Play-compatible notes and no remaining Unreleased entries. Main requires
-branches to be up to date before merging.
-
-If main's version is newer than the last submitted release and has no
-`v<version>` tag yet, a follow-up PR can keep that version. Add the fix to its
-existing release section in `CHANGELOG.md` and regenerate store artwork.
-Release refreshes tags and checks again before distributing. Once Play
-submission is recorded by the tag, bump the version for the next app change.
+Both files go in the PR. CI compares app inputs with the PR base and requires
+a higher stable app version, a released section with nonempty Play-compatible
+notes, and no remaining Unreleased entries. If another app PR merges first,
+update your branch, bump beyond main's new version, and finalize the combined
+notes again. Main requires branches to be up to date before merging.
 
 To run the same check locally after committing your changes:
 
 ```sh
-git fetch origin --tags
 dart run tool/check_app_release.dart origin/main
 ```
 
