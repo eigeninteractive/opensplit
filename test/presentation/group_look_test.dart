@@ -300,10 +300,25 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('OpenSplit'), findsWidgets);
     await tapAndSettle(tester, find.text('Lisbon trip'));
+
+    final addExpense = find.text('Add expense');
+    final expenses = find.ancestor(
+      of: find.text('Spent').first,
+      matching: find.byType(CustomScrollView),
+    );
+    expect(find.descendant(of: expenses, matching: addExpense), findsOneWidget);
+    await tapAndSettle(tester, addExpense);
+    expect(find.text('What was it?'), findsOneWidget);
+    await tapAndSettle(tester, find.byType(CloseButton));
+
     tester.view.physicalSize = const Size(360, 800);
     await settle(tester);
     expect(tester.takeException(), isNull);
     expect(find.text('Expenses'), findsOneWidget);
+    expect(
+      find.widgetWithText(FloatingActionButton, 'Add expense'),
+      findsOneWidget,
+    );
     await unmount(tester);
   }, variant: TargetPlatformVariant({TargetPlatform.macOS}));
 

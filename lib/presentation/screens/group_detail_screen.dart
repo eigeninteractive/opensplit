@@ -139,13 +139,16 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
     if (ledger.me?.isActive != true) return const GroupUnavailableScreen();
 
     final wide = MediaQuery.sizeOf(context).width >= _wideBreakpoint;
+    final VoidCallback? addExpense = ledger.canEdit
+        ? () => context.push<void>('/g/$groupId/add')
+        : null;
 
     final scaffold = Scaffold(
-      floatingActionButton: !ledger.canEdit
+      floatingActionButton: wide || addExpense == null
           ? null
           : ScrollAwareFab(
               extended: _fabExtended,
-              onPressed: () => context.push('/g/$groupId/add'),
+              onPressed: addExpense,
               icon: Icons.add,
               label: 'Add expense',
             ),
@@ -174,7 +177,13 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                 ? Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(flex: 3, child: _EntriesPane(ledger: ledger)),
+                      Expanded(
+                        flex: 3,
+                        child: _EntriesPane(
+                          ledger: ledger,
+                          onAddExpense: addExpense,
+                        ),
+                      ),
                       const VerticalDivider(width: 1),
                       Expanded(
                         flex: 2,
@@ -459,9 +468,10 @@ class _GroupHeader extends ConsumerWidget {
 }
 
 class _EntriesPane extends ConsumerWidget {
-  const _EntriesPane({required this.ledger});
+  const _EntriesPane({required this.ledger, this.onAddExpense});
 
   final GroupLedger ledger;
+  final VoidCallback? onAddExpense;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -490,6 +500,20 @@ class _EntriesPane extends ConsumerWidget {
       groupId: ledger.group.id,
       storageKey: 'expenses',
       slivers: [
+        if (onAddExpense case final addExpense?)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: FilledButton.icon(
+                  onPressed: addExpense,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add expense'),
+                ),
+              ),
+            ),
+          ),
         if (ledger.entries.isEmpty)
           SliverFillRemaining(
             hasScrollBody: false,

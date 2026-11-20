@@ -8,6 +8,9 @@ What changed in each version of the app, newest first. The format is
 ### Changed
 - Group cards, expenses and payments now expand into their details, with simpler transitions for editing.
 
+### Fixed
+- Add expense stays in the Expenses pane on wide screens so it leaves settlement actions accessible.
+
 ## [4.2.3] - 2026-11-19
 ### Fixed
 - Updated the local database library for faster reads and more reliable batch updates.
