@@ -19,7 +19,7 @@ import '../../domain/money_format.dart';
 import '../detail_transition.dart';
 import '../navigation.dart';
 import '../theme.dart';
-import '../widgets/group_avatar_hero.dart';
+import '../widgets/group_identity_hero.dart';
 import '../widgets/balances_panel.dart';
 import '../widgets/category_icon.dart';
 import '../widgets/day_header.dart';
@@ -421,7 +421,7 @@ class _GroupHeader extends ConsumerWidget {
           left: 0,
           right: 0,
           height: coverHeight,
-          child: GroupCover(ledger: ledger),
+          child: GroupCoverHero(ledger: ledger),
         ),
         PositionedDirectional(
           start: start,
@@ -449,13 +449,12 @@ class _GroupHeader extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                group.name,
+              GroupNameHero(
+                group: group,
                 style: Theme.of(
                   context,
                 ).textTheme.headlineSmall!.copyWith(color: scheme.onSurface),
                 maxLines: 2,
-                overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 4),
               GroupStanding(ledger: ledger, currencies: currencies),
