@@ -1,5 +1,6 @@
 import '../../application/backend_providers.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -8,10 +9,9 @@ import '../../application/preferences_providers.dart';
 import '../../application/sync_providers.dart';
 import '../../data/local/database.dart';
 import '../../data/repositories/drift_group_repository.dart';
-import '../detail_transition.dart';
 import '../launch_hold.dart';
-import '../widgets/avatar_view.dart';
 import '../widgets/group_cover.dart';
+import '../widgets/group_identity_hero.dart';
 import '../widgets/segmented_list.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/conflicting_edit_banner.dart';
@@ -241,16 +241,17 @@ class _GroupTile extends ConsumerWidget {
     return Stack(
       children: [
         if (ledger != null)
-          Positioned.fill(child: GroupCover(ledger: ledger, patternFade: 1)),
+          Positioned.fill(
+            child: GroupCoverHero(
+              ledger: ledger,
+              borderRadius: corners,
+              patternFade: 1,
+            ),
+          ),
         Material(
           type: MaterialType.transparency,
           child: ListTile(
-            onTap: () => openDetail(
-              context,
-              '/g/${group.id}',
-              color: theme.colorScheme.surfaceContainerHigh,
-              corners: corners,
-            ),
+            onTap: () => context.push('/g/${group.id}'),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
               vertical: 12,
@@ -260,17 +261,12 @@ class _GroupTile extends ConsumerWidget {
             leading: Badge(
               isLabelVisible: hasNews,
               smallSize: 12,
-              child: AvatarView(
-                avatar: group.avatar,
-                name: group.name,
-                id: group.id,
-                radius: 28,
-              ),
+              child: GroupAvatarHero(group: group, radius: 28),
             ),
             title: Semantics(
               hint: hasNews ? 'New activity' : null,
-              child: Text(
-                group.name,
+              child: GroupNameHero(
+                group: group,
                 style: theme.textTheme.titleLarge!.copyWith(
                   color: theme.colorScheme.onSurface,
                   fontWeight: FontWeight.w600,

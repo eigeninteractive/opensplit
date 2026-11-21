@@ -9,7 +9,7 @@ import '../../domain/avatar.dart';
 import '../navigation.dart';
 import '../theme.dart';
 import '../widgets/avatar_view.dart';
-import '../widgets/group_avatar_hero.dart';
+import '../widgets/group_identity_hero.dart';
 import '../widgets/page_body.dart';
 import '../widgets/sync_status_notice.dart';
 

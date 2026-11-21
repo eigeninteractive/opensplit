@@ -2,7 +2,7 @@ import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
-/// Opens a routed detail page from the bounds of the tapped card or row.
+/// Opens an expense or payment from the bounds of its row.
 void openDetail(
   BuildContext context,
   String location, {
@@ -96,12 +96,39 @@ class _DetailRoute extends PageRoute<void>
 
   _DetailPage get _page => settings as _DetailPage;
   RRect? _bounds;
+  late final CurvedAnimation _expansion;
+
+  @override
+  Duration get transitionDuration => _bounds == null
+      ? super.transitionDuration
+      : const Duration(milliseconds: 300);
+
+  @override
+  Duration get reverseTransitionDuration => _bounds == null
+      ? super.reverseTransitionDuration
+      : const Duration(milliseconds: 220);
 
   @override
   bool get maintainState => _page.maintainState;
 
   @override
   Widget buildContent(BuildContext context) => _page.child;
+
+  @override
+  void install() {
+    super.install();
+    _expansion = CurvedAnimation(
+      parent: animation!,
+      curve: Curves.fastOutSlowIn,
+      reverseCurve: Curves.fastOutSlowIn.flipped,
+    );
+  }
+
+  @override
+  void dispose() {
+    _expansion.dispose();
+    super.dispose();
+  }
 
   @override
   TickerFuture didPush() {
@@ -146,26 +173,36 @@ class _DetailRoute extends PageRoute<void>
   ) => ListenableBuilder(
     listenable: animation,
     builder: (context, _) {
-      final transforming = _transforms(context) && !animation.isCompleted;
-      final progress = transforming ? animation.value : 1.0;
+      final source = _transforms(context) && !animation.isCompleted
+          ? _bounds
+          : null;
+      final progress = source == null ? 1.0 : animation.value;
+      final expansion = source == null ? 1.0 : _expansion.value;
       return ClipRRect(
-        clipBehavior: transforming ? Clip.antiAlias : Clip.none,
-        clipper: transforming ? _SurfaceClipper(_bounds!, progress) : null,
+        clipBehavior: source == null ? Clip.none : Clip.antiAlias,
+        clipper: source == null ? null : _SurfaceClipper(source, expansion),
         child: ColoredBox(
           color: _page.origin.color.withValues(
-            alpha: transforming
-                ? const Interval(0, 0.2).transform(progress)
+            alpha: source != null
+                ? const Interval(0, 0.15).transform(progress)
                 : 0,
           ),
           child: Opacity(
-            opacity: const Interval(0.15, 0.85).transform(progress),
-            // Keep the Material route's gesture handler mounted. Only its
-            // page motion is suppressed while the container is moving.
-            child: super.buildTransitions(
-              context,
-              transforming ? kAlwaysCompleteAnimation : animation,
-              secondaryAnimation,
-              child,
+            // Give the surface time to become opaque and move away from the
+            // row before revealing the new page's text.
+            opacity: const Interval(0.25, 0.7).transform(progress),
+            child: Transform.translate(
+              // Keep the incoming content with the moving top-left edge.
+              offset:
+                  (source?.outerRect.topLeft ?? Offset.zero) * (1 - expansion),
+              // Keep Flutter's gesture handler mounted while suppressing the
+              // standard page motion during the container transform.
+              child: super.buildTransitions(
+                context,
+                source == null ? animation : kAlwaysCompleteAnimation,
+                secondaryAnimation,
+                child,
+              ),
             ),
           ),
         ),
@@ -184,7 +221,7 @@ class _SurfaceClipper extends CustomClipper<RRect> {
   RRect getClip(Size size) => RRect.lerp(
     source,
     BorderRadius.zero.toRRect(Offset.zero & size),
-    Curves.easeInOutCubicEmphasized.transform(progress),
+    progress,
   )!;
 
   @override

@@ -146,12 +146,9 @@ GoRouter buildRouter({
     ),
     GoRoute(
       path: '/g/:groupId',
-      pageBuilder: (context, state) => detailPage(
-        state,
-        _GroupScreen(
-          groupId: state.pathParameters['groupId']!,
-          child: GroupDetailScreen(groupId: state.pathParameters['groupId']!),
-        ),
+      builder: (context, state) => _GroupScreen(
+        groupId: state.pathParameters['groupId']!,
+        child: GroupDetailScreen(groupId: state.pathParameters['groupId']!),
       ),
       routes: [
         GoRoute(
