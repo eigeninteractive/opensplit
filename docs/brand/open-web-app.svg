@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="176" height="60" viewBox="0 0 176 60" role="img" aria-labelledby="title">
+  <title id="title">Open the web app</title>
+  <rect x="10.5" y="10.5" width="155" height="39" rx="6" fill="#515B92" stroke="#C7C5D0"></rect>
+  <g fill="none" stroke="#fff" stroke-width="1.4">
+    <circle cx="29" cy="30" r="7.5"></circle>
+    <ellipse cx="29" cy="30" rx="3.3" ry="7.5"></ellipse>
+    <path d="M21.5 30h15"></path>
+  </g>
+  <text x="44" y="30" dy=".35em" fill="#fff" font-family="system-ui, sans-serif" font-size="12.5" font-weight="600">Open the web app</text>
+</svg>
