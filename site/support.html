@@ -55,25 +55,109 @@
       margin: 24px 0;
     }
     .support .channel {
-      padding: 24px;
-      border: 1px solid var(--line);
-      border-radius: 20px;
-      background: var(--wash);
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      padding: 20px;
+      border: 1px solid var(--channel-border);
+      border-radius: var(--channel-radius);
+      background: var(--channel-surface);
+    }
+    .support .channel-coffee {
+      --channel-surface: #fff9dd;
+      --channel-border: #f1db83;
+      --channel-radius: 20px;
+      --action-bg: #ffdd00;
+      --action-hover: #f4ce00;
+      --action-ink: #1a180e;
+      --action-radius: 999px;
+    }
+    .support .channel-github {
+      --channel-surface: #f6f8fa;
+      --channel-border: #d1d9e0;
+      --channel-radius: 12px;
+      --action-bg: #24292f;
+      --action-hover: #393f46;
+      --action-ink: #fff;
+      --action-radius: 6px;
+    }
+    .support .channel-razorpay {
+      --channel-surface: #eef5ff;
+      --channel-border: #bfd8fc;
+      --channel-radius: 16px;
+      --action-bg: #1253cc;
+      --action-hover: #0e45ae;
+      --action-ink: #fff;
+      --action-radius: 8px;
     }
     .support .channel h3 {
-      margin: 0 0 6px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 12px;
       font-size: 20px;
+      line-height: 1.25;
+    }
+    .support .channel-mark {
+      display: grid;
+      place-items: center;
+      width: 38px;
+      height: 38px;
+      flex: none;
+      border-radius: var(--action-radius);
+      background: var(--action-bg);
+      color: var(--action-ink);
+    }
+    .support .channel-mark svg {
+      width: 22px;
+      height: 22px;
+    }
+    .support .channel-github .channel-mark {
+      background: transparent;
+      color: #24292f;
     }
     .support .channel p {
       font-size: 15px;
       line-height: 1.6;
-      margin-bottom: 14px;
-    }
-    .support .channel p:last-child {
-      margin-bottom: 0;
+      margin-bottom: 16px;
     }
     .support .channel .doc-actions {
-      margin: 16px 0 0;
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 4px;
+      margin: auto 0 0;
+    }
+    .support .channel .button-filled {
+      min-height: 44px;
+      border-color: transparent;
+      border-radius: var(--action-radius);
+      background: var(--action-bg);
+      color: var(--action-ink);
+    }
+    .support .channel .button-filled:hover {
+      background: var(--action-hover);
+    }
+    .support .sponsor-heart {
+      color: #f778ba;
+    }
+    .support .channel .channel-secondary {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      color: var(--ink);
+      font-size: 15px;
+      font-weight: 600;
+      text-decoration-color: var(--slate);
+      text-underline-offset: 3px;
+    }
+    .support .channel .channel-secondary:hover {
+      text-decoration-color: currentColor;
+      text-decoration-thickness: 2px;
+    }
+    @media (min-width: 810px) {
+      .support .channel .doc-actions {
+        min-height: 92px;
+      }
     }
     .support .supporter-list {
       display: flex;
@@ -95,12 +179,64 @@
       color: transparent;
     }
     .support .recognition {
-      padding: 28px;
       border: 1px solid var(--line);
-      border-radius: 20px;
+      border-radius: 16px;
     }
-    .support .recognition h3 {
-      margin-top: 0;
+    .support .recognition summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 48px;
+      padding: 12px 16px;
+      border-radius: inherit;
+      cursor: pointer;
+      list-style: none;
+      font-weight: 600;
+    }
+    .support .recognition summary::-webkit-details-marker {
+      display: none;
+    }
+    .support .recognition summary:hover {
+      background: var(--wash);
+    }
+    .support .recognition summary svg {
+      width: 18px;
+      height: 18px;
+      flex: none;
+      color: var(--primary);
+    }
+    .support .recognition[open] summary svg {
+      transform: rotate(180deg);
+    }
+    .support .recognition-copy {
+      max-width: 68ch;
+      padding: 8px 16px 16px;
+    }
+    .support .recognition-copy p {
+      font-size: 15px;
+      margin-bottom: 10px;
+    }
+    .support .recognition-copy p:last-child {
+      margin-bottom: 0;
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .support .recognition summary svg {
+        transition: transform 0.2s ease;
+      }
+      @supports (interpolate-size: allow-keywords) {
+        .support .recognition::details-content {
+          block-size: 0;
+          overflow: clip;
+          interpolate-size: allow-keywords;
+          transition:
+            block-size 0.2s ease,
+            content-visibility 0.2s allow-discrete;
+        }
+        .support .recognition[open]::details-content {
+          block-size: auto;
+        }
+      }
     }
     </style>
   </head>
@@ -146,27 +282,44 @@
       <section aria-labelledby="channels-title">
         <h2 id="channels-title">Support OpenSplit</h2>
         <div class="channels">
-          <article class="channel">
-            <h3>Razorpay</h3>
-            <p>Make a one-time contribution in Indian rupees using UPI or another payment method shown at checkout.</p>
-            <div class="doc-actions">
-              <a class="button button-filled button-small" href="https://rzp.io/rzp/opensplit">Pay in INR</a>
-            </div>
-          </article>
-          <article class="channel">
-            <h3>GitHub Sponsors</h3>
-            <p>Choose a one-time or monthly amount in US dollars through EigenInteractive’s GitHub Sponsors page.</p>
-            <div class="doc-actions">
-              <a class="button button-filled button-small" href="https://github.com/sponsors/eigeninteractive?frequency=one-time">One-time on GitHub</a>
-              <a class="button button-outlined button-small" href="https://github.com/sponsors/eigeninteractive">Monthly on GitHub</a>
-            </div>
-          </article>
-          <article class="channel">
-            <h3>Buy Me a Coffee</h3>
-            <p>Give once without signing up or choose a recurring membership. Contributions through these links support OpenSplit.</p>
+          <article class="channel channel-coffee">
+            <h3>
+              <span class="channel-mark">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5 10h12l-1.5 9h-9L5 10Zm-1 0h14M6 7l1-3h8l1 3m-11 0h12" />
+                </svg>
+              </span>
+              Buy Me a Coffee
+            </h3>
+            <p>Give once without signing up or choose a recurring membership. Both support OpenSplit.</p>
             <div class="doc-actions">
               <a class="button button-filled button-small" href="https://buymeacoffee.com/seenuklabs">Give once</a>
-              <a class="button button-outlined button-small" href="https://buymeacoffee.com/seenuklabs/membership">View membership</a>
+              <a class="channel-secondary" href="https://buymeacoffee.com/seenuklabs/membership">View membership</a>
+            </div>
+          </article>
+          <article class="channel channel-github">
+            <h3>
+              <span class="channel-mark">
+                <svg aria-hidden="true"><use href="#github" /></svg>
+              </span>
+              GitHub Sponsors
+            </h3>
+            <p>Sponsor OpenSplit through EigenInteractive on GitHub. Choose a one-time or monthly amount in USD.</p>
+            <div class="doc-actions">
+              <a class="button button-filled button-small" href="https://github.com/sponsors/eigeninteractive">
+                <svg class="sponsor-heart" aria-hidden="true" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M8 14.25 2.17 8.42a3.9 3.9 0 0 1 5.52-5.52l.31.31.31-.31a3.9 3.9 0 0 1 5.52 5.52L8 14.25Z" />
+                </svg>
+                Sponsor monthly
+              </a>
+              <a class="channel-secondary" href="https://github.com/sponsors/eigeninteractive?frequency=one-time">Sponsor once</a>
+            </div>
+          </article>
+          <article class="channel channel-razorpay">
+            <h3><span class="channel-mark" aria-hidden="true">₹</span> Razorpay</h3>
+            <p>Give once in Indian rupees using UPI or another method offered at checkout.</p>
+            <div class="doc-actions">
+              <a class="button button-filled button-small" href="https://rzp.io/rzp/opensplit">Pay in INR</a>
             </div>
           </article>
         </div>
@@ -185,12 +338,19 @@
           <li>Vasanth</li>
           <li>Sushma</li>
         </ul>
-        <div class="recognition">
-          <h3>Your name, your choice</h3>
-          <p>Public acknowledgment is enabled by default and uses only your chosen name or handle. You can opt out before publication or ask us to remove your acknowledgment. Private supporters remain private.</p>
-          <p>We keep billing names, email addresses and contribution amounts private. If a payment provider does not capture your chosen public name and preference, we will confirm them before listing you.</p>
-          <p>Everyone on this list receives the same acknowledgment. For a correction, an opt-out or removal, contact <a href="mailto:hello@eigeninteractive.com?subject=OpenSplit%20supporter%20acknowledgment">hello@eigeninteractive.com</a>.</p>
-        </div>
+        <details class="recognition">
+          <summary>
+            Your name, your choice
+            <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m4 6 4 4 4-4" />
+            </svg>
+          </summary>
+          <div class="recognition-copy">
+            <p>Public acknowledgment is enabled by default and uses only your chosen name or handle. You can opt out before publication or ask us to remove your acknowledgment. Private supporters remain private.</p>
+            <p>We keep billing names, email addresses and contribution amounts private. If a payment provider does not capture your chosen public name and preference, we will confirm them before listing you.</p>
+            <p>Everyone on this list receives the same acknowledgment. For a correction, an opt-out or removal, contact <a href="mailto:hello@eigeninteractive.com?subject=OpenSplit%20supporter%20acknowledgment">hello@eigeninteractive.com</a>.</p>
+          </div>
+        </details>
       </section>
     </main>
 
