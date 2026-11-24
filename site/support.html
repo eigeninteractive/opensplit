@@ -50,14 +50,12 @@
     }
     .support .channels {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
       gap: 16px;
       margin: 24px 0;
     }
     .support .channel {
       display: flex;
       flex-direction: column;
-      align-items: flex-start;
       padding: 20px;
       border: 1px solid var(--channel-border);
       border-radius: var(--channel-radius);
@@ -116,21 +114,30 @@
       background: transparent;
       color: #24292f;
     }
-    .support .channel p {
-      font-size: 15px;
-      line-height: 1.6;
-      margin-bottom: 16px;
+    .support .channel ul {
+      padding-left: 18px;
+      margin: 0 0 18px;
     }
-    .support .channel .doc-actions {
-      align-items: flex-start;
-      flex-direction: column;
-      gap: 4px;
-      margin: auto 0 0;
+    .support .channel li {
+      font-size: 15px;
+      line-height: 1.5;
+      margin: 0 0 4px;
+    }
+    .support .channel-actions {
+      display: grid;
+      align-content: start;
+      gap: 8px;
+      margin-top: auto;
+    }
+    .support .channel .button {
+      min-height: 44px;
+      padding: 8px 12px;
+      border-radius: var(--action-radius);
+      text-align: center;
+      white-space: normal;
     }
     .support .channel .button-filled {
-      min-height: 44px;
       border-color: transparent;
-      border-radius: var(--action-radius);
       background: var(--action-bg);
       color: var(--action-ink);
     }
@@ -140,23 +147,19 @@
     .support .sponsor-heart {
       color: #f778ba;
     }
-    .support .channel .channel-secondary {
-      display: inline-flex;
-      align-items: center;
-      min-height: 44px;
-      color: var(--ink);
-      font-size: 15px;
-      font-weight: 600;
-      text-decoration-color: var(--slate);
-      text-underline-offset: 3px;
+    .support .channel .button-outlined {
+      border-color: var(--channel-border);
     }
-    .support .channel .channel-secondary:hover {
-      text-decoration-color: currentColor;
-      text-decoration-thickness: 2px;
+    .support .channel .button-outlined:hover {
+      border-color: var(--slate);
+      background: transparent;
     }
     @media (min-width: 810px) {
-      .support .channel .doc-actions {
-        min-height: 92px;
+      .support .channels {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+      .support .channel-actions {
+        min-height: 96px;
       }
     }
     .support .supporter-list {
@@ -291,10 +294,13 @@
               </span>
               Buy Me a Coffee
             </h3>
-            <p>Give once without signing up or choose a recurring membership. Both support OpenSplit.</p>
-            <div class="doc-actions">
-              <a class="button button-filled button-small" href="https://buymeacoffee.com/seenuklabs">Give once</a>
-              <a class="channel-secondary" href="https://buymeacoffee.com/seenuklabs/membership">View membership</a>
+            <ul>
+              <li>One-time, monthly or yearly</li>
+              <li>Local pricing in 15+ currencies</li>
+            </ul>
+            <div class="channel-actions">
+              <a class="button button-filled button-small" href="https://buymeacoffee.com/seenuklabs" aria-label="Give once via Buy Me a Coffee">Give once</a>
+              <a class="button button-outlined button-small" href="https://buymeacoffee.com/seenuklabs/membership" aria-label="Give regularly via Buy Me a Coffee">Give regularly</a>
             </div>
           </article>
           <article class="channel channel-github">
@@ -304,26 +310,32 @@
               </span>
               GitHub Sponsors
             </h3>
-            <p>Sponsor OpenSplit through EigenInteractive on GitHub. Choose a one-time or monthly amount in USD.</p>
-            <div class="doc-actions">
-              <a class="button button-filled button-small" href="https://github.com/sponsors/eigeninteractive">
+            <ul>
+              <li>One-time or monthly</li>
+              <li>Billed in US dollars (USD)</li>
+            </ul>
+            <div class="channel-actions">
+              <a class="button button-filled button-small" href="https://github.com/sponsors/eigeninteractive?frequency=one-time" aria-label="Give once via GitHub Sponsors">
                 <svg class="sponsor-heart" aria-hidden="true" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M8 14.25 2.17 8.42a3.9 3.9 0 0 1 5.52-5.52l.31.31.31-.31a3.9 3.9 0 0 1 5.52 5.52L8 14.25Z" />
                 </svg>
-                Sponsor monthly
+                Give once
               </a>
-              <a class="channel-secondary" href="https://github.com/sponsors/eigeninteractive?frequency=one-time">Sponsor once</a>
+              <a class="button button-outlined button-small" href="https://github.com/sponsors/eigeninteractive" aria-label="Give regularly via GitHub Sponsors">Give regularly</a>
             </div>
           </article>
           <article class="channel channel-razorpay">
             <h3><span class="channel-mark" aria-hidden="true">₹</span> Razorpay</h3>
-            <p>Give once in Indian rupees using UPI or another method offered at checkout.</p>
-            <div class="doc-actions">
-              <a class="button button-filled button-small" href="https://rzp.io/rzp/opensplit">Pay in INR</a>
+            <ul>
+              <li>One-time</li>
+              <li>UPI in Indian rupees (INR)</li>
+            </ul>
+            <div class="channel-actions">
+              <a class="button button-filled button-small" href="https://rzp.io/rzp/opensplit" aria-label="Give once via Razorpay">Give once</a>
             </div>
           </article>
         </div>
-        <p>Contributions help maintain OpenSplit and keep its shared service running. <a href="/funding.json">Read the funding manifest</a> or <a href="mailto:hello@eigeninteractive.com?subject=OpenSplit%20funding">get in touch about project support</a>.</p>
+        <p><a href="/funding.json">Read the funding manifest</a> or <a href="mailto:hello@eigeninteractive.com?subject=OpenSplit%20funding">get in touch about project support</a>.</p>
       </section>
 
       <section id="supporters" aria-labelledby="supporters-title">
