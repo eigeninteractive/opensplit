@@ -54,16 +54,23 @@ anything run with `--remote` (including `pnpm db:migrate:remote`), and
 
 ### Once per machine
 
+Install Flutter at the version pinned in [CI](../.github/workflows/ci.yml) and
+[pnpm](https://pnpm.io/installation). From the repository root:
+
 ```sh
-cd server                            # pnpm itself installed once: pnpm.io/installation
+flutter pub get
+dart run build_runner build          # Drift, Freezed and Riverpod
+cd server
 pnpm install                         # also fetches the Node that package.json pins
 cp .dev.vars.example .dev.vars       # local secrets; the example's values work as they are
+pnpm db:migrate:local
 cd ..
+cp env/app.example.json env/app.json
 cp env/local.example.json env/local.json
 ```
 
-`env/app.json` is needed too (copy `env/app.example.json`). It holds only
-public identifiers, and the production values are fine for local runs.
+`env/app.json` holds public build configuration. Use the example for local work,
+or `dart run tool/verify_config.dart` to check actual service identifiers.
 
 ### Starting from a clean local state
 
@@ -82,9 +89,14 @@ is opened.
 ### The web app
 
 ```sh
-dart run tool/build_web.dart         # the whole front end, into build/web
+dart run tool/build_web.dart --config=env/ci.example.json
 cd server && pnpm dev                # the Worker, on localhost:8787
 ```
+
+This uses the same inert build configuration as CI. Use
+`dart run tool/build_web.dart --site-only` to preview changes to the public
+website at `http://localhost:8787/` or to run the Worker API without building
+the Flutter client. The full build is needed for `/app` and the adapter tests.
 
 Open **`http://localhost:8787/app`**, with `localhost` rather than
 `127.0.0.1`, because the session cookie and `APP_ORIGIN` in `.dev.vars` are for
@@ -138,11 +150,39 @@ cd .. && flutter test                                   # the client
 ```
 
 The client's integration tests run against a real Worker and skip themselves
-without one. With `pnpm dev` running:
+without one. Build the full web bundle and start `pnpm dev` before running them:
 
 ```sh
 flutter test --tags integration --dart-define=REQUIRE_BACKEND=true
 ```
+
+If the Worker uses a different port, also pass
+`--dart-define=API_BASE_URL=http://127.0.0.1:<port>`.
+
+Run the Chrome checks for money logic and browser storage:
+
+```sh
+flutter test --platform chrome test/domain \
+  test/presentation/sync_refresh_test.dart test/presentation/sync_status_test.dart
+cp web/sqlite3.wasm web/drift_worker.js test/browser/
+flutter test --platform chrome --wasm --cross-origin-isolation test/browser
+```
+
+The first command exercises JavaScript number limits and the sync UI. The
+second suite exercises local SQLite in OPFS and browser synchronization.
+
+### Test the exchange-rate schedule
+
+From `server/`, run `pnpm dev --test-scheduled`, then trigger the exchange-rate
+cron and read the rates from another terminal:
+
+```sh
+curl 'http://localhost:8787/cdn-cgi/handler/scheduled?cron=0+4+*+*+*'
+curl 'http://localhost:8787/api/v1/fx?since=2026-01-01'
+```
+
+The local job fetches live data from Frankfurter. Add `EXCHANGERATE_API_KEY` to
+`server/.dev.vars` to exercise the second provider.
 
 ---
 
@@ -194,6 +234,9 @@ and the FCM access token. Losing it costs one cron run.
 
 ### 2. Google OAuth
 
+Set up **Google Auth Platform → Branding** before creating the clients. The
+Worker handles identity, so leave Firebase Authentication turned off.
+
 In the **Google Cloud Console** for the project behind `FCM_PROJECT_ID`, under
 _APIs & Services → Credentials_:
 
@@ -229,6 +272,19 @@ API key scoped to sending only. The message and the sending address are in
 `server/src/email/sender.ts`; the address is deliberately not configurable.
 
 ### 4. Firebase Cloud Messaging
+
+Register a Firebase Android app with package name
+`com.eigeninteractive.opensplit` and a Firebase web app. Leave Analytics off.
+For the client build configuration in `env/app.json`:
+
+- From the Android app, download `google-services.json` and run
+  `dart run tool/verify_config.dart /path/to/google-services.json`. This imports
+  the project ID, project number and Android key and app ID. The build reads
+  those values from the configuration, so keep the downloaded file out of Git.
+- From the web app's SDK configuration, copy `apiKey` and `appId` to
+  `WEB_FCM_API_KEY` and `WEB_FCM_APP_ID`.
+- From **Project settings → Cloud Messaging → Web Push certificates**, copy
+  the public key to `FCM_VAPID_KEY`.
 
 The group's Durable Object calls the FCM v1 HTTP API directly, so what is
 needed is a service account with the **Firebase Cloud Messaging API** enabled:
@@ -713,6 +769,28 @@ https://opensplit.eigeninteractive.com/privacy
 https://opensplit.eigeninteractive.com/terms
 https://opensplit.eigeninteractive.com/delete-account
 ```
+
+### Build a signed bundle locally
+
+If Play already has an upload key for the app, use that key. For a new app,
+generate an upload key once and store it outside the repository.
+
+```sh
+keytool -genkey -v -keystore ~/opensplit-upload.jks \
+  -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+cp android/key.properties.example android/key.properties
+```
+
+Set the keystore path and credentials in `android/key.properties`. Keep
+that file and the keystore private. Then verify the configuration and build:
+
+```sh
+dart run tool/verify_config.dart
+flutter build appbundle --release --dart-define-from-file=env/app.json
+```
+
+Gradle requires an upload key for a release bundle. A locally built release
+APK can use the debug key for testing on your phone.
 
 ---
 

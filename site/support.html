@@ -1,0 +1,410 @@
+<!doctype html>
+<!-- Static support page, served from the root beside the Flutter client. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Support OpenSplit</title>
+    <meta name="description" content="Help sustain OpenSplit's free, open-source expense splitting. See funding plans and supporter recognition.">
+    <meta name="theme-color" content="#FBF8FF">
+    <link rel="canonical" href="https://opensplit.eigeninteractive.com/support">
+    <meta property="og:type" content="article">
+    <meta property="og:site_name" content="OpenSplit">
+    <meta property="og:locale" content="en">
+    <meta property="og:title" content="Support OpenSplit">
+    <meta property="og:description" content="Help sustain OpenSplit's free, open-source expense splitting. See funding plans and supporter recognition.">
+    <meta property="og:url" content="https://opensplit.eigeninteractive.com/support">
+    <meta property="og:image" content="https://opensplit.eigeninteractive.com/store/og-card.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Support OpenSplit">
+    <meta name="twitter:description" content="Help sustain OpenSplit's free, open-source expense splitting. See funding plans and supporter recognition.">
+    <meta name="twitter:image" content="https://opensplit.eigeninteractive.com/store/og-card.png">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
+    <link rel="apple-touch-icon" href="/icons/Icon-192.png">
+    <link rel="stylesheet" href="/site.css">
+
+    <style>
+    .support {
+      max-width: 960px;
+    }
+    .support h1 {
+      max-width: 640px;
+      font-size: clamp(38px, 6vw, 64px);
+    }
+    .support .eyebrow {
+      color: var(--primary);
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .support .intro {
+      max-width: 650px;
+      font-size: 19px;
+      line-height: 1.6;
+    }
+    .support .identity {
+      max-width: 680px;
+    }
+    .support .channels {
+      display: grid;
+      gap: 16px;
+      margin: 24px 0;
+    }
+    .support .channel {
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+      border: 1px solid var(--channel-border);
+      border-radius: var(--channel-radius);
+      background: var(--channel-surface);
+    }
+    .support .channel-coffee {
+      --channel-surface: #fff9dd;
+      --channel-border: #f1db83;
+      --channel-radius: 20px;
+      --action-bg: #ffdd00;
+      --action-hover: #f4ce00;
+      --action-ink: #1a180e;
+      --action-radius: 999px;
+    }
+    .support .channel-github {
+      --channel-surface: #f6f8fa;
+      --channel-border: #d1d9e0;
+      --channel-radius: 12px;
+      --action-bg: #24292f;
+      --action-hover: #393f46;
+      --action-ink: #fff;
+      --action-radius: 6px;
+    }
+    .support .channel-razorpay {
+      --channel-surface: #eef5ff;
+      --channel-border: #bfd8fc;
+      --channel-radius: 16px;
+      --action-bg: #1253cc;
+      --action-hover: #0e45ae;
+      --action-ink: #fff;
+      --action-radius: 8px;
+    }
+    .support .channel h3 {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 12px;
+      font-size: 20px;
+      line-height: 1.25;
+    }
+    .support .channel-mark {
+      display: grid;
+      place-items: center;
+      width: 38px;
+      height: 38px;
+      flex: none;
+      border-radius: var(--action-radius);
+      background: var(--action-bg);
+      color: var(--action-ink);
+    }
+    .support .channel-mark svg {
+      width: 22px;
+      height: 22px;
+    }
+    .support .channel-github .channel-mark {
+      background: transparent;
+      color: #24292f;
+    }
+    .support .channel ul {
+      padding-left: 18px;
+      margin: 0 0 18px;
+    }
+    .support .channel li {
+      font-size: 15px;
+      line-height: 1.5;
+      margin: 0 0 4px;
+    }
+    .support .channel-actions {
+      display: grid;
+      align-content: start;
+      gap: 8px;
+      margin-top: auto;
+    }
+    .support .channel .button {
+      min-height: 44px;
+      padding: 8px 12px;
+      border-radius: var(--action-radius);
+      text-align: center;
+      white-space: normal;
+    }
+    .support .channel .button-filled {
+      border-color: transparent;
+      background: var(--action-bg);
+      color: var(--action-ink);
+    }
+    .support .channel .button-filled:hover {
+      background: var(--action-hover);
+    }
+    .support .sponsor-heart {
+      color: #f778ba;
+    }
+    .support .channel .button-outlined {
+      border-color: var(--channel-border);
+    }
+    .support .channel .button-outlined:hover {
+      border-color: var(--slate);
+      background: transparent;
+    }
+    @media (min-width: 810px) {
+      .support .channels {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+      .support .channel-actions {
+        min-height: 96px;
+      }
+    }
+    .support .supporter-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 0;
+      margin: 20px 0 24px;
+    }
+    .support .supporter-list li {
+      margin: 0;
+      padding: 6px 14px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--wash);
+      color: var(--ink);
+      font-weight: 500;
+    }
+    .support .supporter-list li::marker {
+      color: transparent;
+    }
+    .support .recognition {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+    }
+    .support .recognition summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 48px;
+      padding: 12px 16px;
+      border-radius: inherit;
+      cursor: pointer;
+      list-style: none;
+      font-weight: 600;
+    }
+    .support .recognition summary::-webkit-details-marker {
+      display: none;
+    }
+    .support .recognition summary:hover {
+      background: var(--wash);
+    }
+    .support .recognition summary svg {
+      width: 18px;
+      height: 18px;
+      flex: none;
+      color: var(--primary);
+    }
+    .support .recognition[open] summary svg {
+      transform: rotate(180deg);
+    }
+    .support .recognition-copy {
+      max-width: 68ch;
+      padding: 8px 16px 16px;
+    }
+    .support .recognition-copy p {
+      font-size: 15px;
+      margin-bottom: 10px;
+    }
+    .support .recognition-copy p:last-child {
+      margin-bottom: 0;
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .support .recognition summary svg {
+        transition: transform 0.2s ease;
+      }
+      @supports (interpolate-size: allow-keywords) {
+        .support .recognition::details-content {
+          block-size: 0;
+          overflow: clip;
+          interpolate-size: allow-keywords;
+          transition:
+            block-size 0.2s ease,
+            content-visibility 0.2s allow-discrete;
+        }
+        .support .recognition[open]::details-content {
+          block-size: auto;
+        }
+      }
+    }
+    </style>
+  </head>
+  <body>
+    <svg class="mark-defs" aria-hidden="true">
+      <defs>
+        <mask id="mark-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="48" height="48">
+          <rect width="48" height="48" fill="#fff" />
+          <rect x="20.75" y="-4" width="6.5" height="56" fill="#000" transform="rotate(24 24 24)" />
+        </mask>
+        <symbol id="mark" viewBox="0 0 48 48">
+          <circle cx="24" cy="24" r="17" fill="none" stroke="currentColor" stroke-width="6.5" mask="url(#mark-cut)" />
+        </symbol>
+        <symbol id="github" viewBox="0 0 16 16">
+          <path
+            fill="currentColor"
+            d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"
+          />
+        </symbol>
+      </defs>
+    </svg>
+
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="wrap sitenav">
+      <a class="wordmark" href="/" aria-label="OpenSplit home">
+        <svg aria-hidden="true" style="color: var(--primary)"><use href="#mark" /></svg>
+        <span>Open<b>Split</b></span>
+      </a>
+      <nav class="sitenav-links" aria-label="Site">
+        <a href="/support" aria-current="page">Support</a>
+        <a href="https://github.com/eigeninteractive/opensplit">GitHub</a>
+        <a class="button button-outlined button-small" href="/app">Open the app</a>
+      </nav>
+    </header>
+
+    <main id="main" class="doc support">
+      <p class="eyebrow">Community support</p>
+      <h1>Help sustain OpenSplit.</h1>
+      <p class="intro">OpenSplit is free for everyone. Your support helps pay for development, maintenance and the service that keeps shared groups connected.</p>
+      <p class="identity"><a href="https://github.com/seenu-k">Seenu K</a> maintains OpenSplit under EigenInteractive, a brand of Seenu K Labs. Funding collected for OpenSplit is used for OpenSplit, including maintainer time. Every app feature remains free.</p>
+
+      <section aria-labelledby="channels-title">
+        <h2 id="channels-title">Support OpenSplit</h2>
+        <div class="channels">
+          <article class="channel channel-coffee">
+            <h3>
+              <span class="channel-mark">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5 10h12l-1.5 9h-9L5 10Zm-1 0h14M6 7l1-3h8l1 3m-11 0h12" />
+                </svg>
+              </span>
+              Buy Me a Coffee
+            </h3>
+            <ul>
+              <li>One-time, monthly or yearly</li>
+              <li>Local pricing in 15+ currencies</li>
+            </ul>
+            <div class="channel-actions">
+              <a class="button button-filled button-small" href="https://buymeacoffee.com/seenuklabs" aria-label="Give once via Buy Me a Coffee">Give once</a>
+              <a class="button button-outlined button-small" href="https://buymeacoffee.com/seenuklabs/membership" aria-label="Give regularly via Buy Me a Coffee">Give regularly</a>
+            </div>
+          </article>
+          <article class="channel channel-github">
+            <h3>
+              <span class="channel-mark">
+                <svg aria-hidden="true"><use href="#github" /></svg>
+              </span>
+              GitHub Sponsors
+            </h3>
+            <ul>
+              <li>One-time or monthly</li>
+              <li>Billed in US dollars (USD)</li>
+            </ul>
+            <div class="channel-actions">
+              <a class="button button-filled button-small" href="https://github.com/sponsors/eigeninteractive?frequency=one-time" aria-label="Give once via GitHub Sponsors">
+                <svg class="sponsor-heart" aria-hidden="true" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M8 14.25 2.17 8.42a3.9 3.9 0 0 1 5.52-5.52l.31.31.31-.31a3.9 3.9 0 0 1 5.52 5.52L8 14.25Z" />
+                </svg>
+                Give once
+              </a>
+              <a class="button button-outlined button-small" href="https://github.com/sponsors/eigeninteractive" aria-label="Give regularly via GitHub Sponsors">Give regularly</a>
+            </div>
+          </article>
+          <article class="channel channel-razorpay">
+            <h3><span class="channel-mark" aria-hidden="true">₹</span> Razorpay</h3>
+            <ul>
+              <li>One-time</li>
+              <li>UPI in Indian rupees (INR)</li>
+            </ul>
+            <div class="channel-actions">
+              <a class="button button-filled button-small" href="https://rzp.io/rzp/opensplit" aria-label="Give once via Razorpay">Give once</a>
+            </div>
+          </article>
+        </div>
+        <p><a href="/funding.json">Read the funding manifest</a> or <a href="mailto:hello@eigeninteractive.com?subject=OpenSplit%20funding">get in touch about project support</a>.</p>
+      </section>
+
+      <section id="supporters" aria-labelledby="supporters-title">
+        <h2 id="supporters-title">Thank you, supporters</h2>
+        <p>Thank you to everyone who helps OpenSplit through testing, feedback, documentation, code or funding.</p>
+        <ul class="supporter-list">
+          <li>Brinda</li>
+          <li>Kamal Kumar</li>
+          <li>Shivlal</li>
+          <li>Sandeep</li>
+          <li>Kiran</li>
+          <li>Vasanth</li>
+          <li>Sushma</li>
+        </ul>
+        <details class="recognition">
+          <summary>
+            Your name, your choice
+            <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m4 6 4 4 4-4" />
+            </svg>
+          </summary>
+          <div class="recognition-copy">
+            <p>Public acknowledgment is enabled by default and uses only your chosen name or handle. You can opt out before publication or ask us to remove your acknowledgment. Private supporters remain private.</p>
+            <p>We keep billing names, email addresses and contribution amounts private. If a payment provider does not capture your chosen public name and preference, we will confirm them before listing you.</p>
+            <p>Everyone on this list receives the same acknowledgment. For a correction, an opt-out or removal, contact <a href="mailto:hello@eigeninteractive.com?subject=OpenSplit%20supporter%20acknowledgment">hello@eigeninteractive.com</a>.</p>
+          </div>
+        </details>
+      </section>
+    </main>
+
+    <footer class="sitefooter">
+      <div class="wrap">
+        <div class="sitefooter-top">
+          <div class="sitefooter-about">
+            <a class="wordmark" href="/">
+              <svg aria-hidden="true" style="color: var(--primary)"><use href="#mark" /></svg>
+              <span>Open<b>Split</b></span>
+            </a>
+            <p class="sitefooter-tagline">Split expenses with friends, free forever.</p>
+          </div>
+          <nav aria-label="Footer">
+            <div>
+              <h2>App</h2>
+              <ul>
+                <li><a href="https://play.google.com/store/apps/details?id=com.eigeninteractive.opensplit">Android</a></li>
+                <li><a href="/app">Web app</a></li>
+              </ul>
+            </div>
+            <div>
+              <h2>Project</h2>
+              <ul>
+                <li><a href="/support">Support OpenSplit</a></li>
+                <li><a href="https://github.com/eigeninteractive/opensplit">Source code</a></li>
+                <li><a href="https://github.com/eigeninteractive/opensplit/blob/main/PRINCIPLES.md">Principles</a></li>
+                <li><a href="https://github.com/eigeninteractive/opensplit/blob/main/LICENSE">Licence (AGPL-3.0)</a></li>
+              </ul>
+            </div>
+            <div>
+              <h2>Legal</h2>
+              <ul>
+                <li><a href="/privacy">Privacy</a></li>
+                <li><a href="/terms">Terms</a></li>
+                <li><a href="/delete-account">Delete your account</a></li>
+              </ul>
+            </div>
+          </nav>
+        </div>
+        <p class="sitefooter-base">© 2026 EigenInteractive</p>
+      </div>
+    </footer>
+  </body>
+</html>

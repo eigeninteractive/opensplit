@@ -8,6 +8,17 @@ This folder is the designer's kit, kept for the next round of design work. What
 the app and the site actually ship lives elsewhere in the tree and is listed
 below; nothing here is built or served.
 
+## Licensing and branding
+
+The [AGPL-3.0 licence](../../LICENSE) covers the code. The OpenSplit name and
+marks in `assets/brand/`, `assets/icon/`, `assets/splash/` and this folder
+remain with EigenInteractive. Give a fork its own name and artwork and set
+`REPOSITORY_URL` to the fork so that **Settings → About** links to its source.
+
+Google Sans Flex is bundled under the
+[SIL Open Font License 1.1](../../assets/google_fonts/LICENSE). The notice
+also appears under **About → Open-source licences** in the app.
+
 ## Colour
 
 The seed is Material indigo 500, `Colors.indigo` (`#3F51B5`): `_seed` in

@@ -92,3 +92,14 @@ Check it is there before believing a deploy:
 ```bash
 curl -sI https://opensplit.eigeninteractive.com/.well-known/assetlinks.json
 ```
+
+## Funding manifest provenance
+
+`funding-manifest-urls` lists the canonical public funding manifest, one URL
+per line. `tool/build_web.dart` copies it with the rest of this directory.
+The repository has a matching `.well-known/funding-manifest-urls` file,
+referenced from `site/funding.json` to establish repository provenance.
+
+The canonical manifest is `https://opensplit.eigeninteractive.com/funding.json`.
+Verify both files at their published locations after deployment; local files
+and schema validation alone do not establish public provenance.

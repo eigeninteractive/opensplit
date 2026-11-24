@@ -166,8 +166,9 @@ Drizzle tables ──drizzle-orm/zod──▶ Zod rows, and request bodies picke
   the server has seen it (null `seq`), it carries the `groupId` a page states
   once, an expense is three tables, a date is a `DateTime`, and an instant
   leaves as UTC.
-- CI regenerates the contract and the client (`dart run
-  tool/generate_api_client.dart --check`) and fails on any difference.
+- After changing the contract, run `dart run tool/generate_api_client.dart`
+  from the repository root with a JDK and the Worker's dependencies installed.
+  CI runs the same command with `--check` and fails on any difference.
 - **There is no fake server.** The app's sync, session and client tests run
   against a local `wrangler dev` (`flutter test --tags integration`), so the
   rules they exercise are the server's own.
@@ -270,6 +271,14 @@ for only what it could have changed:
   then the named group and the groups the push wrote to. Nothing else on the
   device changed, and another device's change arrives with its own push.
 
+The account-scoped coordinator coalesces requests that arrive during a run
+into a follow-up. A native SQLite lease coordinates the foreground and
+background isolates. The browser uses Web Locks to coordinate tabs. A local
+edit and its outbox item commit together, as do each incoming page and its
+cursor. Failed refreshes leave the ledger usable. Transient uploads keep
+their retry deadlines in the outbox, and permanent refusals can be retried or
+discarded from the app.
+
 Groups are read with one `POST /sync`, which takes up to fifty groups and their
 cursors, reads them from their objects in parallel, and answers a page each. It
 also names every group the account is in, so a group joined on another device
@@ -333,6 +342,21 @@ The Worker resolves a session to a profile id and passes it to the group's
 object, which checks its own membership list. The Worker's check is a first
 pass; the object's is authoritative.
 
+Email sign-in uses an eight-digit code, which a person can enter on the
+device that started sign-in.
+
+### Group invites
+
+Both link types open `/app/join/<token>`. A named invite claims one existing
+place, can be redeemed once and expires after 14 days. A group link admits
+anyone who holds it for up to seven days. The group can revoke or replace its
+one active shared link. A person joining from a group link can claim an
+unclaimed place or join as a new member. Claiming a place preserves its
+existing expenses and balances.
+
+The public preview requires only the token. Listing unclaimed members also
+requires a session.
+
 ---
 
 ## Push
@@ -354,6 +378,12 @@ call site.
 An access token is minted from the service-account key with `jose` and cached in
 KV under one key, so a hundred groups notified at once do not mint a hundred
 tokens.
+
+Android uses a background isolate to sync and compose notifications from
+the local ledger. The foreground owns session refresh. On the web, the
+service worker asks an open app tab to sync and compose the notification.
+Without a response from a tab, it shows a generic update using the push
+payload. Opening a notification routes to the relevant group or entry.
 
 ### Reminders
 
@@ -384,6 +414,13 @@ the server never accepts one past its own clock.
 complete: any stretch of more than a week with no publication (all of it, on a
 new deployment) is fetched whole in one range request. A rate more than a week
 older than a day does not answer for that day, on the server or the device.
+
+Rates use USD as a common base. Published currency-day rows are immutable.
+A backdated expense can request missing rates through `/fx/backfill`. The
+device then reads far enough back to receive older rows. The free secondary
+provider supplies current rates only, so some old entries have no converted
+estimate. Balances in the original currencies remain exact.
+
 `0 5 * * *` collects abandoned guest
 accounts (over ninety days old, in no group, no session used in ninety days) and
 finishes any account deletion a request started and did not complete.

@@ -1,0 +1,129 @@
+{
+  "$schema": "https://fundingjson.org/schema/v1.1.0.json",
+  "version": "2026-11-24",
+  "entity": {
+    "type": "individual",
+    "role": "maintainer",
+    "name": "Seenu K",
+    "email": "hello@eigeninteractive.com",
+    "description": "India-based maintainer of OpenSplit, working under EigenInteractive, a brand of the sole proprietorship Seenu K Labs. Funding is earmarked for OpenSplit, including maintainer time.",
+    "webpageUrl": {
+      "url": "https://opensplit.eigeninteractive.com/support"
+    }
+  },
+  "projects": [
+    {
+      "guid": "opensplit",
+      "name": "OpenSplit",
+      "description": "A local-first expense splitter available on Google Play and the web, with offline expense recording, balances kept separately by currency and CSV export. Functionality remains free, with no ads, analytics SDKs or data sale. The backend depends on Cloudflare and currently has no self-hosting path.",
+      "webpageUrl": {
+        "url": "https://opensplit.eigeninteractive.com/"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/eigeninteractive/opensplit",
+        "wellKnown": "https://github.com/eigeninteractive/opensplit/blob/main/.well-known/funding-manifest-urls"
+      },
+      "licenses": ["spdx:AGPL-3.0"],
+      "tags": ["personal-finance", "expense-tracking", "android", "web", "offline-first"]
+    }
+  ],
+  "funding": {
+    "channels": [
+      {
+        "guid": "razorpay",
+        "type": "payment-provider",
+        "description": "One-time INR contributions to OpenSplit through Seenu K Labs. UPI is available.",
+        "address": "https://rzp.io/rzp/opensplit"
+      },
+      {
+        "guid": "github-sponsors",
+        "type": "payment-provider",
+        "description": "EigenInteractive’s GitHub Sponsors profile features OpenSplit. Sponsorship through this profile supports OpenSplit.",
+        "address": "https://github.com/sponsors/eigeninteractive"
+      },
+      {
+        "guid": "razorpay-subscriptions",
+        "type": "payment-provider",
+        "description": "Separate Razorpay subscription checkout for INR. Public enrollment and cancellation have yet to be configured and verified."
+      },
+      {
+        "guid": "buy-me-a-coffee",
+        "type": "payment-provider",
+        "address": "https://buymeacoffee.com/seenuklabs",
+        "description": "Seenu K Labs’ Buy Me a Coffee page. Contributions referred from OpenSplit are earmarked for the project. The checkout may display localized prices."
+      }
+    ],
+    "plans": [
+      {
+        "guid": "community-one-time-inr",
+        "status": "active",
+        "name": "One-time community support in INR",
+        "description": "Choose a one-time INR amount through the hosted OpenSplit Payment Page. Suggested amounts are INR 100, 500 or 1500.",
+        "amount": 0,
+        "currency": "INR",
+        "frequency": "one-time",
+        "channels": ["razorpay"]
+      },
+      {
+        "guid": "community-monthly-inr",
+        "status": "inactive",
+        "name": "Monthly community support in INR",
+        "description": "Monthly INR support is planned. Activation requires a verified enrollment and cancellation flow.",
+        "amount": 300,
+        "currency": "INR",
+        "frequency": "monthly",
+        "channels": ["razorpay-subscriptions"]
+      },
+      {
+        "guid": "community-one-time-usd",
+        "status": "active",
+        "name": "One-time community support in USD",
+        "description": "Choose a custom one-time USD amount through GitHub Sponsors, subject to GitHub’s available options. Contributions support OpenSplit maintenance, infrastructure and maintainer time.",
+        "amount": 0,
+        "currency": "USD",
+        "frequency": "one-time",
+        "channels": ["github-sponsors"]
+      },
+      {
+        "guid": "community-monthly-usd",
+        "status": "active",
+        "name": "Monthly community support in USD",
+        "description": "Choose a custom monthly USD amount through GitHub Sponsors, subject to GitHub’s available options. Contributions support OpenSplit maintenance, infrastructure and maintainer time.",
+        "amount": 0,
+        "currency": "USD",
+        "frequency": "monthly",
+        "channels": ["github-sponsors"]
+      },
+      {
+        "guid": "coffee-one-time-usd",
+        "status": "active",
+        "name": "One-time support on Buy Me a Coffee",
+        "description": "The base support amount is USD 5. Supporters can give more and the checkout may display localized prices.",
+        "amount": 5,
+        "currency": "USD",
+        "frequency": "one-time",
+        "channels": ["buy-me-a-coffee"]
+      },
+      {
+        "guid": "coffee-monthly-usd",
+        "status": "active",
+        "name": "Monthly support on Buy Me a Coffee",
+        "description": "The Supporter membership is USD 5 per month at the base price. The checkout may display localized prices.",
+        "amount": 5,
+        "currency": "USD",
+        "frequency": "monthly",
+        "channels": ["buy-me-a-coffee"]
+      },
+      {
+        "guid": "coffee-yearly-usd",
+        "status": "active",
+        "name": "Yearly support on Buy Me a Coffee",
+        "description": "The Supporter membership is USD 50 per year at the base price. The checkout may display localized prices.",
+        "amount": 50,
+        "currency": "USD",
+        "frequency": "yearly",
+        "channels": ["buy-me-a-coffee"]
+      }
+    ]
+  }
+}
