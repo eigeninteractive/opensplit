@@ -176,6 +176,7 @@ void main() {
       'site/privacy.html',
       'site/terms.html',
       'site/delete-account.html',
+      'site/support.html',
     ]) {
       final html = File(page).readAsStringSync();
       expect(
@@ -251,7 +252,7 @@ void main() {
       r'<loc>https://opensplit\.eigeninteractive\.com/([^<]*)</loc>',
     ).allMatches(sitemap).map((match) => match.group(1)!).toSet();
 
-    expect(listed, {'', 'privacy', 'terms', 'delete-account'});
+    expect(listed, {'', 'privacy', 'terms', 'delete-account', 'support'});
     for (final page in listed.where((page) => page.isNotEmpty)) {
       // A file and not a directory, because `<name>/index.html` is answered
       // with a redirect to `<name>/` — and a sitemap that advertises a URL

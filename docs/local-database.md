@@ -22,6 +22,20 @@ Edits that never reached the server stay in the unused old database and are not
 imported. Sync pending changes before resetting server storage. Reopening the
 new database preserves its data and queued edits.
 
+## Browser storage
+
+Drift uses OPFS in the browser. Refresh the committed `web/sqlite3.wasm` and
+`web/drift_worker.js` from the resolved Drift release after a Drift upgrade:
+
+```sh
+dart run tool/update_drift_web_assets.dart
+```
+
+CI checks that the files match the locked version. See the
+[cross-origin isolation requirements](architecture.md#serving) for hosting the
+app. When OPFS is unavailable, the app shows a storage error. An IndexedDB
+fallback would create a separate ledger.
+
 ## Schema changes
 
 `AppDatabase.schemaVersion` describes the structure inside the database. It does
