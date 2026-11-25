@@ -72,7 +72,7 @@ void main() {
     expect(find.text('Flat 4B'), findsWidgets);
 
     // ---- Add a flatmate who does not have the app -----------------------
-    await tester.tap(find.byIcon(Icons.people_outline));
+    await tester.tap(find.byTooltip('People'));
     await _settle(tester);
 
     await tester.tap(find.byType(FloatingActionButton));

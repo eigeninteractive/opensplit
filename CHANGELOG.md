@@ -4,6 +4,14 @@ What changed in each version of the app, newest first. The format is
 [Semantic Versioning](https://semver.org/), and the file is kept by
 [cider](https://pub.dev/packages/cider): see "Versions" in docs/runbook.md.
 
+## [4.2.6] - 2026-11-25
+### Changed
+- Edit date and time together, and drag expense details up to see the whole record.
+- Open Account from the Home avatar. Wide screens have a labeled sidebar, and Google sign-in comes first.
+
+### Fixed
+- Changing the split method on Android no longer sends the keyboard back to the total.
+
 ## [4.2.5] - 2026-11-21
 ### Changed
 - Restored the group name, picture and cover animation. Expense and payment details expand from their rows and close faster.
@@ -168,6 +176,7 @@ What changed in each version of the app, newest first. The format is
 ### Added
 - The first build, to Play internal testing.
 
+[4.2.6]: https://github.com/eigeninteractive/opensplit/compare/v4.2.5...v4.2.6
 [4.2.5]: https://github.com/eigeninteractive/opensplit/compare/v4.2.4...v4.2.5
 [4.2.4]: https://github.com/eigeninteractive/opensplit/compare/v4.2.3...v4.2.4
 [4.2.3]: https://github.com/eigeninteractive/opensplit/compare/v4.2.2...v4.2.3

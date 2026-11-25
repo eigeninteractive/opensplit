@@ -36,6 +36,7 @@ import '../widgets/group_access.dart';
 import '../widgets/segmented_list.dart';
 import '../widgets/sync_refresh_button.dart';
 import '../widgets/sync_status_notice.dart';
+import 'entry_detail_screen.dart';
 
 /// Width at which the two halves of a group stop competing for the screen.
 const double _wideBreakpoint = 840;
@@ -279,12 +280,12 @@ class _GroupAppBar extends ConsumerWidget {
           IconButton(
             tooltip: 'Settle up',
             onPressed: () => open('settle'),
-            icon: const Icon(Icons.handshake_outlined),
+            icon: const Icon(Icons.handshake),
           ),
         IconButton(
           tooltip: 'People',
           onPressed: () => open('members'),
-          icon: const Icon(Icons.people_outline),
+          icon: const Icon(Icons.people),
         ),
         PopupMenuButton<String>(
           tooltip: fresh == 0 ? 'More' : 'More, with new activity',
@@ -598,14 +599,23 @@ class _EntryTile extends StatelessWidget {
     final subtitleStyle = theme.textTheme.bodyMedium!.copyWith(
       color: scheme.onSurfaceVariant,
     );
-    void open() => openDetail(
-      context,
-      '/g/${ledger.group.id}/e/${entry.id}',
-      color: isSettlement
-          ? scheme.tertiaryContainer
-          : scheme.surfaceContainerHigh,
-      corners: corners,
-    );
+    void open() {
+      final groupId = ledger.group.id;
+      if (!isSettlement && MediaQuery.sizeOf(context).width < _wideBreakpoint) {
+        unawaited(
+          showExpenseDetailsSheet(context, groupId: groupId, entryId: entry.id),
+        );
+        return;
+      }
+      openDetail(
+        context,
+        '/g/$groupId/e/${entry.id}',
+        color: isSettlement
+            ? scheme.tertiaryContainer
+            : scheme.surfaceContainerHigh,
+        corners: corners,
+      );
+    }
 
     if (isSettlement) {
       return _PaymentTile(

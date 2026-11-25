@@ -36,6 +36,9 @@ Future<void> main() async {
     yield LicenseEntryWithLineBreaks(const [
       'Google Sans Flex',
     ], await rootBundle.loadString('assets/google_fonts/LICENSE'));
+    yield LicenseEntryWithLineBreaks(const [
+      'Google Sans',
+    ], await rootBundle.loadString('assets/google_sign_in/LICENSE'));
   });
 
   // Real paths, not hash fragments.

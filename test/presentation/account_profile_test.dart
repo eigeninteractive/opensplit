@@ -201,36 +201,34 @@ void main() {
     await unmount(tester);
   });
 
-  testWidgets('opened from Settings, it is filled in on its first frame', (
-    tester,
-  ) async {
-    await store(tester, name: 'Ana Lima', upi: 'ana@upi');
-    SharedPreferences.setMockInitialValues({});
-    final prefs = await SharedPreferences.getInstance();
-    await tester.pumpWidget(
-      signedInApp(
-        db: db,
-        prefs: prefs,
-        overrides: [authServiceProvider.overrideWithValue(_Auth(guest: false))],
-        child: const OpenSplitApp(),
-      ),
-    );
-    await settle(tester);
-    // Straight to Settings: Account has never been on screen.
-    ProviderScope.containerOf(
-      tester.element(find.byType(OpenSplitApp)),
-    ).read(routerProvider).go('/settings');
-    await settle(tester);
+  testWidgets(
+    'opened from the Home avatar, it is filled in on its first frame',
+    (tester) async {
+      await store(tester, name: 'Ana Lima', upi: 'ana@upi');
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      await tester.pumpWidget(
+        signedInApp(
+          db: db,
+          prefs: prefs,
+          overrides: [
+            authServiceProvider.overrideWithValue(_Auth(guest: false)),
+          ],
+          child: const OpenSplitApp(),
+        ),
+      );
+      await settle(tester);
+      expect(find.text('AL'), findsOneWidget);
+      await tester.tap(find.byTooltip('Account'));
+      await tester.pump();
 
-    await tester.tap(find.text('Account saved'));
-    await tester.pump();
-
-    // Not "Add the name your groups see" corrected a moment later: the
-    // profile was read at launch, before anyone asked for the page.
-    expect(find.text('ana@upi'), findsOneWidget);
-    expect(find.text('Add the name your groups see'), findsNothing);
-    await unmount(tester);
-  });
+      // Not "Add the name your groups see" corrected a moment later: the
+      // profile was read at launch, before anyone asked for the page.
+      expect(find.text('ana@upi'), findsOneWidget);
+      expect(find.text('Add the name your groups see'), findsNothing);
+      await unmount(tester);
+    },
+  );
 
   testWidgets('a guest is offered one way to save the account', (tester) async {
     await store(tester, name: 'Ana');

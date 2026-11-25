@@ -9,6 +9,7 @@ import '../../application/session_providers.dart';
 import '../../data/auth/google_sign_in_gateway.dart';
 import '../../domain/auth_service.dart';
 import '../navigation.dart';
+import 'google_sign_in_button.dart';
 
 /// The three ways to become somebody, offered together.
 class IdentityChoices extends ConsumerStatefulWidget {
@@ -112,11 +113,7 @@ class _IdentityChoicesState extends ConsumerState<IdentityChoices> {
         if (GoogleSignInGateway.isOffered && !_codeSent) ...[
           // One button on both platforms now. Android calls Google in-process;
           // the web hands the whole page over and comes back signed in.
-          OutlinedButton.icon(
-            onPressed: _busy ? null : _google,
-            icon: const Icon(Icons.account_circle_outlined),
-            label: const Text('Continue with Google'),
-          ),
+          GoogleSignInButton(onPressed: _busy ? null : _google),
           const SizedBox(height: 20),
         ],
 
@@ -158,7 +155,7 @@ class _IdentityChoicesState extends ConsumerState<IdentityChoices> {
         ],
 
         const SizedBox(height: 12),
-        FilledButton(
+        FilledButton.tonal(
           onPressed: _busy ? null : (_codeSent ? _verify : _sendCode),
           child: Text(_codeSent ? 'Verify code' : 'Continue with email'),
         ),

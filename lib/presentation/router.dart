@@ -427,6 +427,9 @@ class AdaptiveNavigation extends StatelessWidget {
   /// Below this the destinations live in a drawer instead.
   static const double _railBreakpoint = 840;
 
+  /// Wide enough to give the navigation labels and content their own space.
+  static const double _sidebarBreakpoint = 1200;
+
   /// Material 3's own default destination width, and the rail's width outright:
   /// a destination is padded 8dp either side *within* this, and only pushes
   /// past it if a label needs more. None of the three labels is anywhere near,
@@ -448,7 +451,10 @@ class AdaptiveNavigation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final wide = MediaQuery.sizeOf(context).width >= _railBreakpoint;
+    final width = MediaQuery.sizeOf(context).width;
+    final wide = width >= _railBreakpoint;
+    final extended = width >= _sidebarBreakpoint;
+    final scheme = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context);
     // Keep the navigator's ancestry stable across the drawer/rail breakpoint.
     // Reparenting it while a route restores keyboard focus can leave traversal
@@ -459,8 +465,13 @@ class AdaptiveNavigation extends StatelessWidget {
           if (wide)
             NavigationRail(
               selectedIndex: shell.currentIndex,
-              labelType: NavigationRailLabelType.all,
+              extended: extended,
+              labelType: extended
+                  ? NavigationRailLabelType.none
+                  : NavigationRailLabelType.all,
               minWidth: _railWidth,
+              minExtendedWidth: 192,
+              backgroundColor: extended ? scheme.surfaceContainerLow : null,
               onDestinationSelected: _select,
               destinations: [
                 for (final destination in _destinations)

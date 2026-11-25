@@ -120,6 +120,29 @@ void main() {
   // navigation bar, in which case it is a destination and there is nothing to
   // go back to, or it does not, in which case it was pushed and pops.
   group('destinations are not pushes', () {
+    testWidgets('the rail labels extend on wide desktops', (tester) async {
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      tester.view.physicalSize = const Size(1000, 800);
+      await _pumpApp(tester, db);
+
+      final rail = find.byType(NavigationRail);
+      expect(tester.widget<NavigationRail>(rail).extended, isFalse);
+      tester.view.physicalSize = const Size(1280, 800);
+      await tester.pumpAndSettle();
+      expect(tester.widget<NavigationRail>(rail).extended, isTrue);
+
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+      expect(find.byType(SettingsScreen), findsOneWidget);
+      expect(find.text('Account saved'), findsNothing);
+      expect(
+        find.descendant(of: rail, matching: find.text('Account')),
+        findsOneWidget,
+      );
+      await _unmount(tester);
+    });
+
     testWidgets(
       'the phone layout has one menu, not a settings button beside it',
       (tester) async {
@@ -240,7 +263,9 @@ void main() {
       await tester.tap(find.text('Add expense'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('Change the day'));
+      await tester.tap(find.text('When'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ListTile, 'Date'));
       await tester.pumpAndSettle();
       expect(find.byType(DatePickerDialog), findsOneWidget);
 

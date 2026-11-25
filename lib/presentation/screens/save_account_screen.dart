@@ -53,14 +53,19 @@ class _Unsaved extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'Guest access depends on this device and yearly use. Add an email '
-          'to recover your account and sign in on other devices.',
+          'Guest access depends on this device and yearly use. Add Google or '
+          'email to recover your account and sign in on other devices.',
           style: theme.textTheme.bodyMedium?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
         const SizedBox(height: 24),
         const SaveAccountForm(),
+        const SizedBox(height: 8),
+        TextButton(
+          onPressed: () => goBack(context, '/account'),
+          child: const Text('Not now'),
+        ),
       ],
     );
   }

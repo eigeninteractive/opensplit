@@ -237,7 +237,7 @@ void main() {
     expect(find.text('Discard changes?'), findsOneWidget);
     await tapAndSettle(tester, find.text('Discard'));
     expect(find.widgetWithText(FilledButton, 'Edit'), findsOneWidget);
-    await tapAndSettle(tester, find.byType(BackButton));
+    await tapAndSettle(tester, find.byType(CloseButton));
     expect(find.text('Spent'), findsNWidgets(3));
     expect(tester.takeException(), isNull);
     await unmount(tester);

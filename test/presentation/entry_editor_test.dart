@@ -1,11 +1,16 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/presentation/app.dart';
+import 'package:opensplit/presentation/screens/entry_editor_screen.dart';
+import 'package:opensplit/presentation/widgets/amount_card.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:opensplit_api/opensplit_api.dart' show SplitKind;
 
@@ -181,6 +186,86 @@ void main() {
   });
   tearDown(() => db.close());
 
+  testWidgets('Android split changes leave the total and keyboard alone', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    await _seed(db);
+    await _pumpApp(tester, db, size: const Size(360, 640));
+    await _go(tester, '/g/g1/add');
+    await tester.runAsync(() => GoogleFonts.pendingFonts());
+    await _beats(tester);
+    expect(tester.testTextInput.isVisible, isFalse);
+
+    final total = find.descendant(
+      of: find.byType(AmountCard),
+      matching: _field('Amount'),
+    );
+    await tester.enterText(total, '300');
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    await _beats(tester);
+    expect(tester.testTextInput.isVisible, isTrue);
+
+    final split = find.widgetWithText(ExpansionTile, 'Split');
+    await tester.ensureVisible(split);
+    await _beats(tester);
+    await tester.tap(find.descendant(of: split, matching: find.text('Split')));
+    await _beats(tester);
+    final menu = find.byType(DropdownMenu<SplitKind>);
+    await Scrollable.ensureVisible(tester.element(menu), alignment: 0.35);
+    await _beats(tester);
+
+    await _chooseMethod(tester, 'Amounts');
+    final totalInput = find.descendant(
+      of: total,
+      matching: find.byType(EditableText),
+    );
+    expect(tester.widget<EditableText>(totalInput).focusNode.hasFocus, isFalse);
+    expect(tester.testTextInput.isVisible, isFalse);
+    expect(tester.widget<TextField>(total).controller!.text, '300');
+    expect(menu.hitTestable(), findsOneWidget);
+
+    final share = _allocationField('exact', 'm-ravi');
+    await tester.enterText(share, '130');
+    expect(tester.testTextInput.isVisible, isTrue);
+    await _chooseMethod(tester, 'Shares');
+    expect(tester.testTextInput.isVisible, isFalse);
+    expect(menu.hitTestable(), findsOneWidget);
+    await _unmount(tester);
+  });
+
+  testWidgets('expense sheet expands and can open the editor at full height', (
+    tester,
+  ) async {
+    await _seed(db);
+    await _pumpApp(tester, db, size: const Size(360, 640));
+    await _go(tester, '/g/g1/add');
+    await _type(tester, what: 'Dinner', amount: '300');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await _beats(tester);
+    await tester.tap(find.text('Dinner'));
+    await _beats(tester);
+
+    final sheet = find.byType(DraggableScrollableSheet);
+    final edit = find.widgetWithText(FilledButton, 'Edit');
+    expect(sheet, findsOneWidget);
+    expect(edit.hitTestable(), findsOneWidget);
+    final collapsedY = tester.getTopLeft(edit).dy;
+
+    await tester.dragFrom(const Offset(150, 450), const Offset(0, -400));
+    await _beats(tester);
+    expect(tester.getTopLeft(edit).dy, lessThan(collapsedY - 150));
+    expect(find.text('Paid by').hitTestable(), findsOneWidget);
+    expect(find.text('Split equally').hitTestable(), findsOneWidget);
+    await tester.tap(edit);
+    await _beats(tester);
+    expect(sheet, findsNothing);
+    expect(find.byType(EntryEditorScreen), findsOneWidget);
+    expect(find.text('Edit expense'), findsOneWidget);
+    await _unmount(tester);
+  });
+
   testWidgets('changed expense survives Close and asks before system back', (
     tester,
   ) async {
@@ -318,22 +403,12 @@ void main() {
         await _beats(tester);
         expect(tester.takeException(), isNull);
       }
-      await tester.scrollUntilVisible(
-        find.text('Time of expense'),
-        200,
-        scrollable: find
-            .descendant(
-              of: find.byType(ListView).first,
-              matching: find.byType(Scrollable),
-            )
-            .first,
-      );
       await Scrollable.ensureVisible(
-        tester.element(find.widgetWithText(ExpansionTile, 'Time of expense')),
+        tester.element(find.widgetWithText(ExpansionTile, 'When')),
         alignment: 0.5,
       );
       await _beats(tester);
-      await tester.tap(find.text('Time of expense'));
+      await tester.tap(find.text('When'));
       await _beats(tester);
       await tester.ensureVisible(find.byTooltip('Remove the time'));
       await tester.tap(find.byTooltip('Remove the time'));
@@ -421,12 +496,12 @@ void main() {
 
     await _openEditor(tester);
     await _type(tester, what: 'Snacks', amount: '60');
-    await tester.ensureVisible(find.text('Time of expense'));
-    await tester.tap(find.text('Time of expense'));
+    await tester.ensureVisible(find.text('When'));
+    await tester.tap(find.text('When'));
     await _beats(tester);
     await tester.tap(find.byTooltip('Remove the time'));
     await _beats(tester);
-    expect(find.text('Add a time'), findsOneWidget);
+    expect(find.text('Date only'), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await _beats(tester);
 

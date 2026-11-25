@@ -270,6 +270,30 @@ void main() {
 
     Currency inr() => container.read(currenciesProvider).requireValue['INR']!;
 
+    test(
+      'moving a timed expense keeps its clock time in the same zone',
+      () async {
+        final expense = await open();
+        container.listen(deviceZoneProvider, (_, _) {});
+        await container.read(deviceZoneProvider.future);
+        expense.form.chooseTime(hour: 19, minute: 30, zone: testZone);
+
+        expect(expense.form.chooseDay(DateTime.utc(2026, 8, 20)), isFalse);
+        expect(expense.state().day, DateTime.utc(2026, 8, 20));
+        expect(
+          expense.state().occurredAt,
+          DateTime(2026, 8, 20, 19, 30).toUtc(),
+        );
+        expect(expense.state().timeZone, testZone);
+
+        expense.form.chooseTime(hour: 19, minute: 30, zone: 'Asia/Kolkata');
+        expect(expense.form.chooseDay(DateTime.utc(2026, 8, 21)), isTrue);
+        expect(expense.state().day, DateTime.utc(2026, 8, 21));
+        expect(expense.state().occurredAt, isNull);
+        expect(expense.state().timeZone, isNull);
+      },
+    );
+
     test('starts split between everyone, paid by this account', () async {
       final expense = await open();
       expense.form.setAmount('300');

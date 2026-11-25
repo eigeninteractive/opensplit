@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../application/push_providers.dart';
-import '../../application/session_providers.dart';
 import '../../config.dart';
 import '../dynamic_colors.dart';
 import '../theme_mode.dart';
@@ -27,8 +26,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       slivers: [
         SliverList.list(
           children: [
-            const _AccountRow(),
-            const SizedBox(height: 24),
             const _AppearanceSetting(),
             const SizedBox(height: 24),
             const _WallpaperSetting(),
@@ -89,56 +86,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ],
         ),
       ],
-    );
-  }
-}
-
-/// What the account is, at the top of the screen where it is read first.
-class _AccountRow extends ConsumerWidget {
-  const _AccountRow();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final account = ref.watch(accountProvider).value;
-
-    // No backend configured, so there is no account to have.
-    if (account == null) return const SizedBox.shrink();
-
-    final scheme = Theme.of(context).colorScheme;
-    final anonymous = account.isAnonymous;
-
-    return Card.filled(
-      // Coloured only while something needs doing. A permanent warning tint on
-      // a settled account would be crying wolf on every visit.
-      color: anonymous
-          ? scheme.secondaryContainer
-          : scheme.surfaceContainerHigh,
-      child: ListTile(
-        onTap: () => context.go('/account'),
-        leading: Icon(
-          anonymous ? Icons.person_outline : Icons.verified_user_outlined,
-          color: anonymous ? scheme.onSecondaryContainer : null,
-        ),
-        title: Text(
-          anonymous ? 'Guest — access is device-bound' : 'Account saved',
-          style: TextStyle(
-            color: anonymous ? scheme.onSecondaryContainer : null,
-          ),
-        ),
-        subtitle: Text(
-          anonymous
-              ? 'Groups sync, but add an email or Google account so you can '
-                    'recover access after losing this device.'
-              : account.email ?? 'You can sign in on another device.',
-          style: TextStyle(
-            color: anonymous ? scheme.onSecondaryContainer : null,
-          ),
-        ),
-        trailing: Icon(
-          Icons.chevron_right,
-          color: anonymous ? scheme.onSecondaryContainer : null,
-        ),
-      ),
     );
   }
 }
