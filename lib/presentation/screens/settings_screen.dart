@@ -33,20 +33,15 @@ class SettingsScreen extends StatelessWidget {
               const _NotificationSetting(),
             ],
             const SizedBox(height: 32),
-            SegmentedList(
+            const SegmentedList(
               children: [
                 ListTile(
-                  leading: const Icon(Icons.lock_outline),
-                  title: const Text('Works offline'),
-                  subtitle: Text(
-                    hasBackend
-                        ? 'Expenses are saved on this device and sync to '
-                              'the cloud when you’re online.'
-                        : 'Expenses are saved on this device.',
-                  ),
+                  leading: Icon(Icons.lock_outline),
+                  title: Text('Offline first'),
+                  subtitle: Text('Expenses are saved on this device first'),
                   titleAlignment: ListTileTitleAlignment.center,
                 ),
-                const ListTile(
+                ListTile(
                   leading: Icon(Icons.favorite_outline),
                   title: Text('Free forever'),
                   subtitle: Text('Open source, with no ads or analytics SDKs.'),
