@@ -5,21 +5,16 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../application/push_providers.dart';
-import '../../application/session_providers.dart';
 import '../../config.dart';
 import '../dynamic_colors.dart';
 import '../theme_mode.dart';
 import '../widgets/page_body.dart';
 import '../widgets/segmented_list.dart';
 
-class SettingsScreen extends ConsumerStatefulWidget {
+/// Appearance, notifications, and information about OpenSplit.
+class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
-  @override
-  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
-}
-
-class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return DestinationScaffold(
@@ -27,8 +22,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       slivers: [
         SliverList.list(
           children: [
-            const _AccountRow(),
-            const SizedBox(height: 24),
             const _AppearanceSetting(),
             const SizedBox(height: 24),
             const _WallpaperSetting(),
@@ -44,21 +37,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               children: [
                 ListTile(
                   leading: Icon(Icons.lock_outline),
-                  title: Text('Your data is on this device'),
-                  subtitle: Text(
-                    'Expenses are stored locally in SQLite. The app keeps working '
-                    'with what it has even if it can never reach a server again.',
-                  ),
-                  isThreeLine: true,
+                  title: Text('Offline first'),
+                  subtitle: Text('Expenses are saved on this device first'),
+                  titleAlignment: ListTileTitleAlignment.center,
                 ),
                 ListTile(
                   leading: Icon(Icons.favorite_outline),
                   title: Text('Free forever'),
-                  subtitle: Text(
-                    'Every feature is free for everyone. The app is open source, '
-                    'has no ads, and has no analytics SDK.',
-                  ),
-                  isThreeLine: true,
+                  subtitle: Text('Open source, with no ads or analytics SDKs.'),
+                  titleAlignment: ListTileTitleAlignment.center,
                 ),
               ],
             ),
@@ -80,7 +67,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ListTile(
                   leading: const Icon(Icons.info_outline),
                   title: const Text('About OpenSplit'),
-                  subtitle: const Text('Version, source code and licence.'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => context.push('/about'),
                 ),
@@ -89,56 +75,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ],
         ),
       ],
-    );
-  }
-}
-
-/// What the account is, at the top of the screen where it is read first.
-class _AccountRow extends ConsumerWidget {
-  const _AccountRow();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final account = ref.watch(accountProvider).value;
-
-    // No backend configured, so there is no account to have.
-    if (account == null) return const SizedBox.shrink();
-
-    final scheme = Theme.of(context).colorScheme;
-    final anonymous = account.isAnonymous;
-
-    return Card.filled(
-      // Coloured only while something needs doing. A permanent warning tint on
-      // a settled account would be crying wolf on every visit.
-      color: anonymous
-          ? scheme.secondaryContainer
-          : scheme.surfaceContainerHigh,
-      child: ListTile(
-        onTap: () => context.go('/account'),
-        leading: Icon(
-          anonymous ? Icons.person_outline : Icons.verified_user_outlined,
-          color: anonymous ? scheme.onSecondaryContainer : null,
-        ),
-        title: Text(
-          anonymous ? 'Guest — access is device-bound' : 'Account saved',
-          style: TextStyle(
-            color: anonymous ? scheme.onSecondaryContainer : null,
-          ),
-        ),
-        subtitle: Text(
-          anonymous
-              ? 'Groups sync, but add an email or Google account so you can '
-                    'recover access after losing this device.'
-              : account.email ?? 'You can sign in on another device.',
-          style: TextStyle(
-            color: anonymous ? scheme.onSecondaryContainer : null,
-          ),
-        ),
-        trailing: Icon(
-          Icons.chevron_right,
-          color: anonymous ? scheme.onSecondaryContainer : null,
-        ),
-      ),
     );
   }
 }
@@ -180,14 +116,6 @@ class _AppearanceSetting extends ConsumerWidget {
             // Single selection, so the set always holds exactly one.
             onSelectionChanged: (selection) =>
                 ref.read(themeModeProvider.notifier).set(selection.first),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'System follows your device, including its automatic night '
-          'schedule.',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         ),
       ],
@@ -252,10 +180,8 @@ class _WallpaperSetting extends ConsumerWidget {
             title: const Text('Using OpenSplit colours'),
             subtitle: Text(
               kIsWeb
-                  ? 'Browsers use OpenSplit colours. The Android app can '
-                        'use your device palette.'
-                  : 'Your device has not provided a colour palette. On '
-                        'Samsung, check Settings → Wallpaper and style → '
+                  ? 'Wallpaper colours are available in the Android app.'
+                  : 'On Samsung, check Settings → Wallpaper and style → '
                         'Colour palette.',
             ),
           ),
@@ -283,7 +209,6 @@ class _WallpaperSetting extends ConsumerWidget {
               ref.read(wallpaperColorsProvider.notifier).set(enabled: wanted),
           secondary: const Icon(Icons.palette_outlined),
           title: const Text('Match my wallpaper'),
-          subtitle: const Text('Use your device’s colours.'),
         ),
         const SizedBox(height: 8),
         // The palette itself, so that "it is on and nothing changed" is
@@ -307,9 +232,7 @@ class _WallpaperSetting extends ConsumerWidget {
               ),
             Expanded(
               child: Text(
-                enabled
-                    ? 'Your device colours are in use.'
-                    : 'Your device colours. OpenSplit colours are in use.',
+                'Wallpaper colours',
                 style: text.bodySmall?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
@@ -374,8 +297,7 @@ class _NotificationSettingState extends ConsumerState<_NotificationSetting> {
           contentPadding: EdgeInsets.zero,
           value: enabled,
           onChanged: _busy ? null : _toggle,
-          title: const Text('Tell me about group activity'),
-          subtitle: const Text('New expenses and payments in your groups.'),
+          title: const Text('Notify me about new expenses and payments'),
         ),
       ],
     );

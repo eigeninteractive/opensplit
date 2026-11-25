@@ -4,6 +4,18 @@ What changed in each version of the app, newest first. The format is
 [Semantic Versioning](https://semver.org/), and the file is kept by
 [cider](https://pub.dev/packages/cider): see "Versions" in docs/runbook.md.
 
+## [4.2.6] - 2026-11-25
+### Changed
+- Edit date and time together. Expand expense and payment sheets to full height.
+- Open Account from Home. Your picture expands into its editor.
+- Branded navigation with a labeled sidebar on wide screens.
+- Continue with Google or email. Find the same recovery prompt on Home and Account.
+- Shorter confirmations and clearer offline and cloud sync wording.
+
+### Fixed
+- Changing the split method on Android keeps the editor in place.
+- Date and time icons line up. The details header stays inside its sheet.
+
 ## [4.2.5] - 2026-11-21
 ### Changed
 - Restored the group name, picture and cover animation. Expense and payment details expand from their rows and close faster.
@@ -168,6 +180,7 @@ What changed in each version of the app, newest first. The format is
 ### Added
 - The first build, to Play internal testing.
 
+[4.2.6]: https://github.com/eigeninteractive/opensplit/compare/v4.2.5...v4.2.6
 [4.2.5]: https://github.com/eigeninteractive/opensplit/compare/v4.2.4...v4.2.5
 [4.2.4]: https://github.com/eigeninteractive/opensplit/compare/v4.2.3...v4.2.4
 [4.2.3]: https://github.com/eigeninteractive/opensplit/compare/v4.2.2...v4.2.3

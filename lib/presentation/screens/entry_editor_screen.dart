@@ -63,10 +63,22 @@ class EntryEditorScreen extends ConsumerWidget {
     if (ledger == null || form == null) {
       return Scaffold(appBar: AppBar(leading: const BackButton()));
     }
-    return _Editor(
-      ledger: ledger,
-      form: form,
-      controller: ref.read(provider.notifier),
+    return Actions(
+      actions: {
+        // Dismiss the active input on touch as well as on mouse clicks.
+        EditableTextTapOutsideIntent:
+            CallbackAction<EditableTextTapOutsideIntent>(
+              onInvoke: (intent) {
+                intent.focusNode.unfocus();
+                return null;
+              },
+            ),
+      },
+      child: _Editor(
+        ledger: ledger,
+        form: form,
+        controller: ref.read(provider.notifier),
+      ),
     );
   }
 }
@@ -94,10 +106,9 @@ class _Editor extends ConsumerWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete this entry?'),
+        title: const Text('Delete this expense?'),
         content: const Text(
-          'Balances update straight away. The entry is kept in history so the '
-          'change can always be explained.',
+          'Balances will update. The expense stays in the history.',
         ),
         actions: [
           TextButton(
@@ -114,22 +125,29 @@ class _Editor extends ConsumerWidget {
         ],
       ),
     );
-    if (!(confirmed ?? false)) return;
+    if (confirmed != true || !context.mounted) return;
     if (await controller.delete() && context.mounted) {
-      goBack(context, _groupPath);
+      goBack(context, _groupPath, result: EntryEditResult.deleted);
     }
   }
 
   Future<void> _pickDay(BuildContext context, DateTime now) async {
     final day = form.day;
+    final initial = DateTime(day.year, day.month, day.day);
+    final first = DateTime(2000);
+    final last = now.add(const Duration(days: 365));
     final picked = await showDatePicker(
       context: context,
-      initialDate: DateTime(day.year, day.month, day.day),
-      firstDate: DateTime(2000),
-      lastDate: now.add(const Duration(days: 365)),
+      initialDate: initial,
+      firstDate: initial.isBefore(first) ? initial : first,
+      lastDate: initial.isAfter(last) ? initial : last,
       currentDate: now,
     );
-    if (picked != null) controller.chooseDay(picked);
+    if (picked != null && context.mounted && controller.chooseDay(picked)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Set a time for the new date if needed.')),
+      );
+    }
   }
 
   /// A time picked on this device's clock happened in this device's zone.
@@ -142,7 +160,7 @@ class _Editor extends ConsumerWidget {
       context: context,
       initialTime: TimeOfDay.fromDateTime(form.occurredAt?.toLocal() ?? now),
     );
-    if (picked == null) return;
+    if (picked == null || !context.mounted) return;
     controller.chooseTime(
       hour: picked.hour,
       minute: picked.minute,
@@ -209,7 +227,6 @@ class _Editor extends ConsumerWidget {
                             currency: currency,
                             currencyCode: form.currencyCode,
                             amount: form.amount,
-                            autofocus: !form.isEditing,
                             onAmountChanged: controller.setAmount,
                             onCurrencyChanged: controller.chooseCurrency,
                           ),
@@ -233,62 +250,29 @@ class _Editor extends ConsumerWidget {
                             onChanged: controller.setDescription,
                           ),
                           const SizedBox(height: 16),
-                          // The details most expenses leave as they are, as chips rather
-                          // than a field each.
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              _CategoryChip(
-                                value: form.categoryId,
-                                onChanged: controller.chooseCategory,
-                              ),
-                              ActionChip(
-                                avatar: const Icon(Icons.event_outlined),
-                                label: Text(_dayName(form.day, clock())),
-                                tooltip: 'Change the day',
-                                onPressed: () => _pickDay(context, clock()),
-                              ),
-                            ],
+                          Align(
+                            alignment: AlignmentDirectional.centerStart,
+                            child: _CategoryChip(
+                              value: form.categoryId,
+                              onChanged: controller.chooseCategory,
+                            ),
                           ),
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 12),
+                          _WhenField(
+                            day: _dayName(form.day, clock()),
+                            at: form.occurredAt?.toLocal(),
+                            onPickDay: () => _pickDay(context, clock()),
+                            onPickTime: device == null
+                                ? null
+                                : () => _pickTime(context, device, clock()),
+                            onClearTime: controller.clearTime,
+                          ),
+                          const SizedBox(height: 16),
                           _PaymentAndSplit(
                             ledger: ledger,
                             currency: currency,
                             form: form,
                             controller: controller,
-                          ),
-                          const SizedBox(height: 16),
-                          ExpansionTile(
-                            title: const Text('Time of expense'),
-                            subtitle: Text(
-                              form.occurredAt == null
-                                  ? 'Date only'
-                                  : DateFormat.jm().format(
-                                      form.occurredAt!.toLocal(),
-                                    ),
-                            ),
-                            leading: const Icon(Icons.schedule_outlined),
-                            tilePadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                            ),
-                            childrenPadding: const EdgeInsets.fromLTRB(
-                              16,
-                              0,
-                              16,
-                              16,
-                            ),
-                            expandedCrossAxisAlignment:
-                                CrossAxisAlignment.start,
-                            children: [
-                              _TimeChip(
-                                shown: form.occurredAt?.toLocal(),
-                                onPick: device == null
-                                    ? null
-                                    : () => _pickTime(context, device, clock()),
-                                onClear: controller.clearTime,
-                              ),
-                            ],
                           ),
                           if (form.error case final error?) ...[
                             const SizedBox(height: 16),
@@ -568,12 +552,12 @@ class _SplitSection extends StatelessWidget {
             if (constraints.maxWidth < 360 ||
                 MediaQuery.textScalerOf(context).scale(16) > 24) {
               return DropdownMenu<SplitKind>(
-                key: ValueKey(form.splitKind),
                 label: const Text('Split method'),
                 initialSelection: form.splitKind,
                 expandedInsets: EdgeInsets.zero,
-                requestFocusOnTap: false,
+                requestFocusOnTap: true,
                 enableSearch: false,
+                selectOnly: true,
                 dropdownMenuEntries: const [
                   DropdownMenuEntry(value: SplitKind.equal, label: 'Equally'),
                   DropdownMenuEntry(value: SplitKind.exact, label: 'Amounts'),
@@ -852,37 +836,60 @@ class _CategorySheet extends StatelessWidget {
   }
 }
 
-/// When on the day it happened: optional, and cleared or changed here.
-class _TimeChip extends StatelessWidget {
-  const _TimeChip({
-    required this.shown,
-    required this.onPick,
-    required this.onClear,
+/// Keeps the date and its optional time together in the form.
+class _WhenField extends StatelessWidget {
+  const _WhenField({
+    required this.day,
+    required this.at,
+    required this.onPickDay,
+    required this.onPickTime,
+    required this.onClearTime,
   });
 
-  /// On this device's clock. Null when no time is recorded.
-  final DateTime? shown;
-
-  /// Null until this device's zone is known.
-  final VoidCallback? onPick;
-  final VoidCallback onClear;
+  final String day;
+  final DateTime? at;
+  final VoidCallback onPickDay;
+  final VoidCallback? onPickTime;
+  final VoidCallback onClearTime;
 
   @override
   Widget build(BuildContext context) {
-    final shown = this.shown;
-    if (shown == null) {
-      return ActionChip(
-        avatar: const Icon(Icons.schedule_outlined),
-        label: const Text('Add a time'),
-        onPressed: onPick,
-      );
-    }
-    return InputChip(
-      avatar: const Icon(Icons.schedule_outlined),
-      label: Text(DateFormat.jm().format(shown)),
-      onPressed: onPick,
-      onDeleted: onClear,
-      deleteButtonTooltipMessage: 'Remove the time',
+    final at = this.at;
+    final time = at == null ? null : DateFormat.jm().format(at);
+    return Card.outlined(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        leading: const Icon(Icons.event_outlined),
+        title: const Text('When'),
+        subtitle: Text(time == null ? day : '$day · $time'),
+        children: [
+          ListTile(
+            title: const Text('Date'),
+            subtitle: Text(day),
+            trailing: const SizedBox.square(
+              dimension: kMinInteractiveDimension,
+              child: Icon(Icons.calendar_today_outlined),
+            ),
+            onTap: onPickDay,
+          ),
+          ListTile(
+            title: const Text('Time'),
+            subtitle: Text(time ?? 'Date only'),
+            onTap: onPickTime,
+            trailing: SizedBox.square(
+              dimension: kMinInteractiveDimension,
+              child: time == null
+                  ? const Icon(Icons.schedule_outlined)
+                  : IconButton(
+                      tooltip: 'Remove the time',
+                      onPressed: onClearTime,
+                      icon: const Icon(Icons.close),
+                    ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

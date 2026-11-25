@@ -7,7 +7,7 @@ class EmptyState extends StatelessWidget {
     super.key,
     required this.icon,
     required this.title,
-    required this.message,
+    this.message,
     this.action,
   });
 
@@ -16,7 +16,9 @@ class EmptyState extends StatelessWidget {
   final IconData icon;
 
   final String title;
-  final String message;
+
+  /// Extra guidance when the title alone cannot explain the empty state.
+  final String? message;
 
   /// The one thing to do about it, if there is one.
   final Widget? action;
@@ -56,14 +58,16 @@ class EmptyState extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: theme.textTheme.titleMedium,
               ),
-              const SizedBox(height: 8),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: scheme.onSurfaceVariant,
+              if (message case final text?) ...[
+                const SizedBox(height: 8),
+                Text(
+                  text,
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
-              ),
+              ],
               if (action != null) ...[const SizedBox(height: 24), action!],
             ],
           ),
@@ -79,8 +83,7 @@ Widget emptyStatePreview() => const MaterialApp(
   home: Scaffold(
     body: EmptyState(
       icon: Icons.receipt_long_outlined,
-      title: 'Nothing yet',
-      message: 'Add the first expense and balances appear straight away.',
+      title: 'No expenses yet',
     ),
   ),
 );

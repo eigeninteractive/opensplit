@@ -8,6 +8,7 @@ import 'package:opensplit/data/repositories/drift_profile_repository.dart';
 import 'package:opensplit/domain/auth_service.dart';
 import 'package:opensplit/domain/avatar.dart';
 import 'package:opensplit/presentation/app.dart';
+import 'package:opensplit/presentation/widgets/avatar_view.dart';
 import 'package:opensplit_api/opensplit_api.dart'
     show Account, AvatarColor, AvatarIcon, AvatarKind;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -159,6 +160,45 @@ void main() {
     await unmount(tester);
   });
 
+  testWidgets('the profile picture moves into the editor and back', (
+    tester,
+  ) async {
+    await store(tester, name: 'Ana Lima');
+    await openAccount(tester);
+
+    final picture = find.byType(AvatarView);
+    final start = tester.getRect(picture);
+    await tester.tap(find.byTooltip('Change picture'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    final opening = tester.getRect(picture);
+    await settle(tester);
+    final preview = tester.getRect(picture);
+    expect(opening.width, inExclusiveRange(start.width, preview.width));
+    expect(
+      opening.center.dx,
+      inExclusiveRange(start.center.dx, preview.center.dx),
+    );
+
+    await tester.tap(find.byTooltip('Close'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    final closing = tester.getRect(picture);
+    expect(closing.width, inExclusiveRange(start.width, preview.width));
+    await settle(tester);
+    expect(tester.getRect(picture), start);
+
+    await tester.tap(find.byTooltip('Change picture'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 32));
+    ProviderScope.containerOf(
+      tester.element(find.byType(OpenSplitApp)),
+    ).read(routerProvider).pop();
+    await settle(tester);
+    expect(tester.getRect(picture), start);
+    await unmount(tester);
+  });
+
   testWidgets('choosing your picture saves it and shows it', (tester) async {
     await store(tester, name: 'Ana Lima', upi: 'ana@okbank');
     await openAccount(tester);
@@ -201,46 +241,48 @@ void main() {
     await unmount(tester);
   });
 
-  testWidgets('opened from Settings, it is filled in on its first frame', (
-    tester,
-  ) async {
-    await store(tester, name: 'Ana Lima', upi: 'ana@upi');
-    SharedPreferences.setMockInitialValues({});
-    final prefs = await SharedPreferences.getInstance();
-    await tester.pumpWidget(
-      signedInApp(
-        db: db,
-        prefs: prefs,
-        overrides: [authServiceProvider.overrideWithValue(_Auth(guest: false))],
-        child: const OpenSplitApp(),
-      ),
-    );
-    await settle(tester);
-    // Straight to Settings: Account has never been on screen.
-    ProviderScope.containerOf(
-      tester.element(find.byType(OpenSplitApp)),
-    ).read(routerProvider).go('/settings');
-    await settle(tester);
+  testWidgets(
+    'opened from the Home avatar, it is filled in on its first frame',
+    (tester) async {
+      await store(tester, name: 'Ana Lima', upi: 'ana@upi');
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      await tester.pumpWidget(
+        signedInApp(
+          db: db,
+          prefs: prefs,
+          overrides: [
+            authServiceProvider.overrideWithValue(_Auth(guest: false)),
+          ],
+          child: const OpenSplitApp(),
+        ),
+      );
+      await settle(tester);
+      expect(find.text('AL'), findsOneWidget);
+      await tester.tap(find.byTooltip('Account'));
+      await tester.pump();
 
-    await tester.tap(find.text('Account saved'));
-    await tester.pump();
-
-    // Not "Add the name your groups see" corrected a moment later: the
-    // profile was read at launch, before anyone asked for the page.
-    expect(find.text('ana@upi'), findsOneWidget);
-    expect(find.text('Add the name your groups see'), findsNothing);
-    await unmount(tester);
-  });
+      // Not "Add the name your groups see" corrected a moment later: the
+      // profile was read at launch, before anyone asked for the page.
+      expect(find.text('ana@upi'), findsOneWidget);
+      expect(find.text('Add the name your groups see'), findsNothing);
+      await unmount(tester);
+    },
+  );
 
   testWidgets('a guest is offered one way to save the account', (tester) async {
     await store(tester, name: 'Ana');
     await openAccount(tester, guest: true);
     expect(find.text('Guest account on this device'), findsOneWidget);
+    expect(find.text('Sign out'), findsNothing);
     expect(find.byType(TextField), findsNothing);
 
     await tapAndSettle(tester, find.text('Save my account'));
 
     expect(find.widgetWithText(TextField, 'Email'), findsOneWidget);
+    expect(find.text('Not now'), findsNothing);
+    await tapAndSettle(tester, find.byType(BackButton));
+    expect(find.text('Save my account'), findsOneWidget);
     await unmount(tester);
   });
 }

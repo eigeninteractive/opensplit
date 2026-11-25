@@ -6,10 +6,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/ledger_providers.dart';
 import '../../application/preferences_providers.dart';
+import '../../application/session_providers.dart';
 import '../../application/sync_providers.dart';
 import '../../data/local/database.dart';
 import '../../data/repositories/drift_group_repository.dart';
+import '../../domain/avatar.dart';
+import '../../l10n/app_localizations.dart';
 import '../launch_hold.dart';
+import '../navigation.dart';
+import '../widgets/avatar_view.dart';
 import '../widgets/group_cover.dart';
 import '../widgets/group_identity_hero.dart';
 import '../widgets/segmented_list.dart';
@@ -43,12 +48,17 @@ class GroupListScreen extends ConsumerWidget {
     ];
     final overview = ref.watch(groupsOverviewProvider);
     final currencies = ref.watch(currenciesProvider).value ?? const {};
+    final hasSidebar =
+        MediaQuery.sizeOf(context).width >= navigationSidebarMinWidth;
 
     return DestinationScaffold(
-      titleWidget: const BrandLockup(),
+      titleWidget: hasSidebar
+          ? Text(AppLocalizations.of(context).navigationGroups)
+          : const BrandLockup(),
       actions: [
         const OfflineIndicator(),
         if (kIsWeb) const SyncRefreshButton.everything(),
+        _HomeAccountButton(hasGroups: groups.isNotEmpty),
       ],
       // The empty state is shown at once rather than held back until the
       // server confirms it, so an empty list says when it may yet fill.
@@ -95,6 +105,50 @@ class GroupListScreen extends ConsumerWidget {
         // this, and afterwards a local read is too quick to be worth drawing.
         _ => const [LaunchPlaceholder(child: SliverToBoxAdapter())],
       },
+    );
+  }
+}
+
+class _HomeAccountButton extends ConsumerWidget {
+  const _HomeAccountButton({required this.hasGroups});
+
+  final bool hasGroups;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final account = ref.watch(accountProvider).value;
+    if (account == null) return const SizedBox.shrink();
+
+    final isGuest = account.isAnonymous;
+    final needsRecovery = isGuest && hasGroups;
+    final profile = isGuest ? null : ref.watch(myProfileProvider).value;
+    final scheme = Theme.of(context).colorScheme;
+    return IconButton(
+      tooltip: needsRecovery
+          ? 'Guest account. Save access to your groups'
+          : isGuest
+          ? 'Guest account'
+          : 'Account',
+      onPressed: () => context.go('/account'),
+      icon: Badge(
+        isLabelVisible: needsRecovery,
+        label: const ExcludeSemantics(child: Text('!')),
+        backgroundColor: scheme.secondaryContainer,
+        textColor: scheme.onSecondaryContainer,
+        child: isGuest
+            ? CircleAvatar(
+                radius: 16,
+                backgroundColor: scheme.primaryContainer,
+                foregroundColor: scheme.onPrimaryContainer,
+                child: const Icon(Icons.person, size: 20),
+              )
+            : AvatarView(
+                avatar: profile?.avatar ?? const InitialsAvatar(),
+                name: profile?.displayName ?? '',
+                id: account.id,
+                radius: 16,
+              ),
+      ),
     );
   }
 }
@@ -261,7 +315,7 @@ class _GroupTile extends ConsumerWidget {
             leading: Badge(
               isLabelVisible: hasNews,
               smallSize: 12,
-              child: GroupAvatarHero(group: group, radius: 28),
+              child: AvatarHero.group(group: group, radius: 28),
             ),
             title: Semantics(
               hint: hasNews ? 'New activity' : null,
@@ -311,11 +365,8 @@ class _EmptyState extends StatelessWidget {
   const _EmptyState();
 
   @override
-  Widget build(BuildContext context) => const EmptyState(
-    icon: Icons.groups_outlined,
-    title: 'No groups yet',
-    message: 'Create a group for a trip, flat or dinner.',
-  );
+  Widget build(BuildContext context) =>
+      const EmptyState(icon: Icons.groups_outlined, title: 'No groups yet');
 }
 
 class _Message extends StatelessWidget {

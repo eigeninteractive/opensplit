@@ -9,6 +9,8 @@ import '../../application/session_providers.dart';
 import '../../data/auth/google_sign_in_gateway.dart';
 import '../../domain/auth_service.dart';
 import '../navigation.dart';
+import 'auth_method_divider.dart';
+import 'google_sign_in_button.dart';
 
 /// Attaches an email address or Google to a guest session, or signs in to the
 /// account either already belongs to.
@@ -202,6 +204,10 @@ class _SaveAccountFormState extends ConsumerState<SaveAccountForm> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (GoogleSignInGateway.isOffered && !_codeSent) ...[
+          GoogleSignInButton(onPressed: _busy ? null : _google),
+          const AuthMethodDivider(),
+        ],
         TextField(
           controller: _email,
           enabled: !_codeSent,
@@ -241,7 +247,7 @@ class _SaveAccountFormState extends ConsumerState<SaveAccountForm> {
           ),
         ],
         const SizedBox(height: 12),
-        FilledButton(
+        FilledButton.tonal(
           onPressed: _busy ? null : (_codeSent ? _verify : _send),
           child: Text(
             _flow == EmailFlow.signInPending
@@ -251,14 +257,6 @@ class _SaveAccountFormState extends ConsumerState<SaveAccountForm> {
                 : 'Send me a code',
           ),
         ),
-        if (GoogleSignInGateway.isOffered && !_codeSent) ...[
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: _busy ? null : _google,
-            icon: const Icon(Icons.account_circle_outlined),
-            label: const Text('Continue with Google'),
-          ),
-        ],
         if (_codeSent)
           TextButton(
             onPressed: _busy ? null : () => setState(() => _flow = null),

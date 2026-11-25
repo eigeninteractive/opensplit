@@ -1,18 +1,23 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../application/backend_providers.dart';
 import '../../application/ledger_providers.dart';
 import '../../application/session_providers.dart';
 import 'inline_notice.dart';
 
-/// Asks a guest to attach a real account as soon as they are in any group:
-/// from then on the server holds something only this session can reach, and
-/// somebody who joined through an invite and only reads balances has as much
-/// to lose as somebody recording every expense.
+/// Offers account recovery to guests, either as a Home reminder or in Account.
 class LinkAccountPrompt extends ConsumerWidget {
-  const LinkAccountPrompt({super.key, this.padding = EdgeInsets.zero});
+  /// A dismissible reminder once the guest has a group worth recovering.
+  const LinkAccountPrompt({super.key, this.padding = EdgeInsets.zero})
+    : _isReminder = true;
+
+  /// The action in Account is available even after dismissing the reminder.
+  const LinkAccountPrompt.account({super.key, this.padding = EdgeInsets.zero})
+    : _isReminder = false;
+
+  final bool _isReminder;
 
   /// Applied only when there is something to show, so that a prompt nobody
   /// needs does not leave a gap where a caller placed it in a column.
@@ -23,28 +28,30 @@ class LinkAccountPrompt extends ConsumerWidget {
     final account = ref.watch(accountProvider).value;
     if (account == null || !account.isAnonymous) return const SizedBox.shrink();
 
-    final groups = ref.watch(groupListingsProvider).value ?? const [];
-    final dismissed = ref.watch(promptDismissedProvider);
-    if (groups.isEmpty || dismissed) return const SizedBox.shrink();
+    if (_isReminder) {
+      final groups = ref.watch(groupListingsProvider).value ?? const [];
+      final dismissed = ref.watch(promptDismissedProvider);
+      if (groups.isEmpty || dismissed) return const SizedBox.shrink();
+    }
 
     return Padding(
       padding: padding,
       child: InlineNotice(
         icon: Icons.lock_outline,
-        title: 'Protect access to this guest account',
-        message: kIsWeb
-            ? 'Clearing browser data can lock you out. Add email or Google '
-                  'for recovery.'
-            : 'Losing this phone or reinstalling can lock you out. Add email '
-                  'or Google for recovery.',
+        title: 'Save access to your groups',
+        message:
+            'Add Google or email to recover your account on another device.',
         actions: [
-          TextButton(
-            onPressed: () =>
-                ref.read(promptDismissedProvider.notifier).dismiss(),
-            child: const Text('Not now'),
-          ),
+          if (_isReminder)
+            TextButton(
+              onPressed: () =>
+                  ref.read(promptDismissedProvider.notifier).dismiss(),
+              child: const Text('Not now'),
+            ),
           FilledButton(
-            onPressed: () => context.push('/account/save'),
+            onPressed: ref.watch(requiresAppUpdateProvider)
+                ? null
+                : () => context.push('/account/save'),
             child: const Text('Save my account'),
           ),
         ],

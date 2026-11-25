@@ -53,8 +53,8 @@ class _Unsaved extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'Guest access depends on this device and yearly use. Add an email '
-          'to recover your account and sign in on other devices.',
+          'Guest access depends on this device and yearly use. Add Google or '
+          'email to recover your account and sign in on other devices.',
           style: theme.textTheme.bodyMedium?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),

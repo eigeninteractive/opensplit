@@ -20,6 +20,7 @@ import '../detail_transition.dart';
 import '../navigation.dart';
 import '../theme.dart';
 import '../widgets/group_identity_hero.dart';
+import '../widgets/avatar_view.dart';
 import '../widgets/balances_panel.dart';
 import '../widgets/category_icon.dart';
 import '../widgets/day_header.dart';
@@ -36,6 +37,7 @@ import '../widgets/group_access.dart';
 import '../widgets/segmented_list.dart';
 import '../widgets/sync_refresh_button.dart';
 import '../widgets/sync_status_notice.dart';
+import 'entry_detail_screen.dart';
 
 /// Width at which the two halves of a group stop competing for the screen.
 const double _wideBreakpoint = 840;
@@ -279,12 +281,12 @@ class _GroupAppBar extends ConsumerWidget {
           IconButton(
             tooltip: 'Settle up',
             onPressed: () => open('settle'),
-            icon: const Icon(Icons.handshake_outlined),
+            icon: const Icon(Icons.handshake),
           ),
         IconButton(
           tooltip: 'People',
           onPressed: () => open('members'),
-          icon: const Icon(Icons.people_outline),
+          icon: const Icon(Icons.people),
         ),
         PopupMenuButton<String>(
           tooltip: fresh == 0 ? 'More' : 'More, with new activity',
@@ -436,7 +438,7 @@ class _GroupHeader extends ConsumerWidget {
               child: CircleAvatar(
                 radius: _avatarRadius + ring,
                 backgroundColor: scheme.surface,
-                child: GroupAvatarHero(group: group, radius: _avatarRadius),
+                child: AvatarHero.group(group: group, radius: _avatarRadius),
               ),
             ),
           ),
@@ -514,9 +516,12 @@ class _EntriesPane extends ConsumerWidget {
             ),
           ),
         if (ledger.entries.isEmpty)
-          SliverFillRemaining(
+          const SliverFillRemaining(
             hasScrollBody: false,
-            child: _EmptyEntries(canEdit: ledger.canEdit),
+            child: EmptyState(
+              icon: Icons.receipt_long_outlined,
+              title: 'No expenses',
+            ),
           )
         else
           SliverList.builder(
@@ -598,14 +603,23 @@ class _EntryTile extends StatelessWidget {
     final subtitleStyle = theme.textTheme.bodyMedium!.copyWith(
       color: scheme.onSurfaceVariant,
     );
-    void open() => openDetail(
-      context,
-      '/g/${ledger.group.id}/e/${entry.id}',
-      color: isSettlement
-          ? scheme.tertiaryContainer
-          : scheme.surfaceContainerHigh,
-      corners: corners,
-    );
+    void open() {
+      final groupId = ledger.group.id;
+      if (MediaQuery.sizeOf(context).width < _wideBreakpoint) {
+        unawaited(
+          showEntryDetailsSheet(context, groupId: groupId, entryId: entry.id),
+        );
+        return;
+      }
+      openDetail(
+        context,
+        '/g/$groupId/e/${entry.id}',
+        color: isSettlement
+            ? scheme.tertiaryContainer
+            : scheme.surfaceContainerHigh,
+        corners: corners,
+      );
+    }
 
     if (isSettlement) {
       return _PaymentTile(
@@ -779,18 +793,3 @@ class _YourPart extends StatelessWidget {
 
 String _capitalised(String text) =>
     text.isEmpty ? text : text[0].toUpperCase() + text.substring(1);
-
-class _EmptyEntries extends StatelessWidget {
-  const _EmptyEntries({required this.canEdit});
-
-  final bool canEdit;
-
-  @override
-  Widget build(BuildContext context) => EmptyState(
-    icon: Icons.receipt_long_outlined,
-    title: canEdit ? 'Nothing yet' : 'No expenses',
-    message: canEdit
-        ? 'Add the first expense and balances appear straight away.'
-        : 'There are no active expenses in this saved history.',
-  );
-}

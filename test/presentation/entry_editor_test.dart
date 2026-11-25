@@ -1,11 +1,17 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/data/repositories/drift_entry_repository.dart';
 import 'package:opensplit/presentation/app.dart';
+import 'package:opensplit/presentation/screens/entry_editor_screen.dart';
+import 'package:opensplit/presentation/widgets/amount_card.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:opensplit_api/opensplit_api.dart' show SplitKind;
 
@@ -181,6 +187,150 @@ void main() {
   });
   tearDown(() => db.close());
 
+  for (final width in [360.0, 540.0]) {
+    testWidgets('Android split changes preserve the total at width $width', (
+      tester,
+    ) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      await _seed(db);
+      await _pumpApp(tester, db, size: Size(width, 640));
+      await _go(tester, '/g/g1/add');
+      await tester.runAsync(() => GoogleFonts.pendingFonts());
+      await _beats(tester);
+      expect(tester.testTextInput.isVisible, isFalse);
+
+      final total = find.descendant(
+        of: find.byType(AmountCard),
+        matching: _field('Amount'),
+      );
+      await tester.enterText(total, '300');
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      await _beats(tester);
+      expect(tester.testTextInput.isVisible, isTrue);
+
+      final split = find.widgetWithText(ExpansionTile, 'Split');
+      await tester.ensureVisible(split);
+      await _beats(tester);
+      await tester.tap(
+        find.descendant(of: split, matching: find.text('Split')),
+      );
+      await _beats(tester);
+      final selector = find.byType(
+        width == 360 ? DropdownMenu<SplitKind> : SegmentedButton<SplitKind>,
+      );
+      await Scrollable.ensureVisible(tester.element(selector), alignment: 0.35);
+      await _beats(tester);
+
+      await _chooseMethod(tester, 'Amounts');
+      final totalInput = find.descendant(
+        of: total,
+        matching: find.byType(EditableText),
+      );
+      expect(
+        tester.widget<EditableText>(totalInput).focusNode.hasFocus,
+        isFalse,
+      );
+      expect(tester.testTextInput.isVisible, isFalse);
+      expect(tester.widget<TextField>(total).controller!.text, '300');
+      expect(selector.hitTestable(), findsOneWidget);
+
+      final share = _allocationField('exact', 'm-ravi');
+      await tester.enterText(share, '130');
+      expect(tester.testTextInput.isVisible, isTrue);
+      await _chooseMethod(tester, 'Shares');
+      expect(tester.testTextInput.isVisible, isFalse);
+      expect(selector.hitTestable(), findsOneWidget);
+
+      if (width == 360) {
+        final field = find.descendant(
+          of: selector,
+          matching: find.byType(EditableText),
+        );
+        tester.widget<EditableText>(field).focusNode.requestFocus();
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await _beats(tester);
+        expect(find.widgetWithText(MenuItemButton, 'Equally'), findsWidgets);
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await _beats(tester);
+      }
+      await _unmount(tester);
+    });
+  }
+
+  testWidgets('expense sheet expands and can open the editor at full height', (
+    tester,
+  ) async {
+    await _seed(db);
+    await _pumpApp(tester, db, size: const Size(360, 640));
+    await _go(tester, '/g/g1/add');
+    await _type(tester, what: 'Dinner', amount: '300');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await _beats(tester);
+    await tester.tap(find.text('Dinner'));
+    await _beats(tester);
+
+    final sheet = find.byType(DraggableScrollableSheet);
+    final bottomSheet = find.byType(BottomSheet);
+    final edit = find.widgetWithText(FilledButton, 'Edit');
+    final close = find.descendant(
+      of: sheet,
+      matching: find.byType(CloseButton),
+    );
+    final toolbar = find.descendant(of: sheet, matching: find.byType(AppBar));
+    expect(sheet, findsOneWidget);
+    expect(
+      tester.widget<BottomSheet>(bottomSheet).clipBehavior,
+      Clip.antiAlias,
+    );
+    expect(edit.hitTestable(), findsOneWidget);
+    final collapsedY = tester.getTopLeft(edit).dy;
+    expect(
+      tester.getTopLeft(close).dy,
+      greaterThan(tester.getTopLeft(bottomSheet).dy),
+    );
+
+    // Start the drag in the handle area above the toolbar.
+    final handle = Offset(
+      tester.getCenter(toolbar).dx,
+      tester.getTopLeft(toolbar).dy - 6,
+    );
+    await tester.dragFrom(handle, const Offset(0, -400));
+    await _beats(tester);
+    expect(tester.getTopLeft(edit).dy, lessThan(collapsedY - 150));
+    expect(
+      tester.getTopLeft(close).dy,
+      greaterThan(tester.getTopLeft(bottomSheet).dy),
+    );
+    expect(find.text('Paid by').hitTestable(), findsOneWidget);
+    expect(find.text('Split equally').hitTestable(), findsOneWidget);
+    await tester.tap(find.byTooltip('Collapse details'));
+    await _beats(tester);
+    expect(tester.getTopLeft(edit).dy, closeTo(collapsedY, 1));
+
+    final expandIcon = find.byIcon(Icons.open_in_full);
+    Focus.of(tester.element(expandIcon)).requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await _beats(tester);
+    expect(tester.getTopLeft(edit).dy, lessThan(collapsedY - 150));
+
+    await tester.tap(edit);
+    await _beats(tester);
+    expect(sheet, findsNothing);
+    expect(find.byType(EntryEditorScreen), findsOneWidget);
+    expect(find.text('Edit expense'), findsOneWidget);
+    await tester.tap(find.byTooltip('Delete'));
+    await _beats(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await _beats(tester);
+    expect(sheet, findsNothing);
+    expect(find.byType(EntryEditorScreen), findsNothing);
+    expect(find.text('Dinner'), findsNothing);
+    await _unmount(tester);
+  });
+
   testWidgets('changed expense survives Close and asks before system back', (
     tester,
   ) async {
@@ -318,23 +468,22 @@ void main() {
         await _beats(tester);
         expect(tester.takeException(), isNull);
       }
-      await tester.scrollUntilVisible(
-        find.text('Time of expense'),
-        200,
-        scrollable: find
-            .descendant(
-              of: find.byType(ListView).first,
-              matching: find.byType(Scrollable),
-            )
-            .first,
-      );
       await Scrollable.ensureVisible(
-        tester.element(find.widgetWithText(ExpansionTile, 'Time of expense')),
+        tester.element(find.widgetWithText(ExpansionTile, 'When')),
         alignment: 0.5,
       );
       await _beats(tester);
-      await tester.tap(find.text('Time of expense'));
+      await tester.tap(find.text('When'));
       await _beats(tester);
+      final calendar = find.descendant(
+        of: find.widgetWithText(ListTile, 'Date'),
+        matching: find.byIcon(Icons.calendar_today_outlined),
+      );
+      final clearTimeIcon = find.descendant(
+        of: find.byTooltip('Remove the time'),
+        matching: find.byIcon(Icons.close),
+      );
+      expect(tester.getCenter(calendar).dx, tester.getCenter(clearTimeIcon).dx);
       await tester.ensureVisible(find.byTooltip('Remove the time'));
       await tester.tap(find.byTooltip('Remove the time'));
       await _beats(tester);
@@ -421,12 +570,12 @@ void main() {
 
     await _openEditor(tester);
     await _type(tester, what: 'Snacks', amount: '60');
-    await tester.ensureVisible(find.text('Time of expense'));
-    await tester.tap(find.text('Time of expense'));
+    await tester.ensureVisible(find.text('When'));
+    await tester.tap(find.text('When'));
     await _beats(tester);
     await tester.tap(find.byTooltip('Remove the time'));
     await _beats(tester);
-    expect(find.text('Add a time'), findsOneWidget);
+    expect(find.text('Date only'), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await _beats(tester);
 

@@ -113,8 +113,10 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
         title: const Text('Leave this group?'),
         content: Text(
           lastAccount
-              ? 'You are the last account holder. Leaving permanently deletes this group and its expenses. Export a copy first if you need one.'
-              : 'Leaving ends your access on all your devices. Your expenses stay in the group for the remaining members. Export a copy first if you need one.',
+              ? 'Leaving permanently deletes this group and its expenses. '
+                    'Export a copy first if you need one.'
+              : 'You’ll lose access on all devices. Your expenses stay in '
+                    'the group. Export a copy first if you need one.',
         ),
         actions: [
           TextButton(
@@ -278,9 +280,6 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
                     title: Text(
                       'Leave group',
                       style: TextStyle(color: scheme.error),
-                    ),
-                    subtitle: const Text(
-                      'Ends your access. Export a copy first if you need one.',
                     ),
                     onTap: _busy ? null : () => _leave(ledger, me),
                   ),

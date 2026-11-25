@@ -132,8 +132,7 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
             padding: EdgeInsets.only(top: 24),
             child: EmptyState(
               icon: Icons.event_busy_outlined,
-              title: 'Nothing spent here',
-              message: 'No expenses match these choices.',
+              title: 'No matching expenses',
             ),
           )
         else ...[

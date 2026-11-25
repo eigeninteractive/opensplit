@@ -1,6 +1,15 @@
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 
+/// The minimum window width for the labeled navigation sidebar.
+const navigationSidebarMinWidth = 1200.0;
+
+/// An editor result that changes what the details route can display.
+enum EntryEditResult {
+  /// The expense or payment was deleted successfully.
+  deleted,
+}
+
 /// Maps native App Links and authentication detours onto internal app routes.
 String? redirectAppRoute(Uri uri, {required bool signedIn}) {
   final path = uri.path;
@@ -46,11 +55,36 @@ String returnDestination(Uri current) => current.path == '/welcome'
     ? safeReturnLocation(current.queryParameters['from'])
     : safeReturnLocation(current.toString());
 
-/// Goes back one screen, or to [fallback] when there is no back to go to.
-void goBack(BuildContext context, String fallback) {
+/// Returns [result] to the previous screen, or goes to [fallback].
+void goBack<T>(BuildContext context, String fallback, {T? result}) {
   if (context.canPop()) {
-    context.pop();
+    context.pop(result);
   } else {
     context.go(fallback);
   }
+}
+
+/// Restores a shared element if overlapping pops skip its return flight.
+Widget settledRouteHeroPlaceholder(
+  BuildContext context,
+  Size size,
+  Widget child,
+) {
+  // A shell destination stays current in its own navigator while a root
+  // route covers it. Its placeholder must follow the covering route.
+  final route =
+      ModalRoute.of(Navigator.of(context).context) ?? ModalRoute.of(context);
+  if (route == null) return SizedBox.fromSize(size: size);
+  final entering = route.animation;
+  final covering = route.secondaryAnimation;
+  return ListenableBuilder(
+    listenable: Listenable.merge([entering, covering]),
+    builder: (context, _) {
+      final settled =
+          route.isCurrent &&
+          (entering?.isCompleted ?? true) &&
+          (covering?.isDismissed ?? true);
+      return settled ? child : SizedBox.fromSize(size: size);
+    },
+  );
 }

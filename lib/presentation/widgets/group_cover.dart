@@ -7,10 +7,10 @@ import 'package:opensplit_api/opensplit_api.dart' show EntryKind;
 import '../../application/ledger_providers.dart';
 import '../../data/local/database.dart';
 import '../../domain/avatar.dart';
+import '../navigation.dart';
 import '../theme.dart';
 import 'avatar_view.dart';
 import 'category_icon.dart';
-import 'group_identity_hero.dart';
 
 /// A group's cover: its hue, patterned with what it spends on.
 ///

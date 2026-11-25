@@ -20,10 +20,15 @@ Future<void> _beats(WidgetTester tester) async {
   }
 }
 
-Future<void> _open(WidgetTester tester, AppDatabase db, String location) async {
+Future<void> _open(
+  WidgetTester tester,
+  AppDatabase db,
+  String? location, {
+  Size size = const Size(400, 1600),
+}) async {
   SharedPreferences.setMockInitialValues({});
   final prefs = await SharedPreferences.getInstance();
-  tester.view.physicalSize = const Size(400, 1600);
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
 
@@ -35,6 +40,7 @@ Future<void> _open(WidgetTester tester, AppDatabase db, String location) async {
   final router = GoRouter.of(tester.element(find.byType(Scaffold).first));
   router.go('/g/g1');
   await _beats(tester);
+  if (location == null) return;
   router.push(location);
   await _beats(tester);
 }
@@ -166,6 +172,64 @@ void main() {
     await _beats(tester);
     expect(find.text('Discard changes?'), findsNothing);
     expect(find.text('Settle up'), findsNothing);
+    await _unmount(tester);
+  });
+
+  testWidgets('a payment opens in a compact sheet and a wide detail page', (
+    tester,
+  ) async {
+    await tester.runAsync(
+      () => DriftEntryRepository(db).create(
+        EntryDraft.settlement(
+          groupId: 'g1',
+          currency: 'INR',
+          amountMinor: 120000,
+          fromMemberId: 'm-priya',
+          toMemberId: 'm-ravi',
+          notes: 'Paid in cash',
+        ),
+        createdBy: 'm-priya',
+      ),
+    );
+    await _open(tester, db, null, size: const Size(400, 800));
+    final row = find.widgetWithText(ListTile, 'Priya paid you');
+    await tester.tap(row);
+    await _beats(tester);
+
+    final sheet = find.byType(DraggableScrollableSheet);
+    final paymentBar = find.widgetWithText(AppBar, 'Payment');
+    expect(sheet, findsOneWidget);
+    expect(find.descendant(of: sheet, matching: paymentBar), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Edit'));
+    await _beats(tester);
+    final editBar = find.widgetWithText(AppBar, 'Edit payment');
+    expect(editBar, findsOneWidget);
+    await tester.tap(
+      find.descendant(of: editBar, matching: find.byType(BackButton)),
+    );
+    await _beats(tester);
+    expect(sheet, findsOneWidget);
+    await tester.tap(
+      find.descendant(of: paymentBar, matching: find.byType(CloseButton)),
+    );
+    await _beats(tester);
+    expect(row.hitTestable(), findsOneWidget);
+
+    tester.view.physicalSize = const Size(1000, 800);
+    await _beats(tester);
+    await tester.tap(row);
+    await _beats(tester);
+    expect(paymentBar, findsOneWidget);
+    expect(sheet, findsNothing);
+    await tester.tap(find.widgetWithText(FilledButton, 'Edit'));
+    await _beats(tester);
+    await tester.tap(find.byTooltip('Delete payment'));
+    await _beats(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await _beats(tester);
+    expect(paymentBar, findsNothing);
+    expect(editBar, findsNothing);
+    expect(row, findsNothing);
     await _unmount(tester);
   });
 

@@ -7,7 +7,7 @@ publish_to: "none"
 # never by hand (see "Versions" in docs/runbook.md). There is no `+build`
 # here on purpose. The release workflow numbers every build itself, and a
 # number written here would only be a second, stale answer.
-version: 4.2.5
+version: 4.2.6
 
 environment:
   sdk: ^3.12.2
@@ -149,8 +149,18 @@ flutter:
     # kilobytes nothing reads. This one is tinted at runtime, so it is the only
     # variant the app needs. See BrandMark.
     - assets/brand/mark-mono.svg
+    # Google’s approved Android + Web button artwork, cropped to the G.
+    # https://developers.google.com/identity/branding-guidelines
+    - assets/google_sign_in/google-sign-in-light.png
+    - assets/google_sign_in/google-sign-in-dark.png
+    - assets/google_sign_in/LICENSE
 
   fonts:
+    - family: GoogleSansButton
+      fonts:
+        # Google Fonts' official text subset for "Continue with Google".
+        - asset: assets/google_sign_in/GoogleSans-ButtonMedium.ttf
+          weight: 500
     - family: Roboto
       fonts:
         - asset: assets/google_fonts/GoogleSansFlex-Regular.ttf

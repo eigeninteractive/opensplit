@@ -5,6 +5,7 @@ import 'package:animations/animations.dart';
 import '../l10n/app_localizations.dart';
 import 'detail_transition.dart';
 import 'navigation.dart';
+import 'widgets/brand_mark.dart';
 import 'widgets/group_access.dart';
 import 'widgets/update_required_notice.dart';
 import 'screens/about_screen.dart';
@@ -432,6 +433,7 @@ class AdaptiveNavigation extends StatelessWidget {
   /// past it if a label needs more. None of the three labels is anywhere near,
   /// so the rail is a fixed 80dp.
   static const double _railWidth = 80;
+  static const double _sidebarWidth = 192;
 
   final StatefulNavigationShell shell;
 
@@ -448,7 +450,10 @@ class AdaptiveNavigation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final wide = MediaQuery.sizeOf(context).width >= _railBreakpoint;
+    final width = MediaQuery.sizeOf(context).width;
+    final wide = width >= _railBreakpoint;
+    final extended = width >= navigationSidebarMinWidth;
+    final scheme = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context);
     // Keep the navigator's ancestry stable across the drawer/rail breakpoint.
     // Reparenting it while a route restores keyboard focus can leave traversal
@@ -459,8 +464,15 @@ class AdaptiveNavigation extends StatelessWidget {
           if (wide)
             NavigationRail(
               selectedIndex: shell.currentIndex,
-              labelType: NavigationRailLabelType.all,
+              extended: extended,
+              leading: const _RailBrand(),
+              scrollable: true,
+              labelType: extended
+                  ? NavigationRailLabelType.none
+                  : NavigationRailLabelType.all,
               minWidth: _railWidth,
+              minExtendedWidth: _sidebarWidth,
+              backgroundColor: extended ? scheme.surfaceContainerLow : null,
               onDestinationSelected: _select,
               destinations: [
                 for (final destination in _destinations)
@@ -479,6 +491,53 @@ class AdaptiveNavigation extends StatelessWidget {
   }
 }
 
+/// The compact rail uses the mark. Its wordmark fits once the rail extends.
+class _RailBrand extends StatelessWidget {
+  const _RailBrand();
+
+  @override
+  Widget build(BuildContext context) {
+    final extension = NavigationRail.extendedAnimation(context);
+    return AnimatedBuilder(
+      animation: extension,
+      builder: (context, _) => SizedBox(
+        width:
+            AdaptiveNavigation._railWidth +
+            (AdaptiveNavigation._sidebarWidth - AdaptiveNavigation._railWidth) *
+                extension.value,
+        height: 56,
+        child: Padding(
+          padding: const EdgeInsetsDirectional.only(start: 22, end: 16),
+          child: Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: extension.isCompleted
+                ? const _NavigationWordmark()
+                : BrandMark(
+                    size: 36,
+                    semanticsLabel: AppLocalizations.of(context).appTitle,
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NavigationWordmark extends StatelessWidget {
+  const _NavigationWordmark();
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    header: true,
+    child: DefaultTextStyle.merge(
+      style: Theme.of(
+        context,
+      ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+      child: const BrandLockup(),
+    ),
+  );
+}
+
 /// The three destinations, as a Material 3 navigation drawer.
 class _NavigationDrawer extends StatelessWidget {
   const _NavigationDrawer();
@@ -486,7 +545,6 @@ class _NavigationDrawer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final shell = StatefulNavigationShell.of(context).widget;
-    final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context);
 
     return NavigationDrawer(
@@ -499,9 +557,9 @@ class _NavigationDrawer extends StatelessWidget {
         shell.goBranch(index, initialLocation: index == shell.currentIndex);
       },
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(28, 16, 16, 10),
-          child: Text(l10n.appTitle, style: theme.textTheme.titleSmall),
+        const Padding(
+          padding: EdgeInsetsDirectional.fromSTEB(24, 20, 20, 12),
+          child: _NavigationWordmark(),
         ),
         for (final destination in _destinations)
           NavigationDrawerDestination(

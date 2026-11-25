@@ -58,7 +58,6 @@ class BalancesPanel extends ConsumerWidget {
             child: EmptyState(
               icon: Icons.check_circle_outline,
               title: 'All settled up',
-              message: 'Nobody owes anybody anything.',
             ),
           )
         else

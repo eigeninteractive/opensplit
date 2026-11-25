@@ -4,7 +4,60 @@ import 'package:opensplit_api/opensplit_api.dart' show AvatarIcon;
 import '../../application/ledger_providers.dart';
 import '../../data/local/database.dart';
 import '../../domain/avatar.dart';
+import '../navigation.dart';
 import '../theme.dart';
+
+/// Shares an avatar with its picture editor, scaling the circle and its
+/// contents together during Flutter's Hero flight.
+class AvatarHero extends StatelessWidget {
+  const AvatarHero.profile({
+    super.key,
+    required this.avatar,
+    required this.name,
+    required this.id,
+    required this.radius,
+  }) : _kind = 'profile-avatar';
+
+  AvatarHero.group({
+    super.key,
+    required Group group,
+    required this.radius,
+    Avatar? avatar,
+  }) : avatar = avatar ?? group.avatar,
+       name = group.name,
+       id = group.id,
+       _kind = 'group-avatar';
+
+  final Avatar avatar;
+  final String name;
+  final String id;
+  final double radius;
+  final String _kind;
+
+  @override
+  Widget build(BuildContext context) => HeroMode(
+    enabled: !MediaQuery.disableAnimationsOf(context),
+    child: Hero(
+      tag: (_kind, id),
+      transitionOnUserGestures: true,
+      placeholderBuilder: settledRouteHeroPlaceholder,
+      child: Material(
+        type: MaterialType.transparency,
+        child: SizedBox.square(
+          dimension: radius * 2,
+          child: FittedBox(
+            child: AvatarView(
+              avatar: avatar,
+              name: name,
+              id: id,
+              radius: radius,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
 
 /// A person or a group, in a circle: a [CircleAvatar] on the avatar's hue.
 ///

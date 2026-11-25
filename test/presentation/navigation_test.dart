@@ -12,6 +12,7 @@ import 'package:opensplit/presentation/screens/entry_editor_screen.dart';
 import 'package:opensplit/presentation/screens/group_detail_screen.dart';
 import 'package:opensplit/presentation/screens/group_list_screen.dart';
 import 'package:opensplit/presentation/screens/settings_screen.dart';
+import 'package:opensplit/presentation/widgets/brand_mark.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../harness.dart';
@@ -120,6 +121,42 @@ void main() {
   // navigation bar, in which case it is a destination and there is nothing to
   // go back to, or it does not, in which case it was pushed and pops.
   group('destinations are not pushes', () {
+    testWidgets('the rail labels extend on wide desktops', (tester) async {
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      tester.view.physicalSize = const Size(1000, 800);
+      await _pumpApp(tester, db);
+
+      final rail = find.byType(NavigationRail);
+      expect(tester.widget<NavigationRail>(rail).extended, isFalse);
+      expect(
+        find.descendant(of: rail, matching: find.byType(BrandMark)),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: rail, matching: find.byType(BrandLockup)),
+        findsNothing,
+      );
+      tester.view.physicalSize = const Size(1280, 800);
+      await tester.pumpAndSettle();
+      expect(tester.widget<NavigationRail>(rail).extended, isTrue);
+      expect(
+        find.descendant(of: rail, matching: find.byType(BrandLockup)),
+        findsOneWidget,
+      );
+      expect(find.text('OpenSplit'), findsOneWidget);
+
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+      expect(find.byType(SettingsScreen), findsOneWidget);
+      expect(find.text('Account saved'), findsNothing);
+      expect(
+        find.descendant(of: rail, matching: find.text('Account')),
+        findsOneWidget,
+      );
+      await _unmount(tester);
+    });
+
     testWidgets(
       'the phone layout has one menu, not a settings button beside it',
       (tester) async {
@@ -133,6 +170,15 @@ void main() {
           ),
           findsNothing,
           reason: 'navigation belongs in one place, and this is not it',
+        );
+        await tester.tap(find.byTooltip('Open navigation menu'));
+        await tester.pumpAndSettle();
+        expect(
+          find.descendant(
+            of: find.byType(NavigationDrawer),
+            matching: find.byType(BrandLockup),
+          ),
+          findsOneWidget,
         );
 
         await _unmount(tester);
@@ -159,6 +205,19 @@ void main() {
       );
       expect(_router(tester).canPop(), isFalse);
 
+      for (final (title, symbol) in [
+        ('Offline first', Icons.lock_outline),
+        ('Free forever', Icons.favorite_outline),
+      ]) {
+        final tile = find.widgetWithText(ListTile, title);
+        await tester.ensureVisible(tile);
+        await tester.pumpAndSettle();
+        final icon = find.descendant(of: tile, matching: find.byIcon(symbol));
+        expect(
+          tester.getCenter(icon).dy,
+          closeTo(tester.getCenter(tile).dy, 0.5),
+        );
+      }
       await _unmount(tester);
     });
 
@@ -240,7 +299,9 @@ void main() {
       await tester.tap(find.text('Add expense'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('Change the day'));
+      await tester.tap(find.text('When'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ListTile, 'Date'));
       await tester.pumpAndSettle();
       expect(find.byType(DatePickerDialog), findsOneWidget);
 

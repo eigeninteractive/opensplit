@@ -176,13 +176,17 @@ void main() {
       addTearDown(tester.view.reset);
 
       await _pumpApp(tester, db);
-      expect(find.byType(NavigationRail), findsOneWidget);
+      final rail = find.byType(NavigationRail);
+      expect(rail, findsOneWidget);
       // No menu button beside it: the rail is already showing everything a
       // drawer would have to be opened to see.
       expect(find.byTooltip('Open navigation menu'), findsNothing);
-      expect(find.text('Groups'), findsOneWidget);
-      expect(find.text('Account'), findsOneWidget);
-      expect(find.text('Settings'), findsOneWidget);
+      for (final label in ['Groups', 'Account', 'Settings']) {
+        expect(
+          find.descendant(of: rail, matching: find.text(label)),
+          findsOneWidget,
+        );
+      }
       await _unmount(tester);
     });
 

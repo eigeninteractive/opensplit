@@ -354,7 +354,7 @@ void main() {
     await tester.pump();
     expect(find.text(_group.name), findsOneWidget);
     expect(find.text('All settled up'), findsOneWidget);
-    expect(find.text('Nothing yet'), findsOneWidget);
+    expect(find.text('No expenses'), findsOneWidget);
     expect(sync.requests, [_group.id]);
     sync.finish();
     await tester.pumpAndSettle();

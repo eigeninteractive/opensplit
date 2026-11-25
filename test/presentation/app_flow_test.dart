@@ -72,7 +72,7 @@ void main() {
     expect(find.text('Flat 4B'), findsWidgets);
 
     // ---- Add a flatmate who does not have the app -----------------------
-    await tester.tap(find.byIcon(Icons.people_outline));
+    await tester.tap(find.byTooltip('People'));
     await _settle(tester);
 
     await tester.tap(find.byType(FloatingActionButton));
@@ -170,7 +170,6 @@ void main() {
     await _settle(tester);
 
     expect(find.text('All settled up'), findsOneWidget);
-    expect(find.text('Nobody owes anybody anything.'), findsOneWidget);
 
     // ---- The record of all of it, with no server anywhere ---------------
     await tester.tap(find.byTooltip('More'));
@@ -178,7 +177,7 @@ void main() {
     await tester.tap(find.text('Activity'));
     await _settle(tester);
 
-    expect(find.text('Nothing yet'), findsNothing);
+    expect(find.text('No activity yet'), findsNothing);
     expect(
       find.text('Ravi added “Groceries”'),
       findsOneWidget,
@@ -208,9 +207,16 @@ void main() {
     await _enterInto(tester, 'Amount', '2000');
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await _settle(tester);
-    expect(find.text('₹2,000.00'), findsWidgets);
-    await tester.tap(find.byIcon(Icons.arrow_back));
+    final details = find.byType(DraggableScrollableSheet);
+    expect(
+      find.descendant(of: details, matching: find.text('₹2,000.00')),
+      findsWidgets,
+    );
+    await tester.tap(
+      find.descendant(of: details, matching: find.byType(CloseButton)),
+    );
     await _settle(tester);
+    expect(details, findsNothing);
 
     await tester.tap(find.byTooltip('More'));
     await _settle(tester);

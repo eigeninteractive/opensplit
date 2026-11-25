@@ -445,14 +445,45 @@ class EntryForm extends _$EntryForm {
     unawaited(_askForRateIfMissing(_form));
   }
 
-  /// Another day: the time no longer applies, since it is not known.
-  void chooseDay(DateTime day) {
+  /// Moves the expense to [day], keeping its clock time when it can be moved
+  /// in the original zone. Returns whether the time needs to be picked again.
+  bool chooseDay(DateTime day) {
     final picked = calendarDay(day);
-    if (picked == _form.day) return;
+    final form = _form;
+    if (picked == form.day || form.saving) return false;
+
+    final deviceZone = ref.read(deviceZoneProvider).value;
+    final previousTime = form.occurredAt?.toLocal();
+    DateTime? moved;
+    if (previousTime != null &&
+        deviceZone != null &&
+        (form.timeZone == null || form.timeZone == deviceZone)) {
+      final local = DateTime(
+        picked.year,
+        picked.month,
+        picked.day,
+        previousTime.hour,
+        previousTime.minute,
+        previousTime.second,
+        previousTime.millisecond,
+        previousTime.microsecond,
+      );
+      // A clock change can skip the chosen time altogether.
+      if (calendarDay(local) == picked &&
+          local.hour == previousTime.hour &&
+          local.minute == previousTime.minute) {
+        moved = local.toUtc();
+      }
+    }
     _change(
-      (form) => form.copyWith(day: picked, occurredAt: null, timeZone: null),
+      (form) => form.copyWith(
+        day: picked,
+        occurredAt: moved,
+        timeZone: moved == null ? null : deviceZone,
+      ),
     );
     unawaited(_askForRateIfMissing(_form));
+    return previousTime != null && moved == null;
   }
 
   /// A time picked on this device's clock happened in this device's [zone].

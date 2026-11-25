@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -17,6 +19,23 @@ import '../widgets/group_access.dart';
 import '../widgets/page_body.dart';
 import '../widgets/segmented_list.dart';
 
+/// Opens an expense or settlement in a resizable sheet from the journal.
+Future<void> showEntryDetailsSheet(
+  BuildContext context, {
+  required String groupId,
+  required String entryId,
+}) => showModalBottomSheet<void>(
+  context: context,
+  isScrollControlled: true,
+  useSafeArea: true,
+  clipBehavior: Clip.antiAlias,
+  // The list's drag resizes the sheet and scrolls through the record.
+  enableDrag: false,
+  showDragHandle: false,
+  builder: (context) =>
+      EntryDetailScreen._sheet(groupId: groupId, entryId: entryId),
+);
+
 /// An expense or a payment, to read: what it was, who paid, how it was
 /// split and what has happened to it since.
 ///
@@ -27,27 +46,35 @@ class EntryDetailScreen extends ConsumerWidget {
     super.key,
     required this.groupId,
     required this.entryId,
-  });
+  }) : _inSheet = false;
+
+  const EntryDetailScreen._sheet({required this.groupId, required this.entryId})
+    : _inSheet = true;
 
   final String groupId;
   final String entryId;
+  final bool _inSheet;
 
   String get _groupPath => '/g/$groupId';
 
-  Future<void> _edit(BuildContext context, WidgetRef ref) async {
-    await context.push('$_groupPath/e/$entryId/edit');
-    // Deleted from the form: there is nothing left here to come back to.
-    final entry = ref.read(entryRecordProvider(entryId)).value;
-    if ((entry?.isDeleted ?? true) && context.mounted) {
-      goBack(context, _groupPath);
+  Future<void> _edit(BuildContext context) async {
+    final result = await context.push<EntryEditResult>(
+      '$_groupPath/e/$entryId/edit',
+    );
+    if (!context.mounted || result != EntryEditResult.deleted) return;
+    if (_inSheet) {
+      Navigator.of(context).pop();
+      return;
     }
+    goBack(context, _groupPath);
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ledger = ref.watch(groupLedgerProvider(groupId));
     final record = ref.watch(entryRecordProvider(entryId));
-    if (ledger != null && ledger.me?.isActive != true) {
+    final unavailable = ledger != null && ledger.me?.isActive != true;
+    if (!_inSheet && unavailable) {
       return const GroupUnavailableScreen();
     }
     // The ledger already holds the live entry when opened from its row. The
@@ -56,41 +83,186 @@ class EntryDetailScreen extends ConsumerWidget {
         record.value ??
         ledger?.entries.where((entry) => entry.id == entryId).firstOrNull;
     final isPayment = entry?.row.kind == EntryKind.settlement;
+    final title = isPayment ? 'Payment' : 'Expense';
+    final actions = [
+      if (!unavailable &&
+          ledger != null &&
+          ledger.canEdit &&
+          entry != null &&
+          !entry.isDeleted)
+        Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: FilledButton.tonalIcon(
+            onPressed: () => _edit(context),
+            icon: const Icon(Icons.edit),
+            label: const Text('Edit'),
+          ),
+        ),
+    ];
+
+    final content = switch ((ledger, entry)) {
+      _ when unavailable => const SliverFillRemaining(
+        hasScrollBody: false,
+        child: Center(child: Text('Group unavailable')),
+      ),
+      (final ledger?, final entry?) => _Detail(ledger: ledger, entry: entry),
+      _ when record.hasValue && ledger != null => const SliverFillRemaining(
+        hasScrollBody: false,
+        child: Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Text('This record isn’t on this device.'),
+          ),
+        ),
+      ),
+      _ => const SliverToBoxAdapter(),
+    };
+
+    if (_inSheet) {
+      return _EntryDetailsSheet(
+        title: title,
+        actions: actions,
+        content: content,
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
         leading: BackButton(onPressed: () => goBack(context, _groupPath)),
-        title: Text(isPayment ? 'Payment' : 'Expense'),
-        actions: [
-          if (ledger != null &&
-              ledger.canEdit &&
-              entry != null &&
-              !entry.isDeleted)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: FilledButton.tonalIcon(
-                onPressed: () => _edit(context, ref),
-                icon: const Icon(Icons.edit_outlined),
-                label: const Text('Edit'),
-              ),
-            ),
-        ],
+        title: Text(title),
+        actions: actions,
       ),
       body: PageBody(
         maxWidth: 640,
-        child: switch ((ledger, entry)) {
-          (final ledger?, final entry?) => _Detail(
-            ledger: ledger,
-            entry: entry,
-          ),
-          _ when record.hasValue && ledger != null => const Center(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: Text('That expense is not on this device.'),
+        child: CustomScrollView(slivers: [content]),
+      ),
+    );
+  }
+}
+
+class _EntryDetailsSheet extends StatefulWidget {
+  const _EntryDetailsSheet({
+    required this.title,
+    required this.actions,
+    required this.content,
+  });
+
+  final String title;
+  final List<Widget> actions;
+  final Widget content;
+
+  @override
+  State<_EntryDetailsSheet> createState() => _EntryDetailsSheetState();
+}
+
+class _EntryDetailsSheetState extends State<_EntryDetailsSheet> {
+  static const _initialSize = 0.6;
+  static const _fullSize = 1.0;
+  final _extent = DraggableScrollableController();
+
+  bool get _isExpanded => _extent.isAttached && _extent.size >= _fullSize;
+
+  void _toggleExtent() {
+    if (!_extent.isAttached) return;
+    final target = _isExpanded ? _initialSize : _fullSize;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _extent.jumpTo(target);
+      return;
+    }
+    unawaited(
+      _extent.animateTo(
+        target,
+        duration: kThemeAnimationDuration,
+        curve: Curves.easeInOut,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _extent.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final sheetTheme = theme.bottomSheetTheme;
+    final surface =
+        sheetTheme.modalBackgroundColor ??
+        sheetTheme.backgroundColor ??
+        theme.colorScheme.surfaceContainerLow;
+    return SafeArea(
+      top: false,
+      child: DraggableScrollableSheet(
+        controller: _extent,
+        expand: false,
+        minChildSize: 0.3,
+        initialChildSize: _initialSize,
+        maxChildSize: _fullSize,
+        snap: true,
+        snapSizes: const [_initialSize],
+        builder: (context, scroll) => CustomScrollView(
+          controller: scroll,
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            PinnedHeaderSliver(
+              child: ColoredBox(
+                color: surface,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Center(child: _SheetHandle()),
+                    AppBar(
+                      primary: false,
+                      forceMaterialTransparency: true,
+                      leading: const CloseButton(),
+                      title: Text(widget.title),
+                      actions: [
+                        ListenableBuilder(
+                          listenable: _extent,
+                          builder: (context, child) => IconButton(
+                            onPressed: _toggleExtent,
+                            tooltip: _isExpanded
+                                ? 'Collapse details'
+                                : 'Expand details',
+                            icon: Icon(
+                              _isExpanded
+                                  ? Icons.close_fullscreen
+                                  : Icons.open_in_full,
+                            ),
+                          ),
+                        ),
+                        ...widget.actions,
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
-          _ => const SizedBox.shrink(),
-        },
+            widget.content,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SheetHandle extends StatelessWidget {
+  const _SheetHandle();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: 32,
+      height: 4,
+      margin: const EdgeInsets.only(top: 12, bottom: 4),
+      decoration: BoxDecoration(
+        color:
+            theme.bottomSheetTheme.dragHandleColor ??
+            theme.colorScheme.onSurfaceVariant,
+        borderRadius: BorderRadius.circular(2),
       ),
     );
   }
@@ -120,100 +292,104 @@ class _Detail extends ConsumerWidget {
       if (at != null) DateFormat.jm().format(at.toLocal()),
     ].join(' · ');
 
-    return ListView(
+    return SliverPadding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 48),
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          spacing: 16,
-          children: [
-            CircleAvatar(
-              radius: 28,
-              backgroundColor: isPayment
-                  ? scheme.tertiaryContainer
-                  : scheme.secondaryContainer,
-              foregroundColor: isPayment
-                  ? scheme.onTertiaryContainer
-                  : scheme.onSecondaryContainer,
-              child: Icon(
-                isPayment
-                    ? Icons.handshake_outlined
-                    : categoryIcon(category?.icon ?? ''),
-                size: 28,
+      sliver: SliverList.list(
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: 16,
+            children: [
+              CircleAvatar(
+                radius: 28,
+                backgroundColor: isPayment
+                    ? scheme.tertiaryContainer
+                    : scheme.secondaryContainer,
+                foregroundColor: isPayment
+                    ? scheme.onTertiaryContainer
+                    : scheme.onSecondaryContainer,
+                child: Icon(
+                  isPayment
+                      ? Icons.handshake_outlined
+                      : categoryIcon(category?.icon ?? ''),
+                  size: 28,
+                ),
               ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _title(isPayment),
+                      style: theme.textTheme.titleLarge!.copyWith(
+                        color: scheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      [if (category != null) category.name, when].join(' · '),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Text(
+            money(entry.row.amountMinor),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: moneyStyle(
+              theme.textTheme.displaySmall!,
+            ).copyWith(color: scheme.onSurface),
+          ),
+          if (entry.isDeleted)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'Deleted. It no longer counts towards balances.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: scheme.error,
+                ),
+              ),
+            )
+          else if (!isPayment)
+            _YourPart(ledger: ledger, entry: entry, money: money),
+          if (notes.isNotEmpty) ...[
+            const _Heading('Note'),
+            Text(notes, style: theme.textTheme.bodyLarge),
+          ],
+          if (!isPayment) ...[
+            const _Heading('Paid by'),
+            SegmentedList(
+              children: [
+                for (final payer in entry.payers)
+                  _PersonTile(
+                    ledger: ledger,
+                    memberId: payer.memberId,
+                    amount: money(payer.amountMinor),
+                  ),
+              ],
             ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _title(isPayment),
-                    style: theme.textTheme.titleLarge!.copyWith(
-                      color: scheme.onSurface,
-                    ),
+            _Heading('Split ${_splitWords(entry.row.splitKind)}'.trim()),
+            SegmentedList(
+              children: [
+                for (final share in entry.shares)
+                  _PersonTile(
+                    ledger: ledger,
+                    memberId: share.memberId,
+                    amount: money(share.amountMinor),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    [if (category != null) category.name, when].join(' · '),
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
+              ],
             ),
           ],
-        ),
-        const SizedBox(height: 20),
-        Text(
-          money(entry.row.amountMinor),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: moneyStyle(
-            theme.textTheme.displaySmall!,
-          ).copyWith(color: scheme.onSurface),
-        ),
-        if (entry.isDeleted)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              'Deleted. It no longer counts towards balances.',
-              style: theme.textTheme.bodyMedium?.copyWith(color: scheme.error),
-            ),
-          )
-        else if (!isPayment)
-          _YourPart(ledger: ledger, entry: entry, money: money),
-        if (notes.isNotEmpty) ...[
-          const _Heading('Note'),
-          Text(notes, style: theme.textTheme.bodyLarge),
+          const SizedBox(height: 32),
+          EntryHistory(entryId: entry.id, ledger: ledger),
         ],
-        if (!isPayment) ...[
-          const _Heading('Paid by'),
-          SegmentedList(
-            children: [
-              for (final payer in entry.payers)
-                _PersonTile(
-                  ledger: ledger,
-                  memberId: payer.memberId,
-                  amount: money(payer.amountMinor),
-                ),
-            ],
-          ),
-          _Heading('Split ${_splitWords(entry.row.splitKind)}'.trim()),
-          SegmentedList(
-            children: [
-              for (final share in entry.shares)
-                _PersonTile(
-                  ledger: ledger,
-                  memberId: share.memberId,
-                  amount: money(share.amountMinor),
-                ),
-            ],
-          ),
-        ],
-        const SizedBox(height: 32),
-        EntryHistory(entryId: entry.id, ledger: ledger),
-      ],
+      ),
     );
   }
 

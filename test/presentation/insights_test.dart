@@ -140,7 +140,7 @@ void main() {
     await tester.tap(find.text('Last month'));
     await _settle(tester);
 
-    expect(find.text('Nothing spent here'), findsOneWidget);
+    expect(find.text('No matching expenses'), findsOneWidget);
     expect(find.text('Where it went'), findsNothing);
     expect(tester.takeException(), isNull);
     await unmount(tester);

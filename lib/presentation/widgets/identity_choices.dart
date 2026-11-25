@@ -9,6 +9,8 @@ import '../../application/session_providers.dart';
 import '../../data/auth/google_sign_in_gateway.dart';
 import '../../domain/auth_service.dart';
 import '../navigation.dart';
+import 'auth_method_divider.dart';
+import 'google_sign_in_button.dart';
 
 /// The three ways to become somebody, offered together.
 class IdentityChoices extends ConsumerStatefulWidget {
@@ -112,12 +114,8 @@ class _IdentityChoicesState extends ConsumerState<IdentityChoices> {
         if (GoogleSignInGateway.isOffered && !_codeSent) ...[
           // One button on both platforms now. Android calls Google in-process;
           // the web hands the whole page over and comes back signed in.
-          OutlinedButton.icon(
-            onPressed: _busy ? null : _google,
-            icon: const Icon(Icons.account_circle_outlined),
-            label: const Text('Continue with Google'),
-          ),
-          const SizedBox(height: 20),
+          GoogleSignInButton(onPressed: _busy ? null : _google),
+          const AuthMethodDivider(),
         ],
 
         TextField(
@@ -158,7 +156,7 @@ class _IdentityChoicesState extends ConsumerState<IdentityChoices> {
         ],
 
         const SizedBox(height: 12),
-        FilledButton(
+        FilledButton.tonal(
           onPressed: _busy ? null : (_codeSent ? _verify : _sendCode),
           child: Text(_codeSent ? 'Verify code' : 'Continue with email'),
         ),
@@ -175,24 +173,7 @@ class _IdentityChoicesState extends ConsumerState<IdentityChoices> {
           ),
 
         if (!_codeSent) ...[
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              const Expanded(child: Divider()),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Text(
-                  'or',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-              const Expanded(child: Divider()),
-            ],
-          ),
-          const SizedBox(height: 16),
-
+          const AuthMethodDivider(),
           // A real button, the same size as the others.
           OutlinedButton(
             onPressed: _busy ? null : _guest,
