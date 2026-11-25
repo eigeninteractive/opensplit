@@ -605,9 +605,9 @@ class _EntryTile extends StatelessWidget {
     );
     void open() {
       final groupId = ledger.group.id;
-      if (!isSettlement && MediaQuery.sizeOf(context).width < _wideBreakpoint) {
+      if (MediaQuery.sizeOf(context).width < _wideBreakpoint) {
         unawaited(
-          showExpenseDetailsSheet(context, groupId: groupId, entryId: entry.id),
+          showEntryDetailsSheet(context, groupId: groupId, entryId: entry.id),
         );
         return;
       }

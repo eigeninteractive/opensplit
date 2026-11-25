@@ -17,8 +17,8 @@ import '../widgets/group_access.dart';
 import '../widgets/page_body.dart';
 import '../widgets/segmented_list.dart';
 
-/// Opens the full expense record in a resizable sheet from the journal.
-Future<void> showExpenseDetailsSheet(
+/// Opens an expense or settlement in a resizable sheet from the journal.
+Future<void> showEntryDetailsSheet(
   BuildContext context, {
   required String groupId,
   required String entryId,
@@ -110,7 +110,7 @@ class EntryDetailScreen extends ConsumerWidget {
         child: Center(
           child: Padding(
             padding: EdgeInsets.all(24),
-            child: Text('That expense is not on this device.'),
+            child: Text('This record isn’t on this device.'),
           ),
         ),
       ),
