@@ -9,6 +9,7 @@ What changed in each version of the app, newest first. The format is
 - Edit date and time together, and drag expense details up to see the whole record.
 - Open Account from the Home avatar. Wide screens have a labeled sidebar, and Google sign-in comes first.
 - Simplified Settings, Account, and common confirmation dialogs.
+- Your profile picture expands into its editor, and the navigation uses the OpenSplit logo.
 
 ### Fixed
 - Changing the split method on Android no longer sends the keyboard back to the total.

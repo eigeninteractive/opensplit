@@ -8,6 +8,7 @@ import 'package:opensplit/data/repositories/drift_profile_repository.dart';
 import 'package:opensplit/domain/auth_service.dart';
 import 'package:opensplit/domain/avatar.dart';
 import 'package:opensplit/presentation/app.dart';
+import 'package:opensplit/presentation/widgets/avatar_view.dart';
 import 'package:opensplit_api/opensplit_api.dart'
     show Account, AvatarColor, AvatarIcon, AvatarKind;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -156,6 +157,45 @@ void main() {
     await tapAndSettle(tester, find.text('Discard'));
     expect(find.text('Edit profile'), findsNothing);
     expect((await stored(tester))?.displayName, 'Ana');
+    await unmount(tester);
+  });
+
+  testWidgets('the profile picture moves into the editor and back', (
+    tester,
+  ) async {
+    await store(tester, name: 'Ana Lima');
+    await openAccount(tester);
+
+    final picture = find.byType(AvatarView);
+    final start = tester.getRect(picture);
+    await tester.tap(find.byTooltip('Change picture'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    final opening = tester.getRect(picture);
+    await settle(tester);
+    final preview = tester.getRect(picture);
+    expect(opening.width, inExclusiveRange(start.width, preview.width));
+    expect(
+      opening.center.dx,
+      inExclusiveRange(start.center.dx, preview.center.dx),
+    );
+
+    await tester.tap(find.byTooltip('Close'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    final closing = tester.getRect(picture);
+    expect(closing.width, inExclusiveRange(start.width, preview.width));
+    await settle(tester);
+    expect(tester.getRect(picture), start);
+
+    await tester.tap(find.byTooltip('Change picture'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 32));
+    ProviderScope.containerOf(
+      tester.element(find.byType(OpenSplitApp)),
+    ).read(routerProvider).pop();
+    await settle(tester);
+    expect(tester.getRect(picture), start);
     await unmount(tester);
   });
 

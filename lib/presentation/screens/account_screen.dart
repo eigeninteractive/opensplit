@@ -301,7 +301,7 @@ class _Identity extends ConsumerWidget {
                       ? null
                       : () => context.push('/account/picture'),
                   radius: 36,
-                  child: AvatarView(
+                  child: AvatarHero.profile(
                     avatar: avatar,
                     name: named,
                     id: id,

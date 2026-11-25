@@ -20,6 +20,7 @@ import '../detail_transition.dart';
 import '../navigation.dart';
 import '../theme.dart';
 import '../widgets/group_identity_hero.dart';
+import '../widgets/avatar_view.dart';
 import '../widgets/balances_panel.dart';
 import '../widgets/category_icon.dart';
 import '../widgets/day_header.dart';
@@ -437,7 +438,7 @@ class _GroupHeader extends ConsumerWidget {
               child: CircleAvatar(
                 radius: _avatarRadius + ring,
                 backgroundColor: scheme.surface,
-                child: GroupAvatarHero(group: group, radius: _avatarRadius),
+                child: AvatarHero.group(group: group, radius: _avatarRadius),
               ),
             ),
           ),

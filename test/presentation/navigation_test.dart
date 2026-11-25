@@ -12,6 +12,7 @@ import 'package:opensplit/presentation/screens/entry_editor_screen.dart';
 import 'package:opensplit/presentation/screens/group_detail_screen.dart';
 import 'package:opensplit/presentation/screens/group_list_screen.dart';
 import 'package:opensplit/presentation/screens/settings_screen.dart';
+import 'package:opensplit/presentation/widgets/brand_mark.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../harness.dart';
@@ -128,9 +129,22 @@ void main() {
 
       final rail = find.byType(NavigationRail);
       expect(tester.widget<NavigationRail>(rail).extended, isFalse);
+      expect(
+        find.descendant(of: rail, matching: find.byType(BrandMark)),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: rail, matching: find.byType(BrandLockup)),
+        findsNothing,
+      );
       tester.view.physicalSize = const Size(1280, 800);
       await tester.pumpAndSettle();
       expect(tester.widget<NavigationRail>(rail).extended, isTrue);
+      expect(
+        find.descendant(of: rail, matching: find.byType(BrandLockup)),
+        findsOneWidget,
+      );
+      expect(find.text('OpenSplit'), findsOneWidget);
 
       await tester.tap(find.text('Settings'));
       await tester.pumpAndSettle();
@@ -156,6 +170,15 @@ void main() {
           ),
           findsNothing,
           reason: 'navigation belongs in one place, and this is not it',
+        );
+        await tester.tap(find.byTooltip('Open navigation menu'));
+        await tester.pumpAndSettle();
+        expect(
+          find.descendant(
+            of: find.byType(NavigationDrawer),
+            matching: find.byType(BrandLockup),
+          ),
+          findsOneWidget,
         );
 
         await _unmount(tester);

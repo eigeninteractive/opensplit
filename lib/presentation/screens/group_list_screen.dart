@@ -11,7 +11,9 @@ import '../../application/sync_providers.dart';
 import '../../data/local/database.dart';
 import '../../data/repositories/drift_group_repository.dart';
 import '../../domain/avatar.dart';
+import '../../l10n/app_localizations.dart';
 import '../launch_hold.dart';
+import '../navigation.dart';
 import '../widgets/avatar_view.dart';
 import '../widgets/group_cover.dart';
 import '../widgets/group_identity_hero.dart';
@@ -46,9 +48,13 @@ class GroupListScreen extends ConsumerWidget {
     ];
     final overview = ref.watch(groupsOverviewProvider);
     final currencies = ref.watch(currenciesProvider).value ?? const {};
+    final hasSidebar =
+        MediaQuery.sizeOf(context).width >= navigationSidebarMinWidth;
 
     return DestinationScaffold(
-      titleWidget: const BrandLockup(),
+      titleWidget: hasSidebar
+          ? Text(AppLocalizations.of(context).navigationGroups)
+          : const BrandLockup(),
       actions: [
         const OfflineIndicator(),
         if (kIsWeb) const SyncRefreshButton.everything(),
@@ -309,7 +315,7 @@ class _GroupTile extends ConsumerWidget {
             leading: Badge(
               isLabelVisible: hasNews,
               smallSize: 12,
-              child: GroupAvatarHero(group: group, radius: 28),
+              child: AvatarHero.group(group: group, radius: 28),
             ),
             title: Semantics(
               hint: hasNews ? 'New activity' : null,
