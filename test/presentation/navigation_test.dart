@@ -182,6 +182,19 @@ void main() {
       );
       expect(_router(tester).canPop(), isFalse);
 
+      for (final (title, symbol) in [
+        ('Your data is on this device', Icons.lock_outline),
+        ('Free forever', Icons.favorite_outline),
+      ]) {
+        final tile = find.widgetWithText(ListTile, title);
+        await tester.ensureVisible(tile);
+        await tester.pumpAndSettle();
+        final icon = find.descendant(of: tile, matching: find.byIcon(symbol));
+        expect(
+          tester.getCenter(icon).dy,
+          closeTo(tester.getCenter(tile).dy, 0.5),
+        );
+      }
       await _unmount(tester);
     });
 

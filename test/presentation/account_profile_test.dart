@@ -234,6 +234,7 @@ void main() {
     await store(tester, name: 'Ana');
     await openAccount(tester, guest: true);
     expect(find.text('Guest account on this device'), findsOneWidget);
+    expect(find.text('Sign out'), findsNothing);
     expect(find.byType(TextField), findsNothing);
 
     await tapAndSettle(tester, find.text('Save my account'));

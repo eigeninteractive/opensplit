@@ -161,7 +161,6 @@ class _ExportButtonState extends ConsumerState<ExportButton> {
       ? ListTile(
           leading: const LeadingIcon(Icons.ios_share),
           title: const Text('Export this group'),
-          subtitle: const Text('Download a spreadsheet or full backup.'),
           onTap: _busy ? null : _pick,
           trailing: _busy
               ? const SizedBox.square(

@@ -37,15 +37,13 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Sign out?'),
         content: const Text(
-          'This device keeps nothing: the groups and expenses stored here are '
-          'removed, so whoever uses it next cannot read them.\n\n'
-          'Synced changes return when you sign back in. Any pending or '
-          'conflicting edits must be synced or resolved before signing out.',
+          'This removes OpenSplit data from this device. Sign back in to '
+          'restore synced groups and expenses.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Stay'),
+            child: const Text('Cancel'),
           ),
           FilledButton(
             onPressed: () {
@@ -92,37 +90,29 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete your account?'),
+        scrollable: true,
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
+          spacing: 12,
           children: [
-            const Text('This cannot be undone.'),
-            const SizedBox(height: 16),
+            const Text('This is permanent.'),
             if (impact.solo > 0)
-              _Bullet(
+              Text(
                 '${impact.solo} ${impact.solo == 1 ? 'group' : 'groups'} '
-                'nobody else has an account in will be deleted outright, '
-                'along with every expense in '
-                '${impact.solo == 1 ? 'it' : 'them'}.',
+                'with no other accounts will be deleted, including all expenses.',
               ),
             if (impact.shared > 0)
-              _Bullet(
-                'In ${impact.shared} shared '
-                '${impact.shared == 1 ? 'group' : 'groups'}, what you paid '
-                'and what you owe stays, under your name. It is your '
-                "co-members' record of their own money as much as yours, and "
-                'removing it would leave their balances wrong.',
+              Text(
+                'Your name, expenses, and balances stay in ${impact.shared} '
+                'shared ${impact.shared == 1 ? 'group' : 'groups'}.',
               ),
-            const _Bullet(
-              'Your account, your sign-in and your notifications go for good. '
-              'There is no way to sign back in.',
-            ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Keep my account'),
+            child: const Text('Cancel'),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
@@ -133,7 +123,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
               confirmedIrreversibly();
               Navigator.of(context).pop(true);
             },
-            child: const Text('Delete for good'),
+            child: const Text('Delete account'),
           ),
         ],
       ),
@@ -236,30 +226,9 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                           'Sign out',
                           style: TextStyle(color: theme.colorScheme.error),
                         ),
-                        subtitle: const Text(
-                          'Removes this device\'s copy. Sign back in to get it again.',
-                        ),
                         onTap: ref.watch(requiresAppUpdateProvider)
                             ? null
                             : _signOut,
-                      )
-                    // Said out loud rather than left as a gap.
-                    else
-                      ListTile(
-                        leading: Icon(
-                          Icons.no_accounts_outlined,
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                        title: Text(
-                          'Signing out would end this account',
-                          style: TextStyle(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                        subtitle: const Text(
-                          'Nothing but this device identifies a guest, so there '
-                          'would be no signing back in. Save your account first.',
-                        ),
                       ),
                     ListTile(
                       leading: Icon(
@@ -269,10 +238,6 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                       title: Text(
                         'Delete account',
                         style: TextStyle(color: theme.colorScheme.error),
-                      ),
-                      subtitle: const Text(
-                        'Removes your account and everything only you can see. '
-                        'Permanent.',
                       ),
                       trailing: _deleting
                           ? const SizedBox(
@@ -401,13 +366,7 @@ class _SaveAccountCard extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Save your account',
-              style: theme.textTheme.titleMedium?.copyWith(color: onCard),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Add an email address or Google so you can get back in after '
-              'losing this device, and use OpenSplit on more than one.',
+              'Add Google or email to recover your groups on another device.',
               style: theme.textTheme.bodyMedium?.copyWith(color: onCard),
             ),
             const SizedBox(height: 16),
@@ -486,25 +445,6 @@ class _ProfileRow extends ConsumerWidget {
 
 void _edit(BuildContext context, ProfileField field) =>
     context.push('/account/edit?field=${field.name}');
-
-/// A dash and a line of text, for a dialog that has to list consequences.
-class _Bullet extends StatelessWidget {
-  const _Bullet(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 12),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('\u2014  '),
-        Expanded(child: Text(text)),
-      ],
-    ),
-  );
-}
 
 /// Asks for the code sent to [email], and checks it before closing.
 class _ConfirmItIsYou extends StatefulWidget {

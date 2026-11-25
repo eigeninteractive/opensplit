@@ -170,7 +170,6 @@ void main() {
     await _settle(tester);
 
     expect(find.text('All settled up'), findsOneWidget);
-    expect(find.text('Nobody owes anybody anything.'), findsOneWidget);
 
     // ---- The record of all of it, with no server anywhere ---------------
     await tester.tap(find.byTooltip('More'));
@@ -178,7 +177,7 @@ void main() {
     await tester.tap(find.text('Activity'));
     await _settle(tester);
 
-    expect(find.text('Nothing yet'), findsNothing);
+    expect(find.text('No activity yet'), findsNothing);
     expect(
       find.text('Ravi added “Groceries”'),
       findsOneWidget,

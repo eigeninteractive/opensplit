@@ -515,9 +515,12 @@ class _EntriesPane extends ConsumerWidget {
             ),
           ),
         if (ledger.entries.isEmpty)
-          SliverFillRemaining(
+          const SliverFillRemaining(
             hasScrollBody: false,
-            child: _EmptyEntries(canEdit: ledger.canEdit),
+            child: EmptyState(
+              icon: Icons.receipt_long_outlined,
+              title: 'No expenses',
+            ),
           )
         else
           SliverList.builder(
@@ -789,18 +792,3 @@ class _YourPart extends StatelessWidget {
 
 String _capitalised(String text) =>
     text.isEmpty ? text : text[0].toUpperCase() + text.substring(1);
-
-class _EmptyEntries extends StatelessWidget {
-  const _EmptyEntries({required this.canEdit});
-
-  final bool canEdit;
-
-  @override
-  Widget build(BuildContext context) => EmptyState(
-    icon: Icons.receipt_long_outlined,
-    title: canEdit ? 'Nothing yet' : 'No expenses',
-    message: canEdit
-        ? 'Add the first expense and balances appear straight away.'
-        : 'There are no active expenses in this saved history.',
-  );
-}

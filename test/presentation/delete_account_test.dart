@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:opensplit/application/backend_providers.dart';
+import 'package:opensplit/application/ledger_providers.dart';
 import 'package:opensplit/application/local_providers.dart';
 import 'package:opensplit/data/local/database.dart';
 import 'package:opensplit/domain/auth_service.dart';
@@ -71,8 +72,9 @@ Future<void> _beats(WidgetTester tester) async {
 Future<void> _pump(
   WidgetTester tester,
   AppDatabase db,
-  AuthService auth,
-) async {
+  AuthService auth, {
+  ({int solo, int shared})? impact,
+}) async {
   tester.view.physicalSize = const Size(1200, 2400);
   addTearDown(tester.view.resetPhysicalSize);
   await tester.pumpWidget(
@@ -82,6 +84,8 @@ Future<void> _pump(
         currentAccountIdProvider.overrideWithValue(testAccountId),
         authServiceProvider.overrideWithValue(auth),
         apiClientProvider.overrideWithValue(null),
+        if (impact != null)
+          deletionImpactProvider.overrideWith((ref) async => impact),
       ],
       child: const MaterialApp(home: AccountScreen()),
     ),
@@ -97,7 +101,15 @@ Future<void> _askToDelete(WidgetTester tester) async {
   );
   await tester.tap(find.text('Delete account'));
   await _beats(tester);
-  await tester.tap(find.text('Delete for good'));
+}
+
+Future<void> _confirmDelete(WidgetTester tester) async {
+  await tester.tap(
+    find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.widgetWithText(FilledButton, 'Delete account'),
+    ),
+  );
   await _beats(tester);
 }
 
@@ -114,8 +126,21 @@ void main() {
 
   testWidgets('asks for the emailed code, then deletes', (tester) async {
     final auth = _StaleSession();
-    await _pump(tester, db, auth);
+    await _pump(tester, db, auth, impact: (solo: 1, shared: 2));
     await _askToDelete(tester);
+    expect(find.text('This is permanent.'), findsOneWidget);
+    expect(
+      find.text(
+        '1 group with no other accounts will be deleted, including all expenses.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Your name, expenses, and balances stay in 2 shared groups.'),
+      findsOneWidget,
+    );
+    expect(auth.calls, isEmpty);
+    await _confirmDelete(tester);
 
     expect(find.text('Confirm it is you'), findsOneWidget);
     expect(
@@ -143,6 +168,7 @@ void main() {
     final auth = _StaleSession();
     await _pump(tester, db, auth);
     await _askToDelete(tester);
+    await _confirmDelete(tester);
 
     await tester.enterText(find.byType(TextField).last, '00000000');
     await tester.tap(find.text('Confirm'));
@@ -157,6 +183,7 @@ void main() {
     final auth = _StaleSession();
     await _pump(tester, db, auth);
     await _askToDelete(tester);
+    await _confirmDelete(tester);
 
     await tester.tap(find.text('Keep my account').last);
     await _beats(tester);

@@ -23,8 +23,6 @@ class AboutScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Scaffold(
       appBar: AppBar(
         leading: BackButton(onPressed: () => goBack(context, '/settings')),
@@ -41,22 +39,15 @@ class AboutScreen extends StatelessWidget {
             const _Version(),
             const Divider(height: 40),
 
-            _Link(
-              icon: Icons.code,
-              title: 'Source code',
-              subtitle: 'App and server.',
-              url: repositoryUrl,
-            ),
+            _Link(icon: Icons.code, title: 'Source code', url: repositoryUrl),
             _Link(
               icon: Icons.bug_report_outlined,
               title: 'Report an issue',
-              subtitle: 'Bugs and suggestions.',
               url: issuesUrl,
             ),
             _Link(
               icon: Icons.balance_outlined,
               title: 'Licence — AGPL-3.0',
-              subtitle: 'Use, modify and share. Keep changes open source.',
               url: licenseUrl,
             ),
 
@@ -65,20 +56,11 @@ class AboutScreen extends StatelessWidget {
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.inventory_outlined),
               title: const Text('Open-source licences'),
-              subtitle: const Text('Packages and fonts.'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => showLicensePage(
                 context: context,
                 applicationName: 'OpenSplit',
                 applicationLegalese: '© 2026 EigenInteractive · AGPL-3.0',
-              ),
-            ),
-
-            const Divider(height: 40),
-            Text(
-              'Open source. No ads, analytics SDKs or venture funding.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
           ],
@@ -125,16 +107,10 @@ class _Version extends StatelessWidget {
 
 /// A row that leaves the app.
 class _Link extends StatelessWidget {
-  const _Link({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.url,
-  });
+  const _Link({required this.icon, required this.title, required this.url});
 
   final IconData icon;
   final String title;
-  final String subtitle;
   final String url;
 
   @override
@@ -142,7 +118,6 @@ class _Link extends StatelessWidget {
     contentPadding: EdgeInsets.zero,
     leading: Icon(icon),
     title: Text(title),
-    subtitle: Text(subtitle),
     trailing: const Icon(Icons.open_in_new, size: 18),
     onTap: () async {
       final messenger = ScaffoldMessenger.of(context);

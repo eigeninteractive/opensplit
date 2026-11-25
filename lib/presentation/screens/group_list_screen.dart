@@ -359,11 +359,8 @@ class _EmptyState extends StatelessWidget {
   const _EmptyState();
 
   @override
-  Widget build(BuildContext context) => const EmptyState(
-    icon: Icons.groups_outlined,
-    title: 'No groups yet',
-    message: 'Create a group for a trip, flat or dinner.',
-  );
+  Widget build(BuildContext context) =>
+      const EmptyState(icon: Icons.groups_outlined, title: 'No groups yet');
 }
 
 class _Message extends StatelessWidget {

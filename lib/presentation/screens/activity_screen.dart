@@ -294,9 +294,6 @@ class _Empty extends StatelessWidget {
   const _Empty();
 
   @override
-  Widget build(BuildContext context) => const EmptyState(
-    icon: Icons.history,
-    title: 'Nothing has happened here yet',
-    message: 'Expense changes and who made them appear here.',
-  );
+  Widget build(BuildContext context) =>
+      const EmptyState(icon: Icons.history, title: 'No activity yet');
 }

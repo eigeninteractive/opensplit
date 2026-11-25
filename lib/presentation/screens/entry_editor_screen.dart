@@ -94,10 +94,9 @@ class _Editor extends ConsumerWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete this entry?'),
+        title: const Text('Delete this expense?'),
         content: const Text(
-          'Balances update straight away. The entry is kept in history so the '
-          'change can always be explained.',
+          'Balances will update. The expense stays in the history.',
         ),
         actions: [
           TextButton(

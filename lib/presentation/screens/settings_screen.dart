@@ -42,20 +42,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ListTile(
                   leading: Icon(Icons.lock_outline),
                   title: Text('Your data is on this device'),
-                  subtitle: Text(
-                    'Expenses are stored locally in SQLite. The app keeps working '
-                    'with what it has even if it can never reach a server again.',
-                  ),
-                  isThreeLine: true,
+                  subtitle: Text('Record expenses offline.'),
+                  titleAlignment: ListTileTitleAlignment.center,
                 ),
                 ListTile(
                   leading: Icon(Icons.favorite_outline),
                   title: Text('Free forever'),
-                  subtitle: Text(
-                    'Every feature is free for everyone. The app is open source, '
-                    'has no ads, and has no analytics SDK.',
-                  ),
-                  isThreeLine: true,
+                  subtitle: Text('Open source, with no ads or analytics SDKs.'),
+                  titleAlignment: ListTileTitleAlignment.center,
                 ),
               ],
             ),
@@ -77,7 +71,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ListTile(
                   leading: const Icon(Icons.info_outline),
                   title: const Text('About OpenSplit'),
-                  subtitle: const Text('Version, source code and licence.'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => context.push('/about'),
                 ),
@@ -127,14 +120,6 @@ class _AppearanceSetting extends ConsumerWidget {
             // Single selection, so the set always holds exactly one.
             onSelectionChanged: (selection) =>
                 ref.read(themeModeProvider.notifier).set(selection.first),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'System follows your device, including its automatic night '
-          'schedule.',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         ),
       ],
@@ -199,10 +184,8 @@ class _WallpaperSetting extends ConsumerWidget {
             title: const Text('Using OpenSplit colours'),
             subtitle: Text(
               kIsWeb
-                  ? 'Browsers use OpenSplit colours. The Android app can '
-                        'use your device palette.'
-                  : 'Your device has not provided a colour palette. On '
-                        'Samsung, check Settings → Wallpaper and style → '
+                  ? 'Wallpaper colours are available in the Android app.'
+                  : 'On Samsung, check Settings → Wallpaper and style → '
                         'Colour palette.',
             ),
           ),
@@ -230,7 +213,6 @@ class _WallpaperSetting extends ConsumerWidget {
               ref.read(wallpaperColorsProvider.notifier).set(enabled: wanted),
           secondary: const Icon(Icons.palette_outlined),
           title: const Text('Match my wallpaper'),
-          subtitle: const Text('Use your device’s colours.'),
         ),
         const SizedBox(height: 8),
         // The palette itself, so that "it is on and nothing changed" is
@@ -254,9 +236,7 @@ class _WallpaperSetting extends ConsumerWidget {
               ),
             Expanded(
               child: Text(
-                enabled
-                    ? 'Your device colours are in use.'
-                    : 'Your device colours. OpenSplit colours are in use.',
+                'Wallpaper colours',
                 style: text.bodySmall?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
@@ -321,8 +301,7 @@ class _NotificationSettingState extends ConsumerState<_NotificationSetting> {
           contentPadding: EdgeInsets.zero,
           value: enabled,
           onChanged: _busy ? null : _toggle,
-          title: const Text('Tell me about group activity'),
-          subtitle: const Text('New expenses and payments in your groups.'),
+          title: const Text('Notify me about new expenses and payments'),
         ),
       ],
     );

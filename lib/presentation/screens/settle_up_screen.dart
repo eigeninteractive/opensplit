@@ -116,7 +116,7 @@ class _SettleUp extends ConsumerWidget {
       builder: (context) => AlertDialog(
         title: const Text('Delete this payment?'),
         content: const Text(
-          'This removes the payment from the balances and keeps its history.',
+          'Balances will update. The payment stays in the history.',
         ),
         actions: [
           TextButton(
@@ -583,8 +583,7 @@ class _UpiSection extends StatelessWidget {
       builder: (context) => AlertDialog(
         title: const Text('Did the payment go through?'),
         content: const Text(
-          'OpenSplit has no way to check. Only say yes if your payment app '
-          'confirmed it.',
+          'Check that your payment app confirmed it before recording.',
         ),
         actions: [
           TextButton(
