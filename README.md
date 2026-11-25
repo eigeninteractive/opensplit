@@ -35,18 +35,45 @@
 The app has no ads or premium tiers. See the [project principles](PRINCIPLES.md)
 and [group lifecycle](docs/group-lifecycle.md).
 
+## Screenshots
+
 <p align="center">
-  <img src="site/store/screenshot-3-balances.png" alt="OpenSplit's Balances screen showing who owes whom in a shared group" width="260">
+  <a href="site/store/screenshot-1-groups.png">
+    <img src="site/store/screenshot-1-groups.png" alt="Groups screen with each group's outstanding balances" width="216">
+  </a>
+  <a href="site/store/screenshot-4-add-expense.png">
+    <img src="site/store/screenshot-4-add-expense.png" alt="Add expense screen with payer and split controls" width="216">
+  </a>
+  <a href="site/store/screenshot-3-balances.png">
+    <img src="site/store/screenshot-3-balances.png" alt="Balances screen showing who owes whom in a shared group" width="216">
+  </a>
 </p>
+
+## Support OpenSplit
+
+Voluntary contributions fund development, maintenance and hosting.
+
+<!-- Buy Me a Coffee artwork: https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png -->
+<p>
+  <a href="https://github.com/sponsors/eigeninteractive">
+    <img src="docs/brand/github-sponsors-badge.svg" alt="GitHub Sponsors" height="36">
+  </a>
+  <a href="https://buymeacoffee.com/seenuklabs">
+    <img src="docs/brand/buy-me-a-coffee-badge.png" alt="Buy Me a Coffee" height="36">
+  </a>
+  <a href="https://rzp.io/rzp/opensplit">
+    <img src="docs/brand/razorpay-badge.svg" alt="Razorpay" height="36">
+  </a>
+</p>
+
+[Compare payment options](https://opensplit.eigeninteractive.com/support) ·
+[Supporter acknowledgments](https://opensplit.eigeninteractive.com/support#supporters)
 
 ## Get involved
 
 - [Report a bug or request a feature](https://github.com/eigeninteractive/opensplit/issues/new/choose)
 - [Report a security issue privately](SECURITY.md)
 - [Contribute code or documentation](CONTRIBUTING.md)
-- [Support OpenSplit](https://opensplit.eigeninteractive.com/support) and
-  [see the people who help sustain it](https://opensplit.eigeninteractive.com/support#supporters).
-  Voluntary contributions fund development, maintenance and hosting.
 
 ## Licence
 
