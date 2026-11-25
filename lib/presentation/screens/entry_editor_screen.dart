@@ -63,10 +63,22 @@ class EntryEditorScreen extends ConsumerWidget {
     if (ledger == null || form == null) {
       return Scaffold(appBar: AppBar(leading: const BackButton()));
     }
-    return _Editor(
-      ledger: ledger,
-      form: form,
-      controller: ref.read(provider.notifier),
+    return Actions(
+      actions: {
+        // Dismiss the active input on touch as well as on mouse clicks.
+        EditableTextTapOutsideIntent:
+            CallbackAction<EditableTextTapOutsideIntent>(
+              onInvoke: (intent) {
+                intent.focusNode.unfocus();
+                return null;
+              },
+            ),
+      },
+      child: _Editor(
+        ledger: ledger,
+        form: form,
+        controller: ref.read(provider.notifier),
+      ),
     );
   }
 }
@@ -113,19 +125,22 @@ class _Editor extends ConsumerWidget {
         ],
       ),
     );
-    if (!(confirmed ?? false)) return;
+    if (confirmed != true || !context.mounted) return;
     if (await controller.delete() && context.mounted) {
-      goBack(context, _groupPath);
+      goBack(context, _groupPath, result: EntryEditResult.deleted);
     }
   }
 
   Future<void> _pickDay(BuildContext context, DateTime now) async {
     final day = form.day;
+    final initial = DateTime(day.year, day.month, day.day);
+    final first = DateTime(2000);
+    final last = now.add(const Duration(days: 365));
     final picked = await showDatePicker(
       context: context,
-      initialDate: DateTime(day.year, day.month, day.day),
-      firstDate: DateTime(2000),
-      lastDate: now.add(const Duration(days: 365)),
+      initialDate: initial,
+      firstDate: initial.isBefore(first) ? initial : first,
+      lastDate: initial.isAfter(last) ? initial : last,
       currentDate: now,
     );
     if (picked != null && context.mounted && controller.chooseDay(picked)) {
@@ -518,16 +533,6 @@ class _SplitSection extends StatelessWidget {
   final EntryFormState form;
   final EntryForm controller;
 
-  void _selectKind(SplitKind kind) {
-    final focus = FocusManager.instance;
-    // On touch, selecting a method ends the previous text edit. Keep
-    // the selector focused when choosing with a hardware keyboard.
-    if (focus.highlightMode == FocusHighlightMode.touch) {
-      focus.primaryFocus?.unfocus();
-    }
-    controller.chooseSplitKind(kind);
-  }
-
   @override
   Widget build(BuildContext context) {
     final currency = this.currency;
@@ -550,7 +555,7 @@ class _SplitSection extends StatelessWidget {
                 label: const Text('Split method'),
                 initialSelection: form.splitKind,
                 expandedInsets: EdgeInsets.zero,
-                requestFocusOnTap: false,
+                requestFocusOnTap: true,
                 enableSearch: false,
                 selectOnly: true,
                 dropdownMenuEntries: const [
@@ -560,7 +565,7 @@ class _SplitSection extends StatelessWidget {
                   DropdownMenuEntry(value: SplitKind.percent, label: '%'),
                 ],
                 onSelected: (kind) {
-                  if (kind != null) _selectKind(kind);
+                  if (kind != null) controller.chooseSplitKind(kind);
                 },
               );
             }
@@ -572,7 +577,8 @@ class _SplitSection extends StatelessWidget {
                 ButtonSegment(value: SplitKind.percent, label: Text('%')),
               ],
               selected: {form.splitKind},
-              onSelectionChanged: (set) => _selectKind(set.first),
+              onSelectionChanged: (set) =>
+                  controller.chooseSplitKind(set.first),
               showSelectedIcon: false,
             );
           },

@@ -11,14 +11,10 @@ import '../theme_mode.dart';
 import '../widgets/page_body.dart';
 import '../widgets/segmented_list.dart';
 
-class SettingsScreen extends ConsumerStatefulWidget {
+/// Appearance, notifications, and information about OpenSplit.
+class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
-  @override
-  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
-}
-
-class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return DestinationScaffold(
@@ -37,18 +33,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const _NotificationSetting(),
             ],
             const SizedBox(height: 32),
-            const SegmentedList(
+            SegmentedList(
               children: [
                 ListTile(
-                  leading: Icon(Icons.lock_outline),
-                  title: Text('Works offline'),
+                  leading: const Icon(Icons.lock_outline),
+                  title: const Text('Works offline'),
                   subtitle: Text(
-                    'Expenses are saved on this device and sync to the cloud '
-                    'when you’re online.',
+                    hasBackend
+                        ? 'Expenses are saved on this device and sync to '
+                              'the cloud when you’re online.'
+                        : 'Expenses are saved on this device.',
                   ),
                   titleAlignment: ListTileTitleAlignment.center,
                 ),
-                ListTile(
+                const ListTile(
                   leading: Icon(Icons.favorite_outline),
                   title: Text('Free forever'),
                   subtitle: Text('Open source, with no ads or analytics SDKs.'),

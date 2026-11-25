@@ -6,7 +6,7 @@ What changed in each version of the app, newest first. The format is
 
 ## [4.2.6] - 2026-11-25
 ### Changed
-- Edit date and time together. Drag expense and payment sheets to full height.
+- Edit date and time together. Expand expense and payment sheets to full height.
 - Open Account from Home. Your picture expands into its editor.
 - Branded navigation with a labeled sidebar on wide screens.
 - Continue with Google or email. Find the same recovery prompt on Home and Account.

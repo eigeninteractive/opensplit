@@ -207,9 +207,16 @@ void main() {
     await _enterInto(tester, 'Amount', '2000');
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await _settle(tester);
-    expect(find.text('₹2,000.00'), findsWidgets);
-    await tester.tap(find.byIcon(Icons.arrow_back));
+    final details = find.byType(DraggableScrollableSheet);
+    expect(
+      find.descendant(of: details, matching: find.text('₹2,000.00')),
+      findsWidgets,
+    );
+    await tester.tap(
+      find.descendant(of: details, matching: find.byType(CloseButton)),
+    );
     await _settle(tester);
+    expect(details, findsNothing);
 
     await tester.tap(find.byTooltip('More'));
     await _settle(tester);

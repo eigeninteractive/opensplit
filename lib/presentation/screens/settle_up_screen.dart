@@ -135,7 +135,7 @@ class _SettleUp extends ConsumerWidget {
     );
     if (confirmed != true || !context.mounted) return;
     if (await controller.delete() && context.mounted) {
-      goBack(context, '/g/${ledger.group.id}');
+      goBack(context, '/g/${ledger.group.id}', result: EntryEditResult.deleted);
     }
   }
 

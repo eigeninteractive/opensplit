@@ -4,6 +4,12 @@ import 'package:go_router/go_router.dart';
 /// The minimum window width for the labeled navigation sidebar.
 const navigationSidebarMinWidth = 1200.0;
 
+/// An editor result that changes what the details route can display.
+enum EntryEditResult {
+  /// The expense or payment was deleted successfully.
+  deleted,
+}
+
 /// Maps native App Links and authentication detours onto internal app routes.
 String? redirectAppRoute(Uri uri, {required bool signedIn}) {
   final path = uri.path;
@@ -49,10 +55,10 @@ String returnDestination(Uri current) => current.path == '/welcome'
     ? safeReturnLocation(current.queryParameters['from'])
     : safeReturnLocation(current.toString());
 
-/// Goes back one screen, or to [fallback] when there is no back to go to.
-void goBack(BuildContext context, String fallback) {
+/// Returns [result] to the previous screen, or goes to [fallback].
+void goBack<T>(BuildContext context, String fallback, {T? result}) {
   if (context.canPop()) {
-    context.pop();
+    context.pop(result);
   } else {
     context.go(fallback);
   }

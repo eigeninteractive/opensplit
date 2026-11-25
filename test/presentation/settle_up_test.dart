@@ -221,6 +221,15 @@ void main() {
     await _beats(tester);
     expect(paymentBar, findsOneWidget);
     expect(sheet, findsNothing);
+    await tester.tap(find.widgetWithText(FilledButton, 'Edit'));
+    await _beats(tester);
+    await tester.tap(find.byTooltip('Delete payment'));
+    await _beats(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await _beats(tester);
+    expect(paymentBar, findsNothing);
+    expect(editBar, findsNothing);
+    expect(row, findsNothing);
     await _unmount(tester);
   });
 

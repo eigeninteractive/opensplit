@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -55,12 +57,11 @@ class EntryDetailScreen extends ConsumerWidget {
 
   String get _groupPath => '/g/$groupId';
 
-  Future<void> _edit(BuildContext context, WidgetRef ref) async {
-    await context.push<void>('$_groupPath/e/$entryId/edit');
-    if (!context.mounted) return;
-    // Deleted from the form: there is nothing left here to come back to.
-    final entry = ref.read(entryRecordProvider(entryId)).value;
-    if (entry?.isDeleted == false) return;
+  Future<void> _edit(BuildContext context) async {
+    final result = await context.push<EntryEditResult>(
+      '$_groupPath/e/$entryId/edit',
+    );
+    if (!context.mounted || result != EntryEditResult.deleted) return;
     if (_inSheet) {
       Navigator.of(context).pop();
       return;
@@ -92,7 +93,7 @@ class EntryDetailScreen extends ConsumerWidget {
         Padding(
           padding: const EdgeInsets.only(right: 8),
           child: FilledButton.tonalIcon(
-            onPressed: () => _edit(context, ref),
+            onPressed: () => _edit(context),
             icon: const Icon(Icons.edit),
             label: const Text('Edit'),
           ),
@@ -118,46 +119,10 @@ class EntryDetailScreen extends ConsumerWidget {
     };
 
     if (_inSheet) {
-      final theme = Theme.of(context);
-      final sheetTheme = theme.bottomSheetTheme;
-      final surface =
-          sheetTheme.modalBackgroundColor ??
-          sheetTheme.backgroundColor ??
-          theme.colorScheme.surfaceContainerLow;
-      return SafeArea(
-        top: false,
-        child: DraggableScrollableSheet(
-          expand: false,
-          minChildSize: 0.3,
-          initialChildSize: 0.6,
-          snap: true,
-          snapSizes: const [0.6],
-          builder: (context, scroll) => CustomScrollView(
-            controller: scroll,
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              PinnedHeaderSliver(
-                child: ColoredBox(
-                  color: surface,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Center(child: _SheetHandle()),
-                      AppBar(
-                        primary: false,
-                        forceMaterialTransparency: true,
-                        leading: const CloseButton(),
-                        title: Text(title),
-                        actions: actions,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              content,
-            ],
-          ),
-        ),
+      return _EntryDetailsSheet(
+        title: title,
+        actions: actions,
+        content: content,
       );
     }
 
@@ -170,6 +135,114 @@ class EntryDetailScreen extends ConsumerWidget {
       body: PageBody(
         maxWidth: 640,
         child: CustomScrollView(slivers: [content]),
+      ),
+    );
+  }
+}
+
+class _EntryDetailsSheet extends StatefulWidget {
+  const _EntryDetailsSheet({
+    required this.title,
+    required this.actions,
+    required this.content,
+  });
+
+  final String title;
+  final List<Widget> actions;
+  final Widget content;
+
+  @override
+  State<_EntryDetailsSheet> createState() => _EntryDetailsSheetState();
+}
+
+class _EntryDetailsSheetState extends State<_EntryDetailsSheet> {
+  static const _initialSize = 0.6;
+  static const _fullSize = 1.0;
+  final _extent = DraggableScrollableController();
+
+  bool get _isExpanded => _extent.isAttached && _extent.size >= _fullSize;
+
+  void _toggleExtent() {
+    if (!_extent.isAttached) return;
+    final target = _isExpanded ? _initialSize : _fullSize;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _extent.jumpTo(target);
+      return;
+    }
+    unawaited(
+      _extent.animateTo(
+        target,
+        duration: kThemeAnimationDuration,
+        curve: Curves.easeInOut,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _extent.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final sheetTheme = theme.bottomSheetTheme;
+    final surface =
+        sheetTheme.modalBackgroundColor ??
+        sheetTheme.backgroundColor ??
+        theme.colorScheme.surfaceContainerLow;
+    return SafeArea(
+      top: false,
+      child: DraggableScrollableSheet(
+        controller: _extent,
+        expand: false,
+        minChildSize: 0.3,
+        initialChildSize: _initialSize,
+        maxChildSize: _fullSize,
+        snap: true,
+        snapSizes: const [_initialSize],
+        builder: (context, scroll) => CustomScrollView(
+          controller: scroll,
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            PinnedHeaderSliver(
+              child: ColoredBox(
+                color: surface,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Center(child: _SheetHandle()),
+                    AppBar(
+                      primary: false,
+                      forceMaterialTransparency: true,
+                      leading: const CloseButton(),
+                      title: Text(widget.title),
+                      actions: [
+                        ListenableBuilder(
+                          listenable: _extent,
+                          builder: (context, child) => IconButton(
+                            onPressed: _toggleExtent,
+                            tooltip: _isExpanded
+                                ? 'Collapse details'
+                                : 'Expand details',
+                            icon: Icon(
+                              _isExpanded
+                                  ? Icons.close_fullscreen
+                                  : Icons.open_in_full,
+                            ),
+                          ),
+                        ),
+                        ...widget.actions,
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            widget.content,
+          ],
+        ),
       ),
     );
   }
