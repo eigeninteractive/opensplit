@@ -6,13 +6,15 @@ What changed in each version of the app, newest first. The format is
 
 ## [4.2.6] - 2026-11-25
 ### Changed
-- Edit date and time together, and drag expense details up to see the whole record.
-- Open Account from the Home avatar. Wide screens have a labeled sidebar, and Google sign-in comes first.
-- Simplified Settings, Account, and common confirmation dialogs.
-- Your profile picture expands into its editor, and the navigation uses the OpenSplit logo.
+- Edit date and time together. Drag the expense sheet to full height.
+- Open Account from Home. Your picture expands into its editor.
+- Branded navigation with a labeled sidebar on wide screens.
+- Continue with Google or email. Find the same recovery prompt on Home and Account.
+- Shorter confirmations and clearer offline and cloud sync wording.
 
 ### Fixed
-- Changing the split method on Android no longer sends the keyboard back to the total.
+- Changing the split method on Android keeps the editor in place.
+- Date and time icons line up. The expense header stays inside its sheet.
 
 ## [4.2.5] - 2026-11-21
 ### Changed

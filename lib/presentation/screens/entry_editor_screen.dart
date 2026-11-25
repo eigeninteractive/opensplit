@@ -861,20 +861,26 @@ class _WhenField extends StatelessWidget {
           ListTile(
             title: const Text('Date'),
             subtitle: Text(day),
-            trailing: const Icon(Icons.calendar_today_outlined),
+            trailing: const SizedBox.square(
+              dimension: kMinInteractiveDimension,
+              child: Icon(Icons.calendar_today_outlined),
+            ),
             onTap: onPickDay,
           ),
           ListTile(
             title: const Text('Time'),
             subtitle: Text(time ?? 'Date only'),
             onTap: onPickTime,
-            trailing: time == null
-                ? const Icon(Icons.schedule_outlined)
-                : IconButton(
-                    tooltip: 'Remove the time',
-                    onPressed: onClearTime,
-                    icon: const Icon(Icons.close),
-                  ),
+            trailing: SizedBox.square(
+              dimension: kMinInteractiveDimension,
+              child: time == null
+                  ? const Icon(Icons.schedule_outlined)
+                  : IconButton(
+                      tooltip: 'Remove the time',
+                      onPressed: onClearTime,
+                      icon: const Icon(Icons.close),
+                    ),
+            ),
           ),
         ],
       ),

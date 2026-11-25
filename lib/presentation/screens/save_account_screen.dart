@@ -61,11 +61,6 @@ class _Unsaved extends StatelessWidget {
         ),
         const SizedBox(height: 24),
         const SaveAccountForm(),
-        const SizedBox(height: 8),
-        TextButton(
-          onPressed: () => goBack(context, '/account'),
-          child: const Text('Not now'),
-        ),
       ],
     );
   }

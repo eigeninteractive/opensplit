@@ -280,6 +280,9 @@ void main() {
     await tapAndSettle(tester, find.text('Save my account'));
 
     expect(find.widgetWithText(TextField, 'Email'), findsOneWidget);
+    expect(find.text('Not now'), findsNothing);
+    await tapAndSettle(tester, find.byType(BackButton));
+    expect(find.text('Save my account'), findsOneWidget);
     await unmount(tester);
   });
 }

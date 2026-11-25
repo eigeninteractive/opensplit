@@ -9,6 +9,7 @@ import '../../application/session_providers.dart';
 import '../../data/auth/google_sign_in_gateway.dart';
 import '../../domain/auth_service.dart';
 import '../navigation.dart';
+import 'auth_method_divider.dart';
 import 'google_sign_in_button.dart';
 
 /// Attaches an email address or Google to a guest session, or signs in to the
@@ -205,7 +206,7 @@ class _SaveAccountFormState extends ConsumerState<SaveAccountForm> {
       children: [
         if (GoogleSignInGateway.isOffered && !_codeSent) ...[
           GoogleSignInButton(onPressed: _busy ? null : _google),
-          const SizedBox(height: 20),
+          const AuthMethodDivider(),
         ],
         TextField(
           controller: _email,

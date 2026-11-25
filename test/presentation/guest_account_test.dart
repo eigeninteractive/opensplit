@@ -23,6 +23,7 @@ Future<void> _pumpPrompt(
   AppDatabase db, {
   required bool guest,
   double textScale = 1,
+  bool accountPage = false,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -40,8 +41,12 @@ Future<void> _pumpPrompt(
           ).copyWith(textScaler: TextScaler.linear(textScale)),
           child: child!,
         ),
-        home: const Scaffold(
-          body: SingleChildScrollView(child: LinkAccountPrompt()),
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: accountPage
+                ? const LinkAccountPrompt.account()
+                : const LinkAccountPrompt(),
+          ),
         ),
       ),
     ),
@@ -92,7 +97,11 @@ void main() {
       await tester.ensureVisible(defer);
       await tester.tap(defer);
       await tester.pump();
-      expect(find.text('Protect access to this guest account'), findsNothing);
+      expect(find.text('Save access to your groups'), findsNothing);
+      await _pumpPrompt(tester, db, guest: true, accountPage: true);
+      expect(find.text('Save access to your groups'), findsOneWidget);
+      expect(find.text('Save my account'), findsOneWidget);
+      expect(defer, findsNothing);
       await _teardown(tester);
     });
 
@@ -100,7 +109,7 @@ void main() {
       await _joinAGroup(db);
       await _pumpPrompt(tester, db, guest: true);
 
-      expect(find.text('Protect access to this guest account'), findsOneWidget);
+      expect(find.text('Save access to your groups'), findsOneWidget);
       await _teardown(tester);
     });
 
@@ -109,7 +118,7 @@ void main() {
     ) async {
       await _pumpPrompt(tester, db, guest: true);
 
-      expect(find.text('Protect access to this guest account'), findsNothing);
+      expect(find.text('Save access to your groups'), findsNothing);
       await _teardown(tester);
     });
 
@@ -119,7 +128,7 @@ void main() {
       await _joinAGroup(db);
       await _pumpPrompt(tester, db, guest: false);
 
-      expect(find.text('Protect access to this guest account'), findsNothing);
+      expect(find.text('Save access to your groups'), findsNothing);
       await _teardown(tester);
     });
   });

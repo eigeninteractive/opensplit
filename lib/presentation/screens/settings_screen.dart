@@ -41,8 +41,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               children: [
                 ListTile(
                   leading: Icon(Icons.lock_outline),
-                  title: Text('Your data is on this device'),
-                  subtitle: Text('Record expenses offline.'),
+                  title: Text('Works offline'),
+                  subtitle: Text(
+                    'Expenses are saved on this device and sync to the cloud '
+                    'when you’re online.',
+                  ),
                   titleAlignment: ListTileTitleAlignment.center,
                 ),
                 ListTile(

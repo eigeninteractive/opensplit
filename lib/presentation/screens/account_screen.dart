@@ -10,6 +10,7 @@ import '../../domain/avatar.dart';
 import '../../data/local/database.dart';
 import '../feedback.dart';
 import '../widgets/avatar_view.dart';
+import '../widgets/link_account_prompt.dart';
 import '../widgets/page_body.dart';
 import '../widgets/segmented_list.dart';
 import '../widgets/sync_status_notice.dart';
@@ -188,7 +189,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
               ),
               if (account != null && account.isAnonymous) ...[
                 const SizedBox(height: 16),
-                const _SaveAccountCard(),
+                const LinkAccountPrompt.account(),
               ],
 
               const _SectionHeader('Profile'),
@@ -341,42 +342,6 @@ class _Identity extends ConsumerWidget {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The one thing a guest should do, said once and with one button.
-class _SaveAccountCard extends ConsumerWidget {
-  const _SaveAccountCard();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final onCard = scheme.onSecondaryContainer;
-
-    return Card.filled(
-      margin: EdgeInsets.zero,
-      color: scheme.secondaryContainer,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Add Google or email to recover your groups on another device.',
-              style: theme.textTheme.bodyMedium?.copyWith(color: onCard),
-            ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: ref.watch(requiresAppUpdateProvider)
-                  ? null
-                  : () => context.push('/account/save'),
-              child: const Text('Save my account'),
-            ),
-          ],
         ),
       ),
     );

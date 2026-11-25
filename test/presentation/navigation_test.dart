@@ -206,7 +206,7 @@ void main() {
       expect(_router(tester).canPop(), isFalse);
 
       for (final (title, symbol) in [
-        ('Your data is on this device', Icons.lock_outline),
+        ('Works offline', Icons.lock_outline),
         ('Free forever', Icons.favorite_outline),
       ]) {
         final tile = find.widgetWithText(ListTile, title);

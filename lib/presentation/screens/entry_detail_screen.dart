@@ -26,6 +26,7 @@ Future<void> showExpenseDetailsSheet(
   context: context,
   isScrollControlled: true,
   useSafeArea: true,
+  clipBehavior: Clip.antiAlias,
   // The list's drag resizes the sheet and scrolls through the record.
   enableDrag: false,
   showDragHandle: false,
@@ -117,6 +118,12 @@ class EntryDetailScreen extends ConsumerWidget {
     };
 
     if (_inSheet) {
+      final theme = Theme.of(context);
+      final sheetTheme = theme.bottomSheetTheme;
+      final surface =
+          sheetTheme.modalBackgroundColor ??
+          sheetTheme.backgroundColor ??
+          theme.colorScheme.surfaceContainerLow;
       return SafeArea(
         top: false,
         child: DraggableScrollableSheet(
@@ -129,13 +136,23 @@ class EntryDetailScreen extends ConsumerWidget {
             controller: scroll,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
-              const SliverToBoxAdapter(child: Center(child: _SheetHandle())),
-              SliverAppBar(
-                primary: false,
-                pinned: true,
-                leading: const CloseButton(),
-                title: Text(title),
-                actions: actions,
+              PinnedHeaderSliver(
+                child: ColoredBox(
+                  color: surface,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Center(child: _SheetHandle()),
+                      AppBar(
+                        primary: false,
+                        forceMaterialTransparency: true,
+                        leading: const CloseButton(),
+                        title: Text(title),
+                        actions: actions,
+                      ),
+                    ],
+                  ),
+                ),
               ),
               content,
             ],

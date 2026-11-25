@@ -248,14 +248,37 @@ void main() {
     await _beats(tester);
 
     final sheet = find.byType(DraggableScrollableSheet);
+    final bottomSheet = find.byType(BottomSheet);
     final edit = find.widgetWithText(FilledButton, 'Edit');
+    final close = find.descendant(
+      of: sheet,
+      matching: find.byType(CloseButton),
+    );
+    final toolbar = find.descendant(of: sheet, matching: find.byType(AppBar));
     expect(sheet, findsOneWidget);
+    expect(
+      tester.widget<BottomSheet>(bottomSheet).clipBehavior,
+      Clip.antiAlias,
+    );
     expect(edit.hitTestable(), findsOneWidget);
     final collapsedY = tester.getTopLeft(edit).dy;
+    expect(
+      tester.getTopLeft(close).dy,
+      greaterThan(tester.getTopLeft(bottomSheet).dy),
+    );
 
-    await tester.dragFrom(const Offset(150, 450), const Offset(0, -400));
+    // Start the drag in the handle area above the toolbar.
+    final handle = Offset(
+      tester.getCenter(toolbar).dx,
+      tester.getTopLeft(toolbar).dy - 6,
+    );
+    await tester.dragFrom(handle, const Offset(0, -400));
     await _beats(tester);
     expect(tester.getTopLeft(edit).dy, lessThan(collapsedY - 150));
+    expect(
+      tester.getTopLeft(close).dy,
+      greaterThan(tester.getTopLeft(bottomSheet).dy),
+    );
     expect(find.text('Paid by').hitTestable(), findsOneWidget);
     expect(find.text('Split equally').hitTestable(), findsOneWidget);
     await tester.tap(edit);
@@ -410,6 +433,15 @@ void main() {
       await _beats(tester);
       await tester.tap(find.text('When'));
       await _beats(tester);
+      final calendar = find.descendant(
+        of: find.widgetWithText(ListTile, 'Date'),
+        matching: find.byIcon(Icons.calendar_today_outlined),
+      );
+      final clearTimeIcon = find.descendant(
+        of: find.byTooltip('Remove the time'),
+        matching: find.byIcon(Icons.close),
+      );
+      expect(tester.getCenter(calendar).dx, tester.getCenter(clearTimeIcon).dx);
       await tester.ensureVisible(find.byTooltip('Remove the time'));
       await tester.tap(find.byTooltip('Remove the time'));
       await _beats(tester);
