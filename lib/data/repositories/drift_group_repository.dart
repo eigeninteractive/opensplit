@@ -119,10 +119,17 @@ final class DriftGroupRepository {
     return row;
   }
 
-  Future<List<Member>> getMembers(String groupId) async {
+  Future<List<Member>> getMembers(
+    String groupId, {
+    bool includeDeparted = false,
+  }) async {
     final rows =
         await (_db.select(_db.members)
-              ..where((t) => t.groupId.equals(groupId) & t.leftAt.isNull())
+              ..where(
+                (t) => includeDeparted
+                    ? t.groupId.equals(groupId)
+                    : t.groupId.equals(groupId) & t.leftAt.isNull(),
+              )
               ..orderBy([(t) => OrderingTerm.asc(t.joinedAt)]))
             .get();
     return [for (final row in rows) row];

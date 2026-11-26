@@ -274,10 +274,14 @@ class _NotificationSettingState extends ConsumerState<_NotificationSetting> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Android did not grant permission. You can turn notifications on '
-            'for OpenSplit in system settings.',
+            'Allow notifications for OpenSplit in your device or browser settings.',
           ),
         ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not update notifications.')),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -286,7 +290,7 @@ class _NotificationSettingState extends ConsumerState<_NotificationSetting> {
 
   @override
   Widget build(BuildContext context) {
-    final enabled = ref.watch(notificationPreferenceProvider);
+    final enabled = ref.watch(notificationPreferenceProvider) == true;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -297,7 +301,10 @@ class _NotificationSettingState extends ConsumerState<_NotificationSetting> {
           contentPadding: EdgeInsets.zero,
           value: enabled,
           onChanged: _busy ? null : _toggle,
-          title: const Text('Notify me about new expenses and payments'),
+          title: const Text('Group notifications'),
+          subtitle: const Text(
+            'Expenses, payments and weekly reminders for unpaid balances.',
+          ),
         ),
       ],
     );

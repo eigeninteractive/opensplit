@@ -241,7 +241,7 @@ export const outbox = sqliteTable("outbox", {
   createdAt: text("created_at").notNull(),
 });
 
-export const chores = ["outbox"] as const;
+export const chores = ["outbox", "settlement-nudge"] as const;
 export type Chore = (typeof chores)[number];
 
 /** Deadlines owed to the object's single alarm, which is armed at the earliest. */

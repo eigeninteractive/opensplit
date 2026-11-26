@@ -69,10 +69,9 @@ enum _DestinationKind { groups, account, settings }
 
 /// One route table serving both Android and the web.
 GoRouter buildRouter({
-  required bool Function() isSignedIn,
+  required GoRouterRedirect redirect,
 
-  /// Notifies the router that [isSignedIn] may now answer differently, so the
-  /// redirect below is reconsidered without the router itself being rebuilt.
+  /// Notifies the router to reconsider [redirect] after a session change.
   Listenable? refresh,
 }) => GoRouter(
   initialLocation: '/',
@@ -81,9 +80,7 @@ GoRouter buildRouter({
     child: NotFoundScreen(location: state.uri.toString()),
   ),
 
-  /// Nothing above the welcome screen works without a session.
-  redirect: (context, state) =>
-      redirectAppRoute(state.uri, signedIn: isSignedIn()),
+  redirect: redirect,
   // Every screen that can be pushed is a page on the one root navigator,
   // which is also where dialogs, date and time pickers and most sheets open.
   // A second navigator around these, as a ShellRoute would add, makes two
@@ -106,7 +103,10 @@ GoRouter buildRouter({
       path: '/join/:token',
       builder: (context, state) => _ReadingOrderScreen(
         child: RequireCurrentApp(
-          child: JoinScreen(token: state.pathParameters['token']!),
+          child: JoinScreen(
+            key: ValueKey(state.pathParameters['token']),
+            token: state.pathParameters['token']!,
+          ),
         ),
       ),
     ),

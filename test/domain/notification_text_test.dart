@@ -112,14 +112,15 @@ void main() {
     final text = describeEntry(
       entry: _entry(kind: EntryKind.settlement, amountMinor: 60000),
       groupName: 'Flat 4B',
-      actorName: 'Priya',
+      actorName: 'Maya',
+      payerName: 'Priya',
+      recipientName: 'Ravi',
       kind: EntryEventKind.created,
       currency: inr,
       shareMinor: 0,
     );
 
-    expect(text.body, contains('recorded paying ₹600.00'));
-    expect(text.body, isNot(contains('added')));
+    expect(text.body, 'Payment recorded from Priya to Ravi (₹600.00).');
   });
 
   test('can be given the app own formatter, so both agree exactly', () {

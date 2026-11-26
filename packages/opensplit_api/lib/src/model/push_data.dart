@@ -26,6 +26,8 @@ class PushData {
     required this.subjectId,
 
     this.currency,
+
+    this.entryKind,
   });
 
   @JsonKey(name: r'groupId', required: true, includeIfNull: false)
@@ -48,6 +50,14 @@ class PushData {
   @JsonKey(name: r'currency', required: false, includeIfNull: false)
   final String? currency;
 
+  @JsonKey(
+    name: r'entryKind',
+    required: false,
+    includeIfNull: false,
+    unknownEnumValue: PushDataEntryKindEnum.unknownDefaultOpenApi,
+  )
+  final PushDataEntryKindEnum? entryKind;
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -56,7 +66,8 @@ class PushData {
           other.eventId == eventId &&
           other.kind == kind &&
           other.subjectId == subjectId &&
-          other.currency == currency;
+          other.currency == currency &&
+          other.entryKind == entryKind;
 
   @override
   int get hashCode =>
@@ -64,7 +75,8 @@ class PushData {
       eventId.hashCode +
       kind.hashCode +
       subjectId.hashCode +
-      currency.hashCode;
+      currency.hashCode +
+      entryKind.hashCode;
 
   factory PushData.fromJson(Map<String, dynamic> json) =>
       _$PushDataFromJson(json);
@@ -75,4 +87,20 @@ class PushData {
   String toString() {
     return toJson().toString();
   }
+}
+
+enum PushDataEntryKindEnum {
+  @JsonValue(r'expense')
+  expense(r'expense'),
+  @JsonValue(r'settlement')
+  settlement(r'settlement'),
+  @JsonValue(r'unknown_default_open_api')
+  unknownDefaultOpenApi(r'unknown_default_open_api');
+
+  const PushDataEntryKindEnum(this.value);
+
+  final String value;
+
+  @override
+  String toString() => value;
 }

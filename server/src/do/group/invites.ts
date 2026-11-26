@@ -105,7 +105,7 @@ export function peek(tx: Tx, token: string, viewer: string | null, now: string):
     return {
       ...shared,
       kind: "group_link",
-      inviterName: nameOf(link.createdBy),
+      inviterName: null,
       memberName: null,
       isRedeemed: false,
       isExpired: link.expiresAt < now,

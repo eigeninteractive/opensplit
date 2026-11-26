@@ -226,6 +226,40 @@ void main() {
     expect(text.body, 'Ravi sent a reminder: you owe them ₹1,200.00.');
   });
 
+  test('a weekly reminder uses the current balance on this device', () async {
+    final g = await seed();
+    await addExpense(g, description: 'Dinner');
+
+    Future<({String title, String body})?> remind(String profileId) =>
+        composeEventNotification(
+          entries: entries,
+          groups: groups,
+          profiles: profiles,
+          currencies: currencies,
+          activity: activity,
+          myProfileId: profileId,
+          push: _push(g.groupId, PushKind.settlementNudge, g.groupId),
+        );
+
+    expect(await remind('profile-ravi'), isNull);
+    expect(await remind('profile-priya'), (
+      title: 'Goa Trip',
+      body: 'You still have a balance to settle in this group.',
+    ));
+
+    await entries.create(
+      EntryDraft.settlement(
+        groupId: g.groupId,
+        currency: 'INR',
+        amountMinor: 120000,
+        fromMemberId: g.priya,
+        toMemberId: g.ravi,
+      ),
+      createdBy: g.priya,
+    );
+    expect(await remind('profile-priya'), isNull);
+  });
+
   test('a reminder for a debt that is gone produces nothing', () async {
     final g = await seed();
     await addExpense(g, description: 'Dinner');

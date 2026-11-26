@@ -8,7 +8,6 @@ import '../../config.dart';
 import '../../data/local/database.dart';
 import '../../data/sync/api_client.dart';
 import '../../data/sync/invites.dart';
-import 'notification_invitation.dart';
 
 /// Creates and shows a link that hands over one unclaimed place in a group.
 Future<void> showInviteSheet(
@@ -130,9 +129,6 @@ class _InviteSheetState extends ConsumerState<_InviteSheet> {
                 ScaffoldMessenger.of(
                   context,
                 ).showSnackBar(const SnackBar(content: Text('Link copied')));
-                // The group is about to stop being a solo ledger, which is the
-                // first moment being notified about it means anything.
-                await offerNotifications(context, ref);
               },
               icon: const Icon(Icons.copy),
               label: const Text('Copy link'),

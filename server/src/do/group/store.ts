@@ -94,6 +94,7 @@ export function purge(tx: Tx, now: string): void {
   tx.delete(schema.events).run();
   tx.delete(schema.invites).run();
   tx.delete(schema.groupLink).run();
+  tx.delete(schema.schedule).where(eq(schema.schedule.name, "settlement-nudge")).run();
   tx.delete(schema.meta).run();
   tx.delete(schema.members).run();
 

@@ -7,13 +7,12 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
+import 'application/app_startup.dart';
 import 'application/backend_providers.dart';
 import 'application/preferences_providers.dart';
 import 'config.dart';
 import 'data/web/launch_signal.dart';
-import 'data/auth/session_store.dart';
 import 'data/sync/api_client.dart';
 import 'presentation/app.dart';
 import 'presentation/launch_hold.dart';
@@ -21,7 +20,7 @@ import 'presentation/theme.dart';
 import 'presentation/widgets/app_viewport.dart';
 import 'presentation/widgets/status_bar_surface.dart';
 
-Future<void> main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
   // The splash stays up while the first screen reads what is saved, so a launch
@@ -44,13 +43,6 @@ Future<void> main() async {
   // Real paths, not hash fragments.
   usePathUrlStrategy();
 
-  final prefs = await SharedPreferences.getInstance();
-
-  // The session is a cached account in the preferences above and, on Android,
-  // a bearer token in secure storage. Both are read now so that
-  // `BetterAuthService` can answer synchronously, then revalidates.
-  final sessions = await SessionStore.load(prefs);
-
   // A build that cannot reach its backend says so, rather than looking correct
   // and quietly doing nothing.
   final problem = configurationProblem;
@@ -69,9 +61,9 @@ Future<void> main() async {
   runApp(
     ProviderScope(
       overrides: [
-        sharedPreferencesProvider.overrideWithValue(prefs),
-        sessionStoreProvider.overrideWithValue(sessions),
+        appStartupProvider.overrideWith((ref) => loadAppStartup()),
         apiAccessProvider.overrideWith((ref) {
+          final prefs = ref.watch(sharedPreferencesProvider);
           final access = ApiAccess.persisted(prefs, baseUrl: apiBaseUrl);
           ref.onDispose(access.dispose);
           return access;

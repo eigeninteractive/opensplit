@@ -1,4 +1,4 @@
-import { runInDurableObject } from "cloudflare:test";
+import { runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { defaultGroupLook } from "../src/db/appearance";
@@ -6,7 +6,7 @@ import { defaultGroupLook } from "../src/db/appearance";
 import type { Group } from "../src/do/group";
 import { finishDeletions } from "../src/forget";
 import { collectAbandonedGuests } from "../src/scheduled";
-import { BY_INVITE, editMember, freshId, makeAccount, makeGroup, ok, RAVI, stub } from "./group";
+import { BY_INVITE, editMember, evenly, freshId, makeAccount, makeGroup, makeGroupOfTwo, ok, RAVI, saveEntry, stub } from "./group";
 import { signInAsGuest } from "./session";
 
 /**
@@ -23,10 +23,10 @@ async function membership(groupId: string, profileId: string) {
 }
 
 /** D1 stops answering for one table, as far as the object can tell. */
-async function withTableAway(table: string, body: () => Promise<void>): Promise<void> {
+async function withTableAway<T>(table: string, body: () => Promise<T>): Promise<T> {
   await env.DB.prepare(`alter table ${table} rename to ${table}_away`).run();
   try {
-    await body();
+    return await body();
   } finally {
     await env.DB.prepare(`alter table ${table}_away rename to ${table}`).run();
   }
@@ -70,6 +70,56 @@ describe("when D1 is not answering", () => {
     expect(after.pending).toBe(0);
     expect(after.chores).toEqual([]);
     expect(after.alarm).toBeNull();
+  });
+
+  it("runs a due reminder without advancing a D1 retry still in backoff", async () => {
+    const { groupId, ravi, priya } = await makeGroupOfTwo();
+    const group = stub(groupId);
+    ok(await saveEntry(group, evenly(freshId("expense"), ravi.id, [ravi.id, priya.id], 300), RAVI));
+
+    const readDeadlines = () =>
+      runInDurableObject(group, async (_instance, state) => ({
+        attempts: state.storage.sql.exec<{ attempts: number }>("select attempts from outbox").toArray(),
+        deadlines: Object.fromEntries(
+          state.storage.sql
+            .exec<{ name: string; due_at: number }>("select name, due_at from schedule")
+            .toArray()
+            .map(({ name, due_at }) => [name, due_at]),
+        ),
+        alarm: await state.storage.getAlarm(),
+      }));
+
+    const link = await withTableAway("link_tokens", async () => {
+      const link = ok(await group.createLink(RAVI));
+      const before = await readDeadlines();
+      expect(before.attempts).toEqual([{ attempts: 1 }]);
+      expect(before.deadlines.outbox).toBeGreaterThan(Date.now());
+      expect(before.alarm).toBe(before.deadlines.outbox);
+      expect(before.deadlines["settlement-nudge"]).toBeGreaterThan(before.deadlines.outbox ?? 0);
+
+      await runInDurableObject(group, async (_instance, state) => {
+        state.storage.sql.exec("update schedule set due_at = ? where name = 'settlement-nudge'", Date.now() - 1);
+      });
+      expect(await runDurableObjectAlarm(group)).toBe(true);
+
+      const after = await readDeadlines();
+      expect(after.attempts).toEqual(before.attempts);
+      expect(after.deadlines.outbox).toBe(before.deadlines.outbox);
+      expect(after.alarm).toBe(before.deadlines.outbox);
+      expect(after.deadlines["settlement-nudge"]).toBeGreaterThan(before.deadlines.outbox ?? 0);
+      return link;
+    });
+
+    const beforeRetry = await readDeadlines();
+    await runInDurableObject(group, async (_instance, state) => {
+      state.storage.sql.exec("update schedule set due_at = ? where name = 'outbox'", Date.now() - 1);
+    });
+    expect(await runDurableObjectAlarm(group)).toBe(true);
+    const caughtUp = await readDeadlines();
+    expect(caughtUp.attempts).toEqual([]);
+    expect(caughtUp.deadlines).toEqual({ "settlement-nudge": beforeRetry.deadlines["settlement-nudge"] });
+    expect(caughtUp.alarm).toBe(beforeRetry.deadlines["settlement-nudge"]);
+    expect(await env.DB.prepare("select group_id from link_tokens where token = ?").bind(link.token).first()).toMatchObject({ group_id: groupId });
   });
 
   it("sends a backlog of any size in one go, not twenty at a time", async () => {

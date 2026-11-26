@@ -8,15 +8,20 @@ import { findMeta, hasActiveAccounts, nowIso, purge, requireMeta, type Tx } from
 
 const RETRY_BACKOFF = [30_000, 2 * 60_000, 10 * 60_000, 60 * 60_000] as const;
 
-function scheduleAt(tx: Tx, name: schema.Chore, at: number): void {
+export function scheduleAt(tx: Tx, name: schema.Chore, at: number): void {
   tx.insert(schema.schedule)
     .values({ name, dueAt: at })
     .onConflictDoUpdate({ target: schema.schedule.name, set: { dueAt: at } })
     .run();
 }
 
-function unschedule(tx: Tx, name: schema.Chore): void {
+export function unschedule(tx: Tx, name: schema.Chore): void {
   tx.delete(schema.schedule).where(eq(schema.schedule.name, name)).run();
+}
+
+/** The deadline for one chore, or null when it is idle. */
+export function scheduledAt(tx: Tx, name: schema.Chore): number | null {
+  return tx.select({ at: schema.schedule.dueAt }).from(schema.schedule).where(eq(schema.schedule.name, name)).get()?.at ?? null;
 }
 
 /** The earliest thing owed, or null when nothing is. */

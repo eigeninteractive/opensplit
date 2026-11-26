@@ -19,6 +19,7 @@ import '../sync/outbox_queue.dart';
 import '../sync/sync_engine.dart';
 import '../sync/sync_session.dart';
 import 'notification_channel.dart';
+import 'notification_preferences.dart';
 import 'push_data.dart';
 
 /// Handles a wake-up that arrives while the app is backgrounded or not running.
@@ -39,6 +40,11 @@ Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
   AppDatabase? db;
   OutboxQueue? outbox;
   try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+    bool enabled() => prefs.getBool(notificationPreferenceKey) == true;
+    if (!enabled()) return;
+
     if (!_firebaseReady) {
       await Firebase.initializeApp(
         options: FirebaseOptions(
@@ -59,10 +65,7 @@ Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
     final session = await readBackgroundSession();
     if (session == null) return;
     final profileId = session.account.id;
-    access = ApiAccess.persisted(
-      await SharedPreferences.getInstance(),
-      baseUrl: apiBaseUrl,
-    );
+    access = ApiAccess.persisted(prefs, baseUrl: apiBaseUrl);
 
     // A second connection to the same file — the same file, because the ledger
     // is named after the account and this isolate resolved the same account
@@ -103,6 +106,8 @@ Future<void> handleBackgroundEntryMessage(RemoteMessage message) async {
     if (text == null) return;
     final after = await readSyncSession(db);
     if (!after.enabled || after.epoch != syncing.epoch) return;
+    await prefs.reload();
+    if (!enabled()) return;
 
     final local = FlutterLocalNotificationsPlugin();
     await local.initialize(

@@ -9,6 +9,28 @@ import 'package:web/web.dart' as web;
 const _describePush = 'opensplit:describe-push';
 const _openGroup = 'opensplit:open-group';
 
+/// Shows a reminder received while a tab is visible. Its tap uses the same
+/// service-worker handler as a reminder that arrived in the background.
+Future<void> showWebReminder({
+  required String groupId,
+  required String eventId,
+  required String title,
+  required String body,
+}) async {
+  final registration = await web.window.navigator.serviceWorker.ready.toDart;
+  await registration
+      .showNotification(
+        title,
+        web.NotificationOptions(
+          body: body,
+          icon: '/icons/Icon-192.png',
+          tag: eventId,
+          data: {'groupId': groupId}.jsify(),
+        ),
+      )
+      .toDart;
+}
+
 /// Answers the service worker's requests to this tab.
 ///
 /// A push that arrives while every tab is hidden goes to the worker, which

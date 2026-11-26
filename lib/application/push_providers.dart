@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../data/push/notification_preferences.dart';
 import '../data/push/push_service.dart';
 import 'backend_providers.dart';
 import 'entry_notification.dart';
@@ -18,8 +19,10 @@ part 'push_providers.g.dart';
 PushService pushService(Ref ref) {
   final service = PushService(
     isEnabled: () =>
-        ref.read(signedInProvider) && ref.read(notificationPreferenceProvider),
-    onTokenChanged: (token) => _registerDeviceToken(ref, token),
+        ref.read(signedInProvider) &&
+        ref.read(notificationPreferenceProvider) == true,
+    onTokenChanged: (token) =>
+        ref.read(notificationPreferenceProvider.notifier).register(token),
     onWake: (groupId) =>
         ref.read(syncControllerProvider.notifier).syncGroup(groupId),
     // The same composer the background isolate calls, so a notification says
@@ -44,30 +47,13 @@ PushService pushService(Ref ref) {
   return service;
 }
 
-/// Sends this device's token to the server.
-Future<void> _registerDeviceToken(Ref ref, String token) async {
-  final tokens = ref.read(deviceTokensProvider);
-  final account = ref.read(sessionControllerProvider);
-  if (tokens == null ||
-      account == null ||
-      !ref.read(notificationPreferenceProvider)) {
-    return;
-  }
-
-  // Unconditional, because a device changes hands.
-  await tokens.register(
-    token: token,
-    platform: ref.read(pushServiceProvider).platform,
-  );
-}
-
 /// Registers this device for push, if the user has already agreed to it.
 @Riverpod(keepAlive: true)
 Future<void> pushRegistration(Ref ref) async {
   final wanted = ref.watch(notificationPreferenceProvider);
   final account = ref.watch(sessionControllerProvider);
   final tokens = ref.watch(deviceTokensProvider);
-  if (!wanted || account == null || tokens == null) return;
+  if (wanted != true || account == null || tokens == null) return;
 
   try {
     final push = ref.read(pushServiceProvider);
@@ -76,24 +62,23 @@ Future<void> pushRegistration(Ref ref) async {
     if (!await push.hasPermission()) return;
 
     final token = await push.token();
-    if (token == null) return;
-    await _registerDeviceToken(ref, token);
-  } catch (error) {
+    if (token == null || !ref.mounted) return;
+    await ref.read(notificationPreferenceProvider.notifier).register(token);
+  } catch (_) {
     // Push is not configured, or permission was refused. Neither is a problem
     // worth interrupting anyone about.
   }
 }
 
-/// Whether the user has asked to be told about group activity.
+/// Stores this device's choice and serializes changes to its push token.
 @Riverpod(keepAlive: true)
 class NotificationPreference extends _$NotificationPreference {
-  static const _key = 'notifications_requested';
+  Future<void> _pending = Future.value();
 
+  /// Null until this device answers the in-app prompt.
   @override
-  bool build() => ref.watch(sharedPreferencesProvider).getBool(_key) ?? false;
-
-  /// Whether the user has ever been shown the prompt.
-  bool hasBeenAsked() => ref.read(sharedPreferencesProvider).containsKey(_key);
+  bool? build() =>
+      ref.watch(sharedPreferencesProvider).getBool(notificationPreferenceKey);
 
   /// Records a refusal made in the app, before the OS is ever involved.
   Future<void> markDeclined() => _remember(false);
@@ -103,33 +88,30 @@ class NotificationPreference extends _$NotificationPreference {
     final push = ref.read(pushServiceProvider);
     final granted = await push.requestPermission();
     await _remember(granted);
-    if (!granted) return false;
-
-    final token = await push.token();
-    if (token == null) return false;
-    await _registerDeviceToken(ref, token);
-    return true;
+    return granted;
   }
 
   /// Stops notifying this device, and removes its token from the server so the
   /// fan-out does not keep paying to wake a device that will ignore it.
   Future<void> disable() async {
     await _remember(false);
-    await releaseDevice();
+    await _inOrder(_unregister);
   }
 
-  /// Removes this device's token from the server without changing the
-  /// preference, so the next account to sign in here registers it again.
-  ///
-  /// Called before signing out, while the session can still prove whose token
-  /// it is. Otherwise the server goes on waking a browser nobody is signed in
-  /// to, and its service worker, which cannot tell, shows the notification.
-  Future<void> releaseDevice() async {
-    final push = ref.read(pushServiceProvider);
-    final tokens = ref.read(deviceTokensProvider);
-    // Asking for a token without permission prompts for it on the web.
-    if (tokens == null || !await push.hasPermission()) return;
+  /// Removes the token while still signed in and holds off token refreshes
+  /// until the session has ended. The next account keeps the device's choice.
+  Future<void> releaseDeviceAndSignOut(Future<void> Function() signOut) =>
+      _inOrder(() async {
+        await _unregister();
+        await signOut();
+      });
+
+  Future<void> _unregister() async {
     try {
+      final push = ref.read(pushServiceProvider);
+      final tokens = ref.read(deviceTokensProvider);
+      // Asking for a token without permission prompts for it on the web.
+      if (tokens == null || !await push.hasPermission()) return;
       final token = await push.token();
       if (token != null) await tokens.unregister(token);
     } catch (_) {
@@ -138,7 +120,35 @@ class NotificationPreference extends _$NotificationPreference {
   }
 
   Future<void> _remember(bool wanted) async {
-    await ref.read(sharedPreferencesProvider).setBool(_key, wanted);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setBool(notificationPreferenceKey, wanted);
     state = wanted;
+  }
+
+  /// Registers a token if the same account still wants notifications.
+  Future<void> register(String token) {
+    final accountId = ref.read(currentAccountIdProvider);
+    return _inOrder(() async {
+      if (accountId == null ||
+          state != true ||
+          ref.read(currentAccountIdProvider) != accountId) {
+        return;
+      }
+      final tokens = ref.read(deviceTokensProvider);
+      await tokens?.register(
+        token: token,
+        platform: ref.read(pushServiceProvider).platform,
+      );
+    });
+  }
+
+  Future<void> _inOrder(Future<void> Function() change) {
+    final result = _pending.then((_) => change());
+    _pending = result.then<void>(
+      (_) {},
+      onError: (Object error, StackTrace stack) {},
+    );
+    return result;
   }
 }
