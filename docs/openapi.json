@@ -414,6 +414,13 @@
             "type": "string",
             "pattern": "^[A-Z]{3}$",
             "example": "INR"
+          },
+          "entryKind": {
+            "type": "string",
+            "enum": [
+              "expense",
+              "settlement"
+            ]
           }
         },
         "required": [
@@ -434,7 +441,8 @@
           "group_renamed",
           "link_created",
           "link_revoked",
-          "reminder"
+          "reminder",
+          "settlement_nudge"
         ]
       },
       "Health": {

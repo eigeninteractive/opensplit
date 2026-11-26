@@ -6,8 +6,9 @@ import type { Group } from "../src/do/group";
 import type { append } from "../src/do/group/events";
 import migrations from "../src/do/group/migrations/migrations.js";
 import { kindOf, statusFor } from "../src/do/group/refusal";
+import { SETTLEMENT_NUDGE_DELAY_MS } from "../src/do/group/settlement-nudges";
 import { refusalCodes } from "../src/schemas/common";
-import { evenly, freshId, makeGroup, ok, RAVI, saveEntry, stub } from "./group";
+import { deleteEntry, evenly, freshId, makeGroup, makeGroupOfTwo, ok, RAVI, saveEntry, stub } from "./group";
 
 /** The object as a Cloudflare object, rather than as a ledger: its migrations, its alarm, and the type its methods actually present across the RPC boundary. */
 
@@ -79,6 +80,83 @@ describe("the one alarm", () => {
     expect(await runDurableObjectAlarm(group)).toBe(true);
     expect(await runDurableObjectAlarm(group)).toBe(false);
     expect(ok(await group.changes(RAVI, 0, 100)).purgedAt).toBeNull();
+  });
+
+  it("repeats a nudge every seven days until the balance clears", async () => {
+    const { groupId, ravi, priya } = await makeGroupOfTwo();
+    const group = stub(groupId);
+    const started = Date.now();
+    const first = ok(await saveEntry(group, evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 300), RAVI));
+    const deadline = await runInDurableObject(group, async (_instance: Group, state) => {
+      const at = await state.storage.getAlarm();
+      expect(at).not.toBeNull();
+      expect(at).toBeGreaterThanOrEqual(started + SETTLEMENT_NUDGE_DELAY_MS);
+      expect(at).toBeLessThanOrEqual(Date.now() + SETTLEMENT_NUDGE_DELAY_MS);
+      return at;
+    });
+    const second = ok(await saveEntry(group, evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 300), RAVI));
+    await runInDurableObject(group, async (_instance: Group, state) => {
+      expect(await state.storage.getAlarm()).toBe(deadline);
+      state.storage.sql.exec("update schedule set due_at = ? where name = 'settlement-nudge'", Date.now() - 1);
+    });
+
+    const sentAt = Date.now();
+    expect(await runDurableObjectAlarm(group)).toBe(true);
+    const nextDeadline = await runInDurableObject(group, async (_instance: Group, state) => {
+      const at = await state.storage.getAlarm();
+      expect(at).not.toBeNull();
+      expect(at).toBeGreaterThanOrEqual(sentAt + SETTLEMENT_NUDGE_DELAY_MS);
+      expect(at).toBeLessThanOrEqual(Date.now() + SETTLEMENT_NUDGE_DELAY_MS);
+      return at;
+    });
+
+    ok(await deleteEntry(group, first, RAVI));
+    await runInDurableObject(group, async (_instance: Group, state) => {
+      expect(await state.storage.getAlarm()).toBe(nextDeadline);
+    });
+    ok(await deleteEntry(group, second, RAVI));
+    await runInDurableObject(group, async (_instance: Group, state) => {
+      expect(await state.storage.getAlarm()).toBe(nextDeadline);
+      state.storage.sql.exec("update schedule set due_at = ? where name = 'settlement-nudge'", Date.now() - 1);
+    });
+    expect(await runDurableObjectAlarm(group)).toBe(true);
+    expect(await runDurableObjectAlarm(group)).toBe(false);
+    ok(await saveEntry(group, evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 300), RAVI));
+    await runInDurableObject(group, async (_instance: Group, state) => {
+      expect(await state.storage.getAlarm()).not.toBeNull();
+    });
+  });
+
+  it("stops weekly checks when a payment has settled the balance", async () => {
+    const { groupId, ravi, priya } = await makeGroupOfTwo();
+    const group = stub(groupId);
+    ok(await saveEntry(group, evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 300), RAVI));
+    ok(await saveEntry(group, { ...evenly(freshId("e"), priya.id, [ravi.id], 150), kind: "settlement" }, RAVI));
+    await runInDurableObject(group, async (_instance: Group, state) => {
+      state.storage.sql.exec("update schedule set due_at = ? where name = 'settlement-nudge'", Date.now() - 1);
+    });
+    expect(await runDurableObjectAlarm(group)).toBe(true);
+    expect(await runDurableObjectAlarm(group)).toBe(false);
+  });
+
+  it("starts weekly checks for an existing balance only after a ledger change", async () => {
+    const { groupId, ravi, priya } = await makeGroupOfTwo();
+    const group = stub(groupId);
+    ok(await saveEntry(group, evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 300), RAVI));
+    // Model a group with a balance from before weekly checks were introduced.
+    await runInDurableObject(group, async (_instance: Group, state) => {
+      state.storage.sql.exec("delete from schedule where name = 'settlement-nudge'");
+      await state.storage.deleteAlarm();
+    });
+
+    ok(await group.changes(RAVI, 0, 100));
+    expect(await runInDurableObject(group, async (_instance, state) => state.storage.getAlarm())).toBeNull();
+
+    const started = Date.now();
+    ok(await saveEntry(group, evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 300), RAVI));
+    await runInDurableObject(group, async (_instance: Group, state) => {
+      expect(await state.storage.getAlarm()).toBeGreaterThanOrEqual(started + SETTLEMENT_NUDGE_DELAY_MS);
+    });
   });
 });
 

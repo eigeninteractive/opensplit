@@ -4,6 +4,18 @@
   "@appTitle": {
     "description": "The product name shown by the operating system."
   },
+  "openingApp": "Opening OpenSplit",
+  "@openingApp": {
+    "description": "Accessibility label for the progress indicator when opening the app."
+  },
+  "startupFailed": "Could not open OpenSplit.",
+  "@startupFailed": {
+    "description": "Message shown when the app cannot load its local startup data."
+  },
+  "retry": "Try again",
+  "@retry": {
+    "description": "Action that retries a failed operation."
+  },
   "navigationGroups": "Groups",
   "@navigationGroups": {
     "description": "Label for the groups top-level destination."

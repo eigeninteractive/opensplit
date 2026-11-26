@@ -5,7 +5,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:opensplit_api/opensplit_api.dart' show Platform, PushData;
+import 'package:opensplit_api/opensplit_api.dart'
+    show Platform, PushData, PushKind;
 
 import '../../config.dart';
 import 'background_handler.dart';
@@ -196,12 +197,23 @@ class PushService {
     // what a server guessed the recipient's share would be.
     await onWake(groupId);
 
-    // Firebase only hands the page a push while a tab is visible, and that tab
-    // has just redrawn with the change. A banner on top would repeat it.
-    if (kIsWeb || !isEnabled()) return;
+    // A visible tab redraws after an activity push. A scheduled reminder
+    // still needs a notification because it has no new ledger entry to show.
+    if (!isEnabled() || (kIsWeb && push.kind != PushKind.settlementNudge)) {
+      return;
+    }
 
     final text = await describe(push);
     if (text == null || !isEnabled()) return;
+    if (kIsWeb) {
+      await showWebReminder(
+        groupId: groupId,
+        eventId: push.eventId,
+        title: text.title,
+        body: text.body,
+      );
+      return;
+    }
 
     await _local.show(
       // Keyed on the subject, so five edits to one expense replace each other

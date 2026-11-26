@@ -11,7 +11,6 @@ import '../../application/sync_providers.dart';
 import '../../config.dart';
 import '../../data/sync/api_client.dart';
 import '../../data/sync/invites.dart';
-import 'notification_invitation.dart';
 
 /// The group's one open invite link: share it, show it, or turn it off.
 Future<void> showGroupLinkSheet(BuildContext context, String groupId) =>
@@ -69,7 +68,6 @@ class _GroupLinkSheetState extends ConsumerState<_GroupLinkSheet> {
   Future<void> _create() => _run(() async {
     final link = await _invites!.createGroupLink(widget.groupId);
     if (mounted) setState(() => _link = link);
-    if (mounted) await offerNotifications(context, ref);
   });
 
   Future<void> _revoke() => _run(() async {

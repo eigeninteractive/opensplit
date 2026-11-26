@@ -68,9 +68,12 @@ class SessionController extends _$SessionController {
     if (auth == null) return;
 
     await forgetLocalLedger(ref.read(appDatabaseProvider), requireSynced: true);
-    await ref.read(notificationPreferenceProvider.notifier).releaseDevice();
-    await auth.signOut();
-    state = null;
+    await ref
+        .read(notificationPreferenceProvider.notifier)
+        .releaseDeviceAndSignOut(() async {
+          await auth.signOut();
+          state = null;
+        });
   }
 
   /// Sends a code to this account's own address, before an action that

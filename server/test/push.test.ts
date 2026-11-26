@@ -1,4 +1,6 @@
+import { runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { deviceTokens } from "../src/db/d1/schema";
@@ -188,6 +190,72 @@ describe("what does not wake a device", () => {
     await settled();
 
     expect(refused.ok).toBe(false);
+    expect(sent).toEqual([]);
+  });
+});
+
+describe("settlement notifications", () => {
+  it("wakes only participants who did not record the payment", async () => {
+    const { groupId, ravi, priya } = await makeGroupOfTwo();
+    const group = stub(groupId);
+    const link = ok(await group.createLink(RAVI));
+    ok(await group.join(link.token, ZARA, { memberId: null, displayName: "Zara" }));
+    await registerDevice(RAVI, "payer-recorder");
+    await registerDevice(PRIYA, "payee");
+    await registerDevice(ZARA, "other-member");
+    await arranged();
+
+    ok(await saveEntry(group, { ...evenly(freshId("e"), ravi.id, [priya.id], 500), kind: "settlement" }, RAVI));
+    await settled();
+    expect(sent.map(({ token }) => token)).toEqual(["payee"]);
+    expect(sent[0]?.data.entryKind).toBe("settlement");
+
+    await arranged();
+    ok(await saveEntry(group, { ...evenly(freshId("e"), ravi.id, [priya.id], 500), kind: "settlement" }, ZARA));
+    await settled();
+    expect(sent.map(({ token }) => token).sort()).toEqual(["payee", "payer-recorder"]);
+  });
+
+  it("reminds all current debtors on the same weekly check", async () => {
+    const { groupId, ravi, priya } = await makeGroupOfTwo();
+    const group = stub(groupId);
+    const link = ok(await group.createLink(RAVI));
+    const { member: zara } = ok(await group.join(link.token, ZARA, { memberId: null, displayName: "Zara" }));
+    await registerDevice(RAVI, "creditor");
+    await registerDevice(PRIYA, "first-debtor");
+    await registerDevice(ZARA, "second-debtor");
+    ok(await saveEntry(group, evenly(freshId("e"), ravi.id, [ravi.id, priya.id], 500), RAVI));
+    ok(await saveEntry(group, evenly(freshId("e"), ravi.id, [ravi.id, zara.id], 500), RAVI));
+    await arranged();
+    const makeDue = () =>
+      runInDurableObject(group, async (_instance, state) => {
+        state.storage.sql.exec("update schedule set due_at = ? where name = 'settlement-nudge'", Date.now() - 1);
+      });
+
+    await makeDue();
+    expect(await runDurableObjectAlarm(group)).toBe(true);
+    await settled();
+    const nudge = (token: string) => ({ token, data: { kind: "settlement_nudge", groupId, eventId: expect.any(String), subjectId: groupId } });
+    expect(sent).toEqual(expect.arrayContaining([nudge("first-debtor"), nudge("second-debtor")]));
+    expect(sent).toHaveLength(2);
+
+    // A retry or earlier outbox alarm cannot send again before the next deadline.
+    expect(await runDurableObjectAlarm(group)).toBe(true);
+    await settled();
+    expect(sent).toHaveLength(2);
+
+    ok(await saveEntry(group, { ...evenly(freshId("e"), priya.id, [ravi.id], 250), kind: "settlement" }, RAVI));
+    await arranged();
+    await makeDue();
+    expect(await runDurableObjectAlarm(group)).toBe(true);
+    await settled();
+    expect(sent).toEqual([nudge("second-debtor")]);
+
+    await drizzle(env.DB).delete(deviceTokens).where(eq(deviceTokens.token, "second-debtor"));
+    await arranged();
+    await makeDue();
+    expect(await runDurableObjectAlarm(group)).toBe(true);
+    await settled();
     expect(sent).toEqual([]);
   });
 });

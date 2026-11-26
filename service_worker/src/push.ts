@@ -21,6 +21,8 @@ export interface PushData {
   eventId: string;
   kind: string;
   subjectId: string;
+  currency?: string;
+  entryKind?: string;
 }
 
 export interface NotificationText {
@@ -36,21 +38,22 @@ const DESCRIBE_TIMEOUT_MS = 15_000;
 
 /** Reads FCM's data map, or null for a message this release does not understand. */
 export function readPushData(data: Record<string, string> | undefined): PushData | null {
-  const { groupId, eventId, kind, subjectId } = data ?? {};
+  const { groupId, eventId, kind, subjectId, currency, entryKind } = data ?? {};
   if (!groupId || !eventId || !kind || !subjectId) return null;
-  return { groupId, eventId, kind, subjectId };
+  return { groupId, eventId, kind, subjectId, ...(currency ? { currency } : {}), ...(entryKind ? { entryKind } : {}) };
 }
 
 /**
  * What the worker can honestly say on its own: what kind of thing happened,
  * and nothing it would have to guess at, such as amounts or names.
  */
-export function fallbackText(kind: string): NotificationText {
+export function fallbackText(kind: string, entryKind?: string): NotificationText {
   const body = {
-    entry: "An expense in one of your groups changed.",
+    entry: entryKind === "settlement" ? "A payment in one of your groups was updated." : "An expense in one of your groups changed.",
     member_joined: "Someone joined one of your groups.",
     member_left: "Someone left one of your groups.",
     reminder: "Someone sent you a payment reminder.",
+    settlement_nudge: "You still have a balance to settle in one of your groups.",
   }[kind];
   return { title: "OpenSplit", body: body ?? "There is new activity in one of your groups." };
 }
@@ -64,13 +67,13 @@ export async function showActivity(scope: WorkerScope, data: Record<string, stri
   const reply = tab ? await askToDescribe(tab, push, timeoutMs) : null;
   if (reply?.status === "skip") return;
 
-  const text = reply?.status === "show" ? { title: reply.title, body: reply.body } : fallbackText(push.kind);
+  const text = reply?.status === "show" ? { title: reply.title, body: reply.body } : fallbackText(push.kind, push.entryKind);
   await scope.registration.showNotification(text.title, {
     body: text.body,
     icon: "/icons/Icon-192.png",
-    // Keyed on the subject, as on Android, so five edits to one expense
-    // replace each other rather than stacking into five banners.
-    tag: push.subjectId,
+    // Edits replace the existing banner for an entry. Each week's reminder
+    // has a distinct event id, so a later week can alert again.
+    tag: push.kind === "settlement_nudge" ? push.eventId : push.subjectId,
     data: { groupId: push.groupId },
   });
 }

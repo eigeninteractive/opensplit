@@ -24,6 +24,8 @@ enum PushKind {
   linkRevoked(r'link_revoked'),
   @JsonValue(r'reminder')
   reminder(r'reminder'),
+  @JsonValue(r'settlement_nudge')
+  settlementNudge(r'settlement_nudge'),
   @JsonValue(r'unknown_default_open_api')
   unknownDefaultOpenApi(r'unknown_default_open_api');
 

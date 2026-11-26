@@ -3,15 +3,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../data/platform/app_update_service.dart';
 import '../data/platform/review_prompt.dart';
 import '../data/sync/api_client.dart';
+import 'app_startup.dart';
 import 'backend_providers.dart';
 import 'local_providers.dart';
 
 part 'preferences_providers.g.dart';
 
-/// Overridden in `main` once the platform store has loaded.
+/// The platform preferences loaded during startup.
 @Riverpod(keepAlive: true)
 SharedPreferences sharedPreferences(Ref ref) =>
-    throw UnimplementedError('sharedPreferencesProvider must be overridden');
+    ref.watch(appStartupProvider).requireValue?.preferences ??
+    (throw StateError('Shared preferences must be supplied by the app host'));
 
 /// Play's own update flow, and nothing anywhere else.
 @Riverpod(keepAlive: true)

@@ -25,6 +25,14 @@ PushData _$PushDataFromJson(Map<String, dynamic> json) =>
         ),
         subjectId: $checkedConvert('subjectId', (v) => v as String),
         currency: $checkedConvert('currency', (v) => v as String?),
+        entryKind: $checkedConvert(
+          'entryKind',
+          (v) => $enumDecodeNullable(
+            _$PushDataEntryKindEnumEnumMap,
+            v,
+            unknownValue: PushDataEntryKindEnum.unknownDefaultOpenApi,
+          ),
+        ),
       );
       return val;
     });
@@ -35,6 +43,7 @@ Map<String, dynamic> _$PushDataToJson(PushData instance) => <String, dynamic>{
   'kind': _$PushKindEnumMap[instance.kind]!,
   'subjectId': instance.subjectId,
   'currency': ?instance.currency,
+  'entryKind': ?_$PushDataEntryKindEnumEnumMap[instance.entryKind],
 };
 
 const _$PushKindEnumMap = {
@@ -47,5 +56,12 @@ const _$PushKindEnumMap = {
   PushKind.linkCreated: 'link_created',
   PushKind.linkRevoked: 'link_revoked',
   PushKind.reminder: 'reminder',
+  PushKind.settlementNudge: 'settlement_nudge',
   PushKind.unknownDefaultOpenApi: 'unknown_default_open_api',
+};
+
+const _$PushDataEntryKindEnumEnumMap = {
+  PushDataEntryKindEnum.expense: 'expense',
+  PushDataEntryKindEnum.settlement: 'settlement',
+  PushDataEntryKindEnum.unknownDefaultOpenApi: 'unknown_default_open_api',
 };

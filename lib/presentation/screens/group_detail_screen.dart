@@ -30,6 +30,7 @@ import '../widgets/leading_icon.dart';
 import '../widgets/group_pane.dart';
 import '../widgets/group_standing.dart';
 import '../widgets/group_search_button.dart';
+import '../widgets/notification_invitation.dart';
 import '../widgets/offline_indicator.dart';
 import '../widgets/page_body.dart';
 import '../widgets/scroll_aware_fab.dart';
@@ -501,6 +502,10 @@ class _EntriesPane extends ConsumerWidget {
       groupId: ledger.group.id,
       storageKey: 'expenses',
       slivers: [
+        if (ledger.members.any(
+          (member) => member.profileId != null && member.id != ledger.me?.id,
+        ))
+          const SliverToBoxAdapter(child: NotificationInvitation()),
         if (onAddExpense case final addExpense?)
           SliverToBoxAdapter(
             child: Padding(

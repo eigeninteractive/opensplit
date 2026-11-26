@@ -1,54 +1,77 @@
-import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../application/push_providers.dart';
 import '../../config.dart';
+import 'inline_notice.dart';
 
-/// Offers notifications at the one moment they obviously matter.
-Future<void> offerNotifications(BuildContext context, WidgetRef ref) async {
-  if (!hasPush) return;
+/// Offers notifications when somebody first has a group shared with an account.
+class NotificationInvitation extends ConsumerStatefulWidget {
+  const NotificationInvitation({super.key});
 
-  final preference = ref.read(notificationPreferenceProvider.notifier);
-  // Already on, or already asked and declined. Neither is worth re-raising:
-  // Settings has a switch for anyone who changes their mind.
-  if (preference.hasBeenAsked()) return;
+  @override
+  ConsumerState<NotificationInvitation> createState() =>
+      _NotificationInvitationState();
+}
 
-  final wanted = await showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      icon: const Icon(Icons.notifications_none),
-      title: const Text('Group notifications?'),
-      content: const Text(
-        'Get notified when someone adds an expense or records a payment.',
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Not now'),
+class _NotificationInvitationState
+    extends ConsumerState<NotificationInvitation> {
+  bool _busy = false;
+
+  Future<void> _choose(bool enable) async {
+    setState(() => _busy = true);
+    final controller = ref.read(notificationPreferenceProvider.notifier);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      if (!enable) {
+        await controller.markDeclined();
+      } else if (!await controller.enable() && messenger.mounted) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Allow notifications for OpenSplit in your device or browser settings.',
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      if (!messenger.mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not enable notifications. Try again in Settings.',
+          ),
         ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('Yes, notify me'),
-        ),
-      ],
-    ),
-  );
-
-  if (wanted != true) {
-    // Recorded as asked-and-declined so this never reappears uninvited.
-    await preference.markDeclined();
-    return;
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
-  final granted = await preference.enable();
-  if (granted || !context.mounted) return;
+  @override
+  Widget build(BuildContext context) {
+    if (!hasPush || ref.watch(notificationPreferenceProvider) != null) {
+      return const SizedBox.shrink();
+    }
 
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(
-      content: Text(
-        'Android did not grant permission. You can turn notifications on for '
-        'OpenSplit in system settings.',
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: InlineNotice(
+        icon: Icons.notifications_outlined,
+        title: 'Get group updates',
+        message:
+            'Get notified about expenses, payments and balances to settle.',
+        actions: [
+          TextButton(
+            onPressed: _busy ? null : () => _choose(false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: _busy ? null : () => _choose(true),
+            child: const Text('Enable notifications'),
+          ),
+        ],
       ),
-    ),
-  );
+    );
+  }
 }

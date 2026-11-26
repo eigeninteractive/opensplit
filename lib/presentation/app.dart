@@ -6,11 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:in_app_update/in_app_update.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../application/local_providers.dart';
+import '../application/app_startup.dart';
 import '../application/backend_providers.dart';
+import '../application/ledger_providers.dart';
+import '../application/local_providers.dart';
 import '../application/preferences_providers.dart';
 import '../application/push_providers.dart';
-import '../application/ledger_providers.dart';
 import '../application/router_provider.dart';
 import '../application/session_providers.dart';
 import '../application/sync_providers.dart';
@@ -19,6 +20,7 @@ import '../data/web/release_updates.dart';
 import '../domain/auth_service.dart';
 import '../l10n/app_localizations.dart';
 import 'dynamic_colors.dart';
+import 'launch_hold.dart';
 import 'theme.dart';
 import 'theme_mode.dart';
 import 'widgets/app_viewport.dart';
@@ -37,7 +39,7 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp>
   /// screen happened to be open when Play answered.
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
 
-  late final AppLifecycleListener _lifecycle;
+  AppLifecycleListener? _lifecycle;
 
   /// Long enough that coming back from a five-second background does not ask
   /// Play anything, short enough that a phone left open all day still notices.
@@ -45,30 +47,27 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp>
 
   DateTime? _lastChecked;
   bool _busy = false;
-  bool _listeningForSession = false;
   bool _offeredRestart = false;
 
   @override
   void initState() {
     super.initState();
+    ref.listenManual(appStartupProvider, (_, startup) {
+      if (startup.hasValue && _lifecycle == null) _startSession();
+    }, fireImmediately: true);
+  }
+
+  void _startSession() {
     WidgetsBinding.instance.addObserver(this);
     _lifecycle = AppLifecycleListener(onResume: _onResume);
 
-    // Not in initState directly: Riverpod's scope is inherited state, which is
-    // first safe to depend on from didChangeDependencies.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _offerUpdate());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_offerUpdate());
+    });
 
     // The web's equivalent of Play's flexible update: the service worker has
     // already downloaded the release, and it only needs a restart.
     watchForNewRelease(() => _offerRestart(restartIntoNewRelease));
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_listeningForSession) return;
-    _listeningForSession = true;
-
     // Built for each account, which starts its automatic sync.
     ref.listenManual(syncControllerProvider, (_, _) {}, fireImmediately: true);
 
@@ -124,7 +123,7 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _lifecycle.dispose();
+    _lifecycle?.dispose();
     super.dispose();
   }
 
@@ -184,13 +183,16 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp>
 
   @override
   Widget build(BuildContext context) {
+    final startup = ref.watch(appStartupProvider);
+    final ready = startup.hasValue;
     // Establishes a session and registers for push, both silently and both
     // optional.
-    ref.watch(pushRegistrationProvider);
+    if (ready) ref.watch(pushRegistrationProvider);
 
     // Material You on Android 12+, when the user has not turned it off.
     // Everywhere else this is null and the seeded scheme is used unchanged.
-    final wallpaper = ref.watch(activeWallpaperSchemesProvider);
+    final wallpaper = ready ? ref.watch(activeWallpaperSchemesProvider) : null;
+    final router = ref.watch(routerProvider);
 
     return MaterialApp.router(
       onGenerateTitle: (context) => AppLocalizations.of(context).appTitle,
@@ -206,16 +208,65 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp>
       darkTheme: buildTheme(Brightness.dark, wallpaper?.dark),
       // Both themes are always supplied, and this decides between them.
       // Defaults to following the platform — see [ThemeModeController].
-      themeMode: ref.watch(themeModeProvider),
-      themeAnimationStyle: kIsWeb ? AnimationStyle.noAnimation : null,
-      routerConfig: ref.watch(routerProvider),
+      themeMode: ready ? ref.watch(themeModeProvider) : ThemeMode.system,
+      themeAnimationStyle: kIsWeb || LaunchHold.isHolding
+          ? AnimationStyle.noAnimation
+          : null,
+      routerConfig: router,
       // Order route scopes without measuring their transitional geometry.
       // Each screen retains standard visual reading order within its scope.
       builder: (context, child) => AppViewport(
         child: FocusTraversalGroup(
           policy: WidgetOrderTraversalPolicy(),
-          child: UpdateRequiredNotice(child: child!),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Keep listening to platform links beneath the startup screen.
+              UpdateRequiredNotice(enabled: ready, child: child!),
+              if (startup.hasError)
+                BlockSemantics(
+                  child: _StartupScreen(
+                    onRetry: () {
+                      ref.invalidate(appStartupProvider);
+                      router.refresh();
+                    },
+                  ),
+                )
+              else if (!ready)
+                const LaunchPlaceholder(
+                  child: BlockSemantics(child: _StartupScreen()),
+                ),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+}
+
+class _StartupScreen extends StatelessWidget {
+  const _StartupScreen({this.onRetry});
+
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return Scaffold(
+      body: Center(
+        child: onRetry == null
+            ? CircularProgressIndicator(semanticsLabel: l10n.openingApp)
+            : SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(l10n.startupFailed, textAlign: TextAlign.center),
+                    const SizedBox(height: 12),
+                    FilledButton(onPressed: onRetry, child: Text(l10n.retry)),
+                  ],
+                ),
+              ),
       ),
     );
   }

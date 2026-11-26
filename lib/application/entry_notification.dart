@@ -1,4 +1,5 @@
-import 'package:opensplit_api/opensplit_api.dart' show PushData, PushKind;
+import 'package:opensplit_api/opensplit_api.dart'
+    show EntryKind, PushData, PushKind;
 
 import '../data/repositories/drift_activity_repository.dart';
 import '../data/repositories/drift_currency_repository.dart';
@@ -6,6 +7,7 @@ import '../data/repositories/drift_entry_repository.dart';
 import '../data/repositories/drift_group_repository.dart';
 import '../data/repositories/drift_profile_repository.dart';
 import '../domain/balance/suggested_transfers.dart';
+import '../domain/balance/balance_fold.dart';
 import '../domain/member_identity.dart';
 import '../domain/models/group_event.dart';
 import '../domain/money_format.dart';
@@ -29,7 +31,28 @@ Future<({String title, String body})?> composeEventNotification({
   if (!_worthABanner.contains(kind)) return null;
 
   final group = await groups.getGroup(groupId);
-  final members = await groups.getMembers(groupId);
+  final members = await groups.getMembers(groupId, includeDeparted: true);
+  final myMemberId = myProfileId == null
+      ? null
+      : members
+            .where((m) => m.profileId == myProfileId && m.leftAt == null)
+            .firstOrNull
+            ?.id;
+
+  if (kind == PushKind.settlementNudge) {
+    if (group == null || myMemberId == null) return null;
+    final balances = foldBalances(await entries.getEntries(groupId));
+    if (!balances.any(
+      (balance) => balance.memberId == myMemberId && balance.balanceMinor < 0,
+    )) {
+      return null;
+    }
+    return (
+      title: group.name,
+      body: 'You still have a balance to settle in this group.',
+    );
+  }
+
   final knownProfiles = await profiles.all();
   final known = await currencies.all();
 
@@ -38,11 +61,6 @@ Future<({String title, String body})?> composeEventNotification({
     if (member == null) return 'Someone';
     return memberDisplayName(member, knownProfiles[member.profileId]);
   }
-
-  final myMemberId = members
-      .where((m) => m.profileId == myProfileId)
-      .map((m) => m.id)
-      .firstOrNull;
 
   // Somebody asking to be paid. Not an event, so there is no record to
   // read: the amount is whatever this device's ledger says is owed now, and
@@ -91,6 +109,14 @@ Future<({String title, String body})?> composeEventNotification({
 
   final entry = await entries.getEntry(subjectId);
   if (entry == null) return null;
+  final isPayment = entry.row.kind == EntryKind.settlement;
+  final payer = isPayment ? entry.payers.firstOrNull?.memberId : null;
+  final recipient = isPayment ? entry.shares.firstOrNull?.memberId : null;
+  if (isPayment &&
+      (myMemberId == null ||
+          (myMemberId != payer && myMemberId != recipient))) {
+    return null;
+  }
 
   // A column lookup on the recipient's own share row, never a recomputation:
   // the split was resolved once, when the entry was written.
@@ -107,6 +133,8 @@ Future<({String title, String body})?> composeEventNotification({
     entry: entry,
     groupName: group?.name ?? 'OpenSplit',
     actorName: change.actorId == null ? 'Someone' : nameOf(change.actorId!),
+    payerName: payer == null ? null : nameOf(payer),
+    recipientName: recipient == null ? null : nameOf(recipient),
     kind: change.kind,
     currency: currency,
     shareMinor: myShare,
@@ -122,6 +150,7 @@ const _worthABanner = {
   PushKind.memberJoined,
   PushKind.memberLeft,
   PushKind.reminder,
+  PushKind.settlementNudge,
 };
 
 /// The group route a notification should open.

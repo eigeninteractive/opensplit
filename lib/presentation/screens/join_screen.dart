@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -49,7 +51,7 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _peek());
+    unawaited(_peek());
   }
 
   Future<void> _peek() async {
@@ -297,13 +299,12 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
     if (preview.isRevoked) {
       return _Dead(
         message:
-            'This link has been turned off. Ask ${preview.inviter} for a '
-            'new one.',
+            'This link has been turned off. Ask a group member for a new one.',
       );
     }
     if (preview.isExpired) {
       return _Dead(
-        message: 'This link has expired. Ask ${preview.inviter} for a new one.',
+        message: 'This link has expired. Ask a group member for a new one.',
       );
     }
     if (preview.hasLeft) return _rejoinView(theme, preview);
@@ -327,7 +328,7 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
       mainAxisSize: MainAxisSize.min,
       children: [
         BrandHeader(
-          title: '${preview.inviter} invited you to ${preview.groupName}',
+          title: 'Join ${preview.groupName} on OpenSplit',
           subtitle:
               '${preview.memberCount} '
               '${preview.memberCount == 1 ? 'person is' : 'people are'} '

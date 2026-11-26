@@ -288,7 +288,7 @@ export const PullSchema = z
 export const notifiableKinds = ["entry", "member_joined", "member_left"] as const satisfies readonly (typeof tables.eventKinds)[number][];
 
 /** What a push is about: a recorded event, or one member asking another to pay. */
-export const PushKindSchema = z.enum([...tables.eventKinds, "reminder"]).openapi("PushKind");
+export const PushKindSchema = z.enum([...tables.eventKinds, "reminder", "settlement_nudge"]).openapi("PushKind");
 
 /**
  * The data-only push message: which event to fetch, not what it says. A
@@ -302,6 +302,7 @@ export const PushDataSchema = z
     kind: PushKindSchema,
     subjectId: IdSchema,
     currency: CurrencyCodeSchema.optional(),
+    entryKind: z.enum(tables.entryKinds).optional(),
   })
   .openapi("PushData");
 

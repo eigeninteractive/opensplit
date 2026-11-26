@@ -6,7 +6,7 @@ import { migrate } from "drizzle-orm/durable-sqlite/migrator";
 
 import { user } from "../../auth-schema";
 import * as d1 from "../../db/d1/schema";
-import { wakeDevices } from "../../push/fcm";
+import { wakeDevices, wakeProfile } from "../../push/fcm";
 import type { EntryInput, GroupChanges, GroupInput, JoinRequest, MemberInput } from "../../schemas/ledger";
 import { changesSince } from "./changes";
 import { createGroupLink, createInvite, join, liveLink, peek, placeholders, revokeGroupLink } from "./invites";
@@ -16,8 +16,9 @@ import { pendingNotices } from "./notices";
 import { attempt, type Result } from "./refusal";
 import { reminderRoute } from "./reminders";
 import { createGroup, forgetProfile, handOver, putMember, updateGroup } from "./roster";
+import { ensureSettlementNudge, takeSettlementNudge } from "./settlement-nudges";
 import { currentSeq, findMemberByProfile, findMeta, findTombstone, type GroupDb, nowIso, requireActiveMember, requireMeta, type Tx, type WriteContext } from "./store";
-import { backoffOutbox, clearOutbox, collectUnowned, nextDue, type OutboxRow, pendingOutbox, touchActivity, type UpkeepOutcome } from "./upkeep";
+import { backoffOutbox, clearOutbox, collectUnowned, nextDue, type OutboxRow, pendingOutbox, scheduledAt, touchActivity, type UpkeepOutcome } from "./upkeep";
 
 /**
  * One group's ledger and its authorization boundary. The object runs one
@@ -57,16 +58,20 @@ export class Group extends DurableObject<Env> {
   }
 
   async putMember(memberId: string, input: MemberInput, profileId: string) {
-    return this.write(profileId, (tx, now) => {
-      const self = findMemberByProfile(tx, profileId);
-      // A lost leave response must still be acknowledgeable after access ended.
-      if (self?.id === memberId && self.leftAt !== null && input.leftAt !== null && input.displayName === self.displayName && input.upiVpa === self.upiVpa) return self;
-      return putMember(tx, memberId, input, as(tx, profileId, now));
-    });
+    return this.write(
+      profileId,
+      (tx, now) => {
+        const self = findMemberByProfile(tx, profileId);
+        // A lost leave response must still be acknowledgeable after access ended.
+        if (self?.id === memberId && self.leftAt !== null && input.leftAt !== null && input.displayName === self.displayName && input.upiVpa === self.upiVpa) return self;
+        return putMember(tx, memberId, input, as(tx, profileId, now));
+      },
+      { mayStartNudges: true },
+    );
   }
 
   async putEntry(entryId: string, input: EntryInput, profileId: string) {
-    return this.write(profileId, (tx, now) => putEntry(tx, entryId, input, as(tx, profileId, now)));
+    return this.write(profileId, (tx, now) => putEntry(tx, entryId, input, as(tx, profileId, now)), { mayStartNudges: true });
   }
 
   async createInvite(memberId: string, profileId: string) {
@@ -105,10 +110,14 @@ export class Group extends DurableObject<Env> {
   }
 
   async join(token: string, profileId: string, request: JoinRequest) {
-    return this.write(profileId, (tx, now) => {
-      const member = join(tx, token, profileId, request, now);
-      return { groupId: requireMeta(tx).id, member };
-    });
+    return this.write(
+      profileId,
+      (tx, now) => {
+        const member = join(tx, token, profileId, request, now);
+        return { groupId: requireMeta(tx).id, member };
+      },
+      { mayStartNudges: true },
+    );
   }
 
   /** An account is being deleted. Not a `Result`: a profile that is not here is an answer. */
@@ -120,7 +129,12 @@ export class Group extends DurableObject<Env> {
 
   /** A guest became an account they already had. Not a `Result`, for the same reason as `forgetProfile`. */
   async handOver(profileId: string, heirId: string): Promise<{ forgotten: boolean; purged: boolean }> {
-    const outcome = this.db.transaction((tx) => handOver(tx, profileId, heirId, nowIso()));
+    const outcome = this.db.transaction((tx) => {
+      const now = Date.now();
+      const result = handOver(tx, profileId, heirId, nowIso(now));
+      if (result.forgotten && !result.purged) ensureSettlementNudge(tx, now);
+      return result;
+    });
     await this.settle();
     return outcome;
   }
@@ -133,9 +147,18 @@ export class Group extends DurableObject<Env> {
   }
 
   override async alarm(): Promise<void> {
-    this.db.transaction((tx) => collectUnowned(tx, Date.now()));
-    // Re-armed unconditionally: the alarm that is firing is spent once this returns.
-    await this.settle({ rearm: true });
+    const { groupId, purged, recipients } = this.db.transaction((tx) => {
+      const now = Date.now();
+      const { purged } = collectUnowned(tx, now);
+      return { groupId: findMeta(tx)?.id, purged, recipients: takeSettlementNudge(tx, now) };
+    });
+    if (groupId && recipients.length > 0) {
+      const message = { groupId, eventId: crypto.randomUUID(), kind: "settlement_nudge" as const, subjectId: groupId };
+      this.ctx.waitUntil(Promise.allSettled(recipients.map((profileId) => wakeProfile(this.env, profileId, message))));
+    }
+    await this.flush({ respectBackoff: !purged });
+    // The alarm that is firing is spent once this returns.
+    await this.armAlarm({ rearm: true });
   }
 
   private async read<T>(body: (tx: Tx, now: string) => T): Promise<Result<T>> {
@@ -151,14 +174,17 @@ export class Group extends DurableObject<Env> {
    * number, so it notifies nobody and does not count as use of the group,
    * which is what keeps retries quiet.
    */
-  private async write<T>(profileId: string, body: (tx: Tx, now: string) => T): Promise<Result<T>> {
+  private async write<T>(profileId: string, body: (tx: Tx, now: string) => T, { mayStartNudges = false } = {}): Promise<Result<T>> {
     const now = nowIso();
     const result = attempt(() =>
       this.db.transaction((tx) => {
         const before = currentSeq(tx);
         const value = body(tx, now);
         const after = currentSeq(tx);
-        if (after > before) touchActivity(tx, now);
+        if (after > before) {
+          touchActivity(tx, now);
+          if (mayStartNudges) ensureSettlementNudge(tx, Date.parse(now));
+        }
         return { value, spent: after > before ? after : null };
       }),
     );
@@ -177,11 +203,15 @@ export class Group extends DurableObject<Env> {
       return { groupId, messages: groupId === undefined ? [] : pendingNotices(tx, seq) };
     });
     if (groupId === undefined || messages.length === 0) return;
-    this.ctx.waitUntil(wakeDevices(this.env, groupId, actorProfileId, messages).catch((error) => console.error("[group] push failed", error)));
+    this.ctx.waitUntil(Promise.all(messages.map(({ message, recipients }) => wakeDevices(this.env, groupId, actorProfileId, [message], recipients))).catch((error) => console.error("[group] push failed", error)));
   }
 
-  private async settle({ rearm = false } = {}): Promise<void> {
+  private async settle(): Promise<void> {
     await this.flush();
+    await this.armAlarm();
+  }
+
+  private async armAlarm({ rearm = false } = {}): Promise<void> {
     const due = this.db.transaction((tx) => nextDue(tx));
     if (due === null) await this.ctx.storage.deleteAlarm();
     else if (rearm || (await this.ctx.storage.getAlarm()) !== due) await this.ctx.storage.setAlarm(due);
@@ -196,9 +226,16 @@ export class Group extends DurableObject<Env> {
    * any flush already running, so two requests can never interleave their
    * writes, and a caller's own rows are always sent before its promise settles.
    */
-  private flush(): Promise<void> {
+  private flush({ respectBackoff = false } = {}): Promise<void> {
     this.flushing = this.flushing
-      .then(() => this.drain())
+      .then(() => {
+        if (respectBackoff) {
+          // Recheck after preceding flushes, which may have just extended the backoff.
+          const retryAt = this.db.transaction((tx) => scheduledAt(tx, "outbox"));
+          if (retryAt !== null && retryAt > Date.now()) return;
+        }
+        return this.drain();
+      })
       .catch((error) => {
         // A bug, not D1 refusing: keep the chain usable and leave the rows for the alarm.
         console.error("[group] index flush crashed", error);

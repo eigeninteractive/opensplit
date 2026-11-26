@@ -9,9 +9,16 @@ import 'status_bar_surface.dart';
 
 /// Keeps navigation and saved data available while an incompatible app updates.
 class UpdateRequiredNotice extends ConsumerStatefulWidget {
-  const UpdateRequiredNotice({super.key, required this.child});
+  const UpdateRequiredNotice({
+    super.key,
+    required this.child,
+    this.enabled = true,
+  });
 
   final Widget child;
+
+  /// Whether startup has loaded the app's update policy.
+  final bool enabled;
 
   @override
   ConsumerState<UpdateRequiredNotice> createState() =>
@@ -47,7 +54,9 @@ class _UpdateRequiredNoticeState extends ConsumerState<UpdateRequiredNotice> {
 
   @override
   Widget build(BuildContext context) {
-    if (!ref.watch(requiresAppUpdateProvider)) return widget.child;
+    if (!widget.enabled || !ref.watch(requiresAppUpdateProvider)) {
+      return widget.child;
+    }
     final colors = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

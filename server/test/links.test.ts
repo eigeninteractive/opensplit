@@ -295,6 +295,22 @@ describe("a pasted link's preview", () => {
     expect(body).not.toContain('content="Join Trip ">');
   });
 
+  it("previews a reusable group link without naming the person who minted it", async () => {
+    const { id, slotId } = await makeGroup(ravi);
+    const link = await json<GroupLink>(await call(`/groups/${id}/link`, ravi, { method: "POST" }));
+    const joined = await call(`/links/${link.token}/join`, priya, { method: "POST", body: JSON.stringify({ memberId: slotId, displayName: null }) });
+    expect(joined.status).toBe(200);
+
+    const forwarded = await json<{ link: GroupLink }>(await call(`/groups/${id}/link`, priya));
+    expect(forwarded.link.token).toBe(link.token);
+    const preview = await json<LinkPreview>(await call(`/links/${forwarded.link.token}`, null));
+    expect(preview.inviterName).toBeNull();
+    const body = await (await page(forwarded.link.token)).text();
+    expect(body).toContain('property="og:title" content="Join Goa trip on OpenSplit"');
+    expect(body).toContain("Split expenses with 2 people. Open the link to join.");
+    expect(body).not.toContain("Ravi invited you");
+  });
+
   it("leaves the document alone for a token nobody minted", async () => {
     const response = await page("no-such-token");
 

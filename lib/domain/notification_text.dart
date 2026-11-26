@@ -13,6 +13,8 @@ import 'money_format.dart';
   required EntryEventKind kind,
   required Currency? currency,
   required int shareMinor,
+  String? payerName,
+  String? recipientName,
   String Function(int minor)? format,
 }) {
   String money(int minor) =>
@@ -24,7 +26,8 @@ import 'money_format.dart';
     return (
       title: groupName,
       body: switch (kind) {
-        EntryEventKind.created => '$actorName recorded paying $total.',
+        EntryEventKind.created =>
+          'Payment recorded from ${payerName ?? "someone"} to ${recipientName ?? "another member"} ($total).',
         EntryEventKind.edited =>
           '$actorName changed a settlement — '
               'now $total.',

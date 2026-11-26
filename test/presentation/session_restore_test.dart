@@ -4,14 +4,16 @@ import 'package:drift/native.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:opensplit/application/app_startup.dart';
 import 'package:opensplit/application/backend_providers.dart';
 import 'package:opensplit/application/local_providers.dart';
-import 'package:opensplit/application/preferences_providers.dart';
 import 'package:opensplit/application/session_providers.dart';
 import 'package:opensplit/data/auth/session_store.dart';
 import 'package:opensplit/data/local/database.dart';
+import 'package:opensplit/data/repositories/drift_group_repository.dart';
 import 'package:opensplit/domain/auth_service.dart';
 import 'package:opensplit/presentation/app.dart';
+import 'package:opensplit/presentation/launch_hold.dart';
 import 'package:opensplit_api/opensplit_api.dart' show Account;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -19,7 +21,7 @@ import '../harness.dart';
 
 /// What a reload shows somebody who is already signed in.
 void main() {
-  testWidgets('a restored session never shows the welcome screen', (
+  testWidgets('a restored session opens directly to saved groups offline', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
@@ -30,21 +32,45 @@ void main() {
     );
     final db = AppDatabase(NativeDatabase.memory());
     await seedReferenceData(db);
+    await DriftGroupRepository(db).createGroup(
+      name: 'Saved trip',
+      defaultCurrency: 'INR',
+      creatorDisplayName: 'Ravi',
+      creatorProfileId: 'user-1',
+    );
     addTearDown(() => tester.runAsync(db.close));
 
+    final startup = Completer<AppStartup>();
+    final visible = <String>[];
+    LaunchHold.begin(
+      onShown: () {
+        if (tester.any(find.text('Saved trip'))) visible.add('saved groups');
+        if (tester.any(find.text('Continue as guest'))) visible.add('welcome');
+        if (tester.any(find.bySemanticsLabel('Opening OpenSplit'))) {
+          visible.add('loading');
+        }
+      },
+    );
+    addTearDown(LaunchHold.reset);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          sharedPreferencesProvider.overrideWithValue(preferences),
-          sessionStoreProvider.overrideWithValue(sessions),
+          appStartupProvider.overrideWith((_) => startup.future),
           authServiceProvider.overrideWithValue(_SignedIn()),
+          apiClientProvider.overrideWithValue(null),
           appDatabaseProvider.overrideWithValue(db),
         ],
         child: const OpenSplitApp(),
       ),
     );
 
-    // Deliberately not pumpAndSettle.
+    for (var frame = 0; frame < 5; frame++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(tester.binding.sendFramesToEngine, isFalse);
+      expect(find.text('Continue as guest'), findsNothing);
+    }
+
+    startup.complete((preferences: preferences, sessions: sessions));
     for (var frame = 0; frame < 5; frame++) {
       expect(
         find.text('Continue as guest'),
@@ -55,6 +81,7 @@ void main() {
     }
 
     await tester.pumpAndSettle();
+    expect(visible, ['saved groups']);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
@@ -63,20 +90,33 @@ void main() {
   testWidgets('a signed-out device still lands on welcome', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
+    final sessions = await SessionStore.load(
+      preferences,
+      vault: MemoryTokenVault(),
+    );
+    final startup = Completer<AppStartup>();
+    bool? welcomeWasFirst;
+    LaunchHold.begin(
+      onShown: () {
+        welcomeWasFirst = tester.any(find.text('Continue as guest'));
+      },
+    );
+    addTearDown(LaunchHold.reset);
 
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          sharedPreferencesProvider.overrideWithValue(preferences),
+          appStartupProvider.overrideWith((_) => startup.future),
           authServiceProvider.overrideWithValue(_SignedOut()),
         ],
         child: const OpenSplitApp(),
       ),
     );
-    await tester.pumpAndSettle();
+    expect(tester.binding.sendFramesToEngine, isFalse);
 
-    // The other half of the same mapping.
-    expect(find.text('Continue as guest'), findsOneWidget);
+    startup.complete((preferences: preferences, sessions: sessions));
+    await tester.pumpAndSettle();
+    expect(welcomeWasFirst, isTrue);
   });
 
   test(

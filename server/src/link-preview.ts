@@ -21,7 +21,7 @@ export function joinToken(pathname: string): string | null {
 export function previewText(link: LinkPreview): { title: string; description: string } {
   const people = `${link.memberCount} ${link.memberCount === 1 ? "person" : "people"}`;
   const title = `Join ${link.groupName} on OpenSplit`;
-  const description = link.inviterName ? `${link.inviterName} invited you to split expenses with ${people}.` : `Split expenses with ${people}. Open the link to join.`;
+  const description = link.kind === "invite" && link.inviterName ? `${link.inviterName} invited you to split expenses with ${people}.` : `Split expenses with ${people}. Open the link to join.`;
   return { title, description };
 }
 

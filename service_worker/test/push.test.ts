@@ -63,6 +63,13 @@ test("nothing is shown when the tab says there is nothing to show", async () => 
   assert.deepEqual(shown, []);
 });
 
+test("each week's reminder has its own tag and opens the affected group", async () => {
+  const { scope, shown } = worker();
+  await showActivity(scope, { ...PUSH, kind: "settlement_nudge", subjectId: PUSH.groupId });
+
+  assert.deepEqual(shown, [{ title: "OpenSplit", options: { body: "You still have a balance to settle in one of your groups.", icon: "/icons/Icon-192.png", tag: PUSH.eventId, data: { groupId: PUSH.groupId } } }]);
+});
+
 test("the worker words it itself when the tab could not", async () => {
   const { scope, shown } = worker([{ url: SCOPE, reply: { status: "failed" } }]);
 

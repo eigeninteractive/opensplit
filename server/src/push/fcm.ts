@@ -22,15 +22,15 @@ const HTTP_TIMEOUT = 10_000;
 const TOKEN_KEY = "fcm:access-token";
 
 /** Wakes every device of the group's current members except the actor's, once per message. */
-export async function wakeDevices(env: Env, groupId: string, actorProfileId: string, messages: PushData[]): Promise<void> {
-  if (messages.length === 0 || !pushConfigured(env)) return;
+export async function wakeDevices(env: Env, groupId: string, actorProfileId: string, messages: PushData[], recipients?: string[]): Promise<void> {
+  if (messages.length === 0 || recipients?.length === 0 || !pushConfigured(env)) return;
 
   const db = drizzle(env.DB);
   const devices = await db
     .select({ token: deviceTokens.token })
     .from(deviceTokens)
     .innerJoin(memberships, eq(memberships.profileId, deviceTokens.profileId))
-    .where(and(eq(memberships.groupId, groupId), isNull(memberships.leftAt), ne(deviceTokens.profileId, actorProfileId)))
+    .where(and(eq(memberships.groupId, groupId), isNull(memberships.leftAt), ne(deviceTokens.profileId, actorProfileId), recipients ? inArray(deviceTokens.profileId, recipients) : undefined))
     .all();
   await deliver(
     env,
