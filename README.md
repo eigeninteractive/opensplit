@@ -23,8 +23,18 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/eigeninteractive/opensplit/releases/latest">Download APK from GitHub</a>
+</p>
+
+<p align="center">
   <a href="https://github.com/eigeninteractive/opensplit/actions/workflows/release.yml?query=branch%3Amain+event%3Apush">
     <img src="https://github.com/eigeninteractive/opensplit/actions/workflows/release.yml/badge.svg?branch=main&amp;event=push" alt="Release status on main">
+  </a>
+  <a href="https://github.com/eigeninteractive/opensplit/releases/latest">
+    <img src="https://img.shields.io/github/v/release/eigeninteractive/opensplit" alt="Latest GitHub release">
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/github/license/eigeninteractive/opensplit" alt="AGPL-3.0 license">
   </a>
 </p>
 
