@@ -462,6 +462,14 @@ dependencies and compiles SQLite from verified upstream C source. Update that
 source pin when the app upgrades its bundled SQLite. F-Droid can reuse the
 listing text in `fastlane/metadata/android/`.
 
+The [F-Droid CI workflow](../.github/workflows/fdroid.yml) builds from a fresh
+checkout on pull requests that change the Android build, Flutter dependencies
+or store integrations. It is also available through workflow dispatch. It
+checks that the resolved packages retain the versions and sources, including
+hashes, in the shared lockfile. It verifies that the APK has the expected
+package and version, is unsigned, retains Internet access, and excludes
+Firebase and Play SDKs.
+
 For the first submission, render the [build recipe](../fdroid/fdroiddata.yml.in)
 from the first eligible GitHub release. From the OpenSplit checkout, set
 `tag` to that release's tag and run:
