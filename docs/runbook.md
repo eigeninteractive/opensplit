@@ -513,19 +513,22 @@ Add the F-Droid install link to the README once the listing is live.
 
 ### Store listing changes
 
-The main English listing is managed in code:
+Play and F-Droid share the English listing in
+`fastlane/metadata/android/en-US/`:
 
 - `fastlane/metadata/android/en-US/title.txt`: at most 30 characters.
 - `short_description.txt` in that directory: at most 80 characters.
 - `full_description.txt`: at most 4,000 characters.
-- `site/store/play/`: five captioned phone screenshots, generated from the
+- `images/phoneScreenshots/`: five captioned screenshots generated from the
   original app captures by `tool/store_graphics.py`.
-- `site/store/feature-graphic.jpg` and `assets/icon/icon.png`: the feature
-  graphic and the icon, packaged at Play's required dimensions.
+- `images/featureGraphic.jpg` and `images/icon.png`: the shared banner and
+  store icon. The generator resizes `assets/icon/icon.png` for the listing.
 
 Edit the copy files directly. For artwork, edit the generator and run
 `dart run tool/store_artifacts.dart`; commit the generated images and manifest.
-The website keeps using the original uncaptioned captures in `site/store/`.
+The website uses the original uncaptioned captures in `site/store/`.
+F-Droid imports the listing from the latest release source it knows about.
+GitHub Releases takes its release notes from `CHANGELOG.md`.
 Store copy and artwork alone need no app version bump. An app icon change also
 changes the installed app and therefore does require the normal app release.
 

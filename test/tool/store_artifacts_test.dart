@@ -56,7 +56,9 @@ void main() {
   test(
     'missing or replaced feature graphics cannot pass on screenshots alone',
     () async {
-      final graphic = File('${fixture.path}/site/store/feature-graphic.jpg');
+      final graphic = File(
+        '${fixture.path}/fastlane/metadata/android/en-US/images/featureGraphic.jpg',
+      );
       final original = graphic.readAsBytesSync();
       addTearDown(() => graphic.writeAsBytesSync(original));
       graphic.deleteSync();
@@ -64,7 +66,10 @@ void main() {
       graphic.writeAsStringSync('old or independently replaced graphic');
       final result = await check();
       expect(result.exitCode, 1);
-      expect(result.stderr, contains('site/store/feature-graphic.jpg'));
+      expect(
+        result.stderr,
+        contains('fastlane/metadata/android/en-US/images/featureGraphic.jpg'),
+      );
     },
   );
 }

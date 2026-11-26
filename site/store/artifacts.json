@@ -389,8 +389,8 @@
     "test/fixtures/android_wallpaper.dart": "588b5037842a5c6ab2f4842e47b679b6d9de3f16c7f4670c2c125af707633c84",
     "test/harness.dart": "0e85c632a2251eb3f8052c9d6ed11b6a5e56ee1a63faf472c045c577cab53387",
     "tool/screenshots_test.dart": "77e6152c28cf0943fffc508337f8751e87cc0d434065342d53304ff3cc5d0d19",
-    "tool/store_artifacts.dart": "6ed74f8ec11ff7c8aca702c12f1534140dfd3f79fc06946e099d77b7a441929b",
-    "tool/store_graphics.py": "e4b13e1dcc29502536355950b8c795e11f5a5081c4d9456dbd59add1c499c2b7"
+    "tool/store_artifacts.dart": "f9b5b7f468c12dce9a23a537c9b475da8b613c4a76f038599f4c8bbc8ca6a57a",
+    "tool/store_graphics.py": "9b3a1ea98c57a2148bc7195b69399453651d17419f5bd76c55d869f06d1efa67"
   },
   "outputs": {
     "site/store/screenshot-1-groups.png": "929d3732c6bbfb36970b95552e9f7a8cf0c5df68c4044144bacfb95b2f7f0bf5",
@@ -398,15 +398,16 @@
     "site/store/screenshot-3-balances.png": "3ca00641f27273fad434f917a9726e8997a357a36ed7969d799efd7d15b0c58e",
     "site/store/screenshot-4-add-expense.png": "0c8e66ff6efad10b25a9908f76d4c498a10584302797d65fc8962a5ed2c58549",
     "site/store/screenshot-5-insights.png": "3e01656d98b499169b213fddfcf0f8946242c6c9270c3c5d3417d6967a72586c",
-    "site/store/play/screenshot-1-groups.png": "e7bfe0a7fb4930a2b3a12772a1bdd96e139c180eb7a3323cd0cdbf5b5a60a429",
-    "site/store/play/screenshot-2-expenses.png": "e051455dbc56732dc2a5366fbe70bafcdabd14de6648463a4048dd9291179ae6",
-    "site/store/play/screenshot-3-balances.png": "c5c55c222b641e55a8a46ce23ca935927de1983cf34f8e931a5c29d3a845de9a",
-    "site/store/play/screenshot-4-add-expense.png": "27251c38c13f90ae93496aac2b2e5ddb39a74c721ec93f96e61e31615c6a3606",
-    "site/store/play/screenshot-5-insights.png": "4da51f99bb80cb2737d6b6ddb807867a28363090fb097c50581fa68a9f4b424f",
+    "fastlane/metadata/android/en-US/images/phoneScreenshots/screenshot-1-groups.png": "e7bfe0a7fb4930a2b3a12772a1bdd96e139c180eb7a3323cd0cdbf5b5a60a429",
+    "fastlane/metadata/android/en-US/images/phoneScreenshots/screenshot-2-expenses.png": "e051455dbc56732dc2a5366fbe70bafcdabd14de6648463a4048dd9291179ae6",
+    "fastlane/metadata/android/en-US/images/phoneScreenshots/screenshot-3-balances.png": "c5c55c222b641e55a8a46ce23ca935927de1983cf34f8e931a5c29d3a845de9a",
+    "fastlane/metadata/android/en-US/images/phoneScreenshots/screenshot-4-add-expense.png": "27251c38c13f90ae93496aac2b2e5ddb39a74c721ec93f96e61e31615c6a3606",
+    "fastlane/metadata/android/en-US/images/phoneScreenshots/screenshot-5-insights.png": "4da51f99bb80cb2737d6b6ddb807867a28363090fb097c50581fa68a9f4b424f",
     "site/store/web-app.png": "2780902d53fdc556eb6792e5c13853178ecfe57cf40ee911ffe63db621a886ea",
     "site/store/og-card.png": "a77da161b2591359a58b5f2190ab5e8a77624ca6e30be054796735e4c972d767",
     "site/store/og-invite.png": "953f6e81003c7f099fe4554bad427120ff9ecfc0fd8bd2b87e6a36c9509998ed",
-    "site/store/feature-graphic.jpg": "b09b25632ebf50c1f46cc57a5e1f13eecf714c2c348c6beaa4dba14992b35f6a",
+    "fastlane/metadata/android/en-US/images/featureGraphic.jpg": "b09b25632ebf50c1f46cc57a5e1f13eecf714c2c348c6beaa4dba14992b35f6a",
+    "fastlane/metadata/android/en-US/images/icon.png": "3b44aad888c11d79ddcf058ab2d314f91f8729d016ba7d26e326d4fb4724ddda",
     "site/email/wordmark.png": "8c43232387a3464261b7b86957495f972a1b4540d122d0cbfb33e5b18ad50b4c"
   }
 }

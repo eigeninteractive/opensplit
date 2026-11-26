@@ -271,9 +271,9 @@ begin
     fastlane/metadata/android/en-US/title.txt
     fastlane/metadata/android/en-US/short_description.txt
     fastlane/metadata/android/en-US/full_description.txt
-    site/store/play/screenshot-1-groups.png
-    site/store/feature-graphic.jpg
-    assets/icon/icon.png
+    fastlane/metadata/android/en-US/images/phoneScreenshots/screenshot-1-groups.png
+    fastlane/metadata/android/en-US/images/featureGraphic.jpg
+    fastlane/metadata/android/en-US/images/icon.png
   ].each do |path|
     previous = git.call("rev-parse", "HEAD")
     target = File.join(history, path)

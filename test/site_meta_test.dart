@@ -43,7 +43,9 @@ void main() {
   });
 
   test('the Play feature graphic is the size and format Play takes', () {
-    final file = File('site/store/feature-graphic.jpg');
+    final file = File(
+      'fastlane/metadata/android/en-US/images/featureGraphic.jpg',
+    );
     final graphic = decodeJpg(file.readAsBytesSync());
 
     // JPEG, because Play refuses a PNG with an alpha channel even when every
