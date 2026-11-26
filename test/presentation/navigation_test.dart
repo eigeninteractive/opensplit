@@ -289,6 +289,48 @@ void main() {
   });
 
   group('back closes what is on top', () {
+    for (final edited in [false, true]) {
+      testWidgets('Android Back closes the keyboard first (edited: $edited)', (
+        tester,
+      ) async {
+        addTearDown(tester.view.resetViewInsets);
+        await _seedGroup(db);
+        await _pumpApp(tester, db);
+        await tester.tap(find.text('Flat 4B'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Add expense'));
+        await tester.pumpAndSettle();
+
+        final description = find.widgetWithText(TextField, 'What was it?');
+        if (edited) {
+          await tester.enterText(description, 'Train ticket');
+        } else {
+          await tester.showKeyboard(description);
+        }
+        tester.view.viewInsets = const FakeViewPadding(bottom: 220);
+        await tester.pumpAndSettle();
+        expect(tester.testTextInput.isVisible, isTrue);
+
+        await _swipeBack(tester);
+        expect(find.byType(EntryEditorScreen), findsOneWidget);
+        expect(find.text('Discard changes?'), findsNothing);
+        expect(tester.testTextInput.isVisible, isFalse);
+        if (edited) expect(find.text('Train ticket'), findsOneWidget);
+
+        tester.view.resetViewInsets();
+        await tester.pumpAndSettle();
+        await _swipeBack(tester);
+        if (edited) {
+          expect(find.text('Discard changes?'), findsOneWidget);
+          await tester.tap(find.text('Discard'));
+          await tester.pumpAndSettle();
+        }
+        expect(find.byType(EntryEditorScreen), findsNothing);
+        expect(find.byType(GroupDetailScreen), findsOneWidget);
+        await _unmount(tester);
+      }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+    }
+
     testWidgets('predictive Back closes the top screen and can be cancelled', (
       tester,
     ) async {

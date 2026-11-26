@@ -1,3 +1,7 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:material_ui/material_ui.dart';
 
 import '../navigation.dart';
@@ -58,11 +62,24 @@ class _FormLeaveGuardState extends State<FormLeaveGuard> {
   }
 
   @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: !_changed && !widget.saving,
-    onPopInvokedWithResult: (didPop, _) {
-      if (!didPop) _leave();
-    },
-    child: widget.builder(context, _leave),
-  );
+  Widget build(BuildContext context) {
+    // Android usually handles this in the keyboard. If Back reaches Flutter
+    // while the keyboard still covers the form, dismiss it before leaving.
+    final keyboardVisible =
+        !kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.android &&
+        MediaQuery.viewInsetsOf(context).bottom > 0;
+    return PopScope(
+      canPop: !keyboardVisible && !_changed && !widget.saving,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (keyboardVisible) {
+          FocusManager.instance.primaryFocus?.unfocus();
+          return;
+        }
+        unawaited(_leave());
+      },
+      child: widget.builder(context, _leave),
+    );
+  }
 }
