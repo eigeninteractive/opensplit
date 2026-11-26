@@ -509,7 +509,7 @@ release publication must succeed for F-Droid to discover the version.
 
 When F-Droid provides its signing certificate, add its SHA-256 fingerprint to
 `site/.well-known/assetlinks.json` so shared links can open the F-Droid app.
-Add the F-Droid install link to the README once the listing is live.
+Verify the README download link once the F-Droid listing is live.
 
 ### Store listing changes
 
