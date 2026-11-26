@@ -8,8 +8,8 @@ on:
       - '.github/workflows/release.yml'
       - 'fdroid/**'
       - 'android/**'
-      # Cider updates pubspec.yaml on every app release. The lockfile
-      # tracks root dependency changes without triggering on version bumps.
+      # Cider writes app version bumps to pubspec.yaml. Watch the resolved
+      # dependencies in pubspec.lock so version-only bumps skip this build.
       - 'pubspec.lock'
       - 'packages/**/pubspec.yaml'
       - 'packages/**/pubspec.lock'

@@ -469,11 +469,10 @@ The [F-Droid CI workflow](../.github/workflows/fdroid.yml) builds from a fresh
 checkout on pull requests that change the Android build, dependency lockfiles
 or store integrations. Changes to the app version in the root pubspec are
 covered by the regular release checks. Use workflow dispatch to verify
-manifest-only build settings. F-Droid CI checks that the resolved packages
-retain the versions and sources, including
-hashes, in the shared lockfile. It verifies that the APK has the expected
-package and version, is unsigned, retains Internet access, and excludes
-Firebase and Play SDKs.
+manifest-only build settings. F-Droid CI checks the resolved packages against
+the versions, sources, and hashes in the shared lockfile. It verifies that
+the APK has the expected package and version, is unsigned, retains Internet
+access, and excludes Firebase and Play SDKs.
 
 For the first submission, render the [build recipe](../fdroid/fdroiddata.yml.in)
 from the first eligible GitHub release. From the OpenSplit checkout, set
@@ -628,7 +627,7 @@ for the behaviour it changes; the PR's web build cannot establish that.
 
 ## Versions
 
-A build has two numbers, and only one of them is written down.
+The app has a source version and a build number assigned by CI.
 
 - **The version**, `1.2.0`: what people see, and what the changelog is
   organised by. It is `version:` in `pubspec.yaml`, changed only through
