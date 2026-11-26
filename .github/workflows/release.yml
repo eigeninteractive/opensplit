@@ -9,10 +9,6 @@ on:
         description: Deploy web/backend, changed Play listing and pending app version (uncheck for artifacts only)
         type: boolean
         default: false
-      inspect_play_apks:
-        description: Only inspect Play's APK metadata for build 4501 (skip build and deploy)
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -24,57 +20,8 @@ defaults:
 jobs:
   checks:
     name: CI checks
-    if: github.ref == 'refs/heads/main' && !inputs.inspect_play_apks
+    if: github.ref == 'refs/heads/main'
     uses: ./.github/workflows/ci.yml
-
-  inspect_play_apks:
-    name: Inspect Play APK metadata
-    if: >-
-      github.event_name == 'workflow_dispatch' &&
-      github.ref == 'refs/heads/main' && inputs.inspect_play_apks
-    runs-on: ubuntu-24.04
-    timeout-minutes: 3
-    environment: production
-    permissions:
-      id-token: write
-    steps:
-      - name: Authenticate to Google Play
-        id: play
-        uses: google-github-actions/auth@v3
-        with:
-          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.PLAY_DEPLOY_SERVICE_ACCOUNT }}
-          project_id: ${{ vars.FIREBASE_PROJECT_ID }}
-          token_format: access_token
-          access_token_scopes: https://www.googleapis.com/auth/androidpublisher
-          access_token_lifetime: 300s
-          create_credentials_file: false
-          export_environment_variables: false
-      - name: Count API entries for OpenSplit 4.3.1
-        env:
-          PLAY_ACCESS_TOKEN: ${{ steps.play.outputs.access_token }}
-        run: |
-          set +x
-          version_code=4501
-          package=com.eigeninteractive.opensplit
-          api="https://androidpublisher.googleapis.com/androidpublisher/v3/applications/$package"
-          curl --fail --silent --show-error --max-time 30 \
-            --header "Authorization: Bearer ${PLAY_ACCESS_TOKEN:?}" \
-            "$api/generatedApks/$version_code" |
-            jq -ce --arg version_code "$version_code" '
-              .generatedApks | arrays | select(length > 0)
-              | map(.generatedUniversalApk.downloadId) as $downloads
-              | {
-                  version_code: $version_code,
-                  signing_key_entries: length,
-                  entries_without_universal: ($downloads | map(select(. == null)) | length),
-                  split_entries_without_universal: ([
-                    .[] | select(.generatedUniversalApk.downloadId == null)
-                    | select((.generatedSplitApks // []) | length > 0)
-                  ] | length),
-                  unique_universal_apks: ($downloads | map(select(. != null)) | unique | length)
-                }
-            '
 
   publish:
     name: Package and distribute
