@@ -421,7 +421,8 @@ the version-bump build, or an upload fails, that app version stays pending for
 the next successful run. Otherwise an ordinary merge could lose the requested
 Android release. Once tagged, subsequent merges skip Android until the next bump.
 
-If APK publishing fails or Play is still generating the APK, re-run
+The APK download runs immediately and retries up to three times, one minute
+apart. If APK publishing still fails, re-run
 **Publish Android APK on GitHub** from the original Release run. GitHub retains
 the original version and build number on a job retry and does not resubmit to
 Play. For builds outside GitHub's 30-day retry window, download the signed

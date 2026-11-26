@@ -389,11 +389,21 @@ jobs:
           project_id: ${{ vars.FIREBASE_PROJECT_ID }}
       - name: Download the Play-signed universal APK
         run: |
-          bundle exec fastlane run download_universal_apk_from_google_play \
-            package_name:com.eigeninteractive.opensplit \
-            version_code:"$PLAY_VERSION_CODE" \
-            json_key:"$GOOGLE_APPLICATION_CREDENTIALS" \
-            destination:"$RUNNER_TEMP/opensplit-$RELEASE_VERSION-android.apk"
+          for attempt in {1..4}; do
+            if bundle exec fastlane run download_universal_apk_from_google_play \
+              package_name:com.eigeninteractive.opensplit \
+              version_code:"$PLAY_VERSION_CODE" \
+              json_key:"$GOOGLE_APPLICATION_CREDENTIALS" \
+              destination:"$RUNNER_TEMP/opensplit-$RELEASE_VERSION-android.apk"; then
+              exit 0
+            fi
+            if (( attempt < 4 )); then
+              echo "APK download attempt $attempt failed. Retrying in 60 seconds."
+              sleep 60
+            fi
+          done
+          echo "Could not download the Play-signed APK after four attempts." >&2
+          exit 1
       - name: Verify and publish the APK
         env:
           GH_TOKEN: ${{ github.token }}
