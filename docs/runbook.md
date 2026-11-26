@@ -465,24 +465,18 @@ package changes, compare the Android binaries' `SQLITE_SOURCE_ID` with the
 pinned source and update the archive URL and digest if needed. F-Droid can
 reuse the listing text in `fastlane/metadata/android/`.
 
-The [F-Droid CI workflow](../.github/workflows/fdroid.yml) runs automatically
-on pull requests that change the F-Droid build files or the workflow itself.
-It builds an unsigned APK from a fresh checkout, checks shared dependency pins
-against the lockfile, and verifies the APK's identity, permissions and exclusion
-of Firebase and Play SDKs.
-
 **F-Droid distribution checklist**
 
-Use this checklist when adding or replacing a Google or Play integration,
-or when changing shared build inputs such as Flutter, Android Gradle or SQLite.
+Use this checklist before merging a change to Google or Play integrations, the
+F-Droid build files, or shared build tooling such as Flutter and Android Gradle.
 
-- Check the Flutter and Android dependencies, including transitive dependencies.
-  Keep store-only plugins and SDKs out of the prepared F-Droid build.
+- Use the local build steps above with the PR's commit in place of the release
+  tag and a test version code such as `1`.
+- Review the resolved Flutter and Android runtime dependencies, including
+  transitive dependencies. Keep store-only plugins and SDKs out of the
+  F-Droid build and verify that retained dependencies match the shared lockfile.
 - Check that the affected feature still works without Google services or that its
   entry point is hidden in the F-Droid app.
-- Before merging, run **F-Droid CI** from the Actions tab and select the PR branch.
-  For a fork, or before the workflow is available on `main`, use the local build
-  steps above with a fresh copy of the PR source.
 
 For the first submission, render the [build recipe](../fdroid/fdroiddata.yml.in)
 from the first eligible GitHub release. From the OpenSplit checkout, set
