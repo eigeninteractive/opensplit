@@ -3,38 +3,52 @@ import 'package:material_ui/material_ui.dart';
 import 'package:opensplit/presentation/widgets/scroll_aware_fab.dart';
 
 void main() {
-  testWidgets('shrinks to its icon when told to and restores its label', (
+  testWidgets('animates the width in both directions and keeps one action', (
     tester,
   ) async {
     final extended = ValueNotifier(true);
     addTearDown(extended.dispose);
+    var presses = 0;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           floatingActionButton: ScrollAwareFab(
             extended: extended,
-            onPressed: () {},
+            onPressed: () => presses++,
             icon: Icons.add,
             label: 'Add expense',
           ),
         ),
       ),
     );
-    FloatingActionButton button() =>
-        tester.widget(find.byType(FloatingActionButton));
+    final button = find.byType(FloatingActionButton);
+    Rect bounds() => tester.getRect(button);
 
-    expect(button().isExtended, isTrue);
     expect(find.text('Add expense'), findsOneWidget);
+    final expanded = bounds();
 
     extended.value = false;
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    final collapsing = bounds();
     await tester.pumpAndSettle();
-
-    expect(button().isExtended, isFalse);
+    final collapsed = bounds();
+    expect(collapsing.width, lessThan(expanded.width));
+    expect(collapsing.width, greaterThan(collapsed.width));
+    expect(collapsing.right, closeTo(expanded.right, 0.01));
+    expect(collapsed.width, collapsed.height);
+    expect(tester.getCenter(find.byIcon(Icons.add)), collapsed.center);
     expect(find.byTooltip('Add expense'), findsOneWidget);
+    await tester.tap(button);
+    expect(presses, 1);
 
     extended.value = true;
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    final expanding = bounds();
+    expect(expanding.width, greaterThan(collapsed.width));
+    expect(expanding.width, lessThan(expanded.width));
     await tester.pumpAndSettle();
-
-    expect(button().isExtended, isTrue);
+    expect(bounds(), expanded);
   });
 }

@@ -4,6 +4,11 @@ What changed in each version of the app, newest first. The format is
 [Semantic Versioning](https://semver.org/), and the file is kept by
 [cider](https://pub.dev/packages/cider): see "Versions" in docs/runbook.md.
 
+## [4.3.1] - 2026-11-26
+### Fixed
+- Animate the Add expense button as you scroll.
+- Android Back closes the keyboard before leaving an expense or payment.
+
 ## [4.3.0] - 2026-11-26
 ### Added
 - Turn on notifications in shared groups, including weekly reminders for unpaid balances.
@@ -190,6 +195,7 @@ What changed in each version of the app, newest first. The format is
 ### Added
 - The first build, to Play internal testing.
 
+[4.3.1]: https://github.com/eigeninteractive/opensplit/compare/v4.3.0...v4.3.1
 [4.3.0]: https://github.com/eigeninteractive/opensplit/compare/v4.2.6...v4.3.0
 [4.2.6]: https://github.com/eigeninteractive/opensplit/compare/v4.2.5...v4.2.6
 [4.2.5]: https://github.com/eigeninteractive/opensplit/compare/v4.2.4...v4.2.5

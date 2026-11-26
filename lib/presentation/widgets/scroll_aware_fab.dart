@@ -4,9 +4,7 @@ import 'package:material_ui/material_ui.dart';
 /// An extended floating action button that shrinks to its icon when the
 /// list behind it is scrolled down, and takes its label back on the way up.
 ///
-/// Material's own behaviour for an extended button over scrolling content:
-/// the stock [FloatingActionButton.extended] animates between the two when
-/// `isExtended` changes, and [extended] decides when.
+/// Keeps one Material button while [extended] animates the label in or out.
 class ScrollAwareFab extends StatelessWidget {
   const ScrollAwareFab({
     super.key,
@@ -30,11 +28,32 @@ class ScrollAwareFab extends StatelessWidget {
     valueListenable: extended,
     builder: (context, extended, _) => FloatingActionButton.extended(
       heroTag: null,
-      tooltip: extended ? null : label,
-      isExtended: extended,
+      tooltip: label,
       onPressed: onPressed,
       icon: Icon(icon),
-      label: Text(label),
+      // Equal padding keeps the icon centered when the label is hidden.
+      extendedPadding: const EdgeInsets.symmetric(horizontal: 16),
+      extendedIconLabelSpacing: 0,
+      label: ExcludeSemantics(
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(end: extended ? 1.0 : 0.0),
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 200),
+          curve: Curves.easeInOut,
+          builder: (context, factor, child) => ClipRect(
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              widthFactor: factor,
+              child: Opacity(opacity: factor, child: child),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsetsDirectional.only(start: 8, end: 4),
+            child: Text(label),
+          ),
+        ),
+      ),
     ),
   );
 }
