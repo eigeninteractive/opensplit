@@ -40,6 +40,7 @@ jobs:
       id-token: write
     outputs:
       version: ${{ steps.build.outputs.version }}
+      number: ${{ steps.build.outputs.number }}
       app_release: ${{ steps.build.outputs.app_release }}
     env:
       BUNDLE_FROZEN: "true"
@@ -318,8 +319,7 @@ jobs:
         if: always()
         run: rm -f -- "${RUNNER_TEMP:?}/opensplit-upload.jks"
 
-  # Its own job so that only this step can write to the repository: the job
-  # that builds and deploys keeps read-only contents.
+  # A failed GitHub release must leave the successful Play submission tagged.
   tag:
     name: Tag the version
     needs: publish
@@ -328,12 +328,15 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: write
+    outputs:
+      created: ${{ steps.tag.outputs.created }}
     steps:
       # The first build of each version tags its commit, and later builds of the
       # same version leave the tag where it is. Those are the tags cider links
       # CHANGELOG.md's versions to. Through the API, so nothing is checked out
       # with credentials.
       - name: Tag the first build of this version
+        id: tag
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: v${{ needs.publish.outputs.version }}
@@ -344,4 +347,89 @@ jobs:
             gh api "repos/$GITHUB_REPOSITORY/git/refs" --silent \
               -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA"
             echo "Tagged $GITHUB_SHA as $TAG."
+            echo "created=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  github_release:
+    name: Publish Android APK on GitHub
+    needs: [publish, tag]
+    if: needs.tag.outputs.created == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: production
+    concurrency:
+      group: opensplit-github-release-${{ needs.publish.outputs.version }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      RELEASE_VERSION: ${{ needs.publish.outputs.version }}
+      PLAY_VERSION_CODE: ${{ needs.publish.outputs.number }}
+      BUNDLE_FROZEN: "true"
+      FASTLANE_SKIP_UPDATE_CHECK: "true"
+      FASTLANE_OPT_OUT_USAGE: "true"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.50.0"
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+      - name: Authenticate to Google Play (keyless)
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.PLAY_DEPLOY_SERVICE_ACCOUNT }}
+          project_id: ${{ vars.FIREBASE_PROJECT_ID }}
+      - name: Download the Play-signed universal APK
+        run: |
+          bundle exec fastlane run download_universal_apk_from_google_play \
+            package_name:com.eigeninteractive.opensplit \
+            version_code:"$PLAY_VERSION_CODE" \
+            json_key:"$GOOGLE_APPLICATION_CREDENTIALS" \
+            destination:"$RUNNER_TEMP/opensplit-$RELEASE_VERSION-android.apk"
+      - name: Verify and publish the APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="v$RELEASE_VERSION"
+          apk="opensplit-$RELEASE_VERSION-android.apk"
+          tools="$ANDROID_HOME/build-tools/37.0.0"
+          "$tools/apksigner" verify "$RUNNER_TEMP/$apk"
+          badging="$("$tools/aapt2" dump badging "$RUNNER_TEMP/$apk")"
+          grep -Fq "package: name='com.eigeninteractive.opensplit' versionCode='$PLAY_VERSION_CODE' versionName='$RELEASE_VERSION'" \
+            <<< "$badging" || { echo "The APK package or version does not match $tag." >&2; exit 1; }
+          dart run cider describe "$RELEASE_VERSION" --only-body > "$RUNNER_TEMP/release-notes.md"
+          test -s "$RUNNER_TEMP/release-notes.md"
+          cd "$RUNNER_TEMP"
+          sha256sum "$apk" > "$apk.sha256"
+
+          if release="$(gh release view "$tag" --json isDraft,assets 2>release-error.txt)"; then
+            if jq -e '.isDraft' <<< "$release" >/dev/null; then
+              gh release upload "$tag" "$apk" "$apk.sha256" --clobber
+              gh release edit "$tag" --draft=false --verify-tag
+            else
+              for asset in "$apk" "$apk.sha256"; do
+                digest="$(sha256sum "$asset" | cut -d ' ' -f 1)"
+                jq -e --arg name "$asset" --arg digest "sha256:$digest" \
+                  'any(.assets[]; .name == $name and .digest == $digest)' \
+                  <<< "$release" >/dev/null || {
+                    echo "Published $tag has a missing or different $asset." >&2
+                    exit 1
+                  }
+              done
+            fi
+          elif grep -Fxq 'release not found' release-error.txt; then
+            gh release create "$tag" "$apk" "$apk.sha256" --verify-tag \
+              --title "OpenSplit $RELEASE_VERSION" --notes-file release-notes.md
+          else
+            cat release-error.txt >&2
+            exit 1
           fi
