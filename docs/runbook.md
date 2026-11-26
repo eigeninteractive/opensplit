@@ -458,14 +458,19 @@ git archive "v$version" | tar -x -C "$source_copy"
 
 The build outputs an unsigned `build/app/outputs/flutter-apk/app-release.apk`.
 Preparation removes store-specific Flutter plugins before Pub resolves
-dependencies and compiles SQLite from verified upstream C source. Update that
-source pin when the app upgrades its bundled SQLite. F-Droid can reuse the
-listing text in `fastlane/metadata/android/`.
+dependencies. The standard Android build uses the binary provided by the
+`sqlite3` Dart package in the shared lockfile. F-Droid compiles SQLite from
+the SHA3-256-pinned upstream archive in `fdroid/prepare.sh`. When the Dart
+package changes, compare the Android binaries' `SQLITE_SOURCE_ID` with the
+pinned source and update the archive URL and digest if needed. F-Droid can
+reuse the listing text in `fastlane/metadata/android/`.
 
 The [F-Droid CI workflow](../.github/workflows/fdroid.yml) builds from a fresh
-checkout on pull requests that change the Android build, Flutter dependencies
-or store integrations. It is also available through workflow dispatch. It
-checks that the resolved packages retain the versions and sources, including
+checkout on pull requests that change the Android build, dependency lockfiles
+or store integrations. Changes to the app version in the root pubspec are
+covered by the regular release checks. Use workflow dispatch to verify
+manifest-only build settings. F-Droid CI checks that the resolved packages
+retain the versions and sources, including
 hashes, in the shared lockfile. It verifies that the APK has the expected
 package and version, is unsigned, retains Internet access, and excludes
 Firebase and Play SDKs.
