@@ -1,4 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET"/>
     <!-- enableOnBackInvokedCallback opts into Android 13+ predictive back, so
          dragging the back gesture shows a live preview of where it will land
          rather than a blank guess. Flutter's own

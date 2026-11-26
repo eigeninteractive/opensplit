@@ -4,6 +4,10 @@ What changed in each version of the app, newest first. The format is
 [Semantic Versioning](https://semver.org/), and the file is kept by
 [cider](https://pub.dev/packages/cider): see "Versions" in docs/runbook.md.
 
+## [4.3.2] - 2026-11-26
+### Added
+- Prepare an Android build for F-Droid with email sign-in and no push notifications.
+
 ## [4.3.1] - 2026-11-26
 ### Fixed
 - Animate the Add expense button as you scroll.
@@ -195,6 +199,7 @@ What changed in each version of the app, newest first. The format is
 ### Added
 - The first build, to Play internal testing.
 
+[4.3.2]: https://github.com/eigeninteractive/opensplit/compare/v4.3.1...v4.3.2
 [4.3.1]: https://github.com/eigeninteractive/opensplit/compare/v4.3.0...v4.3.1
 [4.3.0]: https://github.com/eigeninteractive/opensplit/compare/v4.2.6...v4.3.0
 [4.2.6]: https://github.com/eigeninteractive/opensplit/compare/v4.2.5...v4.2.6

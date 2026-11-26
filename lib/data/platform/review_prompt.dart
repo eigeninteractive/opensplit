@@ -1,7 +1,8 @@
 import 'dart:developer' as developer;
 
-import 'package:in_app_review/in_app_review.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'store_review.dart';
 
 /// Asks for a Play review, at most rarely, and never as a condition of
 /// anything.
@@ -14,8 +15,8 @@ class ReviewPrompt {
     Future<bool> Function()? isAvailable,
     Future<void> Function()? request,
     DateTime Function()? clock,
-  }) : _isAvailable = isAvailable ?? InAppReview.instance.isAvailable,
-       _request = request ?? InAppReview.instance.requestReview,
+  }) : _isAvailable = isAvailable ?? isStoreReviewAvailable,
+       _request = request ?? requestStoreReview,
        _clock = clock ?? DateTime.now;
 
   static const _key = 'review_last_asked';

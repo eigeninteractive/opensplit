@@ -428,6 +428,44 @@ the original version and build number on a job retry and does not resubmit to
 Play. For builds outside GitHub's 30-day retry window, download the signed
 universal APK for that build from Play Console and attach it manually.
 
+### F-Droid
+
+The F-Droid build uses the same Android package ID as Play and GitHub. It uses
+email codes for sign-in, supports the same cloud sync and offline ledger, and
+omits push notifications, native Google sign-in, and Play updates and reviews.
+F-Droid builds and signs its APK. Switching between F-Droid and Play or GitHub
+requires uninstalling one before installing the other. Sync or export any
+device-only data before uninstalling.
+
+Build from a fresh source copy using the same pinned Flutter SDK as
+`release.yml`, Android SDK Platform 37 and the NDK pinned by Flutter. Supply
+the Android version code of the tagged Play submission. It is shown in Play
+Console and in the corresponding GitHub APK when available.
+
+```sh
+source_copy="$(mktemp -d)"
+git archive "v$version" | tar -x -C "$source_copy"
+(
+  cd "$source_copy"
+  bash fdroid/prepare.sh
+  flutter pub get
+  bash fdroid/build.sh "$version_code"
+)
+```
+
+The output is `build/app/outputs/flutter-apk/app-release.apk` inside the source
+copy. It is unsigned. The preparation step removes the store-specific Flutter
+plugins before Pub resolves dependencies and configures SQLite to build from
+verified upstream C source. Update that source pin when the app upgrades its
+bundled SQLite. Check the APK's package, version, Internet permission and
+dependencies before submitting a build recipe to [fdroiddata](https://gitlab.com/fdroid/fdroiddata).
+Start with an explicit tag and version code because Play assigns the code in
+CI. F-Droid can reuse the listing text in `fastlane/metadata/android/`.
+
+When F-Droid provides its signing certificate, add its SHA-256 fingerprint to
+`site/.well-known/assetlinks.json` so shared links can open the F-Droid app.
+Add the F-Droid install link to the README once the listing is live.
+
 ### Store listing changes
 
 The main English listing is managed in code:
@@ -486,10 +524,10 @@ described above. A backend change that needs a new client must include that
 client change and its app version bump.
 
 `tool/check_app_release.dart` runs inside the required **Analyse and test** job.
-It treats `lib/`, `assets/`, `android/`, `web/`, the generated API package's
-`lib/`, and `service_worker/src/` as app inputs. App dependency manifests and
-lockfiles, code generation/localization/icon/splash configuration, and service
-worker build configuration also count. Dependency manifests are deliberately
+It treats `lib/`, `assets/`, `android/`, `fdroid/`, `web/`, the generated API
+package's `lib/`, and `service_worker/src/` as app inputs. App dependency
+manifests and lockfiles, code generation/localization/icon/splash configuration,
+and service worker build configuration also count. Dependency manifests are deliberately
 conservative: even a dev-dependency-only edit to an app pubspec requires a bump.
 Tests, store listing artwork, release scripts/workflows and public site files
 are exempt. The check uses Cider to read the versions and changelog, requires

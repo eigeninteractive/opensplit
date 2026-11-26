@@ -34,6 +34,7 @@ if (ciSigning.values.any { System.getenv(it) != null }) {
     }
 }
 val hasUploadKey = keystoreProperties.getProperty("storeFile") != null
+val fdroid = providers.gradleProperty("fdroid").orNull == "true"
 
 android {
     namespace = "com.eigeninteractive.opensplit"
@@ -80,10 +81,11 @@ android {
             // trusting — Play re-signs with the app signing key — so
             // assetlinks.json has to list BOTH fingerprints. See
             // site/.well-known/README.md.
-            signingConfig = if (hasUploadKey) {
-                signingConfigs.getByName("upload")
-            } else {
-                signingConfigs.getByName("debug")
+            // F-Droid signs its own distribution APK.
+            signingConfig = when {
+                fdroid -> null
+                hasUploadKey -> signingConfigs.getByName("upload")
+                else -> signingConfigs.getByName("debug")
             }
         }
     }

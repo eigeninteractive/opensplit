@@ -3,7 +3,6 @@ import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:in_app_update/in_app_update.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../application/app_startup.dart';
@@ -153,7 +152,7 @@ class _OpenSplitAppState extends ConsumerState<OpenSplitApp>
           break;
       }
 
-      if (await service.download() != AppUpdateResult.success) return;
+      if (!await service.download()) return;
       _offerRestart(service.install);
     } catch (_) {
       // Every failure mode here is Play's, and none of them is something the
