@@ -8,8 +8,7 @@ on:
       - '.github/workflows/release.yml'
       - 'fdroid/**'
       - 'android/**'
-      # Cider writes app version bumps to pubspec.yaml. Watch the resolved
-      # dependencies in pubspec.lock so version-only bumps skip this build.
+      - 'pubspec.yaml'
       - 'pubspec.lock'
       - 'packages/**/pubspec.yaml'
       - 'packages/**/pubspec.lock'

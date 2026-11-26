@@ -466,11 +466,11 @@ pinned source and update the archive URL and digest if needed. F-Droid can
 reuse the listing text in `fastlane/metadata/android/`.
 
 The [F-Droid CI workflow](../.github/workflows/fdroid.yml) builds from a fresh
-checkout on pull requests that change the Android build, dependency lockfiles
-or store integrations. Changes to the app version in the root pubspec are
-covered by the regular release checks. Use workflow dispatch to verify
-manifest-only build settings. F-Droid CI checks the resolved packages against
-the versions, sources, and hashes in the shared lockfile. It verifies that
+checkout on pull requests that change the Android build, Flutter manifests or
+lockfiles, or store integrations. This includes app version bumps in
+`pubspec.yaml`. It is also available through workflow dispatch. F-Droid CI
+checks the resolved packages against the versions, sources, and hashes in
+the shared lockfile. It verifies that
 the APK has the expected package and version, is unsigned, retains Internet
 access, and excludes Firebase and Play SDKs.
 
