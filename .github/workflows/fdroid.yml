@@ -4,21 +4,8 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - '.github/workflows/fdroid.yml'
-      - '.github/workflows/release.yml'
-      - 'fdroid/**'
-      - 'android/**'
-      - 'pubspec.yaml'
-      - 'pubspec.lock'
-      - 'packages/**/pubspec.yaml'
-      - 'packages/**/pubspec.lock'
-      - 'lib/config.dart'
-      - 'lib/main.dart'
-      - 'lib/application/push_providers.dart'
-      - 'lib/data/auth/**'
-      - 'lib/data/platform/**'
-      - 'lib/data/push/**'
-      - 'lib/presentation/app.dart'
+      - ".github/workflows/fdroid.yml"
+      - "fdroid/**"
   workflow_dispatch:
 
 permissions:
@@ -54,8 +41,9 @@ jobs:
           distribution: temurin
           java-version: "17"
           cache: gradle
-      - name: Install the Android build tools
-        run: sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0' 'ndk;28.2.13676358'
+      - name: Install the Android NDK
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'ndk;28.2.13676358'
 
       - name: Prepare the F-Droid sources and resolve dependencies
         run: |
