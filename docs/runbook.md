@@ -411,11 +411,22 @@ A push to `main` runs `.github/workflows/release.yml`:
 8. A `v<version>` tag after an app release submission. This records that Play
    accepted the upload; it does not mean review is complete. Web-only deployments
    do not create app version tags.
+9. Fastlane downloads the Play-signed universal APK for the submitted Android
+   build number. The workflow verifies its signature and version, then publishes
+   the APK, SHA-256 checksum and full Cider notes to GitHub Releases. GitHub may
+   have the APK while Play review is still in progress.
 
-The tag is the release-completion marker. If a newer web-only merge supersedes
+The tag marks the Play submission. If a newer web-only merge supersedes
 the version-bump build, or an upload fails, that app version stays pending for
 the next successful run. Otherwise an ordinary merge could lose the requested
 Android release. Once tagged, subsequent merges skip Android until the next bump.
+
+The APK download runs immediately and retries up to three times, one minute
+apart. If APK publishing still fails, re-run
+**Publish Android APK on GitHub** from the original Release run. GitHub retains
+the original version and build number on a job retry and does not resubmit to
+Play. For builds outside GitHub's 30-day retry window, download the signed
+universal APK for that build from Play Console and attach it manually.
 
 ### Store listing changes
 
