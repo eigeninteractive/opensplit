@@ -1,0 +1,44 @@
+Categories:
+  - Finance Manager
+License: AGPL-3.0-only
+SourceCode: https://github.com/eigeninteractive/opensplit
+IssueTracker: https://github.com/eigeninteractive/opensplit/issues
+
+RepoType: git
+Repo: https://github.com/eigeninteractive/opensplit.git
+
+Builds:
+  - versionName: '@VERSION_NAME@'
+    versionCode: @VERSION_CODE@
+    commit: @COMMIT@
+    output: build/app/outputs/flutter-apk/app-release.apk
+    srclibs:
+      - flutter@stable
+    rm:
+      - ios
+      - linux
+      - macos
+      - web
+      - windows
+    prebuild:
+      - flutterVersion=$(awk -F '"' '/^[[:space:]]*flutter-version:/ { print $2; exit }' .github/workflows/release.yml)
+      - test -n "$flutterVersion"
+      - git -C "$$flutter$$" checkout -f "$flutterVersion"
+      - sdkmanager 'platforms;android-37.0'
+      - export PUB_CACHE="$PWD/.pub-cache"
+      - $$flutter$$/bin/flutter config --no-analytics
+      - bash fdroid/prepare.sh
+      - $$flutter$$/bin/flutter pub get
+    scandelete:
+      - .pub-cache
+    build:
+      - export PUB_CACHE="$PWD/.pub-cache"
+      - PATH="$$flutter$$/bin:$PATH" bash fdroid/build.sh "$$VERCODE$$"
+    ndk: 28.2.13676358
+
+AutoUpdateMode: Version v%v
+UpdateCheckMode: HTTP
+UpdateCheckData: >-
+  https://github.com/eigeninteractive/opensplit/releases/latest/download/version.json|"versionCode":\s*(\d+)|.|"versionName":\s*"(\d+\.\d+\.\d+)"
+CurrentVersion: '@VERSION_NAME@'
+CurrentVersionCode: @VERSION_CODE@

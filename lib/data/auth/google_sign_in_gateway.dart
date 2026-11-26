@@ -6,11 +6,9 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../config.dart';
 
-/// A platform that can produce a Google ID token without leaving the app.
-abstract interface class GoogleTokenSource {
-  /// The credential, or null if the user backed out of the picker.
-  Future<GoogleCredential?> obtainIdToken();
-}
+import 'google_credential.dart';
+
+export 'google_credential.dart';
 
 /// Obtains a Google ID token natively.
 class GoogleSignInGateway implements GoogleTokenSource {
@@ -82,10 +80,3 @@ class GoogleSignInGateway implements GoogleTokenSource {
     );
   }
 }
-
-/// What the server needs to turn a Google sign-in into a session.
-typedef GoogleCredential = ({
-  String idToken,
-  String? accessToken,
-  String nonce,
-});

@@ -4,18 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:in_app_update/in_app_update.dart';
 import 'package:in_app_review/in_app_review.dart';
 
-/// How badly a waiting update wants to be installed.
-enum UpdateUrgency {
-  /// Play is holding nothing, or nothing this build can install.
-  none,
+import 'update_urgency.dart';
 
-  /// Downloads in the background while the app stays usable, and declining
-  /// costs nothing. The ordinary case.
-  flexible,
-
-  /// A full-screen installation flow. Play can report cancellation or failure.
-  immediate,
-}
+export 'update_urgency.dart';
 
 /// Offers the Play Store update a person already has waiting for them.
 class AppUpdateService {
@@ -70,8 +61,7 @@ class AppUpdateService {
                 UpdateAvailability.developerTriggeredUpdateInProgress ||
             (info.updateAvailability == UpdateAvailability.updateAvailable &&
                 info.immediateUpdateAllowed)) {
-          final result = await installNow();
-          if (result != AppUpdateResult.inAppUpdateFailed) return;
+          if (await installNow()) return;
         }
       } catch (error) {
         developer.log(
@@ -89,12 +79,15 @@ class AppUpdateService {
 
   /// Downloads in the background. Resolves when the download finishes, is
   /// declined, or fails.
-  Future<AppUpdateResult> download() => InAppUpdate.startFlexibleUpdate();
+  Future<bool> download() async =>
+      await InAppUpdate.startFlexibleUpdate() == AppUpdateResult.success;
 
   /// Hands the screen to Play until the update is installed.
-  Future<AppUpdateResult> installNow() => InAppUpdate.performImmediateUpdate();
+  Future<bool> installNow() async =>
+      await InAppUpdate.performImmediateUpdate() !=
+      AppUpdateResult.inAppUpdateFailed;
 
   /// Restarts into the downloaded update. Only valid after [download] returned
-  /// [AppUpdateResult.success].
+  /// true.
   Future<void> install() => InAppUpdate.completeFlexibleUpdate();
 }

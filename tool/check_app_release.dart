@@ -88,6 +88,7 @@ bool _isAppInput(String path) =>
       'lib/',
       'assets/',
       'android/',
+      'fdroid/',
       'web/',
       'packages/opensplit_api/lib/',
       'service_worker/src/',

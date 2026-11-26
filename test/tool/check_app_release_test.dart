@@ -82,6 +82,7 @@ void main() {
     'lib/presentation/theme.dart',
     'assets/brand/mark-mono.svg',
     'android/app/src/main/AndroidManifest.xml',
+    'fdroid/lib/data/push/push_service.dart',
     'web/index.html',
     'packages/opensplit_api/lib/api.dart',
     'packages/opensplit_api/pubspec.yaml',
