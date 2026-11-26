@@ -413,8 +413,9 @@ A push to `main` runs `.github/workflows/release.yml`:
    do not create app version tags.
 9. Fastlane downloads the Play-signed universal APK for the submitted Android
    build number. The workflow verifies its signature and version, then publishes
-   the APK, SHA-256 checksum and full Cider notes to GitHub Releases. GitHub may
-   have the APK while Play review is still in progress.
+   the APK, SHA-256 checksum, full Cider notes, and a `version.json` asset with
+   the version name and Android version code. GitHub may have the APK while
+   Play review is still in progress.
 
 The tag marks the Play submission. If a newer web-only merge supersedes
 the version-bump build, or an upload fails, that app version stays pending for
@@ -426,7 +427,9 @@ apart. If APK publishing still fails, re-run
 **Publish Android APK on GitHub** from the original Release run. GitHub retains
 the original version and build number on a job retry and does not resubmit to
 Play. For builds outside GitHub's 30-day retry window, download the signed
-universal APK for that build from Play Console and attach it manually.
+universal APK for that build from Play Console. Attach it with its SHA-256
+checksum and a `version.json` containing the APK's `versionName` and
+`versionCode` so F-Droid can discover the release.
 
 ### F-Droid
 
@@ -437,10 +440,10 @@ F-Droid builds and signs its APK. Switching between F-Droid and Play or GitHub
 requires uninstalling one before installing the other. Sync or export any
 device-only data before uninstalling.
 
-Build from a fresh source copy using the same pinned Flutter SDK as
-`release.yml`, Android SDK Platform 37 and the NDK pinned by Flutter. Supply
-the Android version code of the tagged Play submission. It is shown in Play
-Console and in the corresponding GitHub APK when available.
+For a local build, start with a fresh source copy using the same pinned Flutter
+SDK as `release.yml`, Android SDK Platform 37 and the NDK pinned by Flutter.
+Use the release tag's version name and the Android version code published in
+the matching GitHub release's `version.json`.
 
 ```sh
 source_copy="$(mktemp -d)"
@@ -453,14 +456,40 @@ git archive "v$version" | tar -x -C "$source_copy"
 )
 ```
 
-The output is `build/app/outputs/flutter-apk/app-release.apk` inside the source
-copy. It is unsigned. The preparation step removes the store-specific Flutter
-plugins before Pub resolves dependencies and configures SQLite to build from
-verified upstream C source. Update that source pin when the app upgrades its
-bundled SQLite. Check the APK's package, version, Internet permission and
-dependencies before submitting a build recipe to [fdroiddata](https://gitlab.com/fdroid/fdroiddata).
-Start with an explicit tag and version code because Play assigns the code in
-CI. F-Droid can reuse the listing text in `fastlane/metadata/android/`.
+The build outputs an unsigned `build/app/outputs/flutter-apk/app-release.apk`.
+Preparation removes store-specific Flutter plugins before Pub resolves
+dependencies and compiles SQLite from verified upstream C source. Update that
+source pin when the app upgrades its bundled SQLite. F-Droid can reuse the
+listing text in `fastlane/metadata/android/`.
+
+For the first submission, render the [build recipe](../fdroid/fdroiddata.yml.in)
+from the first eligible GitHub release. From the OpenSplit checkout, set
+`tag` to that release's tag and run:
+
+```sh
+(
+  set -euo pipefail
+  version_json="$(gh release download "$tag" --pattern version.json --output -)"
+  version="$(jq -er '
+    .versionName | select(test("^[0-9]+[.][0-9]+[.][0-9]+$"))
+  ' <<< "$version_json")"
+  version_code="$(jq -er '
+    .versionCode | select(type == "number" and . > 0 and . <= 2100000000 and . == floor)
+  ' <<< "$version_json")"
+  test "$tag" = "v$version"
+  git fetch origin tag "$tag"
+  commit="$(git rev-parse "$tag^{commit}")"
+  sed -e "s/@VERSION_NAME@/$version/g" -e "s/@VERSION_CODE@/$version_code/g" \
+    -e "s/@COMMIT@/$commit/g" fdroid/fdroiddata.yml.in > com.eigeninteractive.opensplit.yml
+)
+```
+
+Submit the result as `metadata/com.eigeninteractive.opensplit.yml` in
+[fdroiddata](https://gitlab.com/fdroid/fdroiddata). After inclusion, F-Droid's
+scheduled updater reads `version.json` from the latest GitHub release. It
+resolves the corresponding `v<version>` tag, reuses the build recipe with the
+new version code, and builds and signs the APK on its own schedule. GitHub
+release publication must succeed for F-Droid to discover the version.
 
 When F-Droid provides its signing certificate, add its SHA-256 fingerprint to
 `site/.well-known/assetlinks.json` so shared links can open the F-Droid app.
@@ -592,9 +621,10 @@ A build has two numbers, and only one of them is written down.
   organised by. It is `version:` in `pubspec.yaml`, changed only through
   [cider](https://pub.dev/packages/cider), which keeps `CHANGELOG.md` in step.
 - **The build number**, `1701`: what Play orders builds by, Android's
-  `versionCode`. It is never written down. The release workflow works it out
-  and gives the same number to web and Android on app releases. A web-only
-  deployment advances the web build number while Android keeps its last release.
+  `versionCode`. The release workflow computes it and gives the same number to
+  web and Android on app releases. The GitHub release records the Android code
+  in `version.json` for F-Droid updates. A web-only deployment advances the web
+  build number while Android keeps its last release.
 
 cider is a dev dependency, so `dart run cider` is the version `pubspec.lock`
 pins, the same everywhere.
