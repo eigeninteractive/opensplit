@@ -117,7 +117,7 @@
     "lib/data/web/launch_signal_web.dart": "35bddb8f180fe5f475512902c5724b04179abf3f9e198a3f9c01e12ee78b13d2",
     "lib/data/web/release_updates.dart": "7a9b5e05c765e77c6657ddb77b698db7ac5c6cb177ea313ed02afd83ca7277fb",
     "lib/data/web/release_updates_stub.dart": "e763988fcbd902d61a1cb4a48df55b3761666e45e2c7f2a2ac2d502f5cbb93c1",
-    "lib/data/web/release_updates_web.dart": "ef1d460c083eab5aaa17ba24ffecef41327a52f6137869a3e95bac825a1fd2de",
+    "lib/data/web/release_updates_web.dart": "4c0c34162317c13b039b2308dba80eef398f773f92c75894237691a72ab6a571",
     "lib/domain/activity/activity_text.dart": "8ae34116c2ab14dd592e07fd898172e631d8b106b47d955f948ef003b7ac78d5",
     "lib/domain/activity/snapshot_diff.dart": "3b137dda31294fdbad0213009ec98936bfe2b3d67c5c90c2e5a7008667b60171",
     "lib/domain/analytics/spending.dart": "dd6df502b5fc086726666f6923467f809aed11452f2b620325bb22100f2146b9",

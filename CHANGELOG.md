@@ -8,6 +8,9 @@ What changed in each version of the app, newest first. The format is
 ### Added
 - Find voluntary project funding in Settings on the web and in the F-Droid build.
 
+### Fixed
+- Show the restart prompt when a web update starts downloading before the app opens.
+
 ## [4.3.3] - 2026-11-27
 ### Added
 - Link to the OpenSplit website, changelog, and support page from the F-Droid listing.

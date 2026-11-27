@@ -118,20 +118,21 @@ Future<void> _watchRegistration(
     }
   }
 
-  // Installed during an earlier visit, while another tab held it back.
-  offerIfWaiting();
+  final installationChanged = ((web.Event _) => offerIfWaiting()).toJS;
+  void watchInstalling() {
+    registration.installing?.addEventListener(
+      'statechange',
+      installationChanged,
+    );
+  }
+
   registration.addEventListener(
     'updatefound',
-    (web.Event _) {
-      final installing = registration.installing;
-      installing?.addEventListener(
-        'statechange',
-        (web.Event _) {
-          if (installing.state == 'installed') offerIfWaiting();
-        }.toJS,
-      );
-    }.toJS,
+    ((web.Event _) => watchInstalling()).toJS,
   );
+  // A browser can start an update before Dart attaches its listener.
+  watchInstalling();
+  offerIfWaiting();
 
   Timer.periodic(_checkEvery, (_) {
     // Offline, or the server is down: the next tick asks again.
