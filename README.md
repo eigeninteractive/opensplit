@@ -41,6 +41,9 @@
   </a>
 </p>
 
+Switching between F-Droid and either Google Play or GitHub requires uninstalling
+OpenSplit first. Sync or export your data before uninstalling.
+
 - Split expenses by amounts, percentages or weights.
 - Keep exact balances per currency and see converted estimates when rates are available.
 - Search your ledger on your device and export groups to CSV.

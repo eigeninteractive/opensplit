@@ -1,8 +1,12 @@
 Categories:
   - Finance Manager
 License: AGPL-3.0-only
+WebSite: https://opensplit.eigeninteractive.com/
 SourceCode: https://github.com/eigeninteractive/opensplit
 IssueTracker: https://github.com/eigeninteractive/opensplit/issues
+Changelog: https://github.com/eigeninteractive/opensplit/blob/main/CHANGELOG.md
+Donate:
+  - https://opensplit.eigeninteractive.com/support
 
 RepoType: git
 Repo: https://github.com/eigeninteractive/opensplit.git

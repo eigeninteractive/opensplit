@@ -384,7 +384,7 @@
     "packages/opensplit_api/lib/src/model/share.g.dart": "17ff331c72c72242b56731122cfbde7b2a603e810d28bf58ee0f135e252c77a2",
     "packages/opensplit_api/lib/src/model/split_kind.dart": "38186b7b070123737b5d78cb5f19e53c0d77d95b3ffe78f2654bbaffb23851a4",
     "pubspec.lock": "fb340649ec2c330dee3dae8c28191db670e3059de71677fe963ecc1ed6c777f0",
-    "pubspec.yaml": "c780e5617a98b9d682bfac7efef561ada9bb117fb7a16d62fa2a2f78c749bc4f",
+    "pubspec.yaml": "f059f24685d2f54977afea4ab84ae071747f0ec6b1fdf68647adb7fa95d9cf72",
     "test/data/server_reference_data.dart": "b291827d21d1ff0bee36bc7ef86e6ff1618f767e20deb1df796ac911bf6e6b9c",
     "test/fixtures/android_wallpaper.dart": "588b5037842a5c6ab2f4842e47b679b6d9de3f16c7f4670c2c125af707633c84",
     "test/harness.dart": "0e85c632a2251eb3f8052c9d6ed11b6a5e56ee1a63faf472c045c577cab53387",
