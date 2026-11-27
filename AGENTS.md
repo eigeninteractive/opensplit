@@ -43,8 +43,8 @@ Read the runbook's [release lifecycle](docs/runbook.md#every-release) and
   production runs follow the same version-based rule.
 - Store title and descriptions live in `fastlane/metadata/android/en-US/`.
   Store-only edits publish on merge without an app version bump. Regenerate
-  artwork with `dart run tool/store_artifacts.dart`: the Play gallery in
-  `site/store/play/` adds captions to the original website screenshots.
+  artwork with `dart run tool/store_artifacts.dart`. The gallery shared by Play
+  and F-Droid adds captions to the original website screenshots.
   App-only releases leave unchanged listing content alone. See the runbook's
   [store listing workflow](docs/runbook.md#store-listing-changes).
 

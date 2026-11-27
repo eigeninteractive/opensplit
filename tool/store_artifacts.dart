@@ -7,21 +7,23 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 
 const _manifestPath = 'site/store/artifacts.json';
+const _listingImages = 'fastlane/metadata/android/en-US/images';
 const _outputs = [
   'site/store/screenshot-1-groups.png',
   'site/store/screenshot-2-expenses.png',
   'site/store/screenshot-3-balances.png',
   'site/store/screenshot-4-add-expense.png',
   'site/store/screenshot-5-insights.png',
-  'site/store/play/screenshot-1-groups.png',
-  'site/store/play/screenshot-2-expenses.png',
-  'site/store/play/screenshot-3-balances.png',
-  'site/store/play/screenshot-4-add-expense.png',
-  'site/store/play/screenshot-5-insights.png',
+  '$_listingImages/phoneScreenshots/screenshot-1-groups.png',
+  '$_listingImages/phoneScreenshots/screenshot-2-expenses.png',
+  '$_listingImages/phoneScreenshots/screenshot-3-balances.png',
+  '$_listingImages/phoneScreenshots/screenshot-4-add-expense.png',
+  '$_listingImages/phoneScreenshots/screenshot-5-insights.png',
   'site/store/web-app.png',
   'site/store/og-card.png',
   'site/store/og-invite.png',
-  'site/store/feature-graphic.jpg',
+  '$_listingImages/featureGraphic.jpg',
+  '$_listingImages/icon.png',
   'site/email/wordmark.png',
 ];
 

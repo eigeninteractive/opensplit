@@ -63,8 +63,8 @@ const _screenshots = [
 /// Writes the en-US listing and, when supplied, app release [notes].
 ///
 /// Validates all sources before writing. A nonempty [output] is refused so
-/// stale screenshots cannot be uploaded alongside the current set. Only the
-/// icon is resized; feature art and screenshots keep their exact source bytes.
+/// stale screenshots cannot be uploaded alongside the current set. Images
+/// keep the source bytes shared with F-Droid.
 ///
 /// Throws if any source is missing, unreadable, incorrectly sized or contains
 /// transparency, or if listing text or [notes] exceeds Play's limits.
@@ -82,6 +82,7 @@ void writePlayMetadata({
       output.path,
     );
   }
+  final listing = '${source.path}/fastlane/metadata/android/en-US';
   final text = <String, String>{
     for (final (name, limit) in [
       ('title', 30),
@@ -89,35 +90,19 @@ void writePlayMetadata({
       ('full_description', 4000),
     ])
       '$name.txt': _readText(
-        File('${source.path}/fastlane/metadata/android/en-US/$name.txt'),
+        File('$listing/$name.txt'),
         limit: limit,
         singleLine: name != 'full_description',
       ),
   };
-  final icon = _readImage(File('${source.path}/assets/icon/icon.png'));
-  if (icon.decoded.width != icon.decoded.height) {
-    throw const FormatException('The source Play icon must be square.');
-  }
   final assets = <String, List<int>>{
-    'images/icon.png': image.encodePng(
-      image
-          .copyResize(
-            icon.decoded,
-            width: 512,
-            height: 512,
-            interpolation: image.Interpolation.average,
-          )
-          .convert(numChannels: 3),
-    ),
-    'images/featureGraphic.jpg': _readImage(
-      File('${source.path}/site/store/feature-graphic.jpg'),
-      size: (1024, 500),
-    ).bytes,
-    for (final name in _screenshots)
-      'images/phoneScreenshots/$name': _readImage(
-        File('${source.path}/site/store/play/$name'),
-        size: (1080, 1920),
-      ).bytes,
+    for (final (path, size) in [
+      ('images/icon.png', (512, 512)),
+      ('images/featureGraphic.jpg', (1024, 500)),
+      for (final name in _screenshots)
+        ('images/phoneScreenshots/$name', (1080, 1920)),
+    ])
+      path: _readImage(File('$listing/$path'), size: size),
   };
   for (final MapEntry(:key, :value) in assets.entries) {
     final target = File('${output.path}/en-US/$key');
@@ -143,10 +128,7 @@ String _readText(File file, {required int limit, required bool singleLine}) {
   return value;
 }
 
-({Uint8List bytes, image.Image decoded}) _readImage(
-  File file, {
-  (int, int)? size,
-}) {
+Uint8List _readImage(File file, {required (int, int) size}) {
   final bytes = file.readAsBytesSync();
   final decoded = file.path.endsWith('.png')
       ? image.decodePng(bytes)
@@ -154,14 +136,13 @@ String _readText(File file, {required int limit, required bool singleLine}) {
   if (decoded == null) {
     throw FormatException('Unreadable Play image: ${file.path}');
   }
-  if (size case (final width, final height)) {
-    if (decoded.width != width || decoded.height != height) {
-      throw FormatException('Expected $width × $height image: ${file.path}');
-    }
+  final (width, height) = size;
+  if (decoded.width != width || decoded.height != height) {
+    throw FormatException('Expected $width × $height image: ${file.path}');
   }
   if (decoded.hasAlpha &&
       decoded.any((pixel) => pixel.a != decoded.maxChannelValue)) {
     throw FormatException('Play artwork must be opaque: ${file.path}');
   }
-  return (bytes: bytes, decoded: decoded);
+  return bytes;
 }

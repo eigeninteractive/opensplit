@@ -11,13 +11,13 @@ void main() {
   late Directory output;
   const notes = '• A refreshed design and easier custom splits.';
   final artwork = [
-    'assets/icon/icon.png',
-    'site/store/feature-graphic.jpg',
-    'site/store/play/screenshot-1-groups.png',
-    'site/store/play/screenshot-2-expenses.png',
-    'site/store/play/screenshot-3-balances.png',
-    'site/store/play/screenshot-4-add-expense.png',
-    'site/store/play/screenshot-5-insights.png',
+    'fastlane/metadata/android/en-US/images/icon.png',
+    'fastlane/metadata/android/en-US/images/featureGraphic.jpg',
+    'fastlane/metadata/android/en-US/images/phoneScreenshots/screenshot-1-groups.png',
+    'fastlane/metadata/android/en-US/images/phoneScreenshots/screenshot-2-expenses.png',
+    'fastlane/metadata/android/en-US/images/phoneScreenshots/screenshot-3-balances.png',
+    'fastlane/metadata/android/en-US/images/phoneScreenshots/screenshot-4-add-expense.png',
+    'fastlane/metadata/android/en-US/images/phoneScreenshots/screenshot-5-insights.png',
   ];
   const textLimits = {
     'title': 30,
@@ -64,7 +64,9 @@ void main() {
     expect((icon.width, icon.height, icon.hasAlpha), (512, 512, false));
     expect(
       File('$locale/images/featureGraphic.jpg').readAsBytesSync(),
-      File('site/store/feature-graphic.jpg').readAsBytesSync(),
+      File(
+        'fastlane/metadata/android/en-US/images/featureGraphic.jpg',
+      ).readAsBytesSync(),
     );
     final screenshots =
         Directory(
@@ -137,7 +139,7 @@ void main() {
 
   test('refuses a feature graphic with incorrect dimensions', () {
     File(
-      '${source.path}/site/store/feature-graphic.jpg',
+      '${source.path}/fastlane/metadata/android/en-US/images/featureGraphic.jpg',
     ).writeAsBytesSync(image.encodeJpg(image.Image(width: 100, height: 50)));
 
     expect(
@@ -148,8 +150,10 @@ void main() {
   });
 
   test('refuses a transparent source icon', () {
-    File('${source.path}/assets/icon/icon.png').writeAsBytesSync(
-      image.encodePng(image.Image(width: 64, height: 64, numChannels: 4)),
+    File(
+      '${source.path}/fastlane/metadata/android/en-US/images/icon.png',
+    ).writeAsBytesSync(
+      image.encodePng(image.Image(width: 512, height: 512, numChannels: 4)),
     );
 
     expect(

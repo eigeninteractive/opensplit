@@ -13,17 +13,20 @@
 </p>
 
 <!-- Google Play badge artwork: https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png -->
+<!-- F-Droid badge artwork: https://f-droid.org/en/docs/Badges/ -->
 <p align="center">
   <a href="https://play.google.com/store/apps/details?id=com.eigeninteractive.opensplit">
     <img src="docs/brand/google-play-badge.png" alt="Get it on Google Play" height="60">
   </a>
+  <a href="https://f-droid.org/packages/com.eigeninteractive.opensplit/">
+    <img src="docs/brand/f-droid-badge.png" alt="Get it on F-Droid" height="60">
+  </a>
+  <a href="https://github.com/eigeninteractive/opensplit/releases/latest">
+    <img src="docs/brand/github-releases-badge.svg" alt="Download APK from GitHub Releases" height="60">
+  </a>
   <a href="https://opensplit.eigeninteractive.com/app">
     <img src="docs/brand/open-web-app.svg" alt="Open the web app" height="60">
   </a>
-</p>
-
-<p align="center">
-  <a href="https://github.com/eigeninteractive/opensplit/releases/latest">Download APK from GitHub</a>
 </p>
 
 <p align="center">
@@ -37,6 +40,9 @@
     <img src="https://img.shields.io/github/license/eigeninteractive/opensplit" alt="AGPL-3.0 license">
   </a>
 </p>
+
+Switching between F-Droid and either Google Play or GitHub requires uninstalling
+OpenSplit first. Sync or export your data before uninstalling.
 
 - Split expenses by amounts, percentages or weights.
 - Keep exact balances per currency and see converted estimates when rates are available.

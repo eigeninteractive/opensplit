@@ -90,14 +90,14 @@ records hashes only after every output succeeds. `--check` validates that record
 in CI. Regenerate after changing app code, assets or the capture toolchain;
 individually rendering screenshots does not update the complete artwork record.
 
-| Command                                   | Writes                                                                                                                                       | From                                                         |
-| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `python3 tool/brand_artwork.py`           | the PNG sources in `assets/brand/`, `assets/icon/` and `assets/splash/`                                                                      | the canonical mark SVG and the generated palette             |
-| `dart run flutter_launcher_icons`         | Android, iOS and web icons                                                                                                                   | `assets/icon/`, configured in `flutter_launcher_icons.yaml`  |
-| `dart run tool/brand_icons.dart`          | root web icons, the favicon and the notification icon, after the command above                                                               | the transparent artwork in `assets/icon/`                    |
-| `dart run flutter_native_splash:create`   | the native splash screens                                                                                                                    | `assets/splash/`, configured in `flutter_native_splash.yaml` |
-| `flutter test tool/screenshots_test.dart` | `site/store/screenshot-*.png` and `web-app.png`                                                                                              | the real screens over demo data                              |
-| `python3 tool/store_graphics.py`          | captioned screenshots in `site/store/play/`, `site/store/og-card.png`, `og-invite.png`, `feature-graphic.jpg`, and `site/email/wordmark.png` | real app captures, the mark's geometry and the bundled font  |
+| Command                                   | Writes                                                                                                    | From                                                         |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `python3 tool/brand_artwork.py`           | the PNG sources in `assets/brand/`, `assets/icon/` and `assets/splash/`                                   | the canonical mark SVG and the generated palette             |
+| `dart run flutter_launcher_icons`         | Android, iOS and web icons                                                                                | `assets/icon/`, configured in `flutter_launcher_icons.yaml`  |
+| `dart run tool/brand_icons.dart`          | root web icons, the favicon and the notification icon, after the command above                            | the transparent artwork in `assets/icon/`                    |
+| `dart run flutter_native_splash:create`   | the native splash screens                                                                                 | `assets/splash/`, configured in `flutter_native_splash.yaml` |
+| `flutter test tool/screenshots_test.dart` | `site/store/screenshot-*.png` and `web-app.png`                                                           | the real screens over demo data                              |
+| `python3 tool/store_graphics.py`          | shared store artwork, `site/store/og-card.png`, `site/store/og-invite.png`, and `site/email/wordmark.png` | real app captures, the mark's geometry and the bundled font  |
 
 `assets/icon/icon.png` is opaque because iOS and legacy Android icons cannot
 carry alpha. The adaptive foreground keeps the mark inside the circle a
@@ -105,15 +105,17 @@ launcher masks it to. The splash icon is 1152 px with the mark at 640 px, so tha
 Android 12's masked circle does not crop it, and there is no wordmark on the
 splash for the same reason.
 
-## Play listing
+## Store listings
 
-| Asset             | Size              | File                                                                          |
-| ----------------- | ----------------- | ----------------------------------------------------------------------------- |
-| Hi-res icon       | 512 × 512, opaque | `assets/icon/icon.png`, resized                                               |
-| Feature graphic   | 1024 × 500, JPEG  | `site/store/feature-graphic.jpg`                                              |
-| Phone screenshots | 1080 × 1920, PNG  | `site/store/play/screenshot-1-groups.png` to `-5-insights.png`, in that order |
+Play and F-Droid share the images in `fastlane/metadata/android/en-US/images/`.
 
-The Play gallery pairs short benefit captions with complete, scaled captures of
+| Asset             | Size              | File                                   |
+| ----------------- | ----------------- | -------------------------------------- |
+| Hi-res icon       | 512 × 512, opaque | `icon.png`                             |
+| Feature graphic   | 1024 × 500, JPEG  | `featureGraphic.jpg`                   |
+| Phone screenshots | 1080 × 1920, PNG  | `phoneScreenshots/`, in filename order |
+
+The store gallery pairs short benefit captions with complete, scaled captures of
 the real app. `tool/store_graphics.py` draws the captions in the bundled font,
 then frames each capture without changing its UI. Keep the five originals in
 `site/store/` uncaptioned: the website and social graphics use those directly.

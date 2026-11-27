@@ -145,9 +145,7 @@ jobs:
             --jq '.workflow_runs[0].head_sha // empty')"
           changed=true
           if [[ -n "$baseline" ]] && git cat-file -e "$baseline^{commit}"; then
-            if git diff --quiet "$baseline" HEAD -- \
-              fastlane/metadata/android assets/icon/icon.png \
-              site/store/feature-graphic.jpg site/store/play; then
+            if git diff --quiet "$baseline" HEAD -- fastlane/metadata/android; then
               changed=false
             fi
           fi

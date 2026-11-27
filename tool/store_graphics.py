@@ -1,19 +1,18 @@
-"""Frames real app captures for Play, social previews and the sign-in email.
+"""Frames real app captures for store listings, social previews and email.
 
     dart run tool/store_artifacts.dart
 
 The orchestrator captures screens, invokes this producer and records provenance.
 To run this producer alone: python3 tool/store_graphics.py.
-The website keeps the original uncaptioned captures. Play gets a separate
-1080 x 1920 gallery in site/store/play/ with readable benefit captions and the
-complete app screen below them. Other outputs:
+The website keeps the original uncaptioned captures. Play and F-Droid share a
+1080 x 1920 gallery under fastlane/metadata/android/en-US/images/. Other outputs:
 
 - site/store/og-card.png, 1200 x 630, the link preview Open Graph asks for.
 - site/store/og-invite.png, 1200 x 630, the preview an invite link unfurls
   with (server/src/link-preview.ts). No screenshot and no pitch, so that a
   link somebody was sent reads as an invitation rather than an advert.
-- site/store/feature-graphic.jpg, 1024 x 500, used in Play promotional and preview placements.
-  JPEG because Play rejects a PNG with an alpha channel, even an opaque one.
+- images/featureGraphic.jpg, 1024 x 500, the shared store banner.
+- images/icon.png, 512 x 512, resized from the opaque launcher artwork.
 - site/email/wordmark.png, the lockup at three times the size the email shows
   it (server/src/email/sender.ts). Mail clients load neither SVG nor web fonts,
   so the one place the brand's type has to survive Gmail is a picture of it.
@@ -45,6 +44,7 @@ REGULAR = f'{FONTS}/GoogleSansFlex-Regular.ttf'
 SEMIBOLD = f'{FONTS}/GoogleSansFlex-SemiBold.ttf'
 
 SCREEN = 'site/store/screenshot-3-balances.png'
+LISTING_IMAGES = 'fastlane/metadata/android/en-US/images'
 
 # Supersampling factor.
 S = 4
@@ -261,9 +261,17 @@ def build():
         'body': 0.044,
         'lines': ['Trips, flatmates and everyday plans.'],
     })
-    play.save('site/store/feature-graphic.jpg', quality=92, optimize=True)
+    screenshots = f'{LISTING_IMAGES}/phoneScreenshots'
+    os.makedirs(screenshots, exist_ok=True)
+    play.save(f'{LISTING_IMAGES}/featureGraphic.jpg', quality=92, optimize=True)
 
-    os.makedirs('site/store/play', exist_ok=True)
+    with Image.open('assets/icon/icon.png') as icon:
+        alpha = icon.convert('RGBA').getchannel('A')
+        if icon.width != icon.height or alpha.getextrema() != (255, 255):
+            raise ValueError('The source store icon must be square and opaque.')
+        icon.convert('RGB').resize((512, 512), Image.Resampling.BOX).save(
+            f'{LISTING_IMAGES}/icon.png', optimize=True
+        )
     for name, headlines, subtitle in [
         ('screenshot-1-groups.png', ['Every group.', 'One clear view.'],
          'Trips, flatmates and everyday plans.'),
@@ -277,15 +285,15 @@ def build():
          'Spending by category and by person.'),
     ]:
         image = store_screenshot(name, headlines, subtitle)
-        image.save(f'site/store/play/{name}', optimize=True)
-        print(f'site/store/play/{name}: {image.width}x{image.height}')
+        image.save(f'{screenshots}/{name}', optimize=True)
+        print(f'{screenshots}/{name}: {image.width}x{image.height}')
 
     invite = invite_card(1200, 630)
     invite.save('site/store/og-invite.png', optimize=True)
 
-    for name, image in [('og-card.png', og), ('og-invite.png', invite),
-                        ('feature-graphic.jpg', play)]:
-        print(f'site/store/{name}: {image.width}x{image.height}')
+    print(f'site/store/og-card.png: {og.width}x{og.height}')
+    print(f'site/store/og-invite.png: {invite.width}x{invite.height}')
+    print(f'{LISTING_IMAGES}/featureGraphic.jpg: {play.width}x{play.height}')
 
     email = email_wordmark(20, 3)
     os.makedirs('site/email', exist_ok=True)
