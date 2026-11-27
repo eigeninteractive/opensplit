@@ -591,16 +591,15 @@ described above. A backend change that needs a new client must include that
 client change and its app version bump.
 
 `tool/check_app_release.dart` runs inside the required **Analyse and test** job.
-It treats `lib/`, `assets/`, `android/`, `web/`, the F-Droid build sources in
-`fdroid/`, the generated API package's `lib/`, and `service_worker/src/` as
-app inputs. App dependency manifests and lockfiles, code generation,
-localization, icon and splash configuration, and service worker build
-configuration also count. Even a dev-dependency-only edit to an app pubspec
-requires a bump. Tests, store listing artwork, release scripts and workflows,
-the F-Droid submission template, and public site files are exempt. The check
-uses Cider to read the versions and changelog, requires a newer stable version,
-and validates the released section through the existing Play note formatter.
-Published changelog history is not audited.
+It treats `lib/`, `assets/`, `android/`, `fdroid/`, `web/`, the generated API
+package's `lib/`, and `service_worker/src/` as app inputs. App dependency
+manifests and lockfiles, code generation/localization/icon/splash configuration,
+and service worker build configuration also count. Dependency manifests are deliberately
+conservative: even a dev-dependency-only edit to an app pubspec requires a bump.
+Tests, store listing artwork, release scripts/workflows and public site files
+are exempt. The check uses Cider to read the versions and changelog, requires
+a newer stable version, and validates the released section through the existing
+Play note formatter. Published changelog history is not audited.
 
 The current-main check skips superseded commits when merges overlap. A green
 upload means Play accepted the submission, not that review has finished or

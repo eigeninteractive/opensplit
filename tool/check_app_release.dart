@@ -84,12 +84,11 @@ Future<String> checkAppRelease(String base, {String? workingDirectory}) async {
 }
 
 bool _isAppInput(String path) =>
-    // The submission template is release tooling.
-    (path.startsWith('fdroid/') && path != 'fdroid/fdroiddata.yml.in') ||
     const [
       'lib/',
       'assets/',
       'android/',
+      'fdroid/',
       'web/',
       'packages/opensplit_api/lib/',
       'service_worker/src/',
