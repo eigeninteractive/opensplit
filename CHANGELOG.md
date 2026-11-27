@@ -4,6 +4,10 @@ What changed in each version of the app, newest first. The format is
 [Semantic Versioning](https://semver.org/), and the file is kept by
 [cider](https://pub.dev/packages/cider): see "Versions" in docs/runbook.md.
 
+## [4.4.0] - 2026-11-27
+### Added
+- Find voluntary project funding in Settings on the web and in the F-Droid build.
+
 ## [4.3.3] - 2026-11-27
 ### Added
 - Link to the OpenSplit website, changelog, and support page from the F-Droid listing.
@@ -203,6 +207,7 @@ What changed in each version of the app, newest first. The format is
 ### Added
 - The first build, to Play internal testing.
 
+[4.4.0]: https://github.com/eigeninteractive/opensplit/compare/v4.3.3...v4.4.0
 [4.3.3]: https://github.com/eigeninteractive/opensplit/compare/v4.3.2...v4.3.3
 [4.3.2]: https://github.com/eigeninteractive/opensplit/compare/v4.3.1...v4.3.2
 [4.3.1]: https://github.com/eigeninteractive/opensplit/compare/v4.3.0...v4.3.1

@@ -1,29 +1,28 @@
 Categories:
   - Finance Manager
 License: AGPL-3.0-only
+AuthorName: EigenInteractive
+AuthorEmail: hello@eigeninteractive.com
 WebSite: https://opensplit.eigeninteractive.com/
 SourceCode: https://github.com/eigeninteractive/opensplit
 IssueTracker: https://github.com/eigeninteractive/opensplit/issues
 Changelog: https://github.com/eigeninteractive/opensplit/blob/main/CHANGELOG.md
-Donate:
-  - https://opensplit.eigeninteractive.com/support
+Donate: https://opensplit.eigeninteractive.com/support
+
+AutoName: OpenSplit
 
 RepoType: git
 Repo: https://github.com/eigeninteractive/opensplit.git
 
 Builds:
-  - versionName: '@VERSION_NAME@'
+  - versionName: @VERSION_NAME@
     versionCode: @VERSION_CODE@
     commit: @COMMIT@
     output: build/app/outputs/flutter-apk/app-release.apk
     srclibs:
       - flutter@stable
     rm:
-      - ios
-      - linux
-      - macos
       - web
-      - windows
     prebuild:
       - flutterVersion=$(awk -F '"' '/^[[:space:]]*flutter-version:/ { print $2; exit }' .github/workflows/release.yml)
       - test -n "$flutterVersion"
@@ -44,5 +43,5 @@ AutoUpdateMode: Version v%v
 UpdateCheckMode: HTTP
 UpdateCheckData: >-
   https://github.com/eigeninteractive/opensplit/releases/latest/download/version.json|"versionCode":\s*(\d+)|.|"versionName":\s*"(\d+\.\d+\.\d+)"
-CurrentVersion: '@VERSION_NAME@'
+CurrentVersion: @VERSION_NAME@
 CurrentVersionCode: @VERSION_CODE@

@@ -34,6 +34,12 @@ String get privacyPolicyUrl => 'https://$linkHost/privacy';
 String get termsUrl => 'https://$linkHost/terms';
 String get deleteAccountUrl => 'https://$linkHost/delete-account';
 
+/// Where users can make a voluntary contribution to the project.
+String get supportUrl => 'https://$linkHost/support';
+
+/// The funding page uses external payment providers with fees.
+const bool showFundingLink = kIsWeb || bool.fromEnvironment('FDROID');
+
 /// Where the source lives, and the pages that hang off it.
 const String repositoryUrl = String.fromEnvironment(
   'REPOSITORY_URL',

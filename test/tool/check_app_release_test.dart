@@ -68,6 +68,7 @@ void main() {
       'tool/build_web.dart',
       '.github/workflows/release.yml',
       'fastlane/Fastfile',
+      'fdroid/fdroiddata.yml.in',
       'packages/opensplit_api/README.md',
       'service_worker/test/push.test.ts',
     ]) {
@@ -83,6 +84,8 @@ void main() {
     'assets/brand/mark-mono.svg',
     'android/app/src/main/AndroidManifest.xml',
     'fdroid/lib/data/push/push_service.dart',
+    'fdroid/prepare.sh',
+    'fdroid/build.sh',
     'web/index.html',
     'packages/opensplit_api/lib/api.dart',
     'packages/opensplit_api/pubspec.yaml',
