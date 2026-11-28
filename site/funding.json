@@ -62,7 +62,7 @@
         "guid": "liberapay",
         "type": "payment-provider",
         "address": "https://liberapay.com/seenuklabs/",
-        "description": "Seenu K Labs’ Liberapay profile supports OpenSplit and other open-source projects. PayPal donors confirm each renewal."
+        "description": "Seenu K Labs’ Liberapay profile supports OpenSplit and other open-source projects."
       }
     ],
     "plans": [
@@ -90,7 +90,7 @@
         "guid": "community-one-time-usd",
         "status": "active",
         "name": "One-time community support in USD",
-        "description": "Choose a one-time USD amount through one of the listed providers. On Liberapay, stop renewals after the first payment.",
+        "description": "Choose a one-time USD amount through one of the listed providers.",
         "amount": 0,
         "currency": "USD",
         "frequency": "one-time",
@@ -100,7 +100,7 @@
         "guid": "community-monthly-usd",
         "status": "active",
         "name": "Monthly community support in USD",
-        "description": "Choose a monthly USD amount through one of the listed providers. PayPal donors on Liberapay confirm each renewal.",
+        "description": "Choose a monthly USD amount through one of the listed providers.",
         "amount": 0,
         "currency": "USD",
         "frequency": "monthly",

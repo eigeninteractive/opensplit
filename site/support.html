@@ -54,13 +54,6 @@
       margin: 24px 0;
     }
     .support .channel {
-      --channel-surface: var(--wash);
-      --channel-border: var(--line);
-      --channel-radius: 16px;
-      --action-bg: var(--primary);
-      --action-hover: var(--on-primary-container);
-      --action-ink: #fff;
-      --action-radius: 8px;
       display: flex;
       flex-direction: column;
       padding: 20px;
@@ -94,6 +87,24 @@
       --action-hover: #0e45ae;
       --action-ink: #fff;
       --action-radius: 8px;
+    }
+    .support .channel-ko-fi {
+      --channel-surface: #f3ecff;
+      --channel-border: #decaff;
+      --channel-radius: 16px;
+      --action-bg: #c19bff;
+      --action-hover: #ae85f5;
+      --action-ink: #202020;
+      --action-radius: 999px;
+    }
+    .support .channel-liberapay {
+      --channel-surface: #fff8d9;
+      --channel-border: #ecd87e;
+      --channel-radius: 12px;
+      --action-bg: #f6c915;
+      --action-hover: #e5b90c;
+      --action-ink: #1a171b;
+      --action-radius: 6px;
     }
     .support .channel h3 {
       display: flex;
@@ -341,8 +352,8 @@
               <a class="button button-filled button-small" href="https://rzp.io/rzp/opensplit" aria-label="Give once via Razorpay">Give once</a>
             </div>
           </article>
-          <article class="channel">
-            <h3>Ko-fi</h3>
+          <article class="channel channel-ko-fi">
+            <h3><img class="channel-mark" src="/support-icons/ko-fi.png" alt="" width="38" height="38"> Ko-fi</h3>
             <ul>
               <li>One-time or monthly tips</li>
               <li>International payments through PayPal</li>
@@ -351,11 +362,10 @@
               <a class="button button-filled button-small" href="https://ko-fi.com/seenuklabs">Give via Ko-fi</a>
             </div>
           </article>
-          <article class="channel">
-            <h3>Liberapay</h3>
+          <article class="channel channel-liberapay">
+            <h3><img class="channel-mark" src="/support-icons/liberapay.png" alt="" width="38" height="38"> Liberapay</h3>
             <ul>
-              <li>Monthly support through PayPal</li>
-              <li>For a one-time gift, stop renewals after the first payment</li>
+              <li>One-time or monthly support through PayPal</li>
               <li>Supports OpenSplit and other Seenu K Labs projects</li>
             </ul>
             <div class="channel-actions">
