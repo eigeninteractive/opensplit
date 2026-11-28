@@ -33,31 +33,37 @@ class SettingsScreen extends StatelessWidget {
               const _NotificationSetting(),
             ],
             const SizedBox(height: 32),
-            const SegmentedList(
+            SegmentedList(
               children: [
-                ListTile(
+                const ListTile(
                   leading: Icon(Icons.lock_outline),
                   title: Text('Offline first'),
                   subtitle: Text('Expenses are saved on this device first'),
                   titleAlignment: ListTileTitleAlignment.center,
                 ),
-                ListTile(
+                const ListTile(
                   leading: Icon(Icons.favorite_outline),
                   title: Text('Free forever'),
                   subtitle: Text('Open source, with no ads or analytics SDKs.'),
                   titleAlignment: ListTileTitleAlignment.center,
                 ),
+                if (showFundingLink)
+                  _ExternalLink(
+                    icon: Icons.volunteer_activism_outlined,
+                    title: 'Support OpenSplit',
+                    url: supportUrl,
+                  ),
               ],
             ),
             const SizedBox(height: 24),
             SegmentedList(
               children: [
-                _LegalLink(
+                _ExternalLink(
                   icon: Icons.privacy_tip_outlined,
                   title: 'Privacy policy',
                   url: privacyPolicyUrl,
                 ),
-                _LegalLink(
+                _ExternalLink(
                   icon: Icons.gavel_outlined,
                   title: 'Terms of service',
                   url: termsUrl,
@@ -123,9 +129,9 @@ class _AppearanceSetting extends ConsumerWidget {
   }
 }
 
-/// A link out to one of the pages the store listing also points at.
-class _LegalLink extends StatelessWidget {
-  const _LegalLink({
+/// Opens a page on the OpenSplit website.
+class _ExternalLink extends StatelessWidget {
+  const _ExternalLink({
     required this.icon,
     required this.title,
     required this.url,

@@ -478,9 +478,10 @@ F-Droid build files, or shared build tooling such as Flutter and Android Gradle.
 - Check that the affected feature still works without Google services or that its
   entry point is hidden in the F-Droid app.
 
-For the first submission, render the [build recipe](../fdroid/fdroiddata.yml.in)
-from the first eligible GitHub release. From the OpenSplit checkout, set
-`tag` to that release's tag and run:
+To render the [build recipe](../fdroid/fdroiddata.yml.in), use `uvx` to
+run F-Droid's formatter with the same YAML serializer version as fdroiddata CI.
+In Bash, from the OpenSplit checkout, set `tag` to the GitHub release tag and
+run:
 
 ```sh
 (
@@ -495,21 +496,39 @@ from the first eligible GitHub release. From the OpenSplit checkout, set
   test "$tag" = "v$version"
   git fetch origin tag "$tag"
   commit="$(git rev-parse "$tag^{commit}")"
+  app_id=com.eigeninteractive.opensplit
+  recipe_dir="$(mktemp -d)"
+  trap 'rm -rf "$recipe_dir"' EXIT
+  mkdir "$recipe_dir/metadata"
   sed -e "s/@VERSION_NAME@/$version/g" -e "s/@VERSION_CODE@/$version_code/g" \
-    -e "s/@COMMIT@/$commit/g" fdroid/fdroiddata.yml.in > com.eigeninteractive.opensplit.yml
+    -e "s/@COMMIT@/$commit/g" fdroid/fdroiddata.yml.in > "$recipe_dir/metadata/$app_id.yml"
+  (
+    cd "$recipe_dir"
+    uvx --from git+https://gitlab.com/fdroid/fdroidserver.git \
+      --with ruamel.yaml==0.18.10 fdroid rewritemeta -W error "$app_id"
+  )
+  mkdir -p build/fdroid
+  mv "$recipe_dir/metadata/$app_id.yml" "build/fdroid/$app_id.yml"
 )
 ```
 
-Submit the result as `metadata/com.eigeninteractive.opensplit.yml` in
+Copy `build/fdroid/com.eigeninteractive.opensplit.yml` to
+`metadata/com.eigeninteractive.opensplit.yml` in
 [fdroiddata](https://gitlab.com/fdroid/fdroiddata). After inclusion, F-Droid's
 scheduled updater reads `version.json` from the latest GitHub release. It
 resolves the corresponding `v<version>` tag, reuses the build recipe with the
 new version code, and builds and signs the APK on its own schedule. GitHub
 release publication must succeed for F-Droid to discover the version.
+Only regenerate the recipe when its metadata or build instructions need to
+change, and submit those changes to `fdroiddata`. Only list paths in `rm`
+that exist in the release source and need to be excluded from the Android
+build scan.
 
 When F-Droid provides its signing certificate, add its SHA-256 fingerprint to
 `site/.well-known/assetlinks.json` so shared links can open the F-Droid app.
-Verify the README download link once the F-Droid listing is live.
+Once the listing is live, verify the README download link and install the
+published APK to check email sign-in, group sync, and shared links. Check that
+the next tagged release is discovered and installs as an F-Droid update.
 
 ### Store listing changes
 

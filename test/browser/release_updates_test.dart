@@ -28,22 +28,7 @@ void main() {
     () async {
       final registration = JSObject();
       final container = JSObject();
-      final property = 'serviceWorker'.toJS;
-      final original = _descriptor(web.window.navigator, property);
-      addTearDown(() {
-        if (original == null) {
-          _deleteProperty(web.window.navigator, property);
-        } else {
-          _defineProperty(web.window.navigator, property, original);
-        }
-      });
-      _defineProperty(
-        web.window.navigator,
-        property,
-        JSObject()
-          ..setProperty('configurable'.toJS, true.toJS)
-          ..setProperty('value'.toJS, container),
-      );
+      _mockServiceWorkerContainer(container);
       container.setProperty('ready'.toJS, Future.value(registration).toJS);
       var checks = 0;
       registration
@@ -109,5 +94,66 @@ void main() {
       expect(checks, 2);
       expect(messages, hasLength(2));
     },
+  );
+
+  test(
+    'the restart offer sees updates already installing at startup',
+    () async {
+      final registration = web.EventTarget();
+      final installing = web.EventTarget();
+      final container = web.EventTarget();
+      _mockServiceWorkerContainer(container);
+      container
+        ..setProperty('controller'.toJS, JSObject())
+        ..setProperty('ready'.toJS, Future.value(registration).toJS);
+      registration
+        ..setProperty('waiting'.toJS, null)
+        ..setProperty('installing'.toJS, installing);
+
+      var offers = 0;
+      watchForNewRelease(() => offers++);
+      await Future<void>.delayed(Duration.zero);
+
+      void finishInstallation(web.EventTarget worker) {
+        registration
+          ..setProperty('installing'.toJS, null)
+          ..setProperty('waiting'.toJS, worker);
+        worker
+          ..setProperty('state'.toJS, 'installed'.toJS)
+          ..dispatchEvent(web.Event('statechange'));
+      }
+
+      expect(offers, 0);
+      finishInstallation(installing);
+      expect(offers, 1);
+
+      final nextWorker = web.EventTarget();
+      registration
+        ..setProperty('waiting'.toJS, null)
+        ..setProperty('installing'.toJS, nextWorker)
+        ..dispatchEvent(web.Event('updatefound'));
+      expect(offers, 1);
+      finishInstallation(nextWorker);
+      expect(offers, 2);
+    },
+  );
+}
+
+void _mockServiceWorkerContainer(JSObject container) {
+  final property = 'serviceWorker'.toJS;
+  final original = _descriptor(web.window.navigator, property);
+  addTearDown(() {
+    if (original == null) {
+      _deleteProperty(web.window.navigator, property);
+    } else {
+      _defineProperty(web.window.navigator, property, original);
+    }
+  });
+  _defineProperty(
+    web.window.navigator,
+    property,
+    JSObject()
+      ..setProperty('configurable'.toJS, true.toJS)
+      ..setProperty('value'.toJS, container),
   );
 }

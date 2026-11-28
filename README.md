@@ -70,6 +70,8 @@ and [group lifecycle](docs/group-lifecycle.md).
 Voluntary contributions fund development, maintenance and hosting.
 
 <!-- Buy Me a Coffee artwork: https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png -->
+<!-- Ko-fi artwork: https://more.ko-fi.com/brand-assets -->
+<!-- Liberapay artwork: https://liberapay.com/assets/widgets/donate.svg -->
 <p>
   <a href="https://github.com/sponsors/eigeninteractive">
     <img src="docs/brand/github-sponsors-badge.svg" alt="GitHub Sponsors" height="36">
@@ -79,6 +81,12 @@ Voluntary contributions fund development, maintenance and hosting.
   </a>
   <a href="https://rzp.io/rzp/opensplit">
     <img src="docs/brand/razorpay-badge.svg" alt="Razorpay" height="36">
+  </a>
+  <a href="https://ko-fi.com/seenuklabs">
+    <img src="docs/brand/ko-fi-badge.png" alt="Support OpenSplit on Ko-fi" height="36">
+  </a>
+  <a href="https://liberapay.com/seenuklabs/">
+    <img src="docs/brand/liberapay-badge.svg" alt="Support OpenSplit on Liberapay" height="36">
   </a>
 </p>
 

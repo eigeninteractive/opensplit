@@ -14,4 +14,5 @@ test -f fdroid/sqlite3.c
 dart run build_runner build
 ORG_GRADLE_PROJECT_fdroid=true flutter build apk --release --no-pub \
   --build-number="$version_code" \
+  --dart-define=FDROID=true \
   --dart-define=API_BASE_URL=https://opensplit.eigeninteractive.com

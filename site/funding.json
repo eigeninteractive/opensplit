@@ -1,6 +1,6 @@
 {
   "$schema": "https://fundingjson.org/schema/v1.1.0.json",
-  "version": "2026-11-24",
+  "version": "2026-11-28",
   "entity": {
     "type": "individual",
     "role": "maintainer",
@@ -51,6 +51,18 @@
         "type": "payment-provider",
         "address": "https://buymeacoffee.com/seenuklabs",
         "description": "Seenu K Labs’ Buy Me a Coffee page. Contributions referred from OpenSplit are earmarked for the project. The checkout may display localized prices."
+      },
+      {
+        "guid": "ko-fi",
+        "type": "payment-provider",
+        "address": "https://ko-fi.com/seenuklabs",
+        "description": "One-time and monthly tips through the Seenu K Labs Ko-fi profile. International payments are processed through PayPal."
+      },
+      {
+        "guid": "liberapay",
+        "type": "payment-provider",
+        "address": "https://liberapay.com/seenuklabs/",
+        "description": "Seenu K Labs’ Liberapay profile supports OpenSplit and other open-source projects."
       }
     ],
     "plans": [
@@ -78,21 +90,21 @@
         "guid": "community-one-time-usd",
         "status": "active",
         "name": "One-time community support in USD",
-        "description": "Choose a custom one-time USD amount through GitHub Sponsors, subject to GitHub’s available options. Contributions support OpenSplit maintenance, infrastructure and maintainer time.",
+        "description": "Choose a one-time USD amount through one of the listed providers.",
         "amount": 0,
         "currency": "USD",
         "frequency": "one-time",
-        "channels": ["github-sponsors"]
+        "channels": ["github-sponsors", "ko-fi", "liberapay"]
       },
       {
         "guid": "community-monthly-usd",
         "status": "active",
         "name": "Monthly community support in USD",
-        "description": "Choose a custom monthly USD amount through GitHub Sponsors, subject to GitHub’s available options. Contributions support OpenSplit maintenance, infrastructure and maintainer time.",
+        "description": "Choose a monthly USD amount through one of the listed providers.",
         "amount": 0,
         "currency": "USD",
         "frequency": "monthly",
-        "channels": ["github-sponsors"]
+        "channels": ["github-sponsors", "ko-fi", "liberapay"]
       },
       {
         "guid": "coffee-one-time-usd",

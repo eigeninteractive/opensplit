@@ -446,6 +446,33 @@
       text-wrap: pretty;
     }
 
+    .support-callout {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px 32px;
+      margin-top: 24px;
+      padding: clamp(24px, 4vw, 40px);
+      border: 1px solid var(--edge);
+      border-radius: 24px;
+    }
+
+    .support-callout h2 {
+      margin: 0;
+      font-size: clamp(24px, 3vw, 32px);
+      line-height: 1.15;
+      letter-spacing: -0.025em;
+      font-weight: 600;
+    }
+
+    .support-callout p {
+      max-width: 40em;
+      margin: 8px 0 0;
+      color: var(--slate);
+      text-wrap: pretty;
+    }
+
     /* FAQ ---------------------------------------------------------------*/
 
     .faq {
@@ -692,6 +719,13 @@
               <p>If the servers disappeared tomorrow, the app would keep working with what it has.</p>
             </li>
           </ol>
+        </section>
+        <section class="support-callout" aria-labelledby="support-title">
+          <div>
+            <h2 id="support-title">Help keep OpenSplit running</h2>
+            <p>Voluntary contributions help cover server costs and give us time to fix bugs and improve the app.</p>
+          </div>
+          <a class="button button-outlined" href="/support">Support OpenSplit</a>
         </section>
       </div>
 

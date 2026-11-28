@@ -221,6 +221,40 @@ void main() {
       await _unmount(tester);
     });
 
+    testWidgets('Settings links to funding in the F-Droid build', (
+      tester,
+    ) async {
+      await _pumpApp(tester, db);
+      await _chooseDestination(tester, 'Settings');
+
+      final fundingTile = find.widgetWithText(ListTile, 'Support OpenSplit');
+      if (const bool.fromEnvironment('FDROID')) {
+        const channel = MethodChannel('plugins.flutter.io/url_launcher');
+        final messenger =
+            TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+        final calls = <MethodCall>[];
+        messenger.setMockMethodCallHandler(channel, (call) async {
+          calls.add(call);
+          return true;
+        });
+        addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+        await tester.scrollUntilVisible(fundingTile, 200);
+        await tester.tap(fundingTile);
+        await tester.pumpAndSettle();
+        expect(calls.single.method, 'launch');
+        expect(
+          calls.single.arguments['url'],
+          'https://opensplit.eigeninteractive.com/support',
+        );
+        expect(calls.single.arguments['useWebView'], isFalse);
+      } else {
+        await tester.scrollUntilVisible(find.text('About OpenSplit'), 200);
+        expect(fundingTile, findsNothing);
+      }
+      await _unmount(tester);
+    });
+
     testWidgets('and comes back to a Groups list that kept its place', (
       tester,
     ) async {
