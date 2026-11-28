@@ -82,6 +82,8 @@ Voluntary contributions fund development, maintenance and hosting.
   </a>
 </p>
 
+[Ko-fi](https://ko-fi.com/seenuklabs) ·
+[Liberapay](https://liberapay.com/seenuklabs/) ·
 [Compare payment options](https://opensplit.eigeninteractive.com/support) ·
 [Supporter acknowledgments](https://opensplit.eigeninteractive.com/support#supporters)
 
